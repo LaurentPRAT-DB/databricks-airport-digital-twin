@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+}
+
+/* Custom flight marker styles */
+.flight-marker {
+  transition: transform 0.3s ease-out;
+}
+
+.flight-marker-ground {
+  color: #6b7280;
+}
+
+.flight-marker-climbing {
+  color: #22c55e;
+}
+
+.flight-marker-descending {
+  color: #f97316;
+}
+
+.flight-marker-cruising {
+  color: #3b82f6;
+}
