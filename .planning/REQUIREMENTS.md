@@ -11,15 +11,15 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **DATA-01**: System ingests real-time flight data from OpenSky Network API
 - [x] **DATA-02**: System provides fallback to cached/synthetic data when API unavailable
-- [ ] **DATA-03**: DLT pipeline transforms raw data through Bronze → Silver → Gold layers
-- [ ] **DATA-04**: All tables registered in Unity Catalog with proper governance
-- [ ] **DATA-05**: Data lineage tracked and visible in Unity Catalog
+- [x] **DATA-03**: DLT pipeline transforms raw data through Bronze → Silver → Gold layers
+- [x] **DATA-04**: All tables registered in Unity Catalog with proper governance
+- [x] **DATA-05**: Data lineage tracked and visible in Unity Catalog
 
 ### Streaming
 
-- [ ] **STRM-01**: Structured Streaming processes flight position updates in near real-time
-- [ ] **STRM-02**: Stream handles late-arriving data and out-of-order events gracefully
-- [ ] **STRM-03**: Streaming checkpoints are resilient to schema changes
+- [x] **STRM-01**: Structured Streaming processes flight position updates in near real-time
+- [x] **STRM-02**: Stream handles late-arriving data and out-of-order events gracefully
+- [x] **STRM-03**: Streaming checkpoints are resilient to schema changes
 
 ### ML/AI
 
@@ -99,12 +99,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | DATA-01 | Phase 1 | Complete |
 | DATA-02 | Phase 1 | Complete |
-| DATA-03 | Phase 1 | Pending |
-| DATA-04 | Phase 1 | Pending |
-| DATA-05 | Phase 1 | Pending |
-| STRM-01 | Phase 1 | Pending |
-| STRM-02 | Phase 1 | Pending |
-| STRM-03 | Phase 1 | Pending |
+| DATA-03 | Phase 1 | Complete |
+| DATA-04 | Phase 1 | Complete |
+| DATA-05 | Phase 1 | Complete |
+| STRM-01 | Phase 1 | Complete |
+| STRM-02 | Phase 1 | Complete |
+| STRM-03 | Phase 1 | Complete |
 | ML-01 | Phase 3 | Pending |
 | ML-02 | Phase 3 | Pending |
 | ML-03 | Phase 3 | Pending |
