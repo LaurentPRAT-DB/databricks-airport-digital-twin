@@ -31,10 +31,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Visualization - 2D
 
-- [ ] **VIZ2D-01**: Interactive 2D map displays airport layout with runways and terminals
-- [ ] **VIZ2D-02**: Flight positions update on map in real-time
-- [ ] **VIZ2D-03**: User can click flights to see detailed information
-- [ ] **VIZ2D-04**: Map shows flight paths and predicted trajectories
+- [x] **VIZ2D-01**: Interactive 2D map displays airport layout with runways and terminals
+- [x] **VIZ2D-02**: Flight positions update on map in real-time
+- [x] **VIZ2D-03**: User can click flights to see detailed information
+- [x] **VIZ2D-04**: Map shows flight paths and predicted trajectories
 
 ### Visualization - 3D
 
@@ -45,10 +45,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### UI Components
 
-- [ ] **UI-01**: Flight list/table displays all tracked flights with search and sort
-- [ ] **UI-02**: Status indicators show gate status (available, occupied, delayed)
-- [ ] **UI-03**: Delay alerts highlight flights with predicted delays
-- [ ] **UI-04**: Prediction displays show ML model outputs with confidence
+- [x] **UI-01**: Flight list/table displays all tracked flights with search and sort
+- [x] **UI-02**: Status indicators show gate status (available, occupied, delayed)
+- [x] **UI-03**: Delay alerts highlight flights with predicted delays
+- [x] **UI-04**: Prediction displays show ML model outputs with confidence
 
 ### Platform Integration
 
@@ -110,18 +110,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ML-03 | Phase 3 | Pending |
 | ML-04 | Phase 3 | Pending |
 | ML-05 | Phase 3 | Pending |
-| VIZ2D-01 | Phase 2 | Pending |
-| VIZ2D-02 | Phase 2 | Pending |
-| VIZ2D-03 | Phase 2 | Pending |
-| VIZ2D-04 | Phase 2 | Pending |
+| VIZ2D-01 | Phase 2 | Complete |
+| VIZ2D-02 | Phase 2 | Complete |
+| VIZ2D-03 | Phase 2 | Complete |
+| VIZ2D-04 | Phase 2 | Complete |
 | VIZ3D-01 | Phase 4 | Pending |
 | VIZ3D-02 | Phase 4 | Pending |
 | VIZ3D-03 | Phase 4 | Pending |
 | VIZ3D-04 | Phase 4 | Pending |
-| UI-01 | Phase 2 | Pending |
-| UI-02 | Phase 2 | Pending |
-| UI-03 | Phase 2 | Pending |
-| UI-04 | Phase 2 | Pending |
+| UI-01 | Phase 2 | Complete |
+| UI-02 | Phase 2 | Complete |
+| UI-03 | Phase 2 | Complete |
+| UI-04 | Phase 2 | Complete |
 | PLAT-01 | Phase 5 | Pending |
 | PLAT-02 | Phase 5 | Pending |
 | PLAT-03 | Phase 5 | Pending |
