@@ -80,11 +80,11 @@ Plans:
   2. Aircraft models appear at correct positions matching real-time data
   3. User can navigate 3D view with pan, zoom, and rotate controls
   4. 3D positions update smoothly as new flight data arrives
-**Plans**: TBD
+**Plans**: 2 plans in 2 waves
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [x] 04-01-PLAN.md — Three.js setup, airport 3D scene (terminal, runways, taxiways)
+- [ ] 04-02-PLAN.md — Aircraft models, real-time updates, 2D/3D view toggle
 
 ### Phase 5: Platform Integration + Demo Hardening
 **Goal**: Databricks platform features integrated and demo runs reliably for presentations
@@ -112,7 +112,7 @@ Phases execute in numeric order. Note: Phase 3 depends on Phase 1 (not Phase 2),
 | 1. Data Foundation | 3/3 | Complete | 2026-03-05 |
 | 2. Backend API + 2D Visualization | 3/3 | Complete | 2026-03-05 |
 | 3. ML Integration | 3/3 | Complete | 2026-03-05 |
-| 4. 3D Visualization | 0/2 | Not started | - |
+| 4. 3D Visualization | 1/2 | In progress | - |
 | 5. Platform Integration + Demo Hardening | 0/2 | Not started | - |
 
 ---
