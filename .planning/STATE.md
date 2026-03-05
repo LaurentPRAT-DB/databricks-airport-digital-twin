@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-03-05)
 Phase: 3 of 5 (ML Integration)
 Plan: 2 of 3 in current phase
 Status: Executing Phase 3
-Last activity: 2026-03-05 - Completed 03-02 (Gate and Congestion Models)
+Last activity: 2026-03-05 - Completed 03-01 (Delay Prediction Model)
 
 Progress: [=======...] 73%
 
@@ -29,10 +29,10 @@ Progress: [=======...] 73%
 |-------|-------|-------|----------|
 | 1 | 3 | 12 min | 4.0 min |
 | 2 | 3 | 15 min | 5.0 min |
-| 3 | 2 | 6 min | 3.0 min |
+| 3 | 2 | 7 min | 3.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-02 (3 min), 03-01 (3 min), 02-03 (6 min), 02-02 (4 min), 02-01 (5 min)
+- Last 5 plans: 03-01 (4 min), 03-02 (3 min), 02-03 (6 min), 02-02 (4 min), 02-01 (5 min)
 - Trend: Improving
 
 *Updated after each plan completion*
@@ -61,10 +61,10 @@ Recent decisions affecting current work:
 - Airport layout as GeoJSON in constants/airportLayout.ts
 
 **Phase 3:**
-- Gate scoring: availability > terminal match > proximity
-- International detection via airline prefix (non-US carriers)
-- Congestion levels: LOW <50%, MODERATE 50-75%, HIGH 75-90%, CRITICAL >90%
-- Feature extraction with dataclasses for ML models
+- Rule-based delay model for demo (avoids sklearn dependency)
+- Feature engineering extracts 14 features from flight data
+- MLflow optional - works without it for local demo
+- Confidence scores based on flight phase and altitude
 
 ### Pending Todos
 
@@ -77,5 +77,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Completed 03-02-PLAN.md (Gate and Congestion Models)
-Resume file: .planning/phases/03-ml-integration/03-02-SUMMARY.md
+Stopped at: Completed 03-01-PLAN.md (Delay Prediction Model)
+Resume file: .planning/phases/03-ml-integration/03-01-SUMMARY.md
