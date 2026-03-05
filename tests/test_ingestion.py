@@ -160,8 +160,10 @@ class TestPollJob:
         # Reset circuit breaker state
         api_circuit_breaker.failures = 0
         api_circuit_breaker.state = "closed"
+        api_circuit_breaker.last_failure_time = None
 
-        with patch('src.ingestion.opensky_client.OpenSkyClient') as MockClient:
+        # Patch where OpenSkyClient is used (in poll_job module)
+        with patch('src.ingestion.poll_job.OpenSkyClient') as MockClient:
             mock_client = Mock()
             mock_client.get_states.return_value = Mock(
                 time=mock_opensky_response["time"],
@@ -189,10 +191,12 @@ class TestPollJob:
         """Test that poll_and_write uses synthetic data when circuit is open."""
         from src.ingestion.poll_job import poll_and_write
         from src.ingestion.circuit_breaker import api_circuit_breaker
+        from datetime import datetime
 
-        # Force circuit open
+        # Force circuit open with recent failure time (so it stays open)
         api_circuit_breaker.failures = 5
         api_circuit_breaker.state = "open"
+        api_circuit_breaker.last_failure_time = datetime.utcnow()
 
         count = poll_and_write(mock_landing_path, sfo_bbox)
 
