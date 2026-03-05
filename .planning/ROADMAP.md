@@ -64,11 +64,12 @@ Plans:
   3. Congestion prediction highlights bottleneck areas on the map
   4. All model experiments tracked in MLflow with metrics and artifacts
   5. Prediction API responds within 2 seconds from Model Serving endpoint
-**Plans**: TBD
+**Plans**: 3 plans in 2 waves
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [x] 03-01-PLAN.md — Delay prediction model with feature engineering and MLflow tracking
+- [x] 03-02-PLAN.md — Gate optimization and congestion prediction models
+- [ ] 03-03-PLAN.md — Prediction API endpoints and frontend integration
 
 ### Phase 4: 3D Visualization
 **Goal**: Users can explore a 3D rendered airport with live aircraft positions
@@ -110,7 +111,7 @@ Phases execute in numeric order. Note: Phase 3 depends on Phase 1 (not Phase 2),
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 3/3 | Complete | 2026-03-05 |
 | 2. Backend API + 2D Visualization | 3/3 | Complete | 2026-03-05 |
-| 3. ML Integration | 0/2 | Not started | - |
+| 3. ML Integration | 2/3 | In progress | - |
 | 4. 3D Visualization | 0/2 | Not started | - |
 | 5. Platform Integration + Demo Hardening | 0/2 | Not started | - |
 

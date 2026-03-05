@@ -24,8 +24,8 @@ Requirements for initial release. Each maps to roadmap phases.
 ### ML/AI
 
 - [ ] **ML-01**: Delay prediction model forecasts arrival/departure delays
-- [ ] **ML-02**: Gate optimization model recommends optimal gate assignments
-- [ ] **ML-03**: Congestion prediction model identifies terminal/taxiway bottlenecks
+- [x] **ML-02**: Gate optimization model recommends optimal gate assignments
+- [x] **ML-03**: Congestion prediction model identifies terminal/taxiway bottlenecks
 - [ ] **ML-04**: All models tracked in MLflow with experiment logging
 - [ ] **ML-05**: Models deployed via Databricks Model Serving for real-time inference
 
@@ -106,8 +106,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STRM-02 | Phase 1 | Complete |
 | STRM-03 | Phase 1 | Complete |
 | ML-01 | Phase 3 | Pending |
-| ML-02 | Phase 3 | Pending |
-| ML-03 | Phase 3 | Pending |
+| ML-02 | Phase 3 | Complete |
+| ML-03 | Phase 3 | Complete |
 | ML-04 | Phase 3 | Pending |
 | ML-05 | Phase 3 | Pending |
 | VIZ2D-01 | Phase 2 | Complete |
