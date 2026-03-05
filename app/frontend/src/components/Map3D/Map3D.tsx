@@ -2,9 +2,13 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { AirportScene } from './AirportScene';
 import { AIRPORT_3D_CONFIG } from '../../constants/airport3D';
+import { Flight } from '../../types/flight';
 
 interface Map3DProps {
   className?: string;
+  flights?: Flight[];
+  selectedFlight?: string | null;
+  onSelectFlight?: (icao24: string) => void;
 }
 
 /**
@@ -17,7 +21,12 @@ interface Map3DProps {
  * - Ambient and directional lighting
  * - The complete airport scene (terminal, runways, taxiways)
  */
-export function Map3D({ className }: Map3DProps) {
+export function Map3D({
+  className,
+  flights = [],
+  selectedFlight = null,
+  onSelectFlight,
+}: Map3DProps) {
   const { lighting } = AIRPORT_3D_CONFIG;
 
   return (
@@ -54,7 +63,11 @@ export function Map3D({ className }: Map3DProps) {
         />
 
         {/* Airport scene with all 3D elements */}
-        <AirportScene />
+        <AirportScene
+          flights={flights}
+          selectedFlight={selectedFlight}
+          onSelectFlight={onSelectFlight}
+        />
 
         {/* Orbit controls for user interaction */}
         <OrbitControls

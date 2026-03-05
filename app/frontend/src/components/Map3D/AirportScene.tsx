@@ -1,6 +1,14 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { AIRPORT_3D_CONFIG, RUNWAY_MARKING_COLOR } from '../../constants/airport3D';
+import { Flight } from '../../types/flight';
+import { Aircraft3D } from './Aircraft3D';
+
+interface AirportSceneProps {
+  flights?: Flight[];
+  selectedFlight?: string | null;
+  onSelectFlight?: (icao24: string) => void;
+}
 
 /**
  * AirportScene Component
@@ -10,8 +18,13 @@ import { AIRPORT_3D_CONFIG, RUNWAY_MARKING_COLOR } from '../../constants/airport
  * - Terminal building
  * - Runways with center line markings
  * - Taxiways connecting runways to terminal
+ * - Aircraft at their current positions
  */
-export function AirportScene() {
+export function AirportScene({
+  flights = [],
+  selectedFlight = null,
+  onSelectFlight,
+}: AirportSceneProps) {
   const { terminal, runways, taxiways, ground } = AIRPORT_3D_CONFIG;
 
   return (
@@ -30,6 +43,16 @@ export function AirportScene() {
       {/* Taxiways */}
       {taxiways.map((taxiway) => (
         <Taxiway key={taxiway.id} config={taxiway} />
+      ))}
+
+      {/* Aircraft */}
+      {flights.map((flight) => (
+        <Aircraft3D
+          key={flight.icao24}
+          flight={flight}
+          selected={selectedFlight === flight.icao24}
+          onClick={() => onSelectFlight?.(flight.icao24)}
+        />
       ))}
     </group>
   );
