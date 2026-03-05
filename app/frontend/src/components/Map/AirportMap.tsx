@@ -2,10 +2,10 @@ import { MapContainer, TileLayer } from 'react-leaflet';
 import { AIRPORT_CENTER, DEFAULT_ZOOM } from '../../constants/airportLayout';
 import AirportOverlay from './AirportOverlay';
 import FlightMarker from './FlightMarker';
-import { useFlights } from '../../hooks/useFlights';
+import { useFlightContext } from '../../context/FlightContext';
 
 export default function AirportMap() {
-  const { flights, isLoading, error, lastUpdated } = useFlights();
+  const { flights, isLoading, error, lastUpdated } = useFlightContext();
 
   return (
     <div className="relative h-full w-full">
