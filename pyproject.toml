@@ -1,0 +1,37 @@
+[project]
+name = "airport-digital-twin"
+version = "0.1.0"
+description = "Airport Digital Twin - Real-time flight data visualization with Databricks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Airport Digital Twin Team"}
+]
+dependencies = [
+    "requests>=2.31",
+    "pydantic>=2.5",
+    "tenacity>=8.2",
+    "circuitbreaker>=1.4",
+    "Faker>=22.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v"
