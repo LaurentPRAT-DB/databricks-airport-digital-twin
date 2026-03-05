@@ -160,3 +160,149 @@ class TestFlightDataIntegrity:
             # Validate coordinate ranges
             assert -90 <= flight["latitude"] <= 90
             assert -180 <= flight["longitude"] <= 180
+
+
+class TestPredictionEndpoints:
+    """Tests for the ML prediction API endpoints."""
+
+    def test_delays_endpoint(self, client):
+        """Test that delays endpoint returns 200."""
+        response = client.get("/api/predictions/delays")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "delays" in data
+        assert "count" in data
+        assert isinstance(data["delays"], list)
+
+    def test_delay_response_format(self, client):
+        """Test delay response has required fields."""
+        response = client.get("/api/predictions/delays")
+        assert response.status_code == 200
+
+        data = response.json()
+        if data["delays"]:
+            delay = data["delays"][0]
+
+            # Verify required fields
+            assert "icao24" in delay
+            assert "delay_minutes" in delay
+            assert "confidence" in delay
+            assert "category" in delay
+
+            # Verify field types and ranges
+            assert isinstance(delay["delay_minutes"], (int, float))
+            assert 0 <= delay["confidence"] <= 1
+            assert delay["category"] in ["on_time", "slight", "moderate", "severe"]
+
+    def test_delay_single_flight(self, client):
+        """Test delay endpoint with single flight filter."""
+        # First get a flight to filter by
+        flights_response = client.get("/api/flights?count=1")
+        assert flights_response.status_code == 200
+
+        flights_data = flights_response.json()
+        if flights_data["flights"]:
+            icao24 = flights_data["flights"][0]["icao24"]
+
+            # Get delay for that specific flight
+            response = client.get(f"/api/predictions/delays?icao24={icao24}")
+            assert response.status_code == 200
+
+            data = response.json()
+            assert data["count"] <= 1
+            if data["delays"]:
+                assert data["delays"][0]["icao24"] == icao24
+
+    def test_gates_endpoint(self, client):
+        """Test that gates endpoint returns recommendations."""
+        # First get a flight
+        flights_response = client.get("/api/flights?count=1")
+        assert flights_response.status_code == 200
+
+        flights_data = flights_response.json()
+        if flights_data["flights"]:
+            icao24 = flights_data["flights"][0]["icao24"]
+
+            response = client.get(f"/api/predictions/gates/{icao24}")
+            assert response.status_code == 200
+
+            recommendations = response.json()
+            assert isinstance(recommendations, list)
+
+            if recommendations:
+                rec = recommendations[0]
+                assert "gate_id" in rec
+                assert "score" in rec
+                assert "reasons" in rec
+                assert "taxi_time" in rec
+
+    def test_gates_endpoint_top_k(self, client):
+        """Test gates endpoint respects top_k parameter."""
+        # First get a flight
+        flights_response = client.get("/api/flights?count=1")
+        assert flights_response.status_code == 200
+
+        flights_data = flights_response.json()
+        if flights_data["flights"]:
+            icao24 = flights_data["flights"][0]["icao24"]
+
+            response = client.get(f"/api/predictions/gates/{icao24}?top_k=5")
+            assert response.status_code == 200
+
+            recommendations = response.json()
+            assert len(recommendations) <= 5
+
+    def test_congestion_endpoint(self, client):
+        """Test that congestion endpoint returns areas."""
+        response = client.get("/api/predictions/congestion")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "areas" in data
+        assert "count" in data
+        assert isinstance(data["areas"], list)
+
+        if data["areas"]:
+            area = data["areas"][0]
+            assert "area_id" in area
+            assert "area_type" in area
+            assert "level" in area
+            assert "flight_count" in area
+            assert "wait_minutes" in area
+
+            # Verify level is valid
+            assert area["level"] in ["low", "moderate", "high", "critical"]
+
+    def test_bottlenecks_endpoint(self, client):
+        """Test bottlenecks endpoint filters correctly."""
+        response = client.get("/api/predictions/bottlenecks")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "areas" in data
+        assert "count" in data
+
+        # Bottlenecks should only contain HIGH or CRITICAL levels
+        for area in data["areas"]:
+            assert area["level"] in ["high", "critical"]
+
+    def test_prediction_performance(self, client):
+        """Test that prediction endpoints respond under 2 seconds."""
+        import time
+
+        endpoints = [
+            "/api/predictions/delays",
+            "/api/predictions/congestion",
+            "/api/predictions/bottlenecks",
+        ]
+
+        for endpoint in endpoints:
+            start = time.time()
+            response = client.get(endpoint)
+            elapsed = time.time() - start
+
+            assert response.status_code == 200
+            assert elapsed < 2.0, f"{endpoint} took {elapsed:.2f}s (> 2s limit)"
