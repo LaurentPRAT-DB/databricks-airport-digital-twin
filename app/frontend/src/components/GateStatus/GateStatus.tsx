@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { useCongestion } from '../../hooks/usePredictions';
+import { CongestionArea } from '../../types/flight';
 
 interface Gate {
   id: string;
@@ -7,8 +9,15 @@ interface Gate {
   isOccupied: boolean;
 }
 
+// Congestion level colors
+const congestionColors: Record<string, { bg: string; text: string; border: string }> = {
+  low: { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300' },
+  moderate: { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300' },
+  high: { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300' },
+  critical: { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300' },
+};
+
 // Generate gates with random occupancy for demo
-// In Phase 3, this will use ML predictions
 function generateGates(): Gate[] {
   const gates: Gate[] = [];
 
@@ -35,16 +44,52 @@ function generateGates(): Gate[] {
   return gates;
 }
 
+// Get congestion for a terminal apron
+function getTerminalCongestion(
+  terminal: 'A' | 'B',
+  congestion: CongestionArea[]
+): CongestionArea | undefined {
+  const areaId = `terminal_${terminal}_apron`;
+  return congestion.find((c) => c.area_id === areaId);
+}
+
+// Congestion indicator component
+function CongestionIndicator({ congestion }: { congestion?: CongestionArea }) {
+  if (!congestion) {
+    return null;
+  }
+
+  const colors = congestionColors[congestion.level] || congestionColors.low;
+  const levelLabel = congestion.level.charAt(0).toUpperCase() + congestion.level.slice(1);
+
+  return (
+    <div
+      className={`ml-2 px-2 py-0.5 rounded text-xs border ${colors.bg} ${colors.text} ${colors.border}`}
+    >
+      {levelLabel}
+      {congestion.wait_minutes > 0 && (
+        <span className="ml-1">({congestion.wait_minutes} min wait)</span>
+      )}
+    </div>
+  );
+}
+
 export default function GateStatus() {
   // Memoize gates so they don't change on every render
-  // In production, this would come from an API
   const gates = useMemo(() => generateGates(), []);
+
+  // Fetch congestion data
+  const { congestion, isLoading: isCongestionLoading } = useCongestion();
 
   const terminalA = gates.filter((g) => g.terminal === 'A');
   const terminalB = gates.filter((g) => g.terminal === 'B');
 
   const occupiedCount = gates.filter((g) => g.isOccupied).length;
   const availableCount = gates.length - occupiedCount;
+
+  // Get congestion for each terminal
+  const terminalACongestion = getTerminalCongestion('A', congestion);
+  const terminalBCongestion = getTerminalCongestion('B', congestion);
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
@@ -64,7 +109,10 @@ export default function GateStatus() {
 
       {/* Terminal A */}
       <div className="mb-4">
-        <div className="text-xs font-medium text-slate-500 mb-2">Terminal A</div>
+        <div className="flex items-center mb-2">
+          <span className="text-xs font-medium text-slate-500">Terminal A</span>
+          {!isCongestionLoading && <CongestionIndicator congestion={terminalACongestion} />}
+        </div>
         <div className="grid grid-cols-10 gap-1">
           {terminalA.map((gate) => (
             <div
@@ -88,7 +136,10 @@ export default function GateStatus() {
 
       {/* Terminal B */}
       <div>
-        <div className="text-xs font-medium text-slate-500 mb-2">Terminal B</div>
+        <div className="flex items-center mb-2">
+          <span className="text-xs font-medium text-slate-500">Terminal B</span>
+          {!isCongestionLoading && <CongestionIndicator congestion={terminalBCongestion} />}
+        </div>
         <div className="grid grid-cols-10 gap-1">
           {terminalB.map((gate) => (
             <div
@@ -110,8 +161,19 @@ export default function GateStatus() {
         </div>
       </div>
 
-      <div className="mt-3 text-xs text-slate-400 text-center">
-        Demo data - ML predictions in Phase 3
+      {/* Congestion Legend */}
+      <div className="mt-3 pt-3 border-t border-slate-100">
+        <div className="text-xs font-medium text-slate-500 mb-2">Area Congestion</div>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(congestionColors).map(([level, colors]) => (
+            <span
+              key={level}
+              className={`px-2 py-0.5 rounded text-xs ${colors.bg} ${colors.text}`}
+            >
+              {level.charAt(0).toUpperCase() + level.slice(1)}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );

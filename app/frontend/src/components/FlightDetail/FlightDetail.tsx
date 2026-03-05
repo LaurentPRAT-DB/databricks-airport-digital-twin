@@ -1,5 +1,6 @@
 import { useFlightContext } from '../../context/FlightContext';
 import { Flight } from '../../types/flight';
+import { useDelayPrediction, useGateRecommendations } from '../../hooks/usePredictions';
 
 const phaseColors: Record<Flight['flight_phase'], string> = {
   ground: 'bg-gray-500',
@@ -13,6 +14,20 @@ const phaseLabels: Record<Flight['flight_phase'], string> = {
   climbing: 'Climbing',
   descending: 'Descending',
   cruising: 'Cruising',
+};
+
+const delayColors: Record<string, string> = {
+  on_time: 'bg-green-500',
+  slight: 'bg-yellow-500',
+  moderate: 'bg-orange-500',
+  severe: 'bg-red-500',
+};
+
+const delayLabels: Record<string, string> = {
+  on_time: 'On Time',
+  slight: 'Slight Delay',
+  moderate: 'Moderate Delay',
+  severe: 'Severe Delay',
 };
 
 interface DetailRowProps {
@@ -38,6 +53,20 @@ function DetailRow({ label, value, unit }: DetailRowProps) {
 
 export default function FlightDetail() {
   const { selectedFlight, setSelectedFlight } = useFlightContext();
+
+  // Fetch predictions for selected flight
+  const { delay, isLoading: isDelayLoading } = useDelayPrediction(
+    selectedFlight?.icao24 ?? null
+  );
+  const { recommendations, isLoading: isGateLoading } = useGateRecommendations(
+    selectedFlight?.icao24 ?? null,
+    3
+  );
+
+  // Show gate recommendations for arriving flights (descending or ground)
+  const isArriving =
+    selectedFlight?.flight_phase === 'descending' ||
+    selectedFlight?.flight_phase === 'ground';
 
   if (!selectedFlight) {
     return (
@@ -122,6 +151,96 @@ export default function FlightDetail() {
         <DetailRow label="Heading" value={heading !== null ? Math.round(heading) : null} unit="deg" />
         <DetailRow label="Vertical Rate" value={vertical_rate !== null ? Math.round(vertical_rate) : null} unit="ft/min" />
       </div>
+
+      {/* Delay Prediction Section */}
+      <div className="mb-4">
+        <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">
+          Delay Prediction
+        </div>
+        {isDelayLoading ? (
+          <div className="text-sm text-slate-400">Loading predictions...</div>
+        ) : delay ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-500">Expected Delay</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-slate-800 text-sm">
+                  {delay.delay_minutes.toFixed(0)} min
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-medium text-white ${
+                    delayColors[delay.category] || 'bg-gray-500'
+                  }`}
+                >
+                  {delayLabels[delay.category] || delay.category}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-500">Confidence</span>
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full"
+                    style={{ width: `${delay.confidence * 100}%` }}
+                  />
+                </div>
+                <span className="font-mono text-slate-800 text-sm">
+                  {(delay.confidence * 100).toFixed(0)}%
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-400">No prediction available</div>
+        )}
+      </div>
+
+      {/* Gate Recommendation Section (only for arriving flights) */}
+      {isArriving && (
+        <div className="mb-4">
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">
+            Gate Recommendations
+          </div>
+          {isGateLoading ? (
+            <div className="text-sm text-slate-400">Loading recommendations...</div>
+          ) : recommendations.length > 0 ? (
+            <div className="space-y-2">
+              {recommendations.map((rec, index) => (
+                <div
+                  key={rec.gate_id}
+                  className={`p-2 rounded border ${
+                    index === 0
+                      ? 'border-blue-200 bg-blue-50'
+                      : 'border-slate-100 bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-mono font-semibold text-slate-800">
+                      {rec.gate_id}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      Score: {(rec.score * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 mb-1">
+                    Taxi time: {rec.taxi_time} min
+                  </div>
+                  {rec.reasons.length > 0 && (
+                    <ul className="text-xs text-slate-500 list-disc list-inside">
+                      {rec.reasons.slice(0, 2).map((reason, i) => (
+                        <li key={i}>{reason}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-400">No recommendations available</div>
+          )}
+        </div>
+      )}
 
       {/* Metadata Section */}
       <div>
