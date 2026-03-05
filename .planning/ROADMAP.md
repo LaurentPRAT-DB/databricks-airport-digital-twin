@@ -50,9 +50,9 @@ Plans:
 **Plans**: 3 plans in 2 waves
 
 Plans:
-- [ ] 02-01-PLAN.md — FastAPI backend with REST and WebSocket endpoints
-- [ ] 02-02-PLAN.md — React frontend with Leaflet 2D map and airport overlay
-- [ ] 02-03-PLAN.md — UI components (flight list, gate status, WebSocket integration)
+- [x] 02-01-PLAN.md — FastAPI backend with REST and WebSocket endpoints
+- [x] 02-02-PLAN.md — React frontend with Leaflet 2D map and airport overlay
+- [x] 02-03-PLAN.md — UI components (flight list, gate status, WebSocket integration)
 
 ### Phase 3: ML Integration
 **Goal**: ML models provide visible predictions for delays, gates, and congestion
@@ -109,7 +109,7 @@ Phases execute in numeric order. Note: Phase 3 depends on Phase 1 (not Phase 2),
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 3/3 | Complete | 2026-03-05 |
-| 2. Backend API + 2D Visualization | 0/3 | In Progress | - |
+| 2. Backend API + 2D Visualization | 3/3 | Complete | 2026-03-05 |
 | 3. ML Integration | 0/2 | Not started | - |
 | 4. 3D Visualization | 0/2 | Not started | - |
 | 5. Platform Integration + Demo Hardening | 0/2 | Not started | - |
