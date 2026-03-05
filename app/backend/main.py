@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.backend.api.routes import router
 from app.backend.api.websocket import websocket_router
+from app.backend.api.predictions import prediction_router
 
 
 app = FastAPI(
@@ -25,6 +26,7 @@ app.add_middleware(
 # Include routers
 app.include_router(router)
 app.include_router(websocket_router)
+app.include_router(prediction_router)
 
 
 @app.get("/health")
