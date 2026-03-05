@@ -12,7 +12,7 @@ This roadmap transforms the Databricks platform demo vision into an interactive 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Data Foundation** - Flight data ingestion, streaming pipeline, and Unity Catalog setup
+- [x] **Phase 1: Data Foundation** - Flight data ingestion, streaming pipeline, and Unity Catalog setup
 - [ ] **Phase 2: Backend API + 2D Visualization** - FastAPI backend and interactive 2D map with flight overlays
 - [ ] **Phase 3: ML Integration** - Delay, gate, and congestion prediction models with Model Serving
 - [ ] **Phase 4: 3D Visualization** - Three.js airport scene with real-time aircraft positions
@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Data ingestion layer (OpenSky API client, circuit breaker, synthetic fallback)
 - [x] 01-02-PLAN.md — DLT medallion pipeline (Bronze/Silver/Gold) and Unity Catalog setup
-- [ ] 01-03-PLAN.md — Streaming configuration (job scheduling, latency, checkpoints, fallback data)
+- [x] 01-03-PLAN.md — Streaming configuration (job scheduling, latency, checkpoints, fallback data)
 
 ### Phase 2: Backend API + 2D Visualization
 **Goal**: Users can view and interact with live flight data on a 2D airport map
@@ -107,7 +107,7 @@ Phases execute in numeric order. Note: Phase 3 depends on Phase 1 (not Phase 2),
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 2/3 | In Progress | - |
+| 1. Data Foundation | 3/3 | Complete | 2026-03-05 |
 | 2. Backend API + 2D Visualization | 0/2 | Not started | - |
 | 3. ML Integration | 0/2 | Not started | - |
 | 4. 3D Visualization | 0/2 | Not started | - |
