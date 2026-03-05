@@ -74,30 +74,46 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
   }, [flight.heading]);
 
   // Animation refs for smooth interpolation
+  // Store current interpolated values to animate toward targets
   const currentPosition = useRef(new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z));
   const currentRotation = useRef(targetRotation);
 
-  // Animate position and rotation smoothly
-  useFrame(() => {
+  /**
+   * Smooth Animation Loop
+   *
+   * Uses linear interpolation (lerp) to smoothly animate aircraft
+   * from their current position/rotation toward the target values
+   * derived from flight data. This creates fluid motion rather than
+   * jumping when new data arrives.
+   *
+   * Lerp factor of 0.1 means the object moves 10% of the remaining
+   * distance toward the target each frame, creating smooth deceleration.
+   */
+  useFrame((_, delta) => {
     if (!groupRef.current) return;
 
-    // Lerp position toward target
-    const lerpFactor = 0.1;
+    // Adjust lerp factor based on frame time for consistent animation speed
+    // Base factor of 0.1 at 60fps, scaled by delta time
+    const baseLerpFactor = 0.1;
+    const lerpFactor = Math.min(baseLerpFactor * delta * 60, 1);
+
+    // Lerp position toward target (x, y, z)
     currentPosition.current.lerp(
       new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z),
       lerpFactor
     );
 
-    // Lerp rotation toward target
+    // Lerp rotation toward target with angle wrapping
+    // Handle the case where rotation crosses the -PI/+PI boundary
     const rotDiff = targetRotation - currentRotation.current;
-    // Handle wrapping around 2*PI
     let adjustedDiff = rotDiff;
     if (Math.abs(rotDiff) > Math.PI) {
+      // Wrap around to take the shorter rotation path
       adjustedDiff = rotDiff > 0 ? rotDiff - 2 * Math.PI : rotDiff + 2 * Math.PI;
     }
     currentRotation.current += adjustedDiff * lerpFactor;
 
-    // Apply to group
+    // Apply interpolated values to the group transform
     groupRef.current.position.copy(currentPosition.current);
     groupRef.current.rotation.y = currentRotation.current;
   });
