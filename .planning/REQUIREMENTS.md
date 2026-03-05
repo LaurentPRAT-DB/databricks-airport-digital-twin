@@ -9,8 +9,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Data Foundation
 
-- [ ] **DATA-01**: System ingests real-time flight data from OpenSky Network API
-- [ ] **DATA-02**: System provides fallback to cached/synthetic data when API unavailable
+- [x] **DATA-01**: System ingests real-time flight data from OpenSky Network API
+- [x] **DATA-02**: System provides fallback to cached/synthetic data when API unavailable
 - [ ] **DATA-03**: DLT pipeline transforms raw data through Bronze → Silver → Gold layers
 - [ ] **DATA-04**: All tables registered in Unity Catalog with proper governance
 - [ ] **DATA-05**: Data lineage tracked and visible in Unity Catalog
@@ -97,8 +97,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | Phase 1 | Pending |
-| DATA-02 | Phase 1 | Pending |
+| DATA-01 | Phase 1 | Complete |
+| DATA-02 | Phase 1 | Complete |
 | DATA-03 | Phase 1 | Pending |
 | DATA-04 | Phase 1 | Pending |
 | DATA-05 | Phase 1 | Pending |
