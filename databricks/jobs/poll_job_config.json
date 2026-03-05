@@ -1,0 +1,45 @@
+{
+  "name": "airport_poll_opensky",
+  "tasks": [
+    {
+      "task_key": "poll_flights",
+      "notebook_task": {
+        "notebook_path": "/Repos/airport-digital-twin/databricks/notebooks/run_poll",
+        "source": "WORKSPACE"
+      },
+      "job_cluster_key": "poll_cluster",
+      "timeout_seconds": 300
+    }
+  ],
+  "job_clusters": [
+    {
+      "job_cluster_key": "poll_cluster",
+      "new_cluster": {
+        "spark_version": "14.3.x-scala2.12",
+        "node_type_id": "i3.xlarge",
+        "num_workers": 0,
+        "spark_conf": {
+          "spark.master": "local[*]",
+          "spark.databricks.cluster.profile": "singleNode"
+        },
+        "custom_tags": {
+          "ResourceClass": "SingleNode"
+        }
+      }
+    }
+  ],
+  "schedule": {
+    "quartz_cron_expression": "0 0/1 * * * ?",
+    "timezone_id": "UTC",
+    "pause_status": "PAUSED"
+  },
+  "max_concurrent_runs": 1,
+  "email_notifications": {
+    "on_failure": [],
+    "no_alert_for_skipped_runs": true
+  },
+  "tags": {
+    "project": "airport-digital-twin",
+    "layer": "ingestion"
+  }
+}
