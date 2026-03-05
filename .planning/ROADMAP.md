@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [ ] 01-01-PLAN.md — Data ingestion layer (OpenSky API client, circuit breaker, synthetic fallback)
-- [ ] 01-02-PLAN.md — DLT medallion pipeline (Bronze/Silver/Gold) and Unity Catalog setup
+- [x] 01-02-PLAN.md — DLT medallion pipeline (Bronze/Silver/Gold) and Unity Catalog setup
 - [ ] 01-03-PLAN.md — Streaming configuration (job scheduling, latency, checkpoints, fallback data)
 
 ### Phase 2: Backend API + 2D Visualization
@@ -107,7 +107,7 @@ Phases execute in numeric order. Note: Phase 3 depends on Phase 1 (not Phase 2),
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 0/3 | Planned | - |
+| 1. Data Foundation | 1/3 | In Progress | - |
 | 2. Backend API + 2D Visualization | 0/2 | Not started | - |
 | 3. ML Integration | 0/2 | Not started | - |
 | 4. 3D Visualization | 0/2 | Not started | - |
