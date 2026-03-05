@@ -64,3 +64,5 @@ env/
 
 # Data directories (for local development)
 data/
+# Exception: keep fallback sample data for offline mode
+!data/fallback/
