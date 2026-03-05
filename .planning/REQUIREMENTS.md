@@ -27,7 +27,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **ML-02**: Gate optimization model recommends optimal gate assignments
 - [x] **ML-03**: Congestion prediction model identifies terminal/taxiway bottlenecks
 - [x] **ML-04**: All models tracked in MLflow with experiment logging
-- [ ] **ML-05**: Models deployed via Databricks Model Serving for real-time inference
+- [x] **ML-05**: Models deployed via Databricks Model Serving for real-time inference
 
 ### Visualization - 2D
 
@@ -109,7 +109,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ML-02 | Phase 3 | Complete |
 | ML-03 | Phase 3 | Complete |
 | ML-04 | Phase 3 | Complete |
-| ML-05 | Phase 3 | Pending |
+| ML-05 | Phase 3 | Complete |
 | VIZ2D-01 | Phase 2 | Complete |
 | VIZ2D-02 | Phase 2 | Complete |
 | VIZ2D-03 | Phase 2 | Complete |
@@ -137,4 +137,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-05 after 03-01 plan execution*
+*Last updated: 2026-03-05 after 03-03 plan execution*

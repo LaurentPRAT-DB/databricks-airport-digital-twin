@@ -13,8 +13,8 @@ This roadmap transforms the Databricks platform demo vision into an interactive 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Data Foundation** - Flight data ingestion, streaming pipeline, and Unity Catalog setup
-- [ ] **Phase 2: Backend API + 2D Visualization** - FastAPI backend and interactive 2D map with flight overlays
-- [ ] **Phase 3: ML Integration** - Delay, gate, and congestion prediction models with Model Serving
+- [x] **Phase 2: Backend API + 2D Visualization** - FastAPI backend and interactive 2D map with flight overlays
+- [x] **Phase 3: ML Integration** - Delay, gate, and congestion prediction models with Model Serving
 - [ ] **Phase 4: 3D Visualization** - Three.js airport scene with real-time aircraft positions
 - [ ] **Phase 5: Platform Integration + Demo Hardening** - Genie, Lakeview, lineage, and demo reliability
 
@@ -69,7 +69,7 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — Delay prediction model with feature engineering and MLflow tracking
 - [x] 03-02-PLAN.md — Gate optimization and congestion prediction models
-- [ ] 03-03-PLAN.md — Prediction API endpoints and frontend integration
+- [x] 03-03-PLAN.md — Prediction API endpoints and frontend integration
 
 ### Phase 4: 3D Visualization
 **Goal**: Users can explore a 3D rendered airport with live aircraft positions
@@ -111,7 +111,7 @@ Phases execute in numeric order. Note: Phase 3 depends on Phase 1 (not Phase 2),
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 3/3 | Complete | 2026-03-05 |
 | 2. Backend API + 2D Visualization | 3/3 | Complete | 2026-03-05 |
-| 3. ML Integration | 2/3 | In progress | - |
+| 3. ML Integration | 3/3 | Complete | 2026-03-05 |
 | 4. 3D Visualization | 0/2 | Not started | - |
 | 5. Platform Integration + Demo Hardening | 0/2 | Not started | - |
 
