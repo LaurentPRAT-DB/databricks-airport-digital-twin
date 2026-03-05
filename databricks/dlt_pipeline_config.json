@@ -1,0 +1,43 @@
+{
+  "name": "airport_digital_twin_pipeline",
+  "catalog": "airport_digital_twin",
+  "target": "default",
+  "storage": "/mnt/airport_digital_twin/dlt",
+  "continuous": false,
+  "development": true,
+  "channel": "CURRENT",
+  "edition": "ADVANCED",
+  "photon": true,
+  "clusters": [
+    {
+      "label": "default",
+      "autoscale": {
+        "min_workers": 1,
+        "max_workers": 4,
+        "mode": "ENHANCED"
+      }
+    }
+  ],
+  "libraries": [
+    {
+      "notebook": {
+        "path": "/Workspace/airport_digital_twin/src/pipelines/bronze"
+      }
+    },
+    {
+      "notebook": {
+        "path": "/Workspace/airport_digital_twin/src/pipelines/silver"
+      }
+    },
+    {
+      "notebook": {
+        "path": "/Workspace/airport_digital_twin/src/pipelines/gold"
+      }
+    }
+  ],
+  "configuration": {
+    "spark.databricks.delta.preview.enabled": "true",
+    "pipelines.trigger.interval": "5 minutes"
+  },
+  "notifications": []
+}
