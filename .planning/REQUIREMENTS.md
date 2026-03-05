@@ -39,9 +39,9 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Visualization - 3D
 
 - [x] **VIZ3D-01**: 3D scene renders airport terminal and runway environment
-- [ ] **VIZ3D-02**: Aircraft models positioned correctly in 3D space
+- [x] **VIZ3D-02**: Aircraft models positioned correctly in 3D space
 - [x] **VIZ3D-03**: User can navigate 3D view (pan, zoom, rotate)
-- [ ] **VIZ3D-04**: 3D view updates with real-time flight positions
+- [x] **VIZ3D-04**: 3D view updates with real-time flight positions
 
 ### UI Components
 
@@ -115,9 +115,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIZ2D-03 | Phase 2 | Complete |
 | VIZ2D-04 | Phase 2 | Complete |
 | VIZ3D-01 | Phase 4 | Complete |
-| VIZ3D-02 | Phase 4 | Pending |
+| VIZ3D-02 | Phase 4 | Complete |
 | VIZ3D-03 | Phase 4 | Complete |
-| VIZ3D-04 | Phase 4 | Pending |
+| VIZ3D-04 | Phase 4 | Complete |
 | UI-01 | Phase 2 | Complete |
 | UI-02 | Phase 2 | Complete |
 | UI-03 | Phase 2 | Complete |
@@ -137,4 +137,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-05*
-*Last updated: 2026-03-05 after 04-01 plan execution*
+*Last updated: 2026-03-05 after 04-02 plan execution*
