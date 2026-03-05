@@ -30,12 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Data lineage graph displays complete flow from Bronze to Gold
   4. System serves cached/synthetic data when OpenSky API is unavailable
   5. Streaming pipeline recovers gracefully from restarts without data loss
-**Plans**: TBD
+**Plans**: 3 plans in 2 waves
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md — Data ingestion layer (OpenSky API client, circuit breaker, synthetic fallback)
+- [ ] 01-02-PLAN.md — DLT medallion pipeline (Bronze/Silver/Gold) and Unity Catalog setup
+- [ ] 01-03-PLAN.md — Streaming configuration (job scheduling, latency, checkpoints, fallback data)
 
 ### Phase 2: Backend API + 2D Visualization
 **Goal**: Users can view and interact with live flight data on a 2D airport map
@@ -107,7 +107,7 @@ Phases execute in numeric order. Note: Phase 3 depends on Phase 1 (not Phase 2),
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 0/3 | Not started | - |
+| 1. Data Foundation | 0/3 | Planned | - |
 | 2. Backend API + 2D Visualization | 0/2 | Not started | - |
 | 3. ML Integration | 0/2 | Not started | - |
 | 4. 3D Visualization | 0/2 | Not started | - |
@@ -115,5 +115,6 @@ Phases execute in numeric order. Note: Phase 3 depends on Phase 1 (not Phase 2),
 
 ---
 *Roadmap created: 2026-03-05*
+*Phase 1 planned: 2026-03-05*
 *Granularity: coarse (5 phases)*
 *Coverage: 33/33 v1 requirements mapped*
