@@ -18,3 +18,41 @@ export interface FlightsResponse {
   count: number;
   timestamp: string;
 }
+
+// Prediction types
+export interface DelayPrediction {
+  icao24: string;
+  delay_minutes: number;
+  confidence: number;
+  category: "on_time" | "slight" | "moderate" | "severe";
+}
+
+export interface GateRecommendation {
+  gate_id: string;
+  score: number;
+  reasons: string[];
+  taxi_time: number;
+}
+
+export interface CongestionArea {
+  area_id: string;
+  area_type: "runway" | "taxiway" | "apron" | "terminal";
+  level: "low" | "moderate" | "high" | "critical";
+  flight_count: number;
+  wait_minutes: number;
+}
+
+export interface DelaysResponse {
+  delays: DelayPrediction[];
+  count: number;
+}
+
+export interface CongestionResponse {
+  areas: CongestionArea[];
+  count: number;
+}
+
+export interface FlightWithPredictions extends Flight {
+  delayPrediction?: DelayPrediction;
+  gateRecommendations?: GateRecommendation[];
+}
