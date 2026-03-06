@@ -1,3 +1,34 @@
-name: airport-digital-twin
-entrypoint: uvicorn app.backend.main:app --host 0.0.0.0 --port 8000
-python_version: "3.10"
+command:
+  - "uvicorn"
+  - "app.backend.main:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8000"
+
+env:
+  # Data source configuration
+  - name: USE_MOCK_BACKEND
+    value: "false"
+
+  # Databricks SQL (Delta tables)
+  - name: DATABRICKS_CATALOG
+    value: "serverless_stable_3n0ihb_catalog"
+  - name: DATABRICKS_SCHEMA
+    value: "airport_digital_twin"
+  - name: DATABRICKS_USE_OAUTH
+    value: "true"
+
+  # Lakebase Autoscaling PostgreSQL
+  - name: LAKEBASE_HOST
+    value: "ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com"
+  - name: LAKEBASE_PORT
+    value: "5432"
+  - name: LAKEBASE_DATABASE
+    value: "databricks_postgres"
+  - name: LAKEBASE_SCHEMA
+    value: "public"
+  - name: LAKEBASE_ENDPOINT_NAME
+    value: "projects/airport-digital-twin/branches/production/endpoints/primary"
+  - name: LAKEBASE_USE_OAUTH
+    value: "true"

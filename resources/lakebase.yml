@@ -1,0 +1,50 @@
+# Lakebase Autoscaling PostgreSQL for low-latency flight data serving
+# Note: Lakebase Autoscaling resources are managed via the postgres SDK/API
+# This file documents the expected configuration
+
+# Lakebase Autoscaling Configuration:
+#
+# Project: airport-digital-twin
+# Branch: production (default)
+# Endpoint: primary
+# Database: databricks_postgres (default)
+# Schema: public
+#
+# Tables:
+#   - flight_status (see scripts/lakebase_schema.sql)
+#
+# Connection details are stored in app.yaml environment variables:
+#   - LAKEBASE_HOST
+#   - LAKEBASE_PORT
+#   - LAKEBASE_DATABASE
+#   - LAKEBASE_SCHEMA
+#   - LAKEBASE_ENDPOINT_NAME (for OAuth token generation)
+#   - LAKEBASE_USE_OAUTH
+#
+# Sync job runs periodically to copy data from Delta Gold tables to Lakebase
+# See: scripts/sync_delta_to_lakebase.py
+
+# Lakebase Autoscaling Management Commands:
+#
+# 1. List projects:
+#    databricks postgres list-projects --profile FEVM_SERVERLESS_STABLE
+#
+# 2. Get project details:
+#    databricks postgres get-project projects/airport-digital-twin --profile FEVM_SERVERLESS_STABLE
+#
+# 3. Get endpoint:
+#    databricks postgres get-endpoint projects/airport-digital-twin/branches/production/endpoints/primary --profile FEVM_SERVERLESS_STABLE
+#
+# 4. Connect via Python:
+#    from databricks.sdk import WorkspaceClient
+#    w = WorkspaceClient(profile='FEVM_SERVERLESS_STABLE')
+#    cred = w.postgres.generate_database_credential(
+#        endpoint='projects/airport-digital-twin/branches/production/endpoints/primary'
+#    )
+#    # Use cred.token as password, current user email as user
+#
+# Key Features (vs Provisioned):
+#   - Scale-to-zero: Automatically suspends compute when idle
+#   - Autoscaling: 0.5-112 CU based on load
+#   - Branching: Create isolated dev/test environments
+#   - OAuth tokens: 1-hour expiry, auto-refresh in SDK
