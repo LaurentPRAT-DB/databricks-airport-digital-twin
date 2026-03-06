@@ -1,8 +1,12 @@
 # Airport Digital Twin
 
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/LaurentPRAT-DB/databricks-airport-digital-twin)
+
 A comprehensive airport digital twin demo application showcasing the full Databricks platform stack. Built as a **Databricks App** using the APX framework (FastAPI + React + Three.js), it visualizes real-time airport operations through 2D maps, 3D visualizations, and AI/BI dashboards — all powered by live flight data.
 
-![Architecture Overview](docs/architecture-overview.png)
+![2D Map View](docs/screenshots/2d-map-view.png)
+
+![3D View](docs/screenshots/3d-view.png)
 
 ## Table of Contents
 
@@ -20,6 +24,7 @@ A comprehensive airport digital twin demo application showcasing the full Databr
 - [Platform Features](#platform-features)
 - [Scripts & Tools](#scripts--tools)
 - [API Reference](#api-reference)
+- [User Guide](#user-guide)
 - [Contributing](#contributing)
 
 ---
@@ -730,6 +735,18 @@ Returns congestion levels for airport areas.
   "count": 12
 }
 ```
+
+---
+
+## User Guide
+
+For detailed usage instructions, see the [User Guide](docs/USER_GUIDE.md).
+
+Quick demo tips:
+1. Start with 2D view - Show the real-time map
+2. Switch to 3D - Demonstrate immersive visualization
+3. Click Platform - Show Databricks integrations
+4. Open Dashboard - Show Lakeview analytics
 
 ---
 
