@@ -21,7 +21,7 @@ function ViewToggle({
   onToggle: (mode: ViewMode) => void;
 }) {
   return (
-    <div className="absolute top-4 right-4 z-10 flex bg-white rounded-lg shadow-md overflow-hidden">
+    <div className="absolute top-4 right-4 z-[1001] flex bg-white rounded-lg shadow-md overflow-hidden">
       <button
         onClick={() => onToggle('2d')}
         className={`px-4 py-2 text-sm font-medium transition-colors ${

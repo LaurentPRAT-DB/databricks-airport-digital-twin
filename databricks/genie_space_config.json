@@ -1,0 +1,35 @@
+{
+  "name": "Airport Digital Twin - Flight Queries",
+  "description": "Ask natural language questions about flight data, gate status, and predictions",
+  "tables": [
+    {
+      "catalog": "${catalog}",
+      "schema": "${schema}",
+      "table": "gold_flight_positions",
+      "description": "Real-time flight position data including callsign, coordinates, altitude, speed, and flight phase"
+    },
+    {
+      "catalog": "${catalog}",
+      "schema": "${schema}",
+      "table": "gold_gate_status",
+      "description": "Gate occupancy status by terminal with availability indicators"
+    },
+    {
+      "catalog": "${catalog}",
+      "schema": "${schema}",
+      "table": "gold_predictions",
+      "description": "ML predictions including delay forecasts and gate recommendations"
+    }
+  ],
+  "sample_questions": [
+    "How many flights are currently in the air?",
+    "Which gates are available in Terminal A?",
+    "What flights have predicted delays over 15 minutes?",
+    "Show me all Alaska Airlines flights",
+    "What is the average altitude of climbing flights?",
+    "Which terminal has the highest gate utilization?",
+    "List flights that are currently descending",
+    "How many flights are on the ground?"
+  ],
+  "instructions": "This Genie Space provides access to airport digital twin data. Users can query real-time flight positions, gate status, and ML predictions. Always include relevant context like timestamps and flight phases in responses."
+}

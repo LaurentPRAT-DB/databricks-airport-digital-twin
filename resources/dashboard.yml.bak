@@ -1,0 +1,9 @@
+resources:
+  dashboards:
+    flight_metrics_dashboard:
+      display_name: "[${bundle.target}] Airport Digital Twin - Flight Metrics"
+      file_path: ../dashboards/flight_metrics.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      permissions:
+        - level: CAN_RUN
+          group_name: "users"

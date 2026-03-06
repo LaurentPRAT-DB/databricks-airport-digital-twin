@@ -1,0 +1,6 @@
+resources:
+  apps:
+    airport_digital_twin:
+      name: airport-digital-twin-${bundle.target}
+      description: "Airport Digital Twin - Real-time flight visualization"
+      source_code_path: ..

@@ -66,3 +66,26 @@ env/
 data/
 # Exception: keep fallback sample data for offline mode
 !data/fallback/
+
+# Node modules
+app/frontend/node_modules/
+
+# MLflow runs
+mlruns/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+
+# Environment
+.env
+.env.local
+
+# Build artifacts
+app/frontend/dist/
+*.egg-info/

@@ -15,8 +15,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Data Foundation** - Flight data ingestion, streaming pipeline, and Unity Catalog setup
 - [x] **Phase 2: Backend API + 2D Visualization** - FastAPI backend and interactive 2D map with flight overlays
 - [x] **Phase 3: ML Integration** - Delay, gate, and congestion prediction models with Model Serving
-- [ ] **Phase 4: 3D Visualization** - Three.js airport scene with real-time aircraft positions
-- [ ] **Phase 5: Platform Integration + Demo Hardening** - Genie, Lakeview, lineage, and demo reliability
+- [x] **Phase 4: 3D Visualization** - Three.js airport scene with real-time aircraft positions
+- [x] **Phase 5: Platform Integration + Demo Hardening** - Genie, Lakeview, lineage, and demo reliability
 
 ## Phase Details
 
@@ -89,18 +89,18 @@ Plans:
 ### Phase 5: Platform Integration + Demo Hardening
 **Goal**: Databricks platform features integrated and demo runs reliably for presentations
 **Depends on**: Phase 3, Phase 4
-**Requirements**: PLAT-01, PLAT-02, PLAT-03, PLAT-04, DEMO-01, DEMO-02, DEMO-03
+**Requirements**: PLAT-01, PLAT-02, PLAT-03, PLAT-04 (✅), DEMO-01, DEMO-02, DEMO-03
 **Success Criteria** (what must be TRUE):
   1. Lakeview dashboard displays live flight metrics within the application
   2. Genie responds to natural language queries about flights and gates
   3. Data lineage view shows complete pipeline from ingestion to visualization
   4. Application handles API failures gracefully with fallback data and clear UI state
   5. Pre-demo health check validates all services are operational
-**Plans**: TBD
+**Plans**: 2 plans in 2 waves
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [x] 05-01-PLAN.md — Demo Reliability & Health Check (fallback data, health script, warmup)
+- [x] 05-02-PLAN.md — Platform Integration (Lakeview dashboard, Genie Space, lineage links)
 
 ## Progress
 
@@ -113,7 +113,7 @@ Phases execute in numeric order. Note: Phase 3 depends on Phase 1 (not Phase 2),
 | 2. Backend API + 2D Visualization | 3/3 | Complete | 2026-03-05 |
 | 3. ML Integration | 3/3 | Complete | 2026-03-05 |
 | 4. 3D Visualization | 2/2 | Complete | 2026-03-05 |
-| 5. Platform Integration + Demo Hardening | 0/2 | Not started | - |
+| 5. Platform Integration + Demo Hardening | 2/2 | Complete | 2026-03-06 |
 
 ---
 *Roadmap created: 2026-03-05*

@@ -1,0 +1,37 @@
+# Delta to Lakebase sync job
+# Runs every minute to keep Lakebase in sync with Gold Delta tables
+
+resources:
+  jobs:
+    delta_lakebase_sync:
+      name: "[${bundle.target}] Airport Digital Twin - Delta to Lakebase Sync"
+      description: "Syncs flight data from Delta Gold tables to Lakebase PostgreSQL for low-latency serving"
+
+      # Serverless environment
+      environments:
+        - environment_key: sync_env
+          spec:
+            client: "1"
+
+      tasks:
+        - task_key: sync_flights
+          notebook_task:
+            notebook_path: ../databricks/notebooks/sync_to_lakebase.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          environment_key: sync_env
+
+      # Run every minute
+      schedule:
+        quartz_cron_expression: "0 * * * * ?"
+        timezone_id: "UTC"
+        pause_status: UNPAUSED
+
+      tags:
+        project: airport-digital-twin
+        component: sync
+        target: ${bundle.target}
+
+      # Timeout after 5 minutes
+      timeout_seconds: 300

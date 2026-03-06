@@ -56,6 +56,7 @@ class FlightListResponse(BaseModel):
                 "flights": [],
                 "count": 0,
                 "timestamp": "2024-03-05T12:00:00Z",
+                "data_source": "synthetic",
             }
         }
     )
@@ -64,4 +65,7 @@ class FlightListResponse(BaseModel):
     count: int = Field(..., description="Number of flights in response")
     timestamp: datetime = Field(
         default_factory=_utc_now, description="Response timestamp"
+    )
+    data_source: str = Field(
+        "synthetic", description="Data source: live, cached, or synthetic"
     )

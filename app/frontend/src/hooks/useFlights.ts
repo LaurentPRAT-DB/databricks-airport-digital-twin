@@ -2,7 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Flight, FlightsResponse } from '../types/flight';
 
 async function fetchFlights(): Promise<FlightsResponse> {
-  const response = await fetch('/api/flights');
+  const response = await fetch('/api/flights', {
+    credentials: 'include', // Include auth cookies for Databricks Apps
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch flights: ${response.statusText}`);
   }
@@ -14,6 +16,7 @@ export interface UseFlightsResult {
   isLoading: boolean;
   error: Error | null;
   lastUpdated: string | null;
+  dataSource: 'live' | 'cached' | 'synthetic' | null;
 }
 
 export function useFlights(): UseFlightsResult {
@@ -31,5 +34,6 @@ export function useFlights(): UseFlightsResult {
     isLoading,
     error: error ?? null,
     lastUpdated: data?.timestamp ?? null,
+    dataSource: data?.data_source ?? null,
   };
 }

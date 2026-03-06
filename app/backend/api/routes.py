@@ -43,3 +43,18 @@ async def get_flight(
     if flight is None:
         raise HTTPException(status_code=404, detail=f"Flight {icao24} not found")
     return flight
+
+
+@router.get("/data-sources")
+async def get_data_sources_status(
+    service: FlightService = Depends(get_flight_service),
+) -> dict:
+    """
+    Get status of all data sources.
+
+    Returns availability and health of:
+    - Lakebase (PostgreSQL)
+    - Delta tables (Databricks SQL)
+    - Synthetic fallback
+    """
+    return service.get_data_sources_status()

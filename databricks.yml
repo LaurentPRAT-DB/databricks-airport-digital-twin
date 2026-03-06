@@ -1,0 +1,43 @@
+bundle:
+  name: airport-digital-twin
+
+sync:
+  include:
+    - app/**
+    - src/**
+    - app.yaml
+    - requirements.txt
+    - pyproject.toml
+    - databricks/**
+    - resources/**
+  exclude:
+    - node_modules/**
+    - "*.pyc"
+    - __pycache__/**
+    - .venv/**
+    - .git/**
+    - tests/**
+    - .planning/**
+    - .databricks/**
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    default: "airport_digital_twin"
+  schema:
+    default: "default"
+  warehouse_id:
+    description: "SQL Warehouse ID for the app"
+    default: ""
+
+targets:
+  dev:
+    default: true
+    mode: development
+    workspace:
+      profile: FEVM_SERVERLESS_STABLE
+    variables:
+      catalog: "serverless_stable_3n0ihb_catalog"
+      schema: "airport_digital_twin"

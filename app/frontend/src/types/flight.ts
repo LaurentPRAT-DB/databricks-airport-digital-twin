@@ -17,6 +17,7 @@ export interface FlightsResponse {
   flights: Flight[];
   count: number;
   timestamp: string;
+  data_source: 'live' | 'cached' | 'synthetic';
 }
 
 // Prediction types

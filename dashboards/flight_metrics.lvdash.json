@@ -1,0 +1,237 @@
+{
+  "datasets": [
+    {
+      "name": "flight_summary",
+      "displayName": "Flight Summary",
+      "queryLines": [
+        "SELECT COUNT(*) as total_flights, SUM(CASE WHEN flight_phase = 'ground' THEN 1 ELSE 0 END) as ground, SUM(CASE WHEN flight_phase = 'climbing' THEN 1 ELSE 0 END) as climbing, SUM(CASE WHEN flight_phase = 'cruising' THEN 1 ELSE 0 END) as cruising, SUM(CASE WHEN flight_phase = 'descending' THEN 1 ELSE 0 END) as descending FROM ${catalog}.${schema}.flight_status_gold"
+      ]
+    },
+    {
+      "name": "flights_by_phase",
+      "displayName": "Flights by Phase",
+      "queryLines": [
+        "SELECT flight_phase, COUNT(*) as count FROM ${catalog}.${schema}.flight_status_gold GROUP BY flight_phase ORDER BY count DESC"
+      ]
+    },
+    {
+      "name": "flights_by_airline",
+      "displayName": "Flights by Airline",
+      "queryLines": [
+        "SELECT SUBSTRING(callsign, 1, 3) as airline_code, COUNT(*) as count FROM ${catalog}.${schema}.flight_status_gold WHERE callsign IS NOT NULL GROUP BY SUBSTRING(callsign, 1, 3) ORDER BY count DESC LIMIT 10"
+      ]
+    },
+    {
+      "name": "flight_list",
+      "displayName": "Flight List",
+      "queryLines": [
+        "SELECT icao24, callsign, flight_phase, altitude, velocity, last_seen FROM ${catalog}.${schema}.flight_status_gold ORDER BY last_seen DESC LIMIT 50"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "overview",
+      "displayName": "Flight Overview",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "w_total",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "flight_summary",
+                "fields": [{"name": "total_flights", "expression": "`total_flights`"}],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {"fieldName": "total_flights", "displayName": "Total Flights"}
+              },
+              "frame": {"showTitle": true, "title": "Active Flights"}
+            }
+          },
+          "position": {"x": 0, "y": 0, "width": 2, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "w_ground",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "flight_summary",
+                "fields": [{"name": "ground", "expression": "`ground`"}],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {"fieldName": "ground", "displayName": "On Ground"}
+              },
+              "frame": {"showTitle": true, "title": "On Ground"}
+            }
+          },
+          "position": {"x": 2, "y": 0, "width": 1, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "w_climbing",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "flight_summary",
+                "fields": [{"name": "climbing", "expression": "`climbing`"}],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {"fieldName": "climbing", "displayName": "Climbing"}
+              },
+              "frame": {"showTitle": true, "title": "Climbing"}
+            }
+          },
+          "position": {"x": 3, "y": 0, "width": 1, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "w_cruising",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "flight_summary",
+                "fields": [{"name": "cruising", "expression": "`cruising`"}],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {"fieldName": "cruising", "displayName": "Cruising"}
+              },
+              "frame": {"showTitle": true, "title": "Cruising"}
+            }
+          },
+          "position": {"x": 4, "y": 0, "width": 1, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "w_descending",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "flight_summary",
+                "fields": [{"name": "descending", "expression": "`descending`"}],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {"fieldName": "descending", "displayName": "Descending"}
+              },
+              "frame": {"showTitle": true, "title": "Descending"}
+            }
+          },
+          "position": {"x": 5, "y": 0, "width": 1, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "w_phase_chart",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "flights_by_phase",
+                "fields": [
+                  {"name": "flight_phase", "expression": "`flight_phase`"},
+                  {"name": "count", "expression": "`count`"}
+                ],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {"fieldName": "flight_phase", "scale": {"type": "categorical"}, "displayName": "Phase"},
+                "y": {"fieldName": "count", "scale": {"type": "quantitative"}, "displayName": "Count"}
+              },
+              "frame": {"showTitle": true, "title": "Flights by Phase"}
+            }
+          },
+          "position": {"x": 0, "y": 2, "width": 3, "height": 4}
+        },
+        {
+          "widget": {
+            "name": "w_airline_chart",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "flights_by_airline",
+                "fields": [
+                  {"name": "airline_code", "expression": "`airline_code`"},
+                  {"name": "count", "expression": "`count`"}
+                ],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {"fieldName": "airline_code", "scale": {"type": "categorical"}, "displayName": "Airline"},
+                "y": {"fieldName": "count", "scale": {"type": "quantitative"}, "displayName": "Flights"}
+              },
+              "frame": {"showTitle": true, "title": "Top Airlines"}
+            }
+          },
+          "position": {"x": 3, "y": 2, "width": 3, "height": 4}
+        },
+        {
+          "widget": {
+            "name": "w_table",
+            "queries": [{
+              "name": "main_query",
+              "query": {
+                "datasetName": "flight_list",
+                "fields": [
+                  {"name": "callsign", "expression": "`callsign`"},
+                  {"name": "flight_phase", "expression": "`flight_phase`"},
+                  {"name": "altitude", "expression": "`altitude`"},
+                  {"name": "velocity", "expression": "`velocity`"},
+                  {"name": "last_seen", "expression": "`last_seen`"}
+                ],
+                "disaggregated": true
+              }
+            }],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {"fieldName": "callsign", "displayName": "Callsign"},
+                  {"fieldName": "flight_phase", "displayName": "Phase"},
+                  {"fieldName": "altitude", "displayName": "Altitude (m)"},
+                  {"fieldName": "velocity", "displayName": "Speed (m/s)"},
+                  {"fieldName": "last_seen", "displayName": "Last Update"}
+                ]
+              },
+              "frame": {"showTitle": true, "title": "Flight Details"}
+            }
+          },
+          "position": {"x": 0, "y": 6, "width": 6, "height": 4}
+        }
+      ]
+    }
+  ]
+}

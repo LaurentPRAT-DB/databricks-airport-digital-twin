@@ -14,6 +14,14 @@ dependencies = [
     "tenacity>=8.2",
     "circuitbreaker>=1.4",
     "Faker>=22.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "websockets>=12.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.26.0",
+    # Data serving layer
+    "databricks-sql-connector>=3.0.0",
+    "psycopg2-binary>=2.9.9",
 ]
 
 [project.optional-dependencies]

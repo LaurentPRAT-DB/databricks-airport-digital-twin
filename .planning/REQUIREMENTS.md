@@ -52,16 +52,16 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Platform Integration
 
-- [ ] **PLAT-01**: AI/BI Lakeview dashboards embedded in application
-- [ ] **PLAT-02**: Genie integration enables natural language queries about flights
-- [ ] **PLAT-03**: Data lineage view shows data flow through the pipeline
-- [ ] **PLAT-04**: Application deployed as Databricks App using APX framework
+- [x] **PLAT-01**: AI/BI Lakeview dashboards embedded in application
+- [x] **PLAT-02**: Genie integration enables natural language queries about flights
+- [x] **PLAT-03**: Data lineage view shows data flow through the pipeline
+- [x] **PLAT-04**: Application deployed as Databricks App using APX framework
 
 ### Demo Reliability
 
-- [ ] **DEMO-01**: Application gracefully handles API failures with fallback data
-- [ ] **DEMO-02**: Pre-demo health check script validates all services
-- [ ] **DEMO-03**: Model serving endpoints pre-warmed before demo
+- [x] **DEMO-01**: Application gracefully handles API failures with fallback data
+- [x] **DEMO-02**: Pre-demo health check script validates all services
+- [x] **DEMO-03**: Model serving endpoints pre-warmed before demo
 
 ## v2 Requirements
 
@@ -122,13 +122,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-02 | Phase 2 | Complete |
 | UI-03 | Phase 2 | Complete |
 | UI-04 | Phase 2 | Complete |
-| PLAT-01 | Phase 5 | Pending |
-| PLAT-02 | Phase 5 | Pending |
-| PLAT-03 | Phase 5 | Pending |
-| PLAT-04 | Phase 5 | Pending |
-| DEMO-01 | Phase 5 | Pending |
-| DEMO-02 | Phase 5 | Pending |
-| DEMO-03 | Phase 5 | Pending |
+| PLAT-01 | Phase 5 | Complete |
+| PLAT-02 | Phase 5 | Complete |
+| PLAT-03 | Phase 5 | Complete |
+| PLAT-04 | Phase 5 | Complete |
+| DEMO-01 | Phase 5 | Complete |
+| DEMO-02 | Phase 5 | Complete |
+| DEMO-03 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 33 total

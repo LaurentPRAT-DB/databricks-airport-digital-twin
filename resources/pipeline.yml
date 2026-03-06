@@ -1,0 +1,19 @@
+resources:
+  pipelines:
+    airport_dlt_pipeline:
+      name: "[${bundle.target}] Airport Digital Twin DLT"
+      catalog: ${var.catalog}
+      target: ${var.schema}
+      development: true
+      continuous: false
+      channel: CURRENT
+      serverless: true
+      libraries:
+        - file:
+            path: ../src/pipelines/bronze.py
+        - file:
+            path: ../src/pipelines/silver.py
+        - file:
+            path: ../src/pipelines/gold.py
+      configuration:
+        pipelines.trigger.interval: "5 minutes"

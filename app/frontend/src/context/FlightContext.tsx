@@ -9,12 +9,13 @@ interface FlightContextType {
   isLoading: boolean;
   error: Error | null;
   lastUpdated: string | null;
+  dataSource: 'live' | 'cached' | 'synthetic' | null;
 }
 
 const FlightContext = createContext<FlightContextType | null>(null);
 
 export function FlightProvider({ children }: { children: ReactNode }) {
-  const { flights, isLoading, error, lastUpdated } = useFlights();
+  const { flights, isLoading, error, lastUpdated, dataSource } = useFlights();
   const [selectedFlight, setSelectedFlight] = useState<Flight | null>(null);
 
   return (
@@ -24,7 +25,8 @@ export function FlightProvider({ children }: { children: ReactNode }) {
       setSelectedFlight,
       isLoading,
       error,
-      lastUpdated
+      lastUpdated,
+      dataSource
     }}>
       {children}
     </FlightContext.Provider>
