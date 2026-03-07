@@ -2,8 +2,14 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.backend.models.flight import FlightListResponse, FlightPosition
+from app.backend.models.flight import (
+    FlightListResponse,
+    FlightPosition,
+    TrajectoryPoint,
+    TrajectoryResponse,
+)
 from app.backend.services.flight_service import FlightService, get_flight_service
+from app.backend.services.lakebase_service import get_lakebase_service
 
 
 router = APIRouter(prefix="/api", tags=["flights"])
@@ -43,6 +49,51 @@ async def get_flight(
     if flight is None:
         raise HTTPException(status_code=404, detail=f"Flight {icao24} not found")
     return flight
+
+
+@router.get("/flights/{icao24}/trajectory", response_model=TrajectoryResponse)
+async def get_flight_trajectory(
+    icao24: str,
+    minutes: int = Query(default=30, ge=1, le=1440, description="Minutes of history"),
+    limit: int = Query(default=500, ge=1, le=2000, description="Max points to return"),
+) -> TrajectoryResponse:
+    """
+    Get trajectory history for a specific flight.
+
+    Returns a time-series of positions for trajectory visualization
+    and analysis. Data is collected every time the sync job runs.
+
+    Args:
+        icao24: The ICAO24 address (hex) of the aircraft.
+        minutes: How many minutes of history to retrieve (default: 30, max: 1440/24h).
+        limit: Maximum number of points to return (default: 500).
+
+    Returns:
+        Trajectory with list of positions ordered by time.
+
+    Raises:
+        404: If no trajectory data found for this flight.
+    """
+    lakebase = get_lakebase_service()
+    trajectory_data = lakebase.get_trajectory(icao24, minutes=minutes, limit=limit)
+
+    if trajectory_data is None or len(trajectory_data) == 0:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No trajectory data found for flight {icao24}"
+        )
+
+    points = [TrajectoryPoint(**p) for p in trajectory_data]
+    callsign = points[0].callsign if points else None
+
+    return TrajectoryResponse(
+        icao24=icao24,
+        callsign=callsign,
+        points=points,
+        count=len(points),
+        start_time=points[0].timestamp if points else None,
+        end_time=points[-1].timestamp if points else None,
+    )
 
 
 @router.get("/data-sources")

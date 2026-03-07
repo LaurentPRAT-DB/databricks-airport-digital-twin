@@ -143,6 +143,53 @@ def upsert_to_lakebase(flights: list[dict]) -> int:
     return len(flights)
 
 
+def append_to_history(flights: list[dict]) -> int:
+    """Append flight positions to history table for trajectory tracking.
+
+    This creates a time-series of positions that can be used for:
+    - Trajectory visualization
+    - ML model training
+    - Analytics and reporting
+    """
+    if not flights:
+        return 0
+
+    logger.info(f"Appending {len(flights)} positions to history")
+
+    with get_lakebase_connection() as conn:
+        with conn.cursor() as cursor:
+            # Check if history table exists
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_name = 'flight_positions_history'
+                )
+            """)
+            if not cursor.fetchone()[0]:
+                logger.warning("flight_positions_history table not found, skipping history append")
+                return 0
+
+            insert_query = """
+                INSERT INTO flight_positions_history (
+                    icao24, callsign, latitude, longitude,
+                    altitude, velocity, heading, vertical_rate,
+                    on_ground, flight_phase, data_source
+                ) VALUES (
+                    %(icao24)s, %(callsign)s, %(latitude)s, %(longitude)s,
+                    %(altitude)s, %(velocity)s, %(heading)s, %(vertical_rate)s,
+                    %(on_ground)s, %(flight_phase)s, %(data_source)s
+                )
+            """
+
+            for flight in flights:
+                cursor.execute(insert_query, flight)
+
+            conn.commit()
+
+    logger.info(f"Appended {len(flights)} positions to history")
+    return len(flights)
+
+
 def cleanup_stale_data(max_age_minutes: int = 60) -> int:
     """Remove stale flight data from Lakebase."""
     logger.info(f"Cleaning up flights older than {max_age_minutes} minutes")
@@ -177,15 +224,19 @@ def main():
         # Fetch from Delta
         flights = fetch_from_delta(catalog, schema)
 
-        # Upsert to Lakebase
+        # Upsert to Lakebase (latest positions)
         synced = upsert_to_lakebase(flights)
 
-        # Cleanup stale data
+        # Append to history table (trajectory tracking)
+        history_count = append_to_history(flights)
+
+        # Cleanup stale data from current positions table
         deleted = cleanup_stale_data(max_age_minutes=60)
 
         logger.info("=" * 60)
         logger.info("Sync complete")
         logger.info(f"  Flights synced: {synced}")
+        logger.info(f"  Positions added to history: {history_count}")
         logger.info(f"  Stale records deleted: {deleted}")
         logger.info("=" * 60)
 
