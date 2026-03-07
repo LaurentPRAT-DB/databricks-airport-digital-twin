@@ -37,9 +37,11 @@ def create_history_table(catalog: str, schema: str):
     with get_delta_connection() as conn:
         with conn.cursor() as cursor:
             # Create the history table (append-only, time-series)
+            # Use recorded_date column for partitioning (Delta doesn't support expression partitioning)
             cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS {table_name} (
                     recorded_at TIMESTAMP NOT NULL,
+                    recorded_date DATE NOT NULL,
                     icao24 STRING NOT NULL,
                     callsign STRING,
                     origin_country STRING,
@@ -54,7 +56,7 @@ def create_history_table(catalog: str, schema: str):
                     data_source STRING
                 )
                 USING DELTA
-                PARTITIONED BY (DATE(recorded_at))
+                PARTITIONED BY (recorded_date)
                 COMMENT 'Flight position history for trajectory analysis and ML training'
             """)
 

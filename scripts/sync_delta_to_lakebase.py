@@ -164,7 +164,9 @@ def append_to_history(flights: list[dict], catalog: str, schema: str) -> int:
     table_name = f"{catalog}.{schema}.flight_positions_history"
     logger.info(f"Appending {len(flights)} positions to {table_name}")
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+    today = now_dt.strftime("%Y-%m-%d")
 
     with get_delta_connection() as conn:
         with conn.cursor() as cursor:
@@ -180,6 +182,7 @@ def append_to_history(flights: list[dict], catalog: str, schema: str) -> int:
             for f in flights:
                 values_list.append(f"""(
                     '{now}',
+                    '{today}',
                     '{f.get("icao24", "")}',
                     {repr(f.get("callsign")) if f.get("callsign") else "NULL"},
                     {repr(f.get("origin_country")) if f.get("origin_country") else "NULL"},
@@ -197,7 +200,7 @@ def append_to_history(flights: list[dict], catalog: str, schema: str) -> int:
             if values_list:
                 insert_query = f"""
                     INSERT INTO {table_name} (
-                        recorded_at, icao24, callsign, origin_country,
+                        recorded_at, recorded_date, icao24, callsign, origin_country,
                         latitude, longitude, altitude, velocity, heading,
                         vertical_rate, on_ground, flight_phase, data_source
                     ) VALUES {", ".join(values_list)}
