@@ -82,6 +82,15 @@ if FRONTEND_DIST.exists():
         logger.info(f"Mounted /models from {models_dir} (files: {list(models_dir.glob('**/*'))})")
     else:
         logger.warning(f"Models directory not found at {models_dir}")
+    # Serve service worker with correct MIME type
+    @app.get("/sw.js")
+    async def serve_service_worker():
+        """Serve service worker with correct JavaScript MIME type."""
+        sw_file = FRONTEND_DIST / "sw.js"
+        if sw_file.exists():
+            return FileResponse(sw_file, media_type="application/javascript")
+        return {"error": "Service worker not found"}
+
     # Catch-all route for SPA - serves index.html for all non-API routes
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):

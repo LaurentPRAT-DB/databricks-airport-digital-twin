@@ -4,7 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Real-time airport digital twin visualization with 2D/3D flight tracking, ML-powered delay predictions, and gate recommendations. Built on Databricks." />
+    <meta name="keywords" content="airport, digital twin, flight tracking, Databricks, real-time visualization" />
     <title>Airport Digital Twin</title>
+    <!-- Preconnect to API origin for faster initial data fetch -->
+    <link rel="preconnect" href="/" />
+    <!-- Preconnect to external CDNs -->
+    <link rel="preconnect" href="https://unpkg.com" crossorigin />
+    <!-- DNS prefetch for external resources -->
+    <link rel="dns-prefetch" href="https://unpkg.com" />
     <!-- Leaflet CSS -->
     <link
       rel="stylesheet"
@@ -16,5 +24,13 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Register Service Worker for caching -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>

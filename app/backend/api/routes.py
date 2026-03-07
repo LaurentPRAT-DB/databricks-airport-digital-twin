@@ -132,3 +132,80 @@ async def get_data_sources_status(
     - Synthetic fallback
     """
     return service.get_data_sources_status()
+
+
+# In-memory storage for web vitals (in production, use a proper store)
+_web_vitals_buffer: list = []
+_MAX_BUFFER_SIZE = 1000
+
+
+@router.post("/metrics")
+async def collect_web_vitals(request_data: dict) -> dict:
+    """
+    Collect Web Vitals metrics from frontend.
+
+    Receives Core Web Vitals (LCP, INP, CLS, FCP, TTFB) from real users.
+    These metrics help monitor real user experience and identify
+    performance regressions.
+
+    In production, these would be sent to a monitoring service
+    like Datadog, New Relic, or stored in Delta tables for analysis.
+    """
+    global _web_vitals_buffer
+
+    metric = {
+        "name": request_data.get("name"),
+        "value": request_data.get("value"),
+        "rating": request_data.get("rating"),
+        "delta": request_data.get("delta"),
+        "id": request_data.get("id"),
+        "navigationType": request_data.get("navigationType"),
+        "timestamp": request_data.get("timestamp"),
+        "received_at": datetime.utcnow().isoformat(),
+    }
+
+    # Add to buffer (simple in-memory store)
+    _web_vitals_buffer.append(metric)
+    if len(_web_vitals_buffer) > _MAX_BUFFER_SIZE:
+        _web_vitals_buffer = _web_vitals_buffer[-_MAX_BUFFER_SIZE:]
+
+    return {"status": "ok", "count": len(_web_vitals_buffer)}
+
+
+@router.get("/metrics/summary")
+async def get_web_vitals_summary() -> dict:
+    """
+    Get summary of collected Web Vitals metrics.
+
+    Returns aggregated statistics for each metric type,
+    useful for dashboards and performance monitoring.
+    """
+    from collections import defaultdict
+
+    if not _web_vitals_buffer:
+        return {"message": "No metrics collected yet", "metrics": {}}
+
+    # Group by metric name
+    by_name = defaultdict(list)
+    for m in _web_vitals_buffer:
+        if m.get("name") and m.get("value") is not None:
+            by_name[m["name"]].append(m["value"])
+
+    # Calculate p75 for each metric (used by CrUX)
+    summary = {}
+    for name, values in by_name.items():
+        sorted_vals = sorted(values)
+        count = len(sorted_vals)
+        p75_idx = int(count * 0.75)
+        summary[name] = {
+            "count": count,
+            "min": round(min(values), 2),
+            "max": round(max(values), 2),
+            "avg": round(sum(values) / count, 2),
+            "p75": round(sorted_vals[p75_idx] if p75_idx < count else sorted_vals[-1], 2),
+        }
+
+    return {
+        "total_metrics": len(_web_vitals_buffer),
+        "metrics": summary,
+    }

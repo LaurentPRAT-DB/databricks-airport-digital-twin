@@ -22,5 +22,17 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split Three.js and 3D libraries into separate chunk
+          three: ['three', '@react-three/fiber', '@react-three/drei'],
+          // Split Leaflet/2D map into separate chunk
+          leaflet: ['leaflet', 'react-leaflet'],
+          // Split React core
+          react: ['react', 'react-dom'],
+        },
+      },
+    },
   },
 })

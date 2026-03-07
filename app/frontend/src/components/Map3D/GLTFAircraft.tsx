@@ -4,6 +4,10 @@ import * as THREE from 'three';
 import { AircraftModelConfig, AirlineConfig } from '../../config/aircraftModels';
 import { ProceduralAircraft } from './ProceduralAircraft';
 
+// Draco decoder path - drei's useGLTF automatically uses this when models are Draco-compressed
+// The decoder is loaded on-demand when a Draco-compressed model is detected
+const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.6/';
+
 interface GLTFAircraftProps {
   modelConfig: AircraftModelConfig;
   airline: AirlineConfig;
@@ -43,9 +47,11 @@ class GLTFErrorBoundary extends Component<
  *
  * Loads external GLB/GLTF aircraft models with airline livery colors.
  * Clones the scene to allow multiple instances with different materials.
+ * Supports Draco-compressed models for faster loading.
  */
 function GLTFAircraftInner({ modelConfig, airline, selected = false }: GLTFAircraftProps) {
-  const { scene } = useGLTF(modelConfig.url);
+  // useGLTF with Draco decoder path - drei handles Draco decompression automatically
+  const { scene } = useGLTF(modelConfig.url, DRACO_DECODER_PATH);
 
   // Clone scene for unique materials per instance
   const clonedScene = useMemo(() => {
@@ -109,11 +115,12 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false }: GLTFAircr
  * Wrapper with Suspense and ErrorBoundary for graceful fallback
  */
 export function GLTFAircraft(props: GLTFAircraftProps) {
-  // Scale procedural aircraft to match GLTF model scale
-  // GLTF models have various scales, procedural base is ~28 units wide
-  // Scene: terminal ~200 units, gates ~64 units apart
-  // Target aircraft ~4-8 units wingspan for realism
-  const proceduralScale = Math.min(props.modelConfig.scale * 0.006, 0.2);
+  // Scale procedural aircraft for fallback when GLB fails to load
+  // Procedural base is ~28 units wide at scale 1
+  // Scene scale: terminal ~200 units (≈200m), gates ~64 units apart
+  // Target: aircraft wingspan ~15-20% of terminal = 30-40 units
+  // 28 * 0.15 = ~4.2 units → too small. Let's use 0.5 for ~14 units
+  const proceduralScale = 0.25; // ~7 unit wingspan for realistic proportions
 
   const fallbackAircraft = (
     <ProceduralAircraft

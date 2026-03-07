@@ -69,7 +69,7 @@ class TestFallbackGenerator:
 
         # Check first state has correct structure
         state = result["states"][0]
-        assert len(state) == 18  # 18 fields per OpenSky state vector
+        assert len(state) == 20  # 18 OpenSky fields + 2 custom (flight_phase, aircraft_type)
 
         # Validate ICAO24 format (6 hex characters)
         icao24 = state[0]

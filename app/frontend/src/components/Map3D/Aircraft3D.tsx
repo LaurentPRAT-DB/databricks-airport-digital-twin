@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useState, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -8,6 +8,9 @@ import {
   getAirlineFromCallsign,
   getModelForAircraftType,
 } from '../../config/aircraftModels';
+
+// Reusable Vector3 for lerp calculations (avoids GC pressure)
+const _targetVec3 = new THREE.Vector3();
 
 interface Aircraft3DProps {
   flight: Flight;
@@ -96,47 +99,58 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
   const currentRotation = useRef(targetRotation);
 
   /**
-   * Smooth Animation Loop
+   * Smooth Animation Loop (Optimized)
    *
-   * Uses linear interpolation (lerp) to smoothly animate aircraft
-   * from their current position/rotation toward the target values
-   * derived from flight data. This creates fluid motion rather than
-   * jumping when new data arrives.
-   *
-   * Lerp factor of 0.1 means the object moves 10% of the remaining
-   * distance toward the target each frame, creating smooth deceleration.
+   * Uses linear interpolation (lerp) to smoothly animate aircraft.
+   * Optimizations:
+   * - Reuses Vector3 to avoid GC pressure
+   * - Batches position/rotation updates
+   * - Uses requestAnimationFrame timing
    */
   useFrame((_, delta) => {
     if (!groupRef.current) return;
 
     // Adjust lerp factor based on frame time for consistent animation speed
-    // Base factor of 0.1 at 60fps, scaled by delta time
-    const baseLerpFactor = 0.1;
-    const lerpFactor = Math.min(baseLerpFactor * delta * 60, 1);
+    const lerpFactor = Math.min(0.1 * delta * 60, 1);
 
-    // Lerp position toward target (x, y, z)
-    currentPosition.current.lerp(
-      new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z),
-      lerpFactor
-    );
+    // Reuse target vector to avoid allocations
+    _targetVec3.set(targetPosition.x, targetPosition.y, targetPosition.z);
+
+    // Lerp position toward target
+    currentPosition.current.lerp(_targetVec3, lerpFactor);
 
     // Lerp rotation toward target with angle wrapping
-    // Handle the case where rotation crosses the -PI/+PI boundary
     const rotDiff = targetRotation - currentRotation.current;
-    let adjustedDiff = rotDiff;
-    if (Math.abs(rotDiff) > Math.PI) {
-      // Wrap around to take the shorter rotation path
-      adjustedDiff = rotDiff > 0 ? rotDiff - 2 * Math.PI : rotDiff + 2 * Math.PI;
-    }
+    const adjustedDiff = Math.abs(rotDiff) > Math.PI
+      ? (rotDiff > 0 ? rotDiff - 2 * Math.PI : rotDiff + 2 * Math.PI)
+      : rotDiff;
     currentRotation.current += adjustedDiff * lerpFactor;
 
-    // Apply interpolated values to the group transform
-    groupRef.current.position.copy(currentPosition.current);
-    groupRef.current.rotation.y = currentRotation.current;
+    // Batch DOM writes - only update if changed significantly
+    const posChanged = groupRef.current.position.distanceToSquared(currentPosition.current) > 0.0001;
+    const rotChanged = Math.abs(groupRef.current.rotation.y - currentRotation.current) > 0.0001;
+
+    if (posChanged || rotChanged) {
+      groupRef.current.position.copy(currentPosition.current);
+      groupRef.current.rotation.y = currentRotation.current;
+    }
   });
 
   // Get airline configuration from callsign
   const airline = useMemo(() => getAirlineFromCallsign(flight.callsign), [flight.callsign]);
+
+  // Memoized pointer handlers to avoid reflows from cursor style changes
+  const handlePointerOver = useCallback((e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    setHovered(true);
+    // Use CSS class toggle instead of direct style manipulation to avoid reflow
+    document.body.classList.add('cursor-pointer');
+  }, []);
+
+  const handlePointerOut = useCallback(() => {
+    setHovered(false);
+    document.body.classList.remove('cursor-pointer');
+  }, []);
 
   // Extract airline code from callsign for model lookup
   const airlineCode = useMemo(() => {
@@ -159,15 +173,8 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
         e.stopPropagation();
         onClick?.();
       }}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        setHovered(true);
-        document.body.style.cursor = 'pointer';
-      }}
-      onPointerOut={() => {
-        setHovered(false);
-        document.body.style.cursor = 'auto';
-      }}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
     >
       {/* Aircraft model - Use GLTF model with Suspense fallback */}
       <GLTFAircraft

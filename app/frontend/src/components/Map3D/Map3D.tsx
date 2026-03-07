@@ -1,5 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
+import * as THREE from 'three';
 import { AirportScene } from './AirportScene';
 import { AIRPORT_3D_CONFIG } from '../../constants/airport3D';
 import { Flight } from '../../types/flight';
@@ -31,7 +32,10 @@ export function Map3D({
 
   return (
     <div className={className} style={{ width: '100%', height: '100%' }}>
-      <Canvas shadows>
+      <Canvas
+        shadows={{ type: THREE.PCFShadowMap }}
+        gl={{ antialias: true }}
+      >
         {/* Camera positioned above and behind the airport for overview */}
         <PerspectiveCamera
           makeDefault

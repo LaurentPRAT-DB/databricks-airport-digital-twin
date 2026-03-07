@@ -52,6 +52,8 @@ export default function FlightList() {
 
         {/* Search input */}
         <input
+          id="flight-search"
+          name="flight-search"
           type="text"
           placeholder="Search callsign..."
           value={searchQuery}

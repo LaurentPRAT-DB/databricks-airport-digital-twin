@@ -171,8 +171,9 @@ Comprehensive test cases for the Airport Digital Twin application covering all 2
 | 10.17 | Shadows | Check scene | Aircraft cast shadows on ground |
 | 10.18 | Trajectory 3D | Enable trajectory | 3D line/tube showing flight path |
 | 10.19 | Airline livery | Check aircraft colors | Colors match airline (if configured) |
-| 10.20 | Aircraft scale | Check aircraft vs terminal | Aircraft appropriately sized (smaller than terminal building) |
+| 10.20 | Aircraft scale ratio | Check aircraft vs terminal width | Aircraft wingspan ~10-20% of terminal width (terminal=200m, B737=35m ≈17%) |
 | 10.21 | Gate spacing | Check aircraft at gates | Aircraft don't overlap, space for ground equipment |
+| 10.22 | Aircraft don't dwarf buildings | Zoom to gate area | Individual aircraft smaller than hangar buildings |
 
 ---
 

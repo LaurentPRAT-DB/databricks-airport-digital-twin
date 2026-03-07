@@ -1,11 +1,25 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { FlightProvider, useFlightContext } from './context/FlightContext';
 import Header from './components/Header/Header';
 import FlightList from './components/FlightList/FlightList';
 import AirportMap from './components/Map/AirportMap';
 import FlightDetail from './components/FlightDetail/FlightDetail';
 import GateStatus from './components/GateStatus/GateStatus';
-import { Map3D } from './components/Map3D';
+
+// Lazy load 3D map to reduce initial bundle size
+const Map3D = lazy(() => import('./components/Map3D').then(m => ({ default: m.Map3D })));
+
+// Loading fallback for 3D view
+function Map3DLoadingFallback() {
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-slate-900">
+      <div className="text-center text-white">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+        <p className="text-lg">Loading 3D View...</p>
+      </div>
+    </div>
+  );
+}
 
 type ViewMode = '2d' | '3d';
 
@@ -73,11 +87,13 @@ function AppContent() {
           {viewMode === '2d' ? (
             <AirportMap />
           ) : (
-            <Map3D
-              flights={flights}
-              selectedFlight={selectedFlight?.icao24 || null}
-              onSelectFlight={handleFlightSelect}
-            />
+            <Suspense fallback={<Map3DLoadingFallback />}>
+              <Map3D
+                flights={flights}
+                selectedFlight={selectedFlight?.icao24 || null}
+                onSelectFlight={handleFlightSelect}
+              />
+            </Suspense>
           )}
         </div>
 
