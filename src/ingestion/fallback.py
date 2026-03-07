@@ -21,6 +21,16 @@ CALLSIGN_PREFIXES = [
     "SKW",  # SkyWest Airlines
 ]
 
+# Test flights with trajectory history in Unity Catalog
+# These flights have historical data for trajectory visualization
+TEST_FLIGHTS_WITH_TRAJECTORY = [
+    {"icao24": "a12345", "callsign": "UAL123"},
+    {"icao24": "b67890", "callsign": "DAL456"},
+    {"icao24": "c11111", "callsign": "SWA789"},
+    {"icao24": "d22222", "callsign": "AAL100"},
+    {"icao24": "e33333", "callsign": "JBU555"},
+]
+
 
 def generate_synthetic_flights(
     count: int = 50,
@@ -52,14 +62,20 @@ def generate_synthetic_flights(
     current_time = int(datetime.utcnow().timestamp())
     states: List[List[Any]] = []
 
-    for _ in range(count):
-        # Generate realistic ICAO24 (6 hex characters)
-        icao24 = fake.hexify(text="^^^^^^", upper=False)
+    for i in range(count):
+        # First 5 flights use test data with trajectory history
+        if i < len(TEST_FLIGHTS_WITH_TRAJECTORY):
+            test_flight = TEST_FLIGHTS_WITH_TRAJECTORY[i]
+            icao24 = test_flight["icao24"]
+            callsign = test_flight["callsign"].ljust(8)
+        else:
+            # Generate realistic ICAO24 (6 hex characters)
+            icao24 = fake.hexify(text="^^^^^^", upper=False)
 
-        # Generate callsign (airline prefix + flight number)
-        prefix = random.choice(CALLSIGN_PREFIXES)
-        flight_num = random.randint(100, 9999)
-        callsign = f"{prefix}{flight_num}".ljust(8)  # Pad to 8 chars
+            # Generate callsign (airline prefix + flight number)
+            prefix = random.choice(CALLSIGN_PREFIXES)
+            flight_num = random.randint(100, 9999)
+            callsign = f"{prefix}{flight_num}".ljust(8)  # Pad to 8 chars
 
         # Generate position within bounding box
         latitude = random.uniform(bbox["lamin"], bbox["lamax"])
