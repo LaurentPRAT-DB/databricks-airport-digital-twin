@@ -1,7 +1,12 @@
-"""Sync Delta Gold tables to Lakebase PostgreSQL.
+"""Sync Delta Gold tables to Lakebase PostgreSQL and history table.
 
-This script runs as a Databricks job to keep Lakebase in sync with the
-Delta Gold layer for low-latency frontend serving.
+Architecture:
+- Lakebase: Recent positions only (<10ms latency for UI)
+- Unity Catalog Delta: Full history for analytics/ML
+
+This script runs as a Databricks job to:
+1. Sync current positions to Lakebase (upsert)
+2. Append positions to Delta history table (append-only)
 
 Usage:
     # Run locally (requires both Delta and Lakebase credentials)
@@ -143,50 +148,63 @@ def upsert_to_lakebase(flights: list[dict]) -> int:
     return len(flights)
 
 
-def append_to_history(flights: list[dict]) -> int:
-    """Append flight positions to history table for trajectory tracking.
+def append_to_history(flights: list[dict], catalog: str, schema: str) -> int:
+    """Append flight positions to Unity Catalog Delta history table.
 
-    This creates a time-series of positions that can be used for:
-    - Trajectory visualization
-    - ML model training
+    Stores full trajectory history in Delta for:
     - Analytics and reporting
+    - ML model training
+    - Historical trajectory queries
+
+    Lakebase only stores recent data for fast UI queries.
     """
     if not flights:
         return 0
 
-    logger.info(f"Appending {len(flights)} positions to history")
+    table_name = f"{catalog}.{schema}.flight_positions_history"
+    logger.info(f"Appending {len(flights)} positions to {table_name}")
 
-    with get_lakebase_connection() as conn:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    with get_delta_connection() as conn:
         with conn.cursor() as cursor:
             # Check if history table exists
-            cursor.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_name = 'flight_positions_history'
-                )
-            """)
-            if not cursor.fetchone()[0]:
-                logger.warning("flight_positions_history table not found, skipping history append")
+            try:
+                cursor.execute(f"DESCRIBE TABLE {table_name}")
+            except Exception:
+                logger.warning(f"{table_name} not found, skipping history append")
                 return 0
 
-            insert_query = """
-                INSERT INTO flight_positions_history (
-                    icao24, callsign, latitude, longitude,
-                    altitude, velocity, heading, vertical_rate,
-                    on_ground, flight_phase, data_source
-                ) VALUES (
-                    %(icao24)s, %(callsign)s, %(latitude)s, %(longitude)s,
-                    %(altitude)s, %(velocity)s, %(heading)s, %(vertical_rate)s,
-                    %(on_ground)s, %(flight_phase)s, %(data_source)s
-                )
-            """
+            # Build VALUES clause for batch insert
+            values_list = []
+            for f in flights:
+                values_list.append(f"""(
+                    '{now}',
+                    '{f.get("icao24", "")}',
+                    {repr(f.get("callsign")) if f.get("callsign") else "NULL"},
+                    {repr(f.get("origin_country")) if f.get("origin_country") else "NULL"},
+                    {f.get("latitude") if f.get("latitude") is not None else "NULL"},
+                    {f.get("longitude") if f.get("longitude") is not None else "NULL"},
+                    {f.get("altitude") if f.get("altitude") is not None else "NULL"},
+                    {f.get("velocity") if f.get("velocity") is not None else "NULL"},
+                    {f.get("heading") if f.get("heading") is not None else "NULL"},
+                    {f.get("vertical_rate") if f.get("vertical_rate") is not None else "NULL"},
+                    {str(f.get("on_ground", False)).lower()},
+                    {repr(f.get("flight_phase")) if f.get("flight_phase") else "NULL"},
+                    {repr(f.get("data_source")) if f.get("data_source") else "NULL"}
+                )""")
 
-            for flight in flights:
-                cursor.execute(insert_query, flight)
+            if values_list:
+                insert_query = f"""
+                    INSERT INTO {table_name} (
+                        recorded_at, icao24, callsign, origin_country,
+                        latitude, longitude, altitude, velocity, heading,
+                        vertical_rate, on_ground, flight_phase, data_source
+                    ) VALUES {", ".join(values_list)}
+                """
+                cursor.execute(insert_query)
 
-            conn.commit()
-
-    logger.info(f"Appended {len(flights)} positions to history")
+    logger.info(f"Appended {len(flights)} positions to Delta history")
     return len(flights)
 
 
@@ -227,8 +245,8 @@ def main():
         # Upsert to Lakebase (latest positions)
         synced = upsert_to_lakebase(flights)
 
-        # Append to history table (trajectory tracking)
-        history_count = append_to_history(flights)
+        # Append to Delta history table (trajectory tracking for analytics/ML)
+        history_count = append_to_history(flights, catalog, schema)
 
         # Cleanup stale data from current positions table
         deleted = cleanup_stale_data(max_age_minutes=60)

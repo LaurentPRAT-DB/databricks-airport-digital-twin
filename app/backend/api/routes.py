@@ -9,7 +9,7 @@ from app.backend.models.flight import (
     TrajectoryResponse,
 )
 from app.backend.services.flight_service import FlightService, get_flight_service
-from app.backend.services.lakebase_service import get_lakebase_service
+from app.backend.services.delta_service import get_delta_service
 
 
 router = APIRouter(prefix="/api", tags=["flights"])
@@ -54,19 +54,20 @@ async def get_flight(
 @router.get("/flights/{icao24}/trajectory", response_model=TrajectoryResponse)
 async def get_flight_trajectory(
     icao24: str,
-    minutes: int = Query(default=30, ge=1, le=1440, description="Minutes of history"),
-    limit: int = Query(default=500, ge=1, le=2000, description="Max points to return"),
+    minutes: int = Query(default=60, ge=1, le=1440, description="Minutes of history"),
+    limit: int = Query(default=1000, ge=1, le=5000, description="Max points to return"),
 ) -> TrajectoryResponse:
     """
-    Get trajectory history for a specific flight.
+    Get trajectory history for a specific flight from Unity Catalog.
 
-    Returns a time-series of positions for trajectory visualization
-    and analysis. Data is collected every time the sync job runs.
+    Returns a time-series of positions for trajectory visualization,
+    analytics, and ML training. Data is stored in Delta tables for
+    full historical analysis.
 
     Args:
         icao24: The ICAO24 address (hex) of the aircraft.
-        minutes: How many minutes of history to retrieve (default: 30, max: 1440/24h).
-        limit: Maximum number of points to return (default: 500).
+        minutes: How many minutes of history to retrieve (default: 60, max: 1440/24h).
+        limit: Maximum number of points to return (default: 1000).
 
     Returns:
         Trajectory with list of positions ordered by time.
@@ -74,8 +75,8 @@ async def get_flight_trajectory(
     Raises:
         404: If no trajectory data found for this flight.
     """
-    lakebase = get_lakebase_service()
-    trajectory_data = lakebase.get_trajectory(icao24, minutes=minutes, limit=limit)
+    delta = get_delta_service()
+    trajectory_data = delta.get_trajectory(icao24, minutes=minutes, limit=limit)
 
     if trajectory_data is None or len(trajectory_data) == 0:
         raise HTTPException(

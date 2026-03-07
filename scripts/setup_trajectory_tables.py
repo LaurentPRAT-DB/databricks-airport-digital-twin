@@ -1,7 +1,10 @@
-"""Setup flight trajectory history tables in Lakebase.
+"""Setup flight trajectory history table in Unity Catalog.
 
-Creates the flight_positions_history table for storing time-series
-position data to enable trajectory tracking and ML training.
+Creates the flight_positions_history Delta table for storing time-series
+position data for analytics and ML training.
+
+Lakebase stores only recent data for fast UI queries.
+Unity Catalog stores full history for analytics and ML.
 """
 
 import os
@@ -15,122 +18,70 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_lakebase_connection():
-    """Create Lakebase Autoscaling PostgreSQL connection."""
-    import psycopg2
+def get_delta_connection():
+    """Create Databricks SQL connection."""
+    from databricks import sql
 
-    conn_string = os.getenv("LAKEBASE_CONNECTION_STRING")
-    if conn_string:
-        return psycopg2.connect(conn_string)
-
-    user = os.getenv("LAKEBASE_USER")
-    password = os.getenv("LAKEBASE_PASSWORD")
-
-    endpoint_name = os.getenv("LAKEBASE_ENDPOINT_NAME")
-    if endpoint_name and not password:
-        from databricks.sdk import WorkspaceClient
-        w = WorkspaceClient()
-        cred = w.postgres.generate_database_credential(endpoint=endpoint_name)
-        password = cred.token
-        user = w.current_user.me().user_name
-        logger.info(f"Using OAuth for Lakebase Autoscaling as {user}")
-
-    return psycopg2.connect(
-        host=os.getenv("LAKEBASE_HOST"),
-        port=os.getenv("LAKEBASE_PORT", "5432"),
-        database=os.getenv("LAKEBASE_DATABASE", "databricks_postgres"),
-        user=user,
-        password=password,
-        sslmode="require",
+    return sql.connect(
+        server_hostname=os.getenv("DATABRICKS_HOST"),
+        http_path=os.getenv("DATABRICKS_HTTP_PATH"),
+        access_token=os.getenv("DATABRICKS_TOKEN"),
     )
 
 
-def create_history_table():
-    """Create the flight_positions_history table."""
-    logger.info("Creating flight_positions_history table...")
+def create_history_table(catalog: str, schema: str):
+    """Create the flight_positions_history Delta table in Unity Catalog."""
+    table_name = f"{catalog}.{schema}.flight_positions_history"
+    logger.info(f"Creating {table_name} table...")
 
-    with get_lakebase_connection() as conn:
+    with get_delta_connection() as conn:
         with conn.cursor() as cursor:
             # Create the history table (append-only, time-series)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS flight_positions_history (
-                    id BIGSERIAL PRIMARY KEY,
-                    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    icao24 VARCHAR(10) NOT NULL,
-                    callsign VARCHAR(20),
-                    latitude DOUBLE PRECISION,
-                    longitude DOUBLE PRECISION,
-                    altitude DOUBLE PRECISION,
-                    velocity DOUBLE PRECISION,
-                    heading DOUBLE PRECISION,
-                    vertical_rate DOUBLE PRECISION,
-                    on_ground BOOLEAN DEFAULT FALSE,
-                    flight_phase VARCHAR(20),
-                    data_source VARCHAR(20)
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_name} (
+                    recorded_at TIMESTAMP NOT NULL,
+                    icao24 STRING NOT NULL,
+                    callsign STRING,
+                    origin_country STRING,
+                    latitude DOUBLE,
+                    longitude DOUBLE,
+                    altitude DOUBLE,
+                    velocity DOUBLE,
+                    heading DOUBLE,
+                    vertical_rate DOUBLE,
+                    on_ground BOOLEAN,
+                    flight_phase STRING,
+                    data_source STRING
+                )
+                USING DELTA
+                PARTITIONED BY (DATE(recorded_at))
+                COMMENT 'Flight position history for trajectory analysis and ML training'
+            """)
+
+            # Optimize for time-series queries
+            cursor.execute(f"""
+                ALTER TABLE {table_name}
+                SET TBLPROPERTIES (
+                    'delta.autoOptimize.optimizeWrite' = 'true',
+                    'delta.autoOptimize.autoCompact' = 'true'
                 )
             """)
 
-            # Create indexes for efficient trajectory queries
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_history_icao24_time
-                ON flight_positions_history (icao24, recorded_at DESC)
-            """)
-
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_history_time
-                ON flight_positions_history (recorded_at DESC)
-            """)
-
-            # Create index for callsign lookups
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_history_callsign
-                ON flight_positions_history (callsign, recorded_at DESC)
-            """)
-
-            conn.commit()
-
-    logger.info("flight_positions_history table created successfully")
-
-
-def setup_retention_policy():
-    """Create a function to clean up old history data.
-
-    By default, keeps 24 hours of data in Lakebase.
-    Older data should be archived to Delta Lake for long-term analytics.
-    """
-    logger.info("Setting up retention policy...")
-
-    with get_lakebase_connection() as conn:
-        with conn.cursor() as cursor:
-            # Create cleanup function
-            cursor.execute("""
-                CREATE OR REPLACE FUNCTION cleanup_old_positions(retention_hours INT DEFAULT 24)
-                RETURNS INTEGER AS $$
-                DECLARE
-                    deleted_count INTEGER;
-                BEGIN
-                    DELETE FROM flight_positions_history
-                    WHERE recorded_at < NOW() - (retention_hours || ' hours')::INTERVAL;
-                    GET DIAGNOSTICS deleted_count = ROW_COUNT;
-                    RETURN deleted_count;
-                END;
-                $$ LANGUAGE plpgsql
-            """)
-
-            conn.commit()
-
-    logger.info("Retention policy function created")
+    logger.info(f"{table_name} table created successfully")
 
 
 def main():
-    """Setup all trajectory tables."""
+    """Setup trajectory history table in Unity Catalog."""
+    catalog = os.getenv("DATABRICKS_CATALOG", "main")
+    schema = os.getenv("DATABRICKS_SCHEMA", "airport_digital_twin")
+
     logger.info("=" * 60)
-    logger.info("Setting up trajectory history tables")
+    logger.info("Setting up trajectory history table in Unity Catalog")
+    logger.info(f"Target: {catalog}.{schema}.flight_positions_history")
     logger.info("=" * 60)
 
     try:
-        create_history_table()
-        setup_retention_policy()
+        create_history_table(catalog, schema)
 
         logger.info("=" * 60)
         logger.info("Setup complete!")

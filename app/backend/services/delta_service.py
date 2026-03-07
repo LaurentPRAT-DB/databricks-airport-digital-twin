@@ -156,6 +156,60 @@ class DeltaService:
             logger.warning(f"Delta table query failed for {icao24}: {e}")
             return None
 
+    def get_trajectory(
+        self,
+        icao24: str,
+        minutes: int = 60,
+        limit: int = 1000,
+    ) -> Optional[list[dict]]:
+        """
+        Fetch trajectory history for a specific flight from Delta.
+
+        Args:
+            icao24: The ICAO24 address to get trajectory for.
+            minutes: How many minutes of history to retrieve.
+            limit: Maximum number of positions to return.
+
+        Returns:
+            List of position dictionaries ordered by time, or None if query fails.
+        """
+        if not self.is_available:
+            return None
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cursor:
+                    query = f"""
+                        SELECT
+                            icao24,
+                            callsign,
+                            latitude,
+                            longitude,
+                            altitude,
+                            velocity,
+                            heading,
+                            vertical_rate,
+                            on_ground,
+                            flight_phase,
+                            UNIX_TIMESTAMP(recorded_at) as timestamp
+                        FROM {self._catalog}.{self._schema}.flight_positions_history
+                        WHERE icao24 = %s
+                          AND recorded_at > CURRENT_TIMESTAMP() - INTERVAL {minutes} MINUTES
+                        ORDER BY recorded_at ASC
+                        LIMIT {limit}
+                    """
+                    cursor.execute(query, (icao24,))
+                    columns = [desc[0] for desc in cursor.description]
+                    rows = cursor.fetchall()
+
+                    positions = [dict(zip(columns, row)) for row in rows]
+                    logger.info(f"Trajectory for {icao24}: {len(positions)} positions from Delta")
+                    return positions
+
+        except Exception as e:
+            logger.warning(f"Trajectory query failed for {icao24}: {e}")
+            return None
+
     def health_check(self) -> bool:
         """Check if Databricks SQL connection is healthy."""
         if not self.is_available:
