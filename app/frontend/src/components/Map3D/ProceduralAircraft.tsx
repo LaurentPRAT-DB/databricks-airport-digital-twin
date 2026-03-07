@@ -1,6 +1,7 @@
 interface ProceduralAircraftProps {
   color: number;
   secondaryColor?: number;
+  scale?: number;
 }
 
 /**
@@ -8,13 +9,17 @@ interface ProceduralAircraftProps {
  *
  * Fallback 3D aircraft model built from basic Three.js primitives.
  * Used when GLTF models are not available.
+ *
+ * Base geometry is ~28 units wingspan, ~22 units length.
+ * Default scale of 0.4 gives ~11 unit wingspan (realistic for scene).
  */
 export function ProceduralAircraft({
   color,
   secondaryColor = 0x555555,
+  scale = 0.4,
 }: ProceduralAircraftProps) {
   return (
-    <group>
+    <group scale={[scale, scale, scale]}>
       {/* Aircraft fuselage - elongated cylinder */}
       <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[2, 2, 18, 12]} />

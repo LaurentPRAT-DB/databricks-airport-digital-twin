@@ -109,10 +109,16 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false }: GLTFAircr
  * Wrapper with Suspense and ErrorBoundary for graceful fallback
  */
 export function GLTFAircraft(props: GLTFAircraftProps) {
+  // Scale procedural aircraft to match GLTF model scale
+  // GLTF models have various scales, procedural base is ~28 units wide
+  // Use a normalized scale factor for procedural fallback
+  const proceduralScale = Math.min(props.modelConfig.scale * 0.02, 0.6);
+
   const fallbackAircraft = (
     <ProceduralAircraft
       color={props.airline.primaryColor}
       secondaryColor={props.airline.secondaryColor}
+      scale={proceduralScale}
     />
   );
 
