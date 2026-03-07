@@ -11,12 +11,13 @@ interface ProceduralAircraftProps {
  * Used when GLTF models are not available.
  *
  * Base geometry is ~28 units wingspan, ~22 units length.
- * Default scale of 0.4 gives ~11 unit wingspan (realistic for scene).
+ * Default scale of 0.15 gives ~4 unit wingspan (realistic for scene).
+ * Scene scale: terminal ~200 units wide, gates ~64 units apart.
  */
 export function ProceduralAircraft({
   color,
   secondaryColor = 0x555555,
-  scale = 0.4,
+  scale = 0.15,
 }: ProceduralAircraftProps) {
   return (
     <group scale={[scale, scale, scale]}>

@@ -111,8 +111,9 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false }: GLTFAircr
 export function GLTFAircraft(props: GLTFAircraftProps) {
   // Scale procedural aircraft to match GLTF model scale
   // GLTF models have various scales, procedural base is ~28 units wide
-  // Use a normalized scale factor for procedural fallback
-  const proceduralScale = Math.min(props.modelConfig.scale * 0.02, 0.6);
+  // Scene: terminal ~200 units, gates ~64 units apart
+  // Target aircraft ~4-8 units wingspan for realism
+  const proceduralScale = Math.min(props.modelConfig.scale * 0.006, 0.2);
 
   const fallbackAircraft = (
     <ProceduralAircraft
