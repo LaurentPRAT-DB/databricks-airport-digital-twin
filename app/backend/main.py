@@ -82,9 +82,6 @@ if FRONTEND_DIST.exists():
         logger.info(f"Mounted /models from {models_dir} (files: {list(models_dir.glob('**/*'))})")
     else:
         logger.warning(f"Models directory not found at {models_dir}")
-else:
-    logger.warning(f"Frontend dist not found at {FRONTEND_DIST}")
-
     # Catch-all route for SPA - serves index.html for all non-API routes
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):
@@ -97,3 +94,5 @@ else:
         if index_file.exists():
             return FileResponse(index_file)
         return {"error": "Frontend not built"}
+else:
+    logger.warning(f"Frontend dist not found at {FRONTEND_DIST}")
