@@ -67,7 +67,8 @@ data/
 # Exception: keep fallback sample data for offline mode
 !data/fallback/
 
-# Node modules
+# Node modules (both root and frontend)
+node_modules/
 app/frontend/node_modules/
 
 # MLflow runs
@@ -89,3 +90,13 @@ __pycache__/
 # Build artifacts
 app/frontend/dist/
 *.egg-info/
+
+# Claude Code local config
+.claude/
+
+# Generated service worker
+app/frontend/public/sw.js
+
+# Root package files (should only exist in app/frontend/)
+/package.json
+/package-lock.json
