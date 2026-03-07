@@ -76,6 +76,7 @@ class DeltaService:
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cursor:
+                    # Use parameterized query to prevent SQL injection
                     query = f"""
                         SELECT
                             icao24,
@@ -93,9 +94,9 @@ class DeltaService:
                         FROM {self._catalog}.{self._schema}.flight_status_gold
                         WHERE last_seen > CURRENT_TIMESTAMP() - INTERVAL 5 MINUTES
                         ORDER BY last_seen DESC
-                        LIMIT {limit}
+                        LIMIT :limit
                     """
-                    cursor.execute(query)
+                    cursor.execute(query, {"limit": limit})
                     columns = [desc[0] for desc in cursor.description]
                     rows = cursor.fetchall()
 
@@ -127,8 +128,7 @@ class DeltaService:
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cursor:
-                    # Use inline parameter - icao24 is validated as hex string
-                    safe_icao24 = icao24.replace("'", "''")
+                    # Use parameterized query to prevent SQL injection
                     query = f"""
                         SELECT
                             icao24,
@@ -144,9 +144,9 @@ class DeltaService:
                             flight_phase,
                             data_source
                         FROM {self._catalog}.{self._schema}.flight_status_gold
-                        WHERE icao24 = '{safe_icao24}'
+                        WHERE icao24 = :icao24
                     """
-                    cursor.execute(query)
+                    cursor.execute(query, {"icao24": icao24})
                     columns = [desc[0] for desc in cursor.description]
                     row = cursor.fetchone()
 
@@ -181,8 +181,10 @@ class DeltaService:
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cursor:
-                    # Use inline parameter - icao24 is validated as hex string
-                    safe_icao24 = icao24.replace("'", "''")
+                    # Use parameterized query to prevent SQL injection
+                    # Note: INTERVAL requires literal value, so we validate minutes as int
+                    if not isinstance(minutes, int) or minutes < 1 or minutes > 1440:
+                        minutes = 60  # Safe default
                     query = f"""
                         SELECT
                             icao24,
@@ -197,12 +199,12 @@ class DeltaService:
                             flight_phase,
                             UNIX_TIMESTAMP(recorded_at) as timestamp
                         FROM {self._catalog}.{self._schema}.flight_positions_history
-                        WHERE icao24 = '{safe_icao24}'
+                        WHERE icao24 = :icao24
                           AND recorded_at > CURRENT_TIMESTAMP() - INTERVAL {minutes} MINUTE
                         ORDER BY recorded_at ASC
-                        LIMIT {limit}
+                        LIMIT :limit
                     """
-                    cursor.execute(query)
+                    cursor.execute(query, {"icao24": icao24, "limit": limit})
                     columns = [desc[0] for desc in cursor.description]
                     rows = cursor.fetchall()
 
