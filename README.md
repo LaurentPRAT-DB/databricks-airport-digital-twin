@@ -740,13 +740,28 @@ Returns congestion levels for airport areas.
 
 ## User Guide
 
-For detailed usage instructions, see the [User Guide](docs/USER_GUIDE.md).
+For comprehensive documentation, see the [User Guide](docs/USER_GUIDE.md), which includes:
 
-Quick demo tips:
-1. Start with 2D view - Show the real-time map
-2. Switch to 3D - Demonstrate immersive visualization
-3. Click Platform - Show Databricks integrations
-4. Open Dashboard - Show Lakeview analytics
+- **End-User Guide**: Detailed walkthrough of all UI features with labeled screenshots
+- **Administrator Guide**: Data persistence strategy with Lakebase and Unity Catalog synchronization
+- **Data Scientist Guide**: ML model documentation including feature engineering and prediction algorithms
+
+### Quick Demo Tips
+
+1. **Start with 2D view** - Show the real-time map with flight markers
+2. **Click a flight** - Demonstrate ML predictions (delay, gate recommendations)
+3. **Switch to 3D** - Showcase immersive Three.js visualization
+4. **Click Platform** - Show integration with Databricks services (Lakeview, Genie, MLflow)
+5. **Try search** - Filter flights by airline prefix (e.g., "UAL", "DAL")
+
+### Screenshots
+
+| View | Description |
+|------|-------------|
+| ![Overview](docs/screenshots/01-overview.png) | Main dashboard with 2D map |
+| ![Flight Details](docs/screenshots/02-flight-selected.png) | Flight selection with ML predictions |
+| ![Platform Links](docs/screenshots/03-platform-dropdown.png) | Databricks platform integration |
+| ![3D View](docs/screenshots/04-3d-view.png) | Immersive 3D visualization |
 
 ---
 
@@ -765,4 +780,4 @@ Internal Databricks Field Engineering demo. Not for external distribution.
 
 ---
 
-*Documentation generated: 2026-03-06*
+*Documentation generated: 2026-03-08*
