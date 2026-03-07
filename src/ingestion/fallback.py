@@ -44,54 +44,53 @@ RUNWAY_28R_WEST = (-122.05, 37.51)   # West end of runway 28R (x≈-400, z=-100)
 RUNWAY_28R_EAST = (-121.95, 37.51)   # East end of runway 28R (x≈400, z=-100)
 
 # Terminal and gate positions (aligned with 3D jetbridge positions)
-# 3D scene: terminal at z=0, jetbridges at x=-60,-20,20,60 and z=-40
-# Using scale 10000: lat offset of 0.004 → z=-40, lon offset of 0.006 → x=-48
-TERMINAL_CENTER = (37.504, -122.0)
+# 3D scene: terminal at z=0, jetbridges extend south toward z=+40
+# Aircraft at gates should be SOUTH of terminal (positive z = lower latitude)
+# z = -(lat - 37.5) * 10000, so lat 37.494 → z = +60
+TERMINAL_CENTER = (37.5, -122.0)
 GATES = {
-    # Gate positions map to 3D jetbridge locations
-    # 4 jetbridges at x=-60,-20,20,60 z=-40 → lon -122.0075 to -122.0025, lat 37.504
-    "A1": (37.504, -122.0075),  # x≈-60, z≈-40
-    "A2": (37.504, -122.0050),  # x≈-40, z≈-40
-    "A3": (37.504, -122.0025),  # x≈-20, z≈-40
-    "A4": (37.504, -122.0000),  # x≈0, z≈-40
-    "B1": (37.504, -121.9975),  # x≈20, z≈-40
-    "B2": (37.504, -121.9950),  # x≈40, z≈-40
-    "B3": (37.504, -121.9925),  # x≈60, z≈-40
-    "B4": (37.504, -121.9900),  # x≈80, z≈-40
+    # Gate positions SOUTH of terminal (lower lat = positive z)
+    # Terminal at z=0, runways at z=±100, gates at z≈+60
+    "A1": (37.494, -122.006),   # x≈-48, z≈+60
+    "A2": (37.494, -122.004),   # x≈-32, z≈+60
+    "A3": (37.494, -122.002),   # x≈-16, z≈+60
+    "A4": (37.494, -122.000),   # x≈0, z≈+60
+    "B1": (37.494, -121.998),   # x≈+16, z≈+60
+    "B2": (37.494, -121.996),   # x≈+32, z≈+60
+    "B3": (37.494, -121.994),   # x≈+48, z≈+60
+    "B4": (37.494, -121.992),   # x≈+64, z≈+60
 }
 
 # Taxiway waypoints aligned with 3D scene
-# 3D: Runway 28L at z=-100, taxiway A from z=-100 to z=0 at x=0
-# Scale 10000: z=-100 → lat offset 0.01 → lat 37.49
+# 3D: Runway 28R at z=+100 (south), terminal at z=0, gates at z=+60
+# Scale 10000: z=+100 → lat = 37.5 - 0.01 = 37.49
 TAXI_WAYPOINTS_ARRIVAL = [
-    (-122.000, 37.490),   # Exit runway at z=-100
-    (-122.000, 37.495),   # Taxiway midpoint z=-50
-    (-122.000, 37.500),   # Taxiway near terminal z=0
-    (-122.004, 37.504),   # Approach gate area z=-40
+    (-122.000, 37.49),    # Exit runway 28R at z=+100
+    (-122.000, 37.492),   # Taxiway heading north z=+80
+    (-122.000, 37.494),   # Approach gate area z=+60
 ]
 
 TAXI_WAYPOINTS_DEPARTURE = [
-    (-122.000, 37.500),   # Leave terminal area z=0
-    (-122.000, 37.495),   # Head to taxiway z=-50
-    (-122.000, 37.490),   # Join runway area z=-100
-    (-122.010, 37.490),   # Runway threshold (x≈-80)
+    (-122.000, 37.494),   # Leave gate area z=+60
+    (-122.000, 37.492),   # Head to taxiway z=+80
+    (-122.000, 37.49),    # Join runway 28R at z=+100
+    (-122.03, 37.49),     # Runway threshold west (x≈-240)
 ]
 
-# Approach path (from east, descending to runway 28L)
-# 3D runway at z=-100, x=-500 to 500
-# Approach from east (positive x direction)
+# Approach path (from east, descending to runway 28R at z=+100)
+# Approach from east/southeast, landing heading west
 APPROACH_WAYPOINTS = [
-    (-121.92, 37.52, 6000),   # Initial approach (x≈640, z≈-200)
-    (-121.95, 37.50, 3000),   # Intermediate (x≈400, z=0)
-    (-121.98, 37.49, 1000),   # Final approach (x≈160, z≈100)
-    (-122.00, 37.49, 100),    # Short final (x=0, z=100 - runway 28R)
+    (-121.90, 37.48, 6000),   # Initial approach (x≈800, z≈200) - east of airport
+    (-121.94, 37.49, 3000),   # Intermediate (x≈480, z≈100)
+    (-121.97, 37.49, 1000),   # Final approach (x≈240, z≈100)
+    (-122.00, 37.49, 50),     # Touchdown (x=0, z=100 - runway 28R)
 ]
 
-# Departure path (climbing to west from runway 28L)
+# Departure path (climbing to west from runway 28R)
 DEPARTURE_WAYPOINTS = [
-    (-122.02, 37.49, 1500),   # Initial climb (x≈-160, z=100)
-    (-122.05, 37.50, 4000),   # Continued climb (x≈-400, z=0)
-    (-122.10, 37.52, 8000),   # Departure fix (x≈-800, z≈-200)
+    (-122.03, 37.49, 1500),   # Initial climb (x≈-240, z=100)
+    (-122.06, 37.48, 4000),   # Continued climb (x≈-480, z=200)
+    (-122.10, 37.46, 8000),   # Departure fix (x≈-800, z≈400)
 ]
 
 
@@ -588,3 +587,97 @@ TEST_FLIGHTS_WITH_TRAJECTORY = [
     {"icao24": "d22222", "callsign": "AAL100"},
     {"icao24": "e33333", "callsign": "JBU555"},
 ]
+
+
+def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1000) -> List[Dict[str, Any]]:
+    """Generate synthetic trajectory data for a flight.
+
+    Creates a realistic approach-to-landing trajectory pattern for demo purposes.
+    Works with mock mode when Delta tables are not available.
+
+    Args:
+        icao24: The ICAO24 address of the aircraft.
+        minutes: Minutes of history to simulate.
+        limit: Maximum number of points to return.
+
+    Returns:
+        List of trajectory points as dictionaries.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    # Find the flight in our test flights list
+    flight_info = None
+    for f in TEST_FLIGHTS_WITH_TRAJECTORY:
+        if f["icao24"] == icao24:
+            flight_info = f
+            break
+
+    # If not found, check in the flight states manager
+    if flight_info is None and icao24 in _flight_states:
+        state = _flight_states[icao24]
+        flight_info = {"icao24": icao24, "callsign": state.callsign}
+
+    if flight_info is None:
+        return []
+
+    callsign = flight_info.get("callsign", "UNKNOWN")
+
+    # Generate trajectory points - simulate an approach pattern
+    points = []
+    num_points = min(limit, 30)  # Generate up to 30 points
+    now = datetime.now(timezone.utc)
+    interval_seconds = (minutes * 60) / num_points
+
+    # Create an approach trajectory (from far to runway)
+    for i in range(num_points):
+        t = i / (num_points - 1) if num_points > 1 else 0  # Progress 0 to 1
+
+        # Interpolate along approach path
+        if t < 0.3:
+            # Initial approach - high altitude, far from airport
+            lat = 37.52 - (t / 0.3) * 0.02
+            lon = -121.92 - (t / 0.3) * 0.03
+            alt = 6000 - (t / 0.3) * 3000
+            phase = "approaching"
+        elif t < 0.6:
+            # Intermediate approach
+            lat = 37.50 - ((t - 0.3) / 0.3) * 0.01
+            lon = -121.95 - ((t - 0.3) / 0.3) * 0.03
+            alt = 3000 - ((t - 0.3) / 0.3) * 2000
+            phase = "descending"
+        elif t < 0.8:
+            # Final approach
+            lat = 37.49
+            lon = -121.98 - ((t - 0.6) / 0.2) * 0.02
+            alt = 1000 - ((t - 0.6) / 0.2) * 900
+            phase = "landing"
+        else:
+            # On ground, taxiing
+            lat = 37.49 + ((t - 0.8) / 0.2) * 0.014
+            lon = -122.0 - ((t - 0.8) / 0.2) * 0.004
+            alt = 0
+            phase = "ground"
+
+        # Calculate heading (roughly west for approach)
+        heading = 270 + random.uniform(-5, 5)
+        velocity = 150 if alt > 0 else 15  # Ground speed
+        vertical_rate = -500 if alt > 0 else 0
+
+        timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
+
+        points.append({
+            "timestamp": timestamp.isoformat(),
+            "icao24": icao24,
+            "callsign": callsign,
+            "latitude": lat + random.uniform(-0.001, 0.001),
+            "longitude": lon + random.uniform(-0.001, 0.001),
+            "altitude": max(0, alt + random.uniform(-50, 50)),
+            "velocity": velocity + random.uniform(-5, 5),
+            "heading": heading,
+            "vertical_rate": vertical_rate,
+            "on_ground": alt == 0,
+            "flight_phase": phase,
+            "data_source": "synthetic",
+        })
+
+    return points
