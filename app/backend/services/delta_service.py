@@ -127,6 +127,8 @@ class DeltaService:
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cursor:
+                    # Use inline parameter - icao24 is validated as hex string
+                    safe_icao24 = icao24.replace("'", "''")
                     query = f"""
                         SELECT
                             icao24,
@@ -142,9 +144,9 @@ class DeltaService:
                             flight_phase,
                             data_source
                         FROM {self._catalog}.{self._schema}.flight_status_gold
-                        WHERE icao24 = %s
+                        WHERE icao24 = '{safe_icao24}'
                     """
-                    cursor.execute(query, (icao24,))
+                    cursor.execute(query)
                     columns = [desc[0] for desc in cursor.description]
                     row = cursor.fetchone()
 
@@ -179,6 +181,8 @@ class DeltaService:
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cursor:
+                    # Use inline parameter - icao24 is validated as hex string
+                    safe_icao24 = icao24.replace("'", "''")
                     query = f"""
                         SELECT
                             icao24,
@@ -193,12 +197,12 @@ class DeltaService:
                             flight_phase,
                             UNIX_TIMESTAMP(recorded_at) as timestamp
                         FROM {self._catalog}.{self._schema}.flight_positions_history
-                        WHERE icao24 = %s
-                          AND recorded_at > CURRENT_TIMESTAMP() - INTERVAL {minutes} MINUTES
+                        WHERE icao24 = '{safe_icao24}'
+                          AND recorded_at > CURRENT_TIMESTAMP() - INTERVAL {minutes} MINUTE
                         ORDER BY recorded_at ASC
                         LIMIT {limit}
                     """
-                    cursor.execute(query, (icao24,))
+                    cursor.execute(query)
                     columns = [desc[0] for desc in cursor.description]
                     rows = cursor.fetchall()
 

@@ -4,6 +4,7 @@ import { AIRPORT_3D_CONFIG, RUNWAY_MARKING_COLOR } from '../../constants/airport
 import { Flight } from '../../types/flight';
 import { Aircraft3D } from './Aircraft3D';
 import { Trajectory3D } from './Trajectory3D';
+import { Building3D } from './Building3D';
 
 interface AirportSceneProps {
   flights?: Flight[];
@@ -26,15 +27,20 @@ export function AirportScene({
   selectedFlight = null,
   onSelectFlight,
 }: AirportSceneProps) {
-  const { terminal, runways, taxiways, ground } = AIRPORT_3D_CONFIG;
+  const { terminal, runways, taxiways, buildings, ground } = AIRPORT_3D_CONFIG;
 
   return (
     <group>
       {/* Ground plane */}
       <Ground size={ground.size} color={ground.color} />
 
-      {/* Terminal building */}
+      {/* Terminal building (main terminal) */}
       <Terminal config={terminal} />
+
+      {/* Additional buildings (GLTF or procedural) */}
+      {buildings.map((building) => (
+        <Building3D key={building.id} placement={building} />
+      ))}
 
       {/* Runways */}
       {runways.map((runway) => (

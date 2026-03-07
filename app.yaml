@@ -12,6 +12,10 @@ env:
     value: "false"
 
   # Databricks SQL (Delta tables)
+  - name: DATABRICKS_HOST
+    value: "fevm-serverless-stable-3n0ihb.cloud.databricks.com"
+  - name: DATABRICKS_HTTP_PATH
+    value: "/sql/1.0/warehouses/b868e84cedeb4262"
   - name: DATABRICKS_CATALOG
     value: "serverless_stable_3n0ihb_catalog"
   - name: DATABRICKS_SCHEMA

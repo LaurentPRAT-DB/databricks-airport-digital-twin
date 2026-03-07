@@ -5,6 +5,8 @@
  * of the airport digital twin.
  */
 
+import { BuildingPlacement } from '../config/buildingModels';
+
 export interface Position3D {
   x: number;
   y: number;
@@ -59,6 +61,7 @@ export interface Airport3DConfig {
   terminal: TerminalConfig;
   runways: RunwayConfig[];
   taxiways: TaxiwayConfig[];
+  buildings: BuildingPlacement[];
   ground: GroundConfig;
   lighting: LightingConfig;
 }
@@ -116,6 +119,76 @@ export const AIRPORT_3D_CONFIG: Airport3DConfig = {
       ],
       width: 20,
       color: 0x555555, // Medium gray
+    },
+  ],
+
+  // Building configurations (GLTF models or procedural fallbacks)
+  buildings: [
+    // Control Tower - positioned east of the terminal
+    {
+      id: 'control-tower-1',
+      type: 'control-tower',
+      position: { x: 150, y: 0, z: 0 },
+      rotation: 0,
+    },
+    // Hangars - north side of airport
+    {
+      id: 'hangar-1',
+      type: 'hangar',
+      position: { x: -300, y: 0, z: -250 },
+      rotation: Math.PI / 2,
+    },
+    {
+      id: 'hangar-2',
+      type: 'hangar',
+      position: { x: -150, y: 0, z: -250 },
+      rotation: Math.PI / 2,
+    },
+    // Cargo building - west side
+    {
+      id: 'cargo-1',
+      type: 'cargo',
+      position: { x: -350, y: 0, z: 50 },
+      rotation: 0,
+    },
+    // Jetbridges - attached to terminal
+    {
+      id: 'jetbridge-1',
+      type: 'jetbridge',
+      position: { x: -60, y: 0, z: -40 },
+      rotation: -Math.PI / 2,
+    },
+    {
+      id: 'jetbridge-2',
+      type: 'jetbridge',
+      position: { x: -20, y: 0, z: -40 },
+      rotation: -Math.PI / 2,
+    },
+    {
+      id: 'jetbridge-3',
+      type: 'jetbridge',
+      position: { x: 20, y: 0, z: -40 },
+      rotation: -Math.PI / 2,
+    },
+    {
+      id: 'jetbridge-4',
+      type: 'jetbridge',
+      position: { x: 60, y: 0, z: -40 },
+      rotation: -Math.PI / 2,
+    },
+    // Fire station - near runway
+    {
+      id: 'fire-station-1',
+      type: 'fire-station',
+      position: { x: 300, y: 0, z: -200 },
+      rotation: 0,
+    },
+    // Fuel station
+    {
+      id: 'fuel-station-1',
+      type: 'fuel-station',
+      position: { x: -250, y: 0, z: 200 },
+      rotation: 0,
     },
   ],
 
