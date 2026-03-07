@@ -89,6 +89,3 @@ __pycache__/
 # Build artifacts
 app/frontend/dist/
 *.egg-info/
-
-# 3D model files (generated or downloaded - see scripts/generate-aircraft-glb.mjs)
-app/frontend/public/models/aircraft/*.glb
