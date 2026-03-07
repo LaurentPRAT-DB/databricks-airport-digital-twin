@@ -135,6 +135,12 @@ class FlightService:
             vertical_rate = state[11] if state[11] is not None else 0.0
             on_ground = state[8] if state[8] is not None else False
 
+            # Use embedded flight phase if available (index 18), otherwise calculate
+            if len(state) > 18 and state[18]:
+                flight_phase = state[18]
+            else:
+                flight_phase = _determine_flight_phase(altitude, vertical_rate, on_ground)
+
             flight = FlightPosition(
                 icao24=state[0],
                 callsign=state[1].strip() if state[1] else None,
@@ -147,7 +153,7 @@ class FlightService:
                 vertical_rate=vertical_rate,
                 last_seen=state[4],
                 data_source="synthetic",
-                flight_phase=_determine_flight_phase(altitude, vertical_rate, on_ground),
+                flight_phase=flight_phase,
             )
             flights.append(flight)
 
