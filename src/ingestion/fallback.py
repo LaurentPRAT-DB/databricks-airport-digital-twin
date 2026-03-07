@@ -20,17 +20,20 @@ from faker import Faker
 
 fake = Faker()
 
-# Common US airline callsign prefixes
-CALLSIGN_PREFIXES = [
-    "UAL",  # United Airlines
-    "DAL",  # Delta Air Lines
-    "AAL",  # American Airlines
-    "SWA",  # Southwest Airlines
-    "JBU",  # JetBlue Airways
-    "ASA",  # Alaska Airlines
-    "FFT",  # Frontier Airlines
-    "SKW",  # SkyWest Airlines
-]
+# Common US airline callsign prefixes with typical aircraft types
+AIRLINE_FLEET = {
+    "UAL": ["B738", "B739", "A320", "A319", "B777", "B787"],  # United Airlines
+    "DAL": ["B738", "B739", "A320", "A321", "A330", "B777"],  # Delta Air Lines
+    "AAL": ["B738", "A321", "A320", "B777", "B787"],          # American Airlines
+    "SWA": ["B737", "B738"],                                  # Southwest Airlines
+    "JBU": ["A320", "A321", "A319"],                          # JetBlue Airways
+    "ASA": ["B738", "B739", "A320"],                          # Alaska Airlines
+    "UAE": ["A380", "B777", "A345"],                          # Emirates
+    "AFR": ["A320", "A318", "A319", "A330"],                  # Air France
+    "CPA": ["A330", "B777", "A350"],                          # Cathay Pacific
+}
+
+CALLSIGN_PREFIXES = list(AIRLINE_FLEET.keys())
 
 # Airport geometry (matching frontend airportLayout.ts)
 AIRPORT_CENTER = (37.5, -122.0)
@@ -48,17 +51,21 @@ RUNWAY_28R_EAST = (-121.95, 37.51)   # East end of runway 28R (x≈400, z=-100)
 # Aircraft at gates should be SOUTH of terminal (positive z = lower latitude)
 # z = -(lat - 37.5) * 10000, so lat 37.494 → z = +60
 TERMINAL_CENTER = (37.5, -122.0)
+
+# Gate spacing calculation:
+# - Aircraft wingspan: ~35m (A320/B737) to ~80m (A380)
+# - 3D scale: 10000, so 0.006 deg lon ≈ 48 units spacing
+# - Need space for: aircraft (~25 units) + ground equipment (~15 units)
+# - Minimum spacing: 0.006 deg longitude (~48 units) for narrow-body
 GATES = {
     # Gate positions SOUTH of terminal (lower lat = positive z)
     # Terminal at z=0, runways at z=±100, gates at z≈+60
-    "A1": (37.494, -122.006),   # x≈-48, z≈+60
-    "A2": (37.494, -122.004),   # x≈-32, z≈+60
-    "A3": (37.494, -122.002),   # x≈-16, z≈+60
-    "A4": (37.494, -122.000),   # x≈0, z≈+60
-    "B1": (37.494, -121.998),   # x≈+16, z≈+60
-    "B2": (37.494, -121.996),   # x≈+32, z≈+60
-    "B3": (37.494, -121.994),   # x≈+48, z≈+60
-    "B4": (37.494, -121.992),   # x≈+64, z≈+60
+    # Wider spacing (0.008 deg = ~64 units) to avoid overlap and allow ground equipment
+    "A1": (37.494, -122.016),   # x≈-128, z≈+60 (wide-body capable)
+    "A2": (37.494, -122.008),   # x≈-64, z≈+60
+    "A3": (37.494, -122.000),   # x≈0, z≈+60 (center gate)
+    "B1": (37.494, -121.992),   # x≈+64, z≈+60
+    "B2": (37.494, -121.984),   # x≈+128, z≈+60 (wide-body capable)
 }
 
 # Taxiway waypoints aligned with 3D scene
@@ -120,6 +127,7 @@ class FlightState:
     vertical_rate: float  # ft/min
     on_ground: bool
     phase: FlightPhase
+    aircraft_type: str = "A320"  # ICAO aircraft type code
     assigned_gate: Optional[str] = None
     waypoint_index: int = 0
     phase_progress: float = 0.0  # 0-1 progress through current phase
@@ -187,8 +195,20 @@ def _interpolate_altitude(current_alt: float, target_alt: float, rate: float) ->
         return current_alt - rate
 
 
+def _get_aircraft_type_for_airline(callsign: str) -> str:
+    """Get a random aircraft type based on airline callsign."""
+    if callsign and len(callsign) >= 3:
+        airline_code = callsign[:3].upper()
+        if airline_code in AIRLINE_FLEET:
+            return random.choice(AIRLINE_FLEET[airline_code])
+    # Default to common narrow-body types
+    return random.choice(["A320", "B738", "A321", "B737"])
+
+
 def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> FlightState:
     """Create a new flight in the specified phase."""
+    aircraft_type = _get_aircraft_type_for_airline(callsign)
+
     if phase == FlightPhase.APPROACHING:
         # Start on approach from the east
         wp = APPROACH_WAYPOINTS[0]
@@ -205,6 +225,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             vertical_rate=-800,
             on_ground=False,
             phase=phase,
+            aircraft_type=aircraft_type,
             waypoint_index=0,
         )
 
@@ -223,6 +244,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             vertical_rate=0,
             on_ground=True,
             phase=phase,
+            aircraft_type=aircraft_type,
             assigned_gate=gate,
             time_at_gate=random.uniform(0, 300),  # Random time already parked
         )
@@ -243,6 +265,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             vertical_rate=random.uniform(-200, 200),
             on_ground=False,
             phase=phase,
+            aircraft_type=aircraft_type,
         )
 
     elif phase == FlightPhase.TAXI_TO_GATE:
@@ -260,6 +283,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             vertical_rate=0,
             on_ground=True,
             phase=phase,
+            aircraft_type=aircraft_type,
             assigned_gate=gate,
             waypoint_index=0,
         )
@@ -279,6 +303,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             vertical_rate=0,
             on_ground=True,
             phase=phase,
+            aircraft_type=aircraft_type,
             assigned_gate=gate,
             waypoint_index=0,
         )
@@ -570,6 +595,7 @@ def generate_synthetic_flights(
             0,                                         # 16: position_source
             random.randint(2, 6),                      # 17: category
             _get_flight_phase_name(state.phase),       # 18: flight_phase (custom)
+            state.aircraft_type,                       # 19: aircraft_type (custom)
         ]
         states.append(state_vector)
 

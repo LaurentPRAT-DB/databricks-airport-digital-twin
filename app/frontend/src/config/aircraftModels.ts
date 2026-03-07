@@ -32,22 +32,50 @@ export interface AirlineConfig {
  * Keys are ICAO aircraft type codes (e.g., B738, A320)
  */
 export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
-  // Boeing narrow body (Sketchfab models - adjust scale as needed)
+  // Boeing narrow body
   'B737': { url: '/models/aircraft/boeing-737.glb', scale: 15, rotationOffset: { x: 0, y: 0, z: 0 } },
   'B738': { url: '/models/aircraft/boeing-737.glb', scale: 15, rotationOffset: { x: 0, y: 0, z: 0 } },
   'B739': { url: '/models/aircraft/boeing-737.glb', scale: 16, rotationOffset: { x: 0, y: 0, z: 0 } },
 
-  // Airbus narrow body (procedural fallback)
-  'A320': { url: '/models/aircraft/airbus-a320.glb', scale: 1, rotationOffset: { x: 0, y: 0, z: 0 } },
+  // Airbus narrow body
+  'A318': { url: '/models/aircraft/airbus-a320.glb', scale: 0.9, rotationOffset: { x: 0, y: 0, z: 0 } },
   'A319': { url: '/models/aircraft/airbus-a320.glb', scale: 0.95, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A320': { url: '/models/aircraft/airbus-a320.glb', scale: 1, rotationOffset: { x: 0, y: 0, z: 0 } },
   'A321': { url: '/models/aircraft/airbus-a320.glb', scale: 1.1, rotationOffset: { x: 0, y: 0, z: 0 } },
 
-  // Boeing wide body
-  'B777': { url: '/models/aircraft/boeing-777.glb', scale: 1.3, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'B787': { url: '/models/aircraft/boeing-787.glb', scale: 1.2, rotationOffset: { x: 0, y: 0, z: 0 } },
+  // Airbus wide body
+  'A310': { url: '/models/aircraft/airbus_a320.glb', scale: 1.15, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A330': { url: '/models/aircraft/airbus_a345.glb', scale: 1.2, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A340': { url: '/models/aircraft/airbus_a345.glb', scale: 1.25, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A345': { url: '/models/aircraft/airbus_a345.glb', scale: 1.25, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A380': { url: '/models/aircraft/airbus_a380.glb', scale: 1.5, rotationOffset: { x: 0, y: 0, z: 0 } },
 
-  // Generic fallback (Sketchfab model)
-  'DEFAULT': { url: '/models/aircraft/generic-jet.glb', scale: 15, rotationOffset: { x: 0, y: 0, z: 0 } },
+  // Boeing wide body
+  'B777': { url: '/models/aircraft/airbus_a345.glb', scale: 1.3, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'B787': { url: '/models/aircraft/airbus_a345.glb', scale: 1.2, rotationOffset: { x: 0, y: 0, z: 0 } },
+
+  // Generic fallback
+  'DEFAULT': { url: '/models/aircraft/generic-jet.glb', scale: 25, rotationOffset: { x: 0, y: Math.PI, z: 0 } },
+};
+
+/**
+ * Airline-specific GLB models with pre-baked liveries
+ * Key format: "AIRLINE_AIRCRAFT" (e.g., "UAE_A345" for Emirates A345)
+ */
+export const AIRLINE_SPECIFIC_MODELS: Record<string, AircraftModelConfig> = {
+  // Emirates
+  'UAE_A345': { url: '/models/aircraft/emirates_airbus_a345.glb', scale: 1.25, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'UAE_A340': { url: '/models/aircraft/emirates_airbus_a345.glb', scale: 1.25, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'UAE_A380': { url: '/models/aircraft/airbus_a380.glb', scale: 1.5, rotationOffset: { x: 0, y: 0, z: 0 } },
+
+  // Air France
+  'AFR_A318': { url: '/models/aircraft/air_france_airbus_a318-100.glb', scale: 0.9, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'AFR_A319': { url: '/models/aircraft/air_france_airbus_a318-100.glb', scale: 0.95, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'AFR_A320': { url: '/models/aircraft/air_france_airbus_a318-100.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
+
+  // Cathay Pacific
+  'CPA_A330': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.2, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'CPA_A333': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.2, rotationOffset: { x: 0, y: 0, z: 0 } },
 };
 
 /**
@@ -73,6 +101,7 @@ export const AIRLINES: Record<string, AirlineConfig> = {
   'SIA': { name: 'Singapore Airlines', primaryColor: 0xF7B500, secondaryColor: 0x003D7C },
   'QFA': { name: 'Qantas', primaryColor: 0xE0001A, secondaryColor: 0xFFFFFF },
   'UAE': { name: 'Emirates', primaryColor: 0xD71921, secondaryColor: 0xC69C6D },
+  'CPA': { name: 'Cathay Pacific', primaryColor: 0x006564, secondaryColor: 0xA6A8AA },
 
   // Default
   'DEFAULT': { name: 'Unknown Airline', primaryColor: 0x888888, secondaryColor: 0xCCCCCC },
@@ -90,13 +119,28 @@ export function getAirlineFromCallsign(callsign: string | null): AirlineConfig {
 }
 
 /**
- * Get model config for aircraft type
+ * Get model config for aircraft type, optionally checking airline-specific models first
+ * @param aircraftType ICAO aircraft type code (e.g., A320, B738)
+ * @param airlineCode ICAO airline code from callsign (e.g., UAE, AFR)
  */
-export function getModelForAircraftType(aircraftType?: string): AircraftModelConfig {
-  if (!aircraftType) {
-    return AIRCRAFT_MODELS['DEFAULT'];
+export function getModelForAircraftType(aircraftType?: string, airlineCode?: string): AircraftModelConfig {
+  // First, check for airline-specific model with pre-baked livery
+  if (airlineCode && aircraftType) {
+    const specificKey = `${airlineCode.toUpperCase()}_${aircraftType.toUpperCase()}`;
+    if (AIRLINE_SPECIFIC_MODELS[specificKey]) {
+      return AIRLINE_SPECIFIC_MODELS[specificKey];
+    }
   }
-  return AIRCRAFT_MODELS[aircraftType.toUpperCase()] || AIRCRAFT_MODELS['DEFAULT'];
+
+  // Fall back to generic aircraft type model
+  if (aircraftType) {
+    const model = AIRCRAFT_MODELS[aircraftType.toUpperCase()];
+    if (model) {
+      return model;
+    }
+  }
+
+  return AIRCRAFT_MODELS['DEFAULT'];
 }
 
 /**

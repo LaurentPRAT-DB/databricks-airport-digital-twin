@@ -45,6 +45,7 @@ class FlightPosition(BaseModel):
     last_seen: Optional[int] = Field(None, description="Unix timestamp of last contact")
     data_source: str = Field("synthetic", description="Source of the data")
     flight_phase: Optional[str] = Field(None, description="Current flight phase")
+    aircraft_type: Optional[str] = Field(None, description="ICAO aircraft type code (e.g., A320, B738)")
 
 
 class FlightListResponse(BaseModel):

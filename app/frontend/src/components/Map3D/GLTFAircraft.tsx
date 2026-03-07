@@ -1,12 +1,41 @@
-import { useMemo, Suspense } from 'react';
+import { useMemo, Suspense, Component, ReactNode } from 'react';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { AircraftModelConfig, AirlineConfig } from '../../config/aircraftModels';
+import { ProceduralAircraft } from './ProceduralAircraft';
 
 interface GLTFAircraftProps {
   modelConfig: AircraftModelConfig;
   airline: AirlineConfig;
   selected?: boolean;
+}
+
+/**
+ * Error Boundary for catching GLTF loading errors
+ */
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class GLTFErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  ErrorBoundaryState
+> {
+  constructor(props: { children: ReactNode; fallback: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
 }
 
 /**
@@ -77,13 +106,22 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false }: GLTFAircr
 }
 
 /**
- * Wrapper with Suspense for loading state
+ * Wrapper with Suspense and ErrorBoundary for graceful fallback
  */
 export function GLTFAircraft(props: GLTFAircraftProps) {
+  const fallbackAircraft = (
+    <ProceduralAircraft
+      color={props.airline.primaryColor}
+      secondaryColor={props.airline.secondaryColor}
+    />
+  );
+
   return (
-    <Suspense fallback={null}>
-      <GLTFAircraftInner {...props} />
-    </Suspense>
+    <GLTFErrorBoundary fallback={fallbackAircraft}>
+      <Suspense fallback={fallbackAircraft}>
+        <GLTFAircraftInner {...props} />
+      </Suspense>
+    </GLTFErrorBoundary>
   );
 }
 

@@ -1,15 +1,12 @@
-import { useRef, useState, useMemo, useEffect } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { Flight } from '../../types/flight';
-import { AIRPORT_3D_CONFIG, COLORS } from '../../constants/airport3D';
-import { ProceduralAircraft } from './ProceduralAircraft';
 import { GLTFAircraft } from './GLTFAircraft';
 import {
   getAirlineFromCallsign,
   getModelForAircraftType,
-  modelExists,
 } from '../../config/aircraftModels';
 
 interface Aircraft3DProps {
@@ -141,34 +138,17 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
   // Get airline configuration from callsign
   const airline = useMemo(() => getAirlineFromCallsign(flight.callsign), [flight.callsign]);
 
-  // Get model configuration - could be enhanced with aircraft type from API
-  const modelConfig = useMemo(() => getModelForAircraftType(), []);
+  // Extract airline code from callsign for model lookup
+  const airlineCode = useMemo(() => {
+    if (!flight.callsign || flight.callsign.length < 3) return undefined;
+    return flight.callsign.substring(0, 3).toUpperCase();
+  }, [flight.callsign]);
 
-  // Track if GLTF model is available
-  const [useGLTF, setUseGLTF] = useState(false);
-
-  // Check if model exists on mount
-  useEffect(() => {
-    modelExists(modelConfig.url).then(setUseGLTF);
-  }, [modelConfig.url]);
-
-  // Determine color based on selection and flight phase
-  // Use airline colors when available, fall back to phase-based
-  const color = useMemo(() => {
-    if (selected) return COLORS.aircraftSelected;
-    // Use airline primary color if recognized
-    if (airline.name !== 'Unknown Airline') return airline.primaryColor;
-    // Fall back to phase-based colors
-    if (flight.flight_phase === 'descending') return COLORS.aircraftArriving;
-    if (flight.flight_phase === 'climbing') return COLORS.aircraftDeparting;
-    return COLORS.aircraftDefault;
-  }, [selected, flight.flight_phase, airline]);
-
-  // Secondary color for livery details
-  const secondaryColor = useMemo(() => {
-    if (airline.name !== 'Unknown Airline') return airline.secondaryColor;
-    return 0x555555;
-  }, [airline]);
+  // Get model configuration based on aircraft type and airline (for airline-specific liveries)
+  const modelConfig = useMemo(
+    () => getModelForAircraftType(flight.aircraft_type, airlineCode),
+    [flight.aircraft_type, airlineCode]
+  );
 
   return (
     <group
@@ -189,19 +169,12 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
         document.body.style.cursor = 'auto';
       }}
     >
-      {/* Aircraft model - GLTF if available, procedural fallback */}
-      {useGLTF ? (
-        <GLTFAircraft
-          modelConfig={modelConfig}
-          airline={airline}
-          selected={selected}
-        />
-      ) : (
-        <ProceduralAircraft
-          color={color}
-          secondaryColor={secondaryColor}
-        />
-      )}
+      {/* Aircraft model - Use GLTF model with Suspense fallback */}
+      <GLTFAircraft
+        modelConfig={modelConfig}
+        airline={airline}
+        selected={selected}
+      />
 
       {/* Selection ring - visible indicator when aircraft is selected */}
       {selected && (

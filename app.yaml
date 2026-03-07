@@ -9,7 +9,7 @@ command:
 env:
   # Data source configuration
   - name: USE_MOCK_BACKEND
-    value: "false"
+    value: "true"
 
   # Databricks SQL (Delta tables)
   - name: DATABRICKS_HOST

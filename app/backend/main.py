@@ -1,6 +1,7 @@
 """FastAPI application entry point for Airport Digital Twin."""
 
 import os
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -12,8 +13,11 @@ from app.backend.api.routes import router
 from app.backend.api.websocket import websocket_router
 from app.backend.api.predictions import prediction_router
 
+logger = logging.getLogger(__name__)
+
 # Resolve frontend dist path
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+logger.info(f"FRONTEND_DIST resolved to: {FRONTEND_DIST} (exists: {FRONTEND_DIST.exists()})")
 
 app = FastAPI(
     title="Airport Digital Twin API",
@@ -42,10 +46,44 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/api/debug/paths")
+async def debug_paths():
+    """Debug endpoint to check file paths in production."""
+    models_dir = FRONTEND_DIST / "models"
+    models_aircraft_dir = models_dir / "aircraft"
+
+    return {
+        "frontend_dist": str(FRONTEND_DIST),
+        "frontend_dist_exists": FRONTEND_DIST.exists(),
+        "models_dir": str(models_dir),
+        "models_dir_exists": models_dir.exists(),
+        "models_aircraft_dir": str(models_aircraft_dir),
+        "models_aircraft_dir_exists": models_aircraft_dir.exists(),
+        "glb_files": [str(f.name) for f in models_aircraft_dir.glob("*.glb")] if models_aircraft_dir.exists() else [],
+        "cwd": os.getcwd(),
+        "__file__": __file__,
+    }
+
+
 # Serve static frontend files (must be after API routes)
 if FRONTEND_DIST.exists():
+    logger.info(f"Mounting static assets from {FRONTEND_DIST}")
+
     # Serve static assets (JS, CSS, etc.)
-    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+    assets_dir = FRONTEND_DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+        logger.info(f"Mounted /assets from {assets_dir}")
+
+    # Serve 3D model files (GLB, GLTF)
+    models_dir = FRONTEND_DIST / "models"
+    if models_dir.exists():
+        app.mount("/models", StaticFiles(directory=models_dir), name="models")
+        logger.info(f"Mounted /models from {models_dir} (files: {list(models_dir.glob('**/*'))})")
+    else:
+        logger.warning(f"Models directory not found at {models_dir}")
+else:
+    logger.warning(f"Frontend dist not found at {FRONTEND_DIST}")
 
     # Catch-all route for SPA - serves index.html for all non-API routes
     @app.get("/{full_path:path}")

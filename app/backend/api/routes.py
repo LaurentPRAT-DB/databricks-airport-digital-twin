@@ -1,5 +1,8 @@
 """REST API routes for the Airport Digital Twin."""
 
+import os
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.backend.models.flight import (
@@ -10,6 +13,7 @@ from app.backend.models.flight import (
 )
 from app.backend.services.flight_service import FlightService, get_flight_service
 from app.backend.services.delta_service import get_delta_service
+from src.ingestion.fallback import generate_synthetic_trajectory
 
 
 router = APIRouter(prefix="/api", tags=["flights"])
@@ -58,11 +62,11 @@ async def get_flight_trajectory(
     limit: int = Query(default=1000, ge=1, le=5000, description="Max points to return"),
 ) -> TrajectoryResponse:
     """
-    Get trajectory history for a specific flight from Unity Catalog.
+    Get trajectory history for a specific flight.
 
     Returns a time-series of positions for trajectory visualization,
-    analytics, and ML training. Data is stored in Delta tables for
-    full historical analysis.
+    analytics, and ML training. In mock mode, returns synthetic trajectory.
+    In live mode, queries Unity Catalog Delta tables.
 
     Args:
         icao24: The ICAO24 address (hex) of the aircraft.
@@ -75,14 +79,32 @@ async def get_flight_trajectory(
     Raises:
         404: If no trajectory data found for this flight.
     """
-    delta = get_delta_service()
-    trajectory_data = delta.get_trajectory(icao24, minutes=minutes, limit=limit)
+    use_mock = os.getenv("USE_MOCK_BACKEND", "true").lower() == "true"
+    trajectory_data = None
+
+    # Try Delta tables first if not in mock mode
+    if not use_mock:
+        delta = get_delta_service()
+        trajectory_data = delta.get_trajectory(icao24, minutes=minutes, limit=limit)
+
+    # Fall back to synthetic trajectory if no data or in mock mode
+    if trajectory_data is None or len(trajectory_data) == 0:
+        trajectory_data = generate_synthetic_trajectory(icao24, minutes=minutes, limit=limit)
 
     if trajectory_data is None or len(trajectory_data) == 0:
         raise HTTPException(
             status_code=404,
             detail=f"No trajectory data found for flight {icao24}"
         )
+
+    # Parse timestamps - convert to Unix timestamp (int)
+    for p in trajectory_data:
+        ts = p.get("timestamp")
+        if isinstance(ts, str):
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            p["timestamp"] = int(dt.timestamp())
+        elif isinstance(ts, datetime):
+            p["timestamp"] = int(ts.timestamp())
 
     points = [TrajectoryPoint(**p) for p in trajectory_data]
     callsign = points[0].callsign if points else None

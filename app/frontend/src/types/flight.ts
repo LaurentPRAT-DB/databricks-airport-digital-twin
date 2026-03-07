@@ -11,6 +11,7 @@ export interface Flight {
   last_seen: string;
   data_source: string;
   flight_phase: "ground" | "climbing" | "descending" | "cruising";
+  aircraft_type?: string; // ICAO aircraft type code (e.g., A320, B738)
 }
 
 export interface FlightsResponse {
