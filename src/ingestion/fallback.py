@@ -35,44 +35,63 @@ CALLSIGN_PREFIXES = [
 # Airport geometry (matching frontend airportLayout.ts)
 AIRPORT_CENTER = (37.5, -122.0)
 
-# Runway endpoints (runway 10L/28R - main runway)
-RUNWAY_10L_THRESHOLD = (-122.015, 37.5018)  # West end
-RUNWAY_28R_THRESHOLD = (-121.985, 37.5018)  # East end
+# Runway endpoints aligned with 3D scene
+# 3D: Runway 28L at z=-100 (south), Runway 28R at z=100 (north)
+# x from -500 to 500
+RUNWAY_28L_WEST = (-122.05, 37.49)   # West end of runway 28L (x≈-400, z=100)
+RUNWAY_28L_EAST = (-121.95, 37.49)   # East end of runway 28L (x≈400, z=100)
+RUNWAY_28R_WEST = (-122.05, 37.51)   # West end of runway 28R (x≈-400, z=-100)
+RUNWAY_28R_EAST = (-121.95, 37.51)   # East end of runway 28R (x≈400, z=-100)
 
-# Terminal and gate positions
+# Terminal and gate positions (aligned with 3D jetbridge positions)
+# 3D scene: terminal at z=0, jetbridges at x=-60,-20,20,60 and z=-40
+# Using scale 10000: lat offset of 0.004 → z=-40, lon offset of 0.006 → x=-48
 TERMINAL_CENTER = (37.504, -122.0)
 GATES = {
-    **{f"A{i+1}": (37.5045, -122.004 + i * 0.001) for i in range(10)},
-    **{f"B{i+1}": (37.5035, -122.004 + i * 0.001) for i in range(10)},
+    # Gate positions map to 3D jetbridge locations
+    # 4 jetbridges at x=-60,-20,20,60 z=-40 → lon -122.0075 to -122.0025, lat 37.504
+    "A1": (37.504, -122.0075),  # x≈-60, z≈-40
+    "A2": (37.504, -122.0050),  # x≈-40, z≈-40
+    "A3": (37.504, -122.0025),  # x≈-20, z≈-40
+    "A4": (37.504, -122.0000),  # x≈0, z≈-40
+    "B1": (37.504, -121.9975),  # x≈20, z≈-40
+    "B2": (37.504, -121.9950),  # x≈40, z≈-40
+    "B3": (37.504, -121.9925),  # x≈60, z≈-40
+    "B4": (37.504, -121.9900),  # x≈80, z≈-40
 }
 
-# Taxiway waypoints (simplified path from runway to terminal)
+# Taxiway waypoints aligned with 3D scene
+# 3D: Runway 28L at z=-100, taxiway A from z=-100 to z=0 at x=0
+# Scale 10000: z=-100 → lat offset 0.01 → lat 37.49
 TAXI_WAYPOINTS_ARRIVAL = [
-    (-122.000, 37.5018),  # Exit runway at midpoint
-    (-122.000, 37.503),   # Turn north toward terminal
-    (-122.000, 37.504),   # Approach terminal area
+    (-122.000, 37.490),   # Exit runway at z=-100
+    (-122.000, 37.495),   # Taxiway midpoint z=-50
+    (-122.000, 37.500),   # Taxiway near terminal z=0
+    (-122.004, 37.504),   # Approach gate area z=-40
 ]
 
 TAXI_WAYPOINTS_DEPARTURE = [
-    (-122.000, 37.504),   # Leave terminal area
-    (-122.000, 37.503),   # Head south
-    (-122.000, 37.5018),  # Join runway
-    (-122.015, 37.5018),  # Runway 10L threshold (takeoff point)
+    (-122.000, 37.500),   # Leave terminal area z=0
+    (-122.000, 37.495),   # Head to taxiway z=-50
+    (-122.000, 37.490),   # Join runway area z=-100
+    (-122.010, 37.490),   # Runway threshold (x≈-80)
 ]
 
-# Approach path (from northeast, descending to runway)
+# Approach path (from east, descending to runway 28L)
+# 3D runway at z=-100, x=-500 to 500
+# Approach from east (positive x direction)
 APPROACH_WAYPOINTS = [
-    (-121.90, 37.55, 8000),   # Initial approach fix
-    (-121.92, 37.53, 5000),   # Intermediate
-    (-121.95, 37.51, 2500),   # Final approach
-    (-121.985, 37.5018, 100), # Short final
+    (-121.92, 37.52, 6000),   # Initial approach (x≈640, z≈-200)
+    (-121.95, 37.50, 3000),   # Intermediate (x≈400, z=0)
+    (-121.98, 37.49, 1000),   # Final approach (x≈160, z≈100)
+    (-122.00, 37.49, 100),    # Short final (x=0, z=100 - runway 28R)
 ]
 
-# Departure path (climbing to northeast)
+# Departure path (climbing to west from runway 28L)
 DEPARTURE_WAYPOINTS = [
-    (-121.97, 37.51, 1500),   # Initial climb
-    (-121.94, 37.52, 4000),   # Continued climb
-    (-121.90, 37.55, 8000),   # Departure fix
+    (-122.02, 37.49, 1500),   # Initial climb (x≈-160, z=100)
+    (-122.05, 37.50, 4000),   # Continued climb (x≈-400, z=0)
+    (-122.10, 37.52, 8000),   # Departure fix (x≈-800, z≈-200)
 ]
 
 
@@ -172,9 +191,10 @@ def _interpolate_altitude(current_alt: float, target_alt: float, rate: float) ->
 def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> FlightState:
     """Create a new flight in the specified phase."""
     if phase == FlightPhase.APPROACHING:
-        # Start on approach
+        # Start on approach from the east
         wp = APPROACH_WAYPOINTS[0]
-        lat, lon = 37.55 + random.uniform(-0.02, 0.02), -121.90 + random.uniform(-0.02, 0.02)
+        lat = wp[1] + random.uniform(-0.01, 0.01)
+        lon = wp[0] + random.uniform(-0.01, 0.01)
         return FlightState(
             icao24=icao24,
             callsign=callsign,
@@ -182,7 +202,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             longitude=lon,
             altitude=wp[2] + random.uniform(-500, 500),
             velocity=180 + random.uniform(-20, 20),
-            heading=_calculate_heading((lat, lon), (RUNWAY_28R_THRESHOLD[1], RUNWAY_28R_THRESHOLD[0])),
+            heading=_calculate_heading((lat, lon), (RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0])),
             vertical_rate=-800,
             on_ground=False,
             phase=phase,
@@ -190,7 +210,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
         )
 
     elif phase == FlightPhase.PARKED:
-        # Start at a gate
+        # Start at a gate (facing the terminal, heading ~180)
         gate = random.choice(list(GATES.keys()))
         lat, lon = GATES[gate]
         return FlightState(
@@ -200,7 +220,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             longitude=lon,
             altitude=0,
             velocity=0,
-            heading=random.uniform(0, 360),
+            heading=180,  # Facing terminal (south)
             vertical_rate=0,
             on_ground=True,
             phase=phase,
@@ -209,16 +229,16 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
         )
 
     elif phase == FlightPhase.ENROUTE:
-        # Cruising flight in the area
-        lat = AIRPORT_CENTER[0] + random.uniform(-0.3, 0.3)
-        lon = AIRPORT_CENTER[1] + random.uniform(-0.3, 0.3)
+        # Cruising flight visible in 3D scene area
+        lat = AIRPORT_CENTER[0] + random.uniform(-0.05, 0.05)
+        lon = AIRPORT_CENTER[1] + random.uniform(-0.05, 0.05)
         heading = random.uniform(0, 360)
         return FlightState(
             icao24=icao24,
             callsign=callsign,
             latitude=lat,
             longitude=lon,
-            altitude=random.uniform(15000, 35000),
+            altitude=random.uniform(8000, 15000),  # Lower for visibility
             velocity=random.uniform(400, 500),
             heading=heading,
             vertical_rate=random.uniform(-200, 200),
@@ -227,7 +247,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
         )
 
     elif phase == FlightPhase.TAXI_TO_GATE:
-        # Just landed, taxiing
+        # Just landed, taxiing from runway
         wp = TAXI_WAYPOINTS_ARRIVAL[0]
         gate = random.choice(list(GATES.keys()))
         return FlightState(
@@ -237,7 +257,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             longitude=wp[0],
             altitude=0,
             velocity=15,
-            heading=0,
+            heading=0,  # Heading north toward terminal
             vertical_rate=0,
             on_ground=True,
             phase=phase,
@@ -246,7 +266,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
         )
 
     elif phase == FlightPhase.TAXI_TO_RUNWAY:
-        # Departing, taxiing to runway
+        # Departing, starting from a gate position
         gate = random.choice(list(GATES.keys()))
         lat, lon = GATES[gate]
         return FlightState(
@@ -256,7 +276,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             longitude=lon,
             altitude=0,
             velocity=10,
-            heading=180,
+            heading=180,  # Heading south toward runway
             vertical_rate=0,
             on_ground=True,
             phase=phase,
@@ -299,13 +319,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.waypoint_index = 0
 
     elif state.phase == FlightPhase.LANDING:
-        # Final touchdown sequence
-        runway_end = (RUNWAY_28R_THRESHOLD[1], RUNWAY_28R_THRESHOLD[0])
-        new_pos = _move_toward((state.latitude, state.longitude), runway_end, 0.001)
+        # Final touchdown sequence - land on runway 28R (z=100, northern runway)
+        runway_touchdown = (RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0])  # lat, lon
+        new_pos = _move_toward((state.latitude, state.longitude), runway_touchdown, 0.002)
         state.latitude, state.longitude = new_pos
         state.altitude = max(0, state.altitude - 500 * dt)
         state.velocity = max(30, state.velocity - 20 * dt)
-        state.heading = _calculate_heading(new_pos, runway_end)
+        state.heading = _calculate_heading(new_pos, runway_touchdown)
 
         if state.altitude <= 0:
             state.altitude = 0
@@ -385,9 +405,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.heading = 280  # Runway heading (10L = 280 degrees)
 
     elif state.phase == FlightPhase.TAKEOFF:
-        # Accelerate down runway and lift off
+        # Accelerate down runway and lift off (runway heading ~280 = west)
         state.velocity = min(state.velocity + 30 * dt, 160)
-        state.longitude -= 0.001 * dt  # Move west down runway
+        state.longitude -= 0.002 * dt  # Move west down runway
+        state.heading = 280  # Runway heading
 
         if state.velocity >= 140:  # Rotation speed
             state.on_ground = False

@@ -18,12 +18,24 @@ interface Aircraft3DProps {
   onClick?: () => void;
 }
 
-// Center coordinates for the airport (SFO area for demo)
-const CENTER_LAT = 37.62;
-const CENTER_LON = -122.38;
+// Center coordinates for the airport (must match synthetic data and 2D layout)
+const CENTER_LAT = 37.5;
+const CENTER_LON = -122.0;
+
+// Scale factor to map lat/lon to 3D scene units
+// 3D scene: runways at z=±100, terminal at z=0
+// 2D layout: runways at lat ~37.498-37.502, terminal at lat ~37.504
+// Scale chosen so that lat 37.504 (gates) maps to z≈-40 (near terminal)
+const COORDINATE_SCALE = 10000;
 
 /**
  * Convert lat/lon to 3D scene coordinates
+ *
+ * Maps real-world lat/lon coordinates to the 3D airport scene.
+ * The scene is centered at AIRPORT_CENTER (37.5, -122.0) with:
+ * - X axis: East-West (positive = East)
+ * - Z axis: North-South (negative = North)
+ * - Y axis: Altitude
  *
  * @param lat - Latitude in degrees
  * @param lon - Longitude in degrees
@@ -36,17 +48,18 @@ export function latLonTo3D(
   altitude: number | null = 0,
   centerLat: number = CENTER_LAT,
   centerLon: number = CENTER_LON,
-  scale: number = AIRPORT_3D_CONFIG.scale
+  scale: number = COORDINATE_SCALE
 ): { x: number; y: number; z: number } {
-  // Meters per degree (approximate at this latitude)
-  const metersPerDegree = 111000;
-
   // Convert lat/lon offset to scene coordinates
-  const x = (lon - centerLon) * metersPerDegree * scale * Math.cos(centerLat * Math.PI / 180);
-  const z = -(lat - centerLat) * metersPerDegree * scale; // Negative because Z is inverted in scene
+  // Longitude → X axis (scaled by cos(lat) for projection)
+  const x = (lon - centerLon) * scale * Math.cos(centerLat * Math.PI / 180);
+  // Latitude → Z axis (negative because Z points south in scene)
+  const z = -(lat - centerLat) * scale;
 
   // Convert altitude from feet to scene units
-  const y = ((altitude || 0) * 0.3048 * scale) + 5; // Add 5 to keep above ground
+  // Ground-level flights get y=5 to stay above ground plane
+  const altitudeMeters = (altitude || 0) * 0.3048;
+  const y = altitudeMeters * 0.05 + 5; // Scale altitude for visibility
 
   return { x, y, z };
 }
