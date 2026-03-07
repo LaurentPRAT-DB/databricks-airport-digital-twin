@@ -2,6 +2,7 @@ import { MapContainer, TileLayer } from 'react-leaflet';
 import { AIRPORT_CENTER, DEFAULT_ZOOM } from '../../constants/airportLayout';
 import AirportOverlay from './AirportOverlay';
 import FlightMarker from './FlightMarker';
+import TrajectoryLine from './TrajectoryLine';
 import { useFlightContext } from '../../context/FlightContext';
 
 export default function AirportMap() {
@@ -19,6 +20,7 @@ export default function AirportMap() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <AirportOverlay />
+        <TrajectoryLine />
         {flights.map((flight) => (
           <FlightMarker key={flight.icao24} flight={flight} />
         ))}

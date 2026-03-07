@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
-import { Marker, Popup } from 'react-leaflet';
+import { useMemo, useRef, useEffect } from 'react';
+import { Marker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { Flight } from '../../types/flight';
+import { useFlightContext } from '../../context/FlightContext';
 
 interface FlightMarkerProps {
   flight: Flight;
@@ -23,10 +24,13 @@ function getPhaseColor(phase: Flight['flight_phase']): string {
   }
 }
 
+// Selection color (green)
+const SELECTION_COLOR = '#22c55e';
+
 // Create airplane SVG icon with rotation
-function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase']): L.DivIcon {
+function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'], isSelected: boolean): L.DivIcon {
   const rotation = heading ?? 0;
-  const color = getPhaseColor(phase);
+  const color = isSelected ? SELECTION_COLOR : getPhaseColor(phase);
 
   const svgIcon = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="24" height="24" style="transform: rotate(${rotation}deg);">
@@ -43,88 +47,44 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
   });
 }
 
-// Format speed for display
-function formatSpeed(velocity: number | null): string {
-  if (velocity === null) return 'N/A';
-  return `${Math.round(velocity)} m/s`;
-}
-
 // Format altitude for display
 function formatAltitude(altitude: number | null): string {
   if (altitude === null) return 'N/A';
-  return `${Math.round(altitude)} m`;
-}
-
-// Format timestamp for display
-function formatTime(timestamp: string): string {
-  try {
-    return new Date(timestamp).toLocaleTimeString();
-  } catch {
-    return timestamp;
-  }
+  return `${Math.round(altitude)} ft`;
 }
 
 export default function FlightMarker({ flight }: FlightMarkerProps) {
+  const { selectedFlight, setSelectedFlight } = useFlightContext();
+  const isSelected = selectedFlight?.icao24 === flight.icao24;
+  const markerRef = useRef<L.Marker>(null);
+
   const icon = useMemo(
-    () => createAirplaneIcon(flight.heading, flight.flight_phase),
-    [flight.heading, flight.flight_phase]
+    () => createAirplaneIcon(flight.heading, flight.flight_phase, isSelected),
+    [flight.heading, flight.flight_phase, isSelected]
   );
+
+  // Update marker icon when selection changes without full re-render
+  useEffect(() => {
+    if (markerRef.current) {
+      markerRef.current.setIcon(icon);
+    }
+  }, [icon]);
 
   return (
     <Marker
+      ref={markerRef}
       position={[flight.latitude, flight.longitude]}
       icon={icon}
+      eventHandlers={{
+        click: () => setSelectedFlight(flight),
+      }}
     >
-      <Popup>
-        <div className="min-w-[200px]">
-          <h3 className="font-bold text-lg mb-2">
-            {flight.callsign || flight.icao24}
-          </h3>
-          <table className="text-sm w-full">
-            <tbody>
-              <tr>
-                <td className="text-gray-600">ICAO24:</td>
-                <td className="font-mono">{flight.icao24}</td>
-              </tr>
-              <tr>
-                <td className="text-gray-600">Phase:</td>
-                <td>
-                  <span
-                    className="px-2 py-0.5 rounded text-white text-xs"
-                    style={{ backgroundColor: getPhaseColor(flight.flight_phase) }}
-                  >
-                    {flight.flight_phase}
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td className="text-gray-600">Altitude:</td>
-                <td>{formatAltitude(flight.altitude)}</td>
-              </tr>
-              <tr>
-                <td className="text-gray-600">Speed:</td>
-                <td>{formatSpeed(flight.velocity)}</td>
-              </tr>
-              <tr>
-                <td className="text-gray-600">Heading:</td>
-                <td>{flight.heading !== null ? `${Math.round(flight.heading)}` : 'N/A'}</td>
-              </tr>
-              <tr>
-                <td className="text-gray-600">On Ground:</td>
-                <td>{flight.on_ground ? 'Yes' : 'No'}</td>
-              </tr>
-              <tr>
-                <td className="text-gray-600">Source:</td>
-                <td>{flight.data_source}</td>
-              </tr>
-              <tr>
-                <td className="text-gray-600">Last Seen:</td>
-                <td>{formatTime(flight.last_seen)}</td>
-              </tr>
-            </tbody>
-          </table>
+      <Tooltip direction="top" offset={[0, -12]}>
+        <div className="text-sm">
+          <div className="font-bold">{flight.callsign || flight.icao24}</div>
+          <div className="text-gray-500">{flight.flight_phase} • {formatAltitude(flight.altitude)}</div>
         </div>
-      </Popup>
+      </Tooltip>
     </Marker>
   );
 }

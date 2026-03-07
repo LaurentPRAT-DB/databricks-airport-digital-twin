@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { AIRPORT_3D_CONFIG, RUNWAY_MARKING_COLOR } from '../../constants/airport3D';
 import { Flight } from '../../types/flight';
 import { Aircraft3D } from './Aircraft3D';
+import { Trajectory3D } from './Trajectory3D';
 
 interface AirportSceneProps {
   flights?: Flight[];
@@ -44,6 +45,9 @@ export function AirportScene({
       {taxiways.map((taxiway) => (
         <Taxiway key={taxiway.id} config={taxiway} />
       ))}
+
+      {/* Trajectory (render before aircraft so it appears behind) */}
+      <Trajectory3D />
 
       {/* Aircraft */}
       {flights.map((flight) => (

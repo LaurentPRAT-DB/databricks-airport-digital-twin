@@ -22,9 +22,10 @@ from datetime import datetime, timezone
 CATALOG = "serverless_stable_3n0ihb_catalog"
 SCHEMA = "airport_digital_twin"
 
-# Lakebase configuration
-LAKEBASE_HOST = "instance-a19a95a0-cd1b-43bc-ae5e-82497977a00c.database.cloud.databricks.com"
-LAKEBASE_DATABASE = "airport_digital_twin"
+# Lakebase Autoscaling configuration
+LAKEBASE_HOST = "ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com"
+LAKEBASE_DATABASE = "databricks_postgres"
+LAKEBASE_ENDPOINT_NAME = "projects/airport-digital-twin/branches/production/endpoints/primary"
 
 print(f"Syncing from {CATALOG}.{SCHEMA}.flight_status_gold to Lakebase")
 print(f"Lakebase host: {LAKEBASE_HOST}")
@@ -68,22 +69,43 @@ display(spark.sql(f"SELECT * FROM {table_name} LIMIT 5"))
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 2. Get Lakebase credentials from notebook context
+# MAGIC ## 2. Get Lakebase Autoscaling credentials
 
 # COMMAND ----------
 
-# Get the user's OAuth token from notebook context
-import os
+# Get OAuth credentials for Lakebase Autoscaling via REST API
+import requests
+import json
 
 try:
-    db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
-    # Hardcode user email for this deployment (Lakebase OAuth requires exact email)
-    user_email = "laurent.prat@databricks.com"
-    print(f"Using credentials for: {user_email}")
-    print(f"Token obtained: {'Yes' if db_token else 'No'} (length: {len(db_token) if db_token else 0})")
+    # Get the notebook context token and host
+    ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+    db_token = ctx.apiToken().get()
+    workspace_host = ctx.apiUrl().get()
+    user_email = ctx.userName().get()
+
+    # Generate Lakebase credential via REST API
+    headers = {"Authorization": f"Bearer {db_token}", "Content-Type": "application/json"}
+    resp = requests.post(
+        f"{workspace_host}/api/2.0/lakebase/postgres/credentials/generate",
+        headers=headers,
+        json={"endpoint": LAKEBASE_ENDPOINT_NAME}
+    )
+
+    if resp.status_code == 200:
+        lakebase_token = resp.json().get("token")
+        print(f"Using OAuth for Lakebase Autoscaling as: {user_email}")
+        print(f"Lakebase token obtained: {'Yes' if lakebase_token else 'No'}")
+        db_token = lakebase_token  # Use Lakebase-specific token
+    else:
+        print(f"Could not get Lakebase credential (status {resp.status_code}): {resp.text}")
+        print("Falling back to notebook API token")
+
 except Exception as e:
-    print(f"ERROR: Could not get notebook credentials: {e}")
-    dbutils.notebook.exit(f"ERROR: Failed to get credentials - {e}")
+    print(f"WARNING: Could not get Lakebase credentials via API: {e}")
+    print("Falling back to notebook API token")
+    db_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+    user_email = "laurent.prat@databricks.com"
 
 # COMMAND ----------
 

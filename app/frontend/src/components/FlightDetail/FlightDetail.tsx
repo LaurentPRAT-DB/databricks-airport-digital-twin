@@ -1,6 +1,7 @@
 import { useFlightContext } from '../../context/FlightContext';
 import { Flight } from '../../types/flight';
 import { useDelayPrediction, useGateRecommendations } from '../../hooks/usePredictions';
+import { useTrajectory } from '../../hooks/useTrajectory';
 
 const phaseColors: Record<Flight['flight_phase'], string> = {
   ground: 'bg-gray-500',
@@ -52,7 +53,7 @@ function DetailRow({ label, value, unit }: DetailRowProps) {
 }
 
 export default function FlightDetail() {
-  const { selectedFlight, setSelectedFlight } = useFlightContext();
+  const { selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory } = useFlightContext();
 
   // Fetch predictions for selected flight
   const { delay, isLoading: isDelayLoading } = useDelayPrediction(
@@ -61,6 +62,12 @@ export default function FlightDetail() {
   const { recommendations, isLoading: isGateLoading } = useGateRecommendations(
     selectedFlight?.icao24 ?? null,
     3
+  );
+
+  // Fetch trajectory when enabled
+  const { data: trajectoryData, isLoading: isTrajectoryLoading } = useTrajectory(
+    selectedFlight?.icao24 ?? null,
+    showTrajectory
   );
 
   // Show gate recommendations for arriving flights (descending or ground)
@@ -130,6 +137,46 @@ export default function FlightDetail() {
         `}>
           {phaseLabels[flight_phase]}
         </span>
+      </div>
+
+      {/* Trajectory Toggle */}
+      <div className="mb-4 pb-3 border-b border-slate-200">
+        <button
+          onClick={() => setShowTrajectory(!showTrajectory)}
+          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-colors ${
+            showTrajectory
+              ? 'bg-blue-50 border-blue-200 text-blue-700'
+              : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            <span className="font-medium text-sm">Show Trajectory</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {isTrajectoryLoading && (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            {showTrajectory && trajectoryData && (
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                {trajectoryData.count} pts
+              </span>
+            )}
+            <div className={`w-10 h-6 rounded-full p-1 transition-colors ${
+              showTrajectory ? 'bg-blue-500' : 'bg-slate-300'
+            }`}>
+              <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                showTrajectory ? 'translate-x-4' : 'translate-x-0'
+              }`} />
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* Position Section */}

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useState, useMemo, useCallback, ReactNode } from 'react';
 import { useFlights } from '../hooks/useFlights';
 import { Flight } from '../types/flight';
 
@@ -6,6 +6,8 @@ interface FlightContextType {
   flights: Flight[];
   selectedFlight: Flight | null;
   setSelectedFlight: (flight: Flight | null) => void;
+  showTrajectory: boolean;
+  setShowTrajectory: (show: boolean) => void;
   isLoading: boolean;
   error: Error | null;
   lastUpdated: string | null;
@@ -18,6 +20,8 @@ export function FlightProvider({ children }: { children: ReactNode }) {
   const { flights, isLoading, error, lastUpdated, dataSource } = useFlights();
   // Store selection by icao24 ID so it persists across data refreshes
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
+  // Trajectory display toggle
+  const [showTrajectory, setShowTrajectoryState] = useState(false);
 
   // Derive selected flight from current flights array
   // This ensures selection stays in sync with latest flight data
@@ -26,21 +30,33 @@ export function FlightProvider({ children }: { children: ReactNode }) {
     return flights.find((f) => f.icao24 === selectedFlightId) || null;
   }, [flights, selectedFlightId]);
 
-  // Wrapper to set selection by flight object or null
-  const setSelectedFlight = (flight: Flight | null) => {
+  // Stable callback for setting selected flight
+  const setSelectedFlight = useCallback((flight: Flight | null) => {
     setSelectedFlightId(flight?.icao24 || null);
-  };
+    // Reset trajectory when deselecting
+    if (!flight) setShowTrajectoryState(false);
+  }, []);
+
+  // Stable callback for trajectory toggle
+  const setShowTrajectory = useCallback((show: boolean) => {
+    setShowTrajectoryState(show);
+  }, []);
+
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(() => ({
+    flights,
+    selectedFlight,
+    setSelectedFlight,
+    showTrajectory,
+    setShowTrajectory,
+    isLoading,
+    error,
+    lastUpdated,
+    dataSource,
+  }), [flights, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource]);
 
   return (
-    <FlightContext.Provider value={{
-      flights,
-      selectedFlight,
-      setSelectedFlight,
-      isLoading,
-      error,
-      lastUpdated,
-      dataSource
-    }}>
+    <FlightContext.Provider value={contextValue}>
       {children}
     </FlightContext.Provider>
   );

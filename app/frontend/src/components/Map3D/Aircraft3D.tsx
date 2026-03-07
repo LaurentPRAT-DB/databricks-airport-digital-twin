@@ -1,9 +1,16 @@
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useState, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { Flight } from '../../types/flight';
 import { AIRPORT_3D_CONFIG, COLORS } from '../../constants/airport3D';
+import { ProceduralAircraft } from './ProceduralAircraft';
+import { GLTFAircraft } from './GLTFAircraft';
+import {
+  getAirlineFromCallsign,
+  getModelForAircraftType,
+  modelExists,
+} from '../../config/aircraftModels';
 
 interface Aircraft3DProps {
   flight: Flight;
@@ -118,13 +125,37 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
     groupRef.current.rotation.y = currentRotation.current;
   });
 
+  // Get airline configuration from callsign
+  const airline = useMemo(() => getAirlineFromCallsign(flight.callsign), [flight.callsign]);
+
+  // Get model configuration - could be enhanced with aircraft type from API
+  const modelConfig = useMemo(() => getModelForAircraftType(), []);
+
+  // Track if GLTF model is available
+  const [useGLTF, setUseGLTF] = useState(false);
+
+  // Check if model exists on mount
+  useEffect(() => {
+    modelExists(modelConfig.url).then(setUseGLTF);
+  }, [modelConfig.url]);
+
   // Determine color based on selection and flight phase
+  // Use airline colors when available, fall back to phase-based
   const color = useMemo(() => {
     if (selected) return COLORS.aircraftSelected;
+    // Use airline primary color if recognized
+    if (airline.name !== 'Unknown Airline') return airline.primaryColor;
+    // Fall back to phase-based colors
     if (flight.flight_phase === 'descending') return COLORS.aircraftArriving;
     if (flight.flight_phase === 'climbing') return COLORS.aircraftDeparting;
     return COLORS.aircraftDefault;
-  }, [selected, flight.flight_phase]);
+  }, [selected, flight.flight_phase, airline]);
+
+  // Secondary color for livery details
+  const secondaryColor = useMemo(() => {
+    if (airline.name !== 'Unknown Airline') return airline.secondaryColor;
+    return 0x555555;
+  }, [airline]);
 
   return (
     <group
@@ -145,80 +176,40 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
         document.body.style.cursor = 'auto';
       }}
     >
-      {/* Aircraft fuselage - elongated cylinder */}
-      <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[2, 2, 18, 12]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={selected ? 0x002200 : 0x000000}
-          emissiveIntensity={0.3}
-          metalness={0.3}
-          roughness={0.7}
+      {/* Aircraft model - GLTF if available, procedural fallback */}
+      {useGLTF ? (
+        <GLTFAircraft
+          modelConfig={modelConfig}
+          airline={airline}
+          selected={selected}
         />
-      </mesh>
+      ) : (
+        <ProceduralAircraft
+          color={color}
+          secondaryColor={secondaryColor}
+        />
+      )}
 
-      {/* Nose cone */}
-      <mesh castShadow position={[0, 0, -10]} rotation={[Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[2, 4, 12]} />
-        <meshStandardMaterial color={color} metalness={0.3} roughness={0.7} />
-      </mesh>
+      {/* Selection ring - visible indicator when aircraft is selected */}
+      {selected && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3, 0]}>
+          <ringGeometry args={[18, 22, 32]} />
+          <meshBasicMaterial color={0x00ff00} transparent opacity={0.8} side={THREE.DoubleSide} />
+        </mesh>
+      )}
 
-      {/* Tail cone */}
-      <mesh castShadow position={[0, 0.5, 8]} rotation={[-Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[2, 5, 12]} />
-        <meshStandardMaterial color={color} metalness={0.3} roughness={0.7} />
-      </mesh>
+      {/* Pulsing selection indicator */}
+      {selected && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]}>
+          <ringGeometry args={[24, 26, 32]} />
+          <meshBasicMaterial color={0x00ff00} transparent opacity={0.4} side={THREE.DoubleSide} />
+        </mesh>
+      )}
 
-      {/* Main wings - swept back */}
-      <mesh position={[0, -0.5, 1]} castShadow>
-        <boxGeometry args={[28, 0.5, 5]} />
-        <meshStandardMaterial color={color} metalness={0.3} roughness={0.7} />
-      </mesh>
-
-      {/* Wing tips - angled up (winglets) */}
-      <mesh position={[14.5, 1, 1]} rotation={[0, 0, Math.PI / 6]} castShadow>
-        <boxGeometry args={[0.3, 3, 2]} />
-        <meshStandardMaterial color={color} metalness={0.3} roughness={0.7} />
-      </mesh>
-      <mesh position={[-14.5, 1, 1]} rotation={[0, 0, -Math.PI / 6]} castShadow>
-        <boxGeometry args={[0.3, 3, 2]} />
-        <meshStandardMaterial color={color} metalness={0.3} roughness={0.7} />
-      </mesh>
-
-      {/* Horizontal stabilizer (tail wings) */}
-      <mesh position={[0, 0.5, 9]} castShadow>
-        <boxGeometry args={[10, 0.3, 3]} />
-        <meshStandardMaterial color={color} metalness={0.3} roughness={0.7} />
-      </mesh>
-
-      {/* Vertical stabilizer (tail fin) */}
-      <mesh position={[0, 4, 8]} castShadow>
-        <boxGeometry args={[0.3, 7, 4]} />
-        <meshStandardMaterial color={color} metalness={0.3} roughness={0.7} />
-      </mesh>
-
-      {/* Engines - left */}
-      <mesh position={[-6, -2, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <cylinderGeometry args={[1.2, 1.5, 4, 8]} />
-        <meshStandardMaterial color={0x555555} metalness={0.5} roughness={0.5} />
-      </mesh>
-
-      {/* Engines - right */}
-      <mesh position={[6, -2, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <cylinderGeometry args={[1.2, 1.5, 4, 8]} />
-        <meshStandardMaterial color={0x555555} metalness={0.5} roughness={0.5} />
-      </mesh>
-
-      {/* Cockpit windows - dark glass effect */}
-      <mesh position={[0, 1, -8]} rotation={[Math.PI / 4, 0, 0]}>
-        <planeGeometry args={[2.5, 1.5]} />
-        <meshStandardMaterial color={0x111122} metalness={0.8} roughness={0.2} />
-      </mesh>
-
-      {/* Hover label with callsign */}
-      {hovered && (
+      {/* Label - shows on hover OR when selected */}
+      {(hovered || selected) && (
         <Html
-          position={[0, 15, 0]}
+          position={[0, 25, 0]}
           center
           style={{
             pointerEvents: 'none',
@@ -226,15 +217,18 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
           }}
         >
           <div style={{
-            background: 'rgba(0, 0, 0, 0.8)',
+            background: selected ? 'rgba(0, 100, 0, 0.9)' : 'rgba(0, 0, 0, 0.8)',
             color: 'white',
-            padding: '4px 8px',
+            padding: '6px 12px',
             borderRadius: '4px',
-            fontSize: '12px',
+            fontSize: '14px',
             fontFamily: 'sans-serif',
+            border: selected ? '2px solid #00ff00' : 'none',
+            boxShadow: selected ? '0 0 10px rgba(0, 255, 0, 0.5)' : 'none',
           }}>
             <strong>{flight.callsign || flight.icao24}</strong>
-            {flight.altitude && <span> | {Math.round(flight.altitude)} ft</span>}
+            {flight.altitude != null && <span> | {Math.round(flight.altitude)} ft</span>}
+            {flight.velocity != null && <span> | {Math.round(flight.velocity)} kts</span>}
           </div>
         </Html>
       )}
