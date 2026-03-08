@@ -14,6 +14,21 @@ export const DEFAULT_CENTER_LAT = 37.5;
 export const DEFAULT_CENTER_LON = -122.0;
 export const DEFAULT_COORDINATE_SCALE = 10000;
 
+/**
+ * Altitude scale factor for 3D visualization
+ * Converts feet to scene units with exaggeration for visual clarity
+ *
+ * Real scale would be ~0.003 (1ft = 0.3048m, 1m = 0.01 scene units)
+ * Using 0.15 for 50x exaggeration so altitude differences are visible
+ *
+ * At this scale:
+ * - Ground (0 ft) → Y = 5
+ * - 1,000 ft → Y = 50
+ * - 5,000 ft → Y = 234
+ * - 10,000 ft → Y = 462
+ */
+export const ALTITUDE_SCALE = 0.15;
+
 export interface Position3D {
   x: number;
   y: number;
@@ -40,9 +55,9 @@ export function latLonTo3D(
   const x = (lon - centerLon) * scale * Math.cos(centerLat * Math.PI / 180);
   // Latitude → Z axis (negative because Z points south in scene)
   const z = -(lat - centerLat) * scale;
-  // Altitude from feet to scene units
+  // Altitude from feet to scene units (exaggerated for visibility)
   const altitudeMeters = (altitude || 0) * 0.3048;
-  const y = altitudeMeters * 0.05 + 5; // Scale + ground offset
+  const y = altitudeMeters * ALTITUDE_SCALE + 5; // Scale + ground offset
 
   return { x, y, z };
 }
@@ -58,7 +73,7 @@ export function position3DToLatLon(
 ): { lat: number; lon: number; altitude: number } {
   const lat = centerLat - pos.z / scale;
   const lon = centerLon + pos.x / (scale * Math.cos(centerLat * Math.PI / 180));
-  const altitudeMeters = (pos.y - 5) / 0.05;
+  const altitudeMeters = (pos.y - 5) / ALTITUDE_SCALE;
   const altitude = altitudeMeters / 0.3048;
 
   return { lat, lon, altitude };
