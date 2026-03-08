@@ -243,3 +243,171 @@ npx playwright test
 # Run with Chrome DevTools MCP
 # Use mcp__chrome-devtools__* tools for automated UI testing
 ```
+
+---
+
+## 14. Weather Widget (V2 Feature)
+
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| 14.1 | Widget renders in header | Check header area | Weather widget visible with temp, wind, visibility |
+| 14.2 | Flight category indicator | Check left of widget | Colored dot (green/blue/red/purple) for VFR/MVFR/IFR/LIFR |
+| 14.3 | Temperature displays | Check widget | Temperature in Celsius format (e.g., "15°C") |
+| 14.4 | Wind displays | Check widget | Wind format "280@12kt" or with gust "280@12G18kt" |
+| 14.5 | Visibility displays | Check widget | Visibility in SM (e.g., "10SM") |
+| 14.6 | Click expands dropdown | Click on widget | Expanded panel appears below |
+| 14.7 | Station identifier | Check expanded panel | Station code (e.g., "KSFO") displays |
+| 14.8 | Flight category badge | Check expanded panel | Category badge with color (VFR green, IFR red) |
+| 14.9 | Category description | Check expanded panel | Full description (e.g., "VFR - Clear") |
+| 14.10 | Weather details grid | Check expanded panel | Wind, visibility, temp, clouds in 2x2 grid |
+| 14.11 | Cloud layers | Check expanded panel | Cloud layers formatted (e.g., "SCT045") |
+| 14.12 | Raw METAR | Check expanded panel | Raw METAR string at bottom |
+| 14.13 | Click outside closes | Click outside panel | Dropdown closes |
+| 14.14 | Auto-refresh | Wait 5 minutes | Weather data updates silently |
+| 14.15 | Loading state | Refresh page | "Loading weather..." shows briefly |
+| 14.16 | Error state | Simulate API failure | "Weather unavailable" message |
+
+---
+
+## 15. FIDS (Flight Information Display System) (V2 Feature)
+
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| 15.1 | FIDS button in header | Check header | "FIDS" button visible |
+| 15.2 | Click opens modal | Click FIDS button | Modal overlay appears |
+| 15.3 | Modal title | Check modal header | "Flight Information Display" title |
+| 15.4 | Tab toggle - Arrivals | Check tabs | "Arrivals" tab, highlighted by default |
+| 15.5 | Tab toggle - Departures | Click Departures tab | Tab highlights, table updates |
+| 15.6 | Close button | Click X button | Modal closes |
+| 15.7 | Click outside closes | Click overlay background | Modal closes |
+| 15.8 | ESC key closes | Press Escape key | Modal closes |
+| 15.9 | Table headers | Check table | Time, Flight, From/To, Gate, Status, Remarks columns |
+| 15.10 | Flight rows render | Check table body | Multiple flight rows visible |
+| 15.11 | Scheduled time | Check Time column | Time in HH:MM format |
+| 15.12 | Estimated time for delays | Check delayed flight | "Est: HH:MM" below scheduled time |
+| 15.13 | Flight number bold | Check Flight column | Flight number in bold |
+| 15.14 | Airline name | Check Flight column | Airline name below flight number |
+| 15.15 | Origin/Destination | Check From/To column | 3-letter airport code |
+| 15.16 | Gate assignment | Check Gate column | Gate code (e.g., "B12") or "-" |
+| 15.17 | Status - On Time | Check On Time flight | Green "On Time" text |
+| 15.18 | Status - Delayed | Check delayed flight | Yellow "Delayed" text |
+| 15.19 | Status - Boarding | Check boarding flight | Blue "Boarding" text |
+| 15.20 | Status - Cancelled | Check cancelled flight | Red "Cancelled" text |
+| 15.21 | Status - Departed/Arrived | Check past flight | Gray "Departed" or "Arrived" text |
+| 15.22 | Delay minutes | Check Remarks column | "+15 min" for delayed flights |
+| 15.23 | Footer stats | Check modal footer | Flight count, refresh interval |
+| 15.24 | Auto-refresh | Wait 1 minute | Table updates silently |
+| 15.25 | Loading state | Open modal | "Loading schedule..." shows briefly |
+| 15.26 | Error state | Simulate API failure | Error message displays |
+| 15.27 | Arrivals tab shows From | Select Arrivals | Column shows "From" |
+| 15.28 | Departures tab shows To | Select Departures | Column shows "To" |
+| 15.29 | Scroll for many flights | Check table | Table scrollable if > 15 flights |
+| 15.30 | Hover highlight | Hover over row | Row background highlights |
+
+---
+
+## 16. Turnaround Timeline (V2 Feature)
+
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| 16.1 | Timeline visible for ground | Select ground aircraft | "Turnaround Progress" section in details panel |
+| 16.2 | Timeline hidden for airborne | Select cruising aircraft | Timeline section not visible |
+| 16.3 | Gate displays | Check timeline header | Gate assignment shows (e.g., "Gate B12") |
+| 16.4 | Current phase label | Check above progress bar | Phase name (e.g., "Refueling") |
+| 16.5 | Progress percentage | Check progress bar | Percentage displayed (e.g., "65%") |
+| 16.6 | Progress bar fill | Check progress bar | Blue fill width matches percentage |
+| 16.7 | Phase indicators | Check below progress | 7 circular indicators |
+| 16.8 | Completed phases | Check indicators | Green checkmarks for completed |
+| 16.9 | Current phase pulse | Check indicators | Blue pulsing for current phase |
+| 16.10 | Future phases gray | Check indicators | Gray numbers for future phases |
+| 16.11 | Phase labels | Check below indicators | Short phase names |
+| 16.12 | Est. departure time | Check bottom | "Est. Departure HH:MM" displays |
+| 16.13 | Active equipment | Check bottom section | "Active Equipment" with GSE tags |
+| 16.14 | GSE type badges | Check equipment tags | Equipment type names |
+| 16.15 | Auto-refresh | Wait 30 seconds | Progress updates |
+| 16.16 | Loading state | Select new flight | Skeleton loading shows |
+
+---
+
+## 17. Baggage Status (V2 Feature)
+
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| 17.1 | Status visible in details | Select flight | "Baggage Status" section visible |
+| 17.2 | Carousel for arrivals | Select arrival flight | "Carousel N" badge displays |
+| 17.3 | Progress bar | Check section | Loading/delivery progress bar |
+| 17.4 | Progress percentage | Check progress | Percentage displayed |
+| 17.5 | Stats grid | Check section | 3-column grid with stats |
+| 17.6 | Total bags count | Check first stat | Total bag count |
+| 17.7 | Loaded/Delivered count | Check second stat | Loaded (departures) or Delivered (arrivals) |
+| 17.8 | Connecting bags count | Check third stat | Connecting bag count in blue |
+| 17.9 | Misconnect alert | Flight with misconnects | Yellow alert banner appears |
+| 17.10 | Alert message | Check alert | "N bags at risk" message |
+| 17.11 | Alert reason | Check alert | "Tight connection time" subtext |
+| 17.12 | No alert when clean | Flight with no misconnects | No alert banner |
+| 17.13 | Progress bar color | Check with misconnects | Yellow bar for misconnects, green otherwise |
+| 17.14 | Auto-refresh | Wait 30 seconds | Stats update |
+| 17.15 | Loading state | Select new flight | Skeleton loading shows |
+
+---
+
+## 18. V2 Feature Integration
+
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| 18.1 | Header shows all widgets | Check header | Weather + FIDS button + existing elements |
+| 18.2 | Weather + FIDS together | Open FIDS, check weather | Both visible simultaneously |
+| 18.3 | Details panel complete | Select ground flight | FlightDetail + Turnaround + Baggage sections |
+| 18.4 | V2 features with 3D view | Switch to 3D, check header | Weather widget works in 3D mode |
+| 18.5 | Selection updates V2 panels | Select different flight | Turnaround and Baggage update |
+| 18.6 | FIDS works from 3D view | In 3D mode, click FIDS | Modal opens correctly |
+| 18.7 | No console errors | Open DevTools console | No JavaScript errors from V2 features |
+| 18.8 | Mobile responsive header | Resize window narrow | Weather widget adapts or hides |
+| 18.9 | FIDS modal responsive | Resize window narrow | Modal adapts to smaller width |
+
+---
+
+## 19. V2 API Integration Tests (Manual)
+
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| 19.1 | Schedule API accessible | `curl /api/schedule/arrivals` | JSON response with flights array |
+| 19.2 | Weather API accessible | `curl /api/weather/current` | JSON response with METAR object |
+| 19.3 | GSE API accessible | `curl /api/gse/status` | JSON response with units array |
+| 19.4 | Turnaround API accessible | `curl /api/turnaround/test` | JSON response with turnaround object |
+| 19.5 | Baggage stats API | `curl /api/baggage/stats` | JSON response with statistics |
+| 19.6 | Baggage flight API | `curl /api/baggage/flight/UA123` | JSON response with flight stats |
+| 19.7 | Baggage alerts API | `curl /api/baggage/alerts` | JSON response with alerts array |
+| 19.8 | APIs return valid JSON | Check all responses | No malformed JSON errors |
+| 19.9 | APIs respond < 1 second | Time all requests | Response time under 1000ms |
+
+---
+
+## V2 Test Data Requirements
+
+For complete V2 testing:
+- Weather should show various conditions (VFR, MVFR, IFR)
+- Schedule should have mix of statuses (On Time, Delayed, Boarding, etc.)
+- At least 1 ground aircraft for turnaround testing
+- Flights with various aircraft types (A320, B777, A380 for different bag counts)
+
+---
+
+## V2 API Test Commands
+
+```bash
+# Run V2 API unit tests
+uv run pytest tests/test_v2_api.py -v
+
+# Test specific V2 feature
+uv run pytest tests/test_v2_api.py::TestScheduleEndpoints -v
+uv run pytest tests/test_v2_api.py::TestWeatherEndpoints -v
+uv run pytest tests/test_v2_api.py::TestGSEEndpoints -v
+uv run pytest tests/test_v2_api.py::TestBaggageEndpoints -v
+
+# Run performance tests only
+uv run pytest tests/test_v2_api.py::TestV2APIPerformance -v
+
+# Run all backend tests including V2
+uv run pytest tests/ -v
+```
