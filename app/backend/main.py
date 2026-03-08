@@ -2,6 +2,7 @@
 
 import os
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -12,6 +13,8 @@ from fastapi.responses import FileResponse
 from app.backend.api.routes import router
 from app.backend.api.websocket import websocket_router
 from app.backend.api.predictions import prediction_router
+from app.backend.api.data_ops import router as data_ops_router
+from app.backend.services.data_generator_service import get_data_generator_service
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +22,39 @@ logger = logging.getLogger(__name__)
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 logger.info(f"FRONTEND_DIST resolved to: {FRONTEND_DIST} (exists: {FRONTEND_DIST.exists()})")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan handler for startup/shutdown events."""
+    # Startup: Initialize and start data generation
+    logger.info("=" * 60)
+    logger.info("Starting Airport Digital Twin API")
+    logger.info("=" * 60)
+
+    data_generator = get_data_generator_service()
+
+    # Initialize all data to Lakebase
+    init_success = await data_generator.initialize_all_data()
+    if init_success:
+        # Start periodic refresh tasks
+        await data_generator.start_periodic_refresh()
+        logger.info("Data generation service started with periodic refresh")
+    else:
+        logger.warning("Data initialization failed - using fallback generators only")
+
+    yield
+
+    # Shutdown: Stop periodic refresh tasks
+    logger.info("Shutting down data generation service...")
+    await data_generator.stop_periodic_refresh()
+    logger.info("Airport Digital Twin API stopped")
+
+
 app = FastAPI(
     title="Airport Digital Twin API",
     description="Real-time flight data API for the Airport Digital Twin visualization",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Configure CORS middleware
@@ -38,6 +70,7 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(websocket_router)
 app.include_router(prediction_router)
+app.include_router(data_ops_router)
 
 
 @app.get("/health")

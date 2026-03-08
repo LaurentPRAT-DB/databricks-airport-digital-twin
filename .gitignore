@@ -100,3 +100,10 @@ app/frontend/public/sw.js
 # Root package files (should only exist in app/frontend/)
 /package.json
 /package-lock.json
+
+# Personal/internal documents
+docs/email_*.md
+
+# Test coverage and results
+app/frontend/coverage/
+app/frontend/test-results/

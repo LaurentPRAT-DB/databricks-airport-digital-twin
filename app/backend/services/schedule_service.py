@@ -1,6 +1,7 @@
 """Schedule service for FIDS (Flight Information Display System).
 
-Provides arrivals and departures schedule data using synthetic generation.
+Provides arrivals and departures schedule data.
+Reads from Lakebase first for persistence, falls back to generator.
 """
 
 import logging
@@ -18,6 +19,7 @@ from app.backend.models.schedule import (
     FlightType,
     ScheduleResponse,
 )
+from app.backend.services.lakebase_service import get_lakebase_service
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,8 @@ class ScheduleService:
         """
         Get arrival flights for the specified time window.
 
+        Reads from Lakebase first for persistence, falls back to generator.
+
         Args:
             hours_ahead: Hours into future to include
             hours_behind: Hours into past to include
@@ -66,13 +70,30 @@ class ScheduleService:
         Returns:
             ScheduleResponse with arrival flights
         """
-        raw_arrivals = get_arrivals(
-            airport=self._airport,
-            hours_ahead=hours_ahead,
-            hours_behind=hours_behind,
-        )
+        # Try Lakebase first (persisted data)
+        lakebase = get_lakebase_service()
+        raw_arrivals = None
 
-        flights = [_dict_to_scheduled_flight(f) for f in raw_arrivals[:limit]]
+        if lakebase.is_available:
+            raw_arrivals = lakebase.get_schedule(
+                flight_type="arrival",
+                hours_behind=hours_behind,
+                hours_ahead=hours_ahead,
+                limit=limit,
+            )
+            if raw_arrivals:
+                logger.debug(f"Schedule arrivals from Lakebase: {len(raw_arrivals)}")
+
+        # Fallback to generator
+        if not raw_arrivals:
+            logger.debug("Schedule arrivals from generator")
+            raw_arrivals = get_arrivals(
+                airport=self._airport,
+                hours_ahead=hours_ahead,
+                hours_behind=hours_behind,
+            )[:limit]
+
+        flights = [_dict_to_scheduled_flight(f) for f in raw_arrivals]
 
         logger.info(f"Schedule service returning {len(flights)} arrivals")
 
@@ -92,6 +113,8 @@ class ScheduleService:
         """
         Get departure flights for the specified time window.
 
+        Reads from Lakebase first for persistence, falls back to generator.
+
         Args:
             hours_ahead: Hours into future to include
             hours_behind: Hours into past to include
@@ -100,13 +123,30 @@ class ScheduleService:
         Returns:
             ScheduleResponse with departure flights
         """
-        raw_departures = get_departures(
-            airport=self._airport,
-            hours_ahead=hours_ahead,
-            hours_behind=hours_behind,
-        )
+        # Try Lakebase first (persisted data)
+        lakebase = get_lakebase_service()
+        raw_departures = None
 
-        flights = [_dict_to_scheduled_flight(f) for f in raw_departures[:limit]]
+        if lakebase.is_available:
+            raw_departures = lakebase.get_schedule(
+                flight_type="departure",
+                hours_behind=hours_behind,
+                hours_ahead=hours_ahead,
+                limit=limit,
+            )
+            if raw_departures:
+                logger.debug(f"Schedule departures from Lakebase: {len(raw_departures)}")
+
+        # Fallback to generator
+        if not raw_departures:
+            logger.debug("Schedule departures from generator")
+            raw_departures = get_departures(
+                airport=self._airport,
+                hours_ahead=hours_ahead,
+                hours_behind=hours_behind,
+            )[:limit]
+
+        flights = [_dict_to_scheduled_flight(f) for f in raw_departures]
 
         logger.info(f"Schedule service returning {len(flights)} departures")
 

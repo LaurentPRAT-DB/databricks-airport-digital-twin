@@ -234,6 +234,516 @@ class LakebaseService:
             self._cached_credentials = None
             return False
 
+    # =========================================================================
+    # Weather Operations
+    # =========================================================================
+
+    def upsert_weather(self, obs: dict) -> bool:
+        """
+        Upsert weather observation to Lakebase.
+
+        Args:
+            obs: Weather observation dictionary with METAR/TAF data.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not self.is_available:
+            return False
+
+        try:
+            import json
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO weather_observations (
+                            station, observation_time, wind_direction, wind_speed_kts,
+                            wind_gust_kts, visibility_sm, clouds, temperature_c,
+                            dewpoint_c, altimeter_inhg, weather, flight_category,
+                            raw_metar, taf_text, taf_valid_from, taf_valid_to
+                        ) VALUES (
+                            %(station)s, %(observation_time)s, %(wind_direction)s, %(wind_speed_kts)s,
+                            %(wind_gust_kts)s, %(visibility_sm)s, %(clouds)s, %(temperature_c)s,
+                            %(dewpoint_c)s, %(altimeter_inhg)s, %(weather)s, %(flight_category)s,
+                            %(raw_metar)s, %(taf_text)s, %(taf_valid_from)s, %(taf_valid_to)s
+                        )
+                        ON CONFLICT (station) DO UPDATE SET
+                            observation_time = EXCLUDED.observation_time,
+                            wind_direction = EXCLUDED.wind_direction,
+                            wind_speed_kts = EXCLUDED.wind_speed_kts,
+                            wind_gust_kts = EXCLUDED.wind_gust_kts,
+                            visibility_sm = EXCLUDED.visibility_sm,
+                            clouds = EXCLUDED.clouds,
+                            temperature_c = EXCLUDED.temperature_c,
+                            dewpoint_c = EXCLUDED.dewpoint_c,
+                            altimeter_inhg = EXCLUDED.altimeter_inhg,
+                            weather = EXCLUDED.weather,
+                            flight_category = EXCLUDED.flight_category,
+                            raw_metar = EXCLUDED.raw_metar,
+                            taf_text = EXCLUDED.taf_text,
+                            taf_valid_from = EXCLUDED.taf_valid_from,
+                            taf_valid_to = EXCLUDED.taf_valid_to
+                        """,
+                        {
+                            **obs,
+                            "clouds": json.dumps(obs.get("clouds", [])),
+                            "weather": json.dumps(obs.get("weather", [])),
+                        }
+                    )
+                    conn.commit()
+                    return True
+
+        except Exception as e:
+            logger.warning(f"Lakebase weather upsert failed: {e}")
+            self._cached_credentials = None
+            return False
+
+    def get_weather(self, station: str) -> Optional[dict]:
+        """
+        Get weather observation from Lakebase.
+
+        Args:
+            station: ICAO station identifier (e.g., KSFO).
+
+        Returns:
+            Weather observation dictionary, or None if not found.
+        """
+        if not self.is_available:
+            return None
+
+        try:
+            import json
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT
+                            station, observation_time, wind_direction, wind_speed_kts,
+                            wind_gust_kts, visibility_sm, clouds, temperature_c,
+                            dewpoint_c, altimeter_inhg, weather, flight_category,
+                            raw_metar, taf_text, taf_valid_from, taf_valid_to
+                        FROM weather_observations
+                        WHERE station = %s
+                        """,
+                        (station,),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        result = dict(row)
+                        # Parse JSON fields
+                        if result.get("clouds"):
+                            result["clouds"] = json.loads(result["clouds"]) if isinstance(result["clouds"], str) else result["clouds"]
+                        if result.get("weather"):
+                            result["weather"] = json.loads(result["weather"]) if isinstance(result["weather"], str) else result["weather"]
+                        return result
+                    return None
+
+        except Exception as e:
+            logger.warning(f"Lakebase weather query failed for {station}: {e}")
+            self._cached_credentials = None
+            return None
+
+    # =========================================================================
+    # Schedule Operations
+    # =========================================================================
+
+    def upsert_schedule(self, flights: list[dict]) -> int:
+        """
+        Upsert flight schedule to Lakebase.
+
+        Args:
+            flights: List of scheduled flight dictionaries.
+
+        Returns:
+            Number of flights upserted.
+        """
+        if not self.is_available or not flights:
+            return 0
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    count = 0
+                    for flight in flights:
+                        cur.execute(
+                            """
+                            INSERT INTO flight_schedule (
+                                flight_number, airline, airline_code, origin, destination,
+                                scheduled_time, estimated_time, actual_time, gate, status,
+                                delay_minutes, delay_reason, aircraft_type, flight_type
+                            ) VALUES (
+                                %(flight_number)s, %(airline)s, %(airline_code)s, %(origin)s, %(destination)s,
+                                %(scheduled_time)s, %(estimated_time)s, %(actual_time)s, %(gate)s, %(status)s,
+                                %(delay_minutes)s, %(delay_reason)s, %(aircraft_type)s, %(flight_type)s
+                            )
+                            ON CONFLICT (flight_number, scheduled_time) DO UPDATE SET
+                                airline = EXCLUDED.airline,
+                                airline_code = EXCLUDED.airline_code,
+                                origin = EXCLUDED.origin,
+                                destination = EXCLUDED.destination,
+                                estimated_time = EXCLUDED.estimated_time,
+                                actual_time = EXCLUDED.actual_time,
+                                gate = EXCLUDED.gate,
+                                status = EXCLUDED.status,
+                                delay_minutes = EXCLUDED.delay_minutes,
+                                delay_reason = EXCLUDED.delay_reason,
+                                aircraft_type = EXCLUDED.aircraft_type,
+                                flight_type = EXCLUDED.flight_type
+                            """,
+                            flight
+                        )
+                        count += 1
+                    conn.commit()
+                    logger.info(f"Upserted {count} flights to Lakebase schedule")
+                    return count
+
+        except Exception as e:
+            logger.warning(f"Lakebase schedule upsert failed: {e}")
+            self._cached_credentials = None
+            return 0
+
+    def get_schedule(
+        self,
+        flight_type: Optional[str] = None,
+        hours_behind: int = 1,
+        hours_ahead: int = 2,
+        limit: int = 100,
+    ) -> Optional[list[dict]]:
+        """
+        Get flight schedule from Lakebase.
+
+        Args:
+            flight_type: "arrival" or "departure", or None for both.
+            hours_behind: Hours into past to include.
+            hours_ahead: Hours into future to include.
+            limit: Maximum flights to return.
+
+        Returns:
+            List of scheduled flights, or None if query fails.
+        """
+        if not self.is_available:
+            return None
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    type_clause = ""
+                    params: list = []
+                    if flight_type:
+                        type_clause = "AND flight_type = %s"
+                        params.append(flight_type)
+
+                    cur.execute(
+                        f"""
+                        SELECT
+                            flight_number, airline, airline_code, origin, destination,
+                            scheduled_time, estimated_time, actual_time, gate, status,
+                            delay_minutes, delay_reason, aircraft_type, flight_type
+                        FROM flight_schedule
+                        WHERE scheduled_time BETWEEN NOW() - INTERVAL '%s hours' AND NOW() + INTERVAL '%s hours'
+                        {type_clause}
+                        ORDER BY scheduled_time ASC
+                        LIMIT %s
+                        """,
+                        [hours_behind, hours_ahead] + params + [limit],
+                    )
+                    rows = cur.fetchall()
+                    return [dict(row) for row in rows]
+
+        except Exception as e:
+            logger.warning(f"Lakebase schedule query failed: {e}")
+            self._cached_credentials = None
+            return None
+
+    def clear_old_schedule(self, hours_old: int = 24) -> int:
+        """Remove old schedule entries from Lakebase."""
+        if not self.is_available:
+            return 0
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM flight_schedule WHERE scheduled_time < NOW() - INTERVAL '%s hours'",
+                        (hours_old,)
+                    )
+                    deleted = cur.rowcount
+                    conn.commit()
+                    return deleted
+
+        except Exception as e:
+            logger.warning(f"Lakebase schedule cleanup failed: {e}")
+            self._cached_credentials = None
+            return 0
+
+    # =========================================================================
+    # Baggage Operations
+    # =========================================================================
+
+    def upsert_baggage_stats(self, stats: dict) -> bool:
+        """
+        Upsert baggage statistics for a flight to Lakebase.
+
+        Args:
+            stats: Baggage stats dictionary with flight_number as key.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not self.is_available:
+            return False
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO baggage_status (
+                            flight_number, total_bags, checked_in, loaded, unloaded,
+                            on_carousel, loading_progress_pct, connecting_bags, misconnects, carousel
+                        ) VALUES (
+                            %(flight_number)s, %(total_bags)s, %(checked_in)s, %(loaded)s, %(unloaded)s,
+                            %(on_carousel)s, %(loading_progress_pct)s, %(connecting_bags)s, %(misconnects)s, %(carousel)s
+                        )
+                        ON CONFLICT (flight_number) DO UPDATE SET
+                            total_bags = EXCLUDED.total_bags,
+                            checked_in = EXCLUDED.checked_in,
+                            loaded = EXCLUDED.loaded,
+                            unloaded = EXCLUDED.unloaded,
+                            on_carousel = EXCLUDED.on_carousel,
+                            loading_progress_pct = EXCLUDED.loading_progress_pct,
+                            connecting_bags = EXCLUDED.connecting_bags,
+                            misconnects = EXCLUDED.misconnects,
+                            carousel = EXCLUDED.carousel
+                        """,
+                        stats
+                    )
+                    conn.commit()
+                    return True
+
+        except Exception as e:
+            logger.warning(f"Lakebase baggage upsert failed: {e}")
+            self._cached_credentials = None
+            return False
+
+    def get_baggage_stats(self, flight_number: str) -> Optional[dict]:
+        """
+        Get baggage statistics for a flight from Lakebase.
+
+        Args:
+            flight_number: Flight number to look up.
+
+        Returns:
+            Baggage stats dictionary, or None if not found.
+        """
+        if not self.is_available:
+            return None
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT
+                            flight_number, total_bags, checked_in, loaded, unloaded,
+                            on_carousel, loading_progress_pct, connecting_bags, misconnects, carousel
+                        FROM baggage_status
+                        WHERE flight_number = %s
+                        """,
+                        (flight_number,),
+                    )
+                    row = cur.fetchone()
+                    return dict(row) if row else None
+
+        except Exception as e:
+            logger.warning(f"Lakebase baggage query failed for {flight_number}: {e}")
+            self._cached_credentials = None
+            return None
+
+    # =========================================================================
+    # GSE Fleet Operations
+    # =========================================================================
+
+    def upsert_gse_fleet(self, units: list[dict]) -> int:
+        """
+        Upsert GSE fleet units to Lakebase.
+
+        Args:
+            units: List of GSE unit dictionaries.
+
+        Returns:
+            Number of units upserted.
+        """
+        if not self.is_available or not units:
+            return 0
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    count = 0
+                    for unit in units:
+                        cur.execute(
+                            """
+                            INSERT INTO gse_fleet (
+                                unit_id, gse_type, status, assigned_flight,
+                                assigned_gate, position_x, position_y
+                            ) VALUES (
+                                %(unit_id)s, %(gse_type)s, %(status)s, %(assigned_flight)s,
+                                %(assigned_gate)s, %(position_x)s, %(position_y)s
+                            )
+                            ON CONFLICT (unit_id) DO UPDATE SET
+                                gse_type = EXCLUDED.gse_type,
+                                status = EXCLUDED.status,
+                                assigned_flight = EXCLUDED.assigned_flight,
+                                assigned_gate = EXCLUDED.assigned_gate,
+                                position_x = EXCLUDED.position_x,
+                                position_y = EXCLUDED.position_y
+                            """,
+                            unit
+                        )
+                        count += 1
+                    conn.commit()
+                    return count
+
+        except Exception as e:
+            logger.warning(f"Lakebase GSE fleet upsert failed: {e}")
+            self._cached_credentials = None
+            return 0
+
+    def get_gse_fleet(self) -> Optional[list[dict]]:
+        """
+        Get all GSE fleet units from Lakebase.
+
+        Returns:
+            List of GSE unit dictionaries, or None if query fails.
+        """
+        if not self.is_available:
+            return None
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT
+                            unit_id, gse_type, status, assigned_flight,
+                            assigned_gate, position_x, position_y
+                        FROM gse_fleet
+                        ORDER BY gse_type, unit_id
+                        """
+                    )
+                    rows = cur.fetchall()
+                    return [dict(row) for row in rows]
+
+        except Exception as e:
+            logger.warning(f"Lakebase GSE fleet query failed: {e}")
+            self._cached_credentials = None
+            return None
+
+    # =========================================================================
+    # GSE Turnaround Operations
+    # =========================================================================
+
+    def upsert_turnaround(self, turnaround: dict) -> bool:
+        """
+        Upsert turnaround status to Lakebase.
+
+        Args:
+            turnaround: Turnaround status dictionary.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not self.is_available:
+            return False
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO gse_turnaround (
+                            icao24, flight_number, gate, arrival_time, current_phase,
+                            phase_progress_pct, total_progress_pct, estimated_departure, aircraft_type
+                        ) VALUES (
+                            %(icao24)s, %(flight_number)s, %(gate)s, %(arrival_time)s, %(current_phase)s,
+                            %(phase_progress_pct)s, %(total_progress_pct)s, %(estimated_departure)s, %(aircraft_type)s
+                        )
+                        ON CONFLICT (icao24) DO UPDATE SET
+                            flight_number = EXCLUDED.flight_number,
+                            gate = EXCLUDED.gate,
+                            arrival_time = EXCLUDED.arrival_time,
+                            current_phase = EXCLUDED.current_phase,
+                            phase_progress_pct = EXCLUDED.phase_progress_pct,
+                            total_progress_pct = EXCLUDED.total_progress_pct,
+                            estimated_departure = EXCLUDED.estimated_departure,
+                            aircraft_type = EXCLUDED.aircraft_type
+                        """,
+                        turnaround
+                    )
+                    conn.commit()
+                    return True
+
+        except Exception as e:
+            logger.warning(f"Lakebase turnaround upsert failed: {e}")
+            self._cached_credentials = None
+            return False
+
+    def get_turnaround(self, icao24: str) -> Optional[dict]:
+        """
+        Get turnaround status from Lakebase.
+
+        Args:
+            icao24: Aircraft ICAO24 address.
+
+        Returns:
+            Turnaround status dictionary, or None if not found.
+        """
+        if not self.is_available:
+            return None
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT
+                            icao24, flight_number, gate, arrival_time, current_phase,
+                            phase_progress_pct, total_progress_pct, estimated_departure, aircraft_type
+                        FROM gse_turnaround
+                        WHERE icao24 = %s
+                        """,
+                        (icao24,),
+                    )
+                    row = cur.fetchone()
+                    return dict(row) if row else None
+
+        except Exception as e:
+            logger.warning(f"Lakebase turnaround query failed for {icao24}: {e}")
+            self._cached_credentials = None
+            return None
+
+    def delete_turnaround(self, icao24: str) -> bool:
+        """Delete turnaround when aircraft departs."""
+        if not self.is_available:
+            return False
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM gse_turnaround WHERE icao24 = %s",
+                        (icao24,)
+                    )
+                    conn.commit()
+                    return cur.rowcount > 0
+
+        except Exception as e:
+            logger.warning(f"Lakebase turnaround delete failed for {icao24}: {e}")
+            self._cached_credentials = None
+            return False
+
 
 # Singleton instance
 _lakebase_service: Optional[LakebaseService] = None

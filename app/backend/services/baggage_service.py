@@ -1,6 +1,7 @@
 """Baggage handling service for bag tracking and statistics.
 
-Provides baggage data using synthetic generation.
+Provides baggage data.
+Reads from Lakebase first for persistence, falls back to generator.
 """
 
 import logging
@@ -22,6 +23,7 @@ from app.backend.models.baggage import (
     BaggageAlert,
     BaggageAlertsResponse,
 )
+from app.backend.services.lakebase_service import get_lakebase_service
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +111,8 @@ class BaggageService:
         """
         Get baggage information for a flight.
 
+        Reads from Lakebase first for persistence, falls back to generator.
+
         Args:
             flight_number: Flight number
             aircraft_type: Aircraft type code
@@ -121,13 +125,26 @@ class BaggageService:
         Returns:
             FlightBaggageResponse with stats and optionally bags
         """
-        stats_dict = get_flight_baggage_stats(
-            flight_number=flight_number,
-            aircraft_type=aircraft_type,
-            origin=origin,
-            destination=destination,
-            is_arrival=is_arrival,
-        )
+        # Try Lakebase first (persisted data)
+        lakebase = get_lakebase_service()
+        stats_dict = None
+
+        if lakebase.is_available:
+            stats_dict = lakebase.get_baggage_stats(flight_number)
+            if stats_dict:
+                logger.debug(f"Baggage stats from Lakebase for {flight_number}")
+
+        # Fallback to generator
+        if not stats_dict:
+            logger.debug(f"Baggage stats from generator for {flight_number}")
+            stats_dict = get_flight_baggage_stats(
+                flight_number=flight_number,
+                aircraft_type=aircraft_type,
+                origin=origin,
+                destination=destination,
+                is_arrival=is_arrival,
+            )
+
         stats = _dict_to_stats(stats_dict)
 
         bags = []

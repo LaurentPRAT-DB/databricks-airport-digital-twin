@@ -228,7 +228,7 @@ def get_arrivals(
     hours_behind: int = 1,
 ) -> list[dict]:
     """Get arrivals for the specified time window."""
-    schedule = generate_daily_schedule(airport=airport, include_past_hours=hours_behind)
+    schedule = get_cached_schedule(airport=airport)
     now = datetime.now(timezone.utc)
     cutoff_future = now + timedelta(hours=hours_ahead)
     cutoff_past = now - timedelta(hours=hours_behind)
@@ -247,7 +247,7 @@ def get_departures(
     hours_behind: int = 1,
 ) -> list[dict]:
     """Get departures for the specified time window."""
-    schedule = generate_daily_schedule(airport=airport, include_past_hours=hours_behind)
+    schedule = get_cached_schedule(airport=airport)
     now = datetime.now(timezone.utc)
     cutoff_future = now + timedelta(hours=hours_ahead)
     cutoff_past = now - timedelta(hours=hours_behind)

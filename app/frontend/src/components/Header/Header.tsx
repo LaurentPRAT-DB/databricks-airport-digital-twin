@@ -10,7 +10,7 @@ export default function Header({ onShowFIDS }: HeaderProps) {
   const { flights, isLoading, error, lastUpdated, dataSource } = useFlightContext();
 
   return (
-    <header className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between shadow-lg z-10">
+    <header className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between shadow-lg z-[1002] relative">
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-bold">Airport Digital Twin</h1>
         <div className="flex items-center gap-2 bg-slate-700 px-3 py-1 rounded-full text-sm">

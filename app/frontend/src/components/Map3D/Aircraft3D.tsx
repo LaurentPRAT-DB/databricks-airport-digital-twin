@@ -8,6 +8,16 @@ import {
   getAirlineFromCallsign,
   getModelForAircraftType,
 } from '../../config/aircraftModels';
+import {
+  latLonTo3D,
+  headingToRotation,
+  calculateLerpFactor,
+  normalizeRotationDiff,
+  extractAirlineCode,
+} from '../../utils/map3d-calculations';
+
+// Re-export for backwards compatibility
+export { latLonTo3D };
 
 // Reusable Vector3 for lerp calculations (avoids GC pressure)
 const _targetVec3 = new THREE.Vector3();
@@ -16,52 +26,6 @@ interface Aircraft3DProps {
   flight: Flight;
   selected?: boolean;
   onClick?: () => void;
-}
-
-// Center coordinates for the airport (must match synthetic data and 2D layout)
-const CENTER_LAT = 37.5;
-const CENTER_LON = -122.0;
-
-// Scale factor to map lat/lon to 3D scene units
-// 3D scene: runways at z=±100, terminal at z=0
-// 2D layout: runways at lat ~37.498-37.502, terminal at lat ~37.504
-// Scale chosen so that lat 37.504 (gates) maps to z≈-40 (near terminal)
-const COORDINATE_SCALE = 10000;
-
-/**
- * Convert lat/lon to 3D scene coordinates
- *
- * Maps real-world lat/lon coordinates to the 3D airport scene.
- * The scene is centered at AIRPORT_CENTER (37.5, -122.0) with:
- * - X axis: East-West (positive = East)
- * - Z axis: North-South (negative = North)
- * - Y axis: Altitude
- *
- * @param lat - Latitude in degrees
- * @param lon - Longitude in degrees
- * @param altitude - Altitude in feet (optional)
- * @returns Position in 3D scene coordinates
- */
-export function latLonTo3D(
-  lat: number,
-  lon: number,
-  altitude: number | null = 0,
-  centerLat: number = CENTER_LAT,
-  centerLon: number = CENTER_LON,
-  scale: number = COORDINATE_SCALE
-): { x: number; y: number; z: number } {
-  // Convert lat/lon offset to scene coordinates
-  // Longitude → X axis (scaled by cos(lat) for projection)
-  const x = (lon - centerLon) * scale * Math.cos(centerLat * Math.PI / 180);
-  // Latitude → Z axis (negative because Z points south in scene)
-  const z = -(lat - centerLat) * scale;
-
-  // Convert altitude from feet to scene units
-  // Ground-level flights get y=5 to stay above ground plane
-  const altitudeMeters = (altitude || 0) * 0.3048;
-  const y = altitudeMeters * 0.05 + 5; // Scale altitude for visibility
-
-  return { x, y, z };
 }
 
 /**
@@ -86,12 +50,7 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
   );
 
   // Calculate target rotation from heading
-  const targetRotation = useMemo(() => {
-    // Heading is in degrees clockwise from north
-    // Convert to radians, and adjust for scene orientation (Z is forward)
-    const headingRad = ((flight.heading || 0) - 90) * Math.PI / 180;
-    return headingRad;
-  }, [flight.heading]);
+  const targetRotation = useMemo(() => headingToRotation(flight.heading), [flight.heading]);
 
   // Animation refs for smooth interpolation
   // Store current interpolated values to animate toward targets
@@ -111,7 +70,7 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
     if (!groupRef.current) return;
 
     // Adjust lerp factor based on frame time for consistent animation speed
-    const lerpFactor = Math.min(0.1 * delta * 60, 1);
+    const lerpFactor = calculateLerpFactor(delta);
 
     // Reuse target vector to avoid allocations
     _targetVec3.set(targetPosition.x, targetPosition.y, targetPosition.z);
@@ -120,10 +79,7 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
     currentPosition.current.lerp(_targetVec3, lerpFactor);
 
     // Lerp rotation toward target with angle wrapping
-    const rotDiff = targetRotation - currentRotation.current;
-    const adjustedDiff = Math.abs(rotDiff) > Math.PI
-      ? (rotDiff > 0 ? rotDiff - 2 * Math.PI : rotDiff + 2 * Math.PI)
-      : rotDiff;
+    const adjustedDiff = normalizeRotationDiff(currentRotation.current, targetRotation);
     currentRotation.current += adjustedDiff * lerpFactor;
 
     // Batch DOM writes - only update if changed significantly
@@ -153,10 +109,10 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
   }, []);
 
   // Extract airline code from callsign for model lookup
-  const airlineCode = useMemo(() => {
-    if (!flight.callsign || flight.callsign.length < 3) return undefined;
-    return flight.callsign.substring(0, 3).toUpperCase();
-  }, [flight.callsign]);
+  const airlineCode = useMemo(
+    () => extractAirlineCode(flight.callsign) ?? undefined,
+    [flight.callsign]
+  );
 
   // Get model configuration based on aircraft type and airline (for airline-specific liveries)
   const modelConfig = useMemo(

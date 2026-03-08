@@ -1,6 +1,7 @@
 """Ground Support Equipment (GSE) service for turnaround operations.
 
-Provides GSE status and turnaround tracking using synthetic models.
+Provides GSE status and turnaround tracking.
+Reads from Lakebase first for persistence, falls back to generator.
 """
 
 import logging
@@ -24,6 +25,7 @@ from app.backend.models.gse import (
     TurnaroundResponse,
     GSEFleetStatus,
 )
+from app.backend.services.lakebase_service import get_lakebase_service
 
 logger = logging.getLogger(__name__)
 
@@ -162,9 +164,58 @@ class GSEService:
         """
         Get overall GSE fleet status.
 
+        Reads from Lakebase first for persistence, falls back to generator.
+
         Returns:
             GSEFleetStatus with fleet inventory
         """
+        # Try Lakebase first (persisted data)
+        lakebase = get_lakebase_service()
+        lb_units = None
+
+        if lakebase.is_available:
+            lb_units = lakebase.get_gse_fleet()
+            if lb_units:
+                logger.debug(f"GSE fleet from Lakebase: {len(lb_units)} units")
+
+        if lb_units:
+            # Convert Lakebase data to model
+            units = []
+            available = 0
+            in_service = 0
+            maintenance = 0
+
+            for u in lb_units:
+                status = u.get("status", "available")
+                if status == "available":
+                    available += 1
+                elif status in ("servicing", "en_route"):
+                    in_service += 1
+                elif status == "maintenance":
+                    maintenance += 1
+
+                units.append(GSEUnit(
+                    unit_id=u["unit_id"],
+                    gse_type=_map_gse_type(u["gse_type"]),
+                    status=_map_gse_status(status),
+                    assigned_flight=u.get("assigned_flight"),
+                    assigned_gate=u.get("assigned_gate"),
+                    position_x=float(u.get("position_x", 0) or 0),
+                    position_y=float(u.get("position_y", 0) or 0),
+                ))
+
+            logger.info(f"GSE fleet status: {len(units)} total, {available} available (from Lakebase)")
+
+            return GSEFleetStatus(
+                total_units=len(units),
+                available=available,
+                in_service=in_service,
+                maintenance=maintenance,
+                units=units,
+            )
+
+        # Fallback to generator
+        logger.debug("GSE fleet from generator")
         fleet = get_fleet_status()
 
         # Generate unit list

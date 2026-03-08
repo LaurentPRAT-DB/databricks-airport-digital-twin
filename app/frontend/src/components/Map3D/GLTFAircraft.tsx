@@ -1,8 +1,7 @@
 import { useMemo, Suspense, Component, ReactNode } from 'react';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
-import { AircraftModelConfig, AirlineConfig } from '../../config/aircraftModels';
-import { ProceduralAircraft } from './ProceduralAircraft';
+import { AircraftModelConfig, AirlineConfig, AIRCRAFT_MODELS } from '../../config/aircraftModels';
 
 // Draco decoder path - drei's useGLTF automatically uses this when models are Draco-compressed
 // The decoder is loaded on-demand when a Draco-compressed model is detected
@@ -112,27 +111,58 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false }: GLTFAircr
 }
 
 /**
+ * Fallback aircraft using generic-jet.glb when primary model fails to load
+ */
+function FallbackAircraft({ airline, selected = false }: Omit<GLTFAircraftProps, 'modelConfig'>) {
+  const defaultConfig = AIRCRAFT_MODELS['DEFAULT'];
+  return (
+    <GLTFAircraftInner
+      modelConfig={defaultConfig}
+      airline={airline}
+      selected={selected}
+    />
+  );
+}
+
+/**
+ * Simple loading placeholder (minimal geometry while model loads)
+ */
+function LoadingPlaceholder() {
+  return (
+    <mesh>
+      <boxGeometry args={[10, 3, 15]} />
+      <meshBasicMaterial color={0x666666} transparent opacity={0.3} />
+    </mesh>
+  );
+}
+
+/**
  * Wrapper with Suspense and ErrorBoundary for graceful fallback
+ * Uses generic-jet.glb as fallback instead of procedural geometry
  */
 export function GLTFAircraft(props: GLTFAircraftProps) {
-  // Scale procedural aircraft for fallback when GLB fails to load
-  // Procedural base is ~28 units wide at scale 1
-  // Scene scale: terminal ~200 units (≈200m), gates ~64 units apart
-  // Target: aircraft wingspan ~15-20% of terminal = 30-40 units
-  // 28 * 0.15 = ~4.2 units → too small. Let's use 0.5 for ~14 units
-  const proceduralScale = 0.25; // ~7 unit wingspan for realistic proportions
+  // Check if we're already using the DEFAULT model to avoid infinite recursion
+  const isDefaultModel = props.modelConfig.url === AIRCRAFT_MODELS['DEFAULT'].url;
 
+  // If already using default model, use simple placeholder as final fallback
+  if (isDefaultModel) {
+    return (
+      <Suspense fallback={<LoadingPlaceholder />}>
+        <GLTFAircraftInner {...props} />
+      </Suspense>
+    );
+  }
+
+  // For non-default models, use generic-jet.glb as fallback
   const fallbackAircraft = (
-    <ProceduralAircraft
-      color={props.airline.primaryColor}
-      secondaryColor={props.airline.secondaryColor}
-      scale={proceduralScale}
-    />
+    <Suspense fallback={<LoadingPlaceholder />}>
+      <FallbackAircraft airline={props.airline} selected={props.selected} />
+    </Suspense>
   );
 
   return (
     <GLTFErrorBoundary fallback={fallbackAircraft}>
-      <Suspense fallback={fallbackAircraft}>
+      <Suspense fallback={<LoadingPlaceholder />}>
         <GLTFAircraftInner {...props} />
       </Suspense>
     </GLTFErrorBoundary>

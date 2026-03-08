@@ -1,6 +1,7 @@
 """Weather service for aviation METAR/TAF data.
 
-Provides current weather observations and forecasts using synthetic generation.
+Provides current weather observations and forecasts.
+Reads from Lakebase first for persistence, falls back to generator.
 """
 
 import logging
@@ -20,6 +21,7 @@ from app.backend.models.weather import (
     SkyCondition,
     WeatherResponse,
 )
+from app.backend.services.lakebase_service import get_lakebase_service
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,8 @@ class WeatherService:
         """
         Get current weather observation and forecast.
 
+        Reads from Lakebase first for persistence, falls back to in-memory generator.
+
         Args:
             station: ICAO station identifier (defaults to KSFO)
 
@@ -80,10 +84,41 @@ class WeatherService:
             WeatherResponse with METAR and TAF
         """
         station = station or self._default_station
-        cached = get_cached_weather(station=station)
 
-        metar = _dict_to_metar(cached["metar"])
-        taf = _dict_to_taf(cached["taf"])
+        # Try Lakebase first (persisted data)
+        lakebase = get_lakebase_service()
+        cached = lakebase.get_weather(station) if lakebase.is_available else None
+
+        if cached:
+            logger.debug(f"Weather from Lakebase for {station}")
+            metar = _dict_to_metar({
+                "station": cached["station"],
+                "observation_time": cached["observation_time"].isoformat() if hasattr(cached["observation_time"], "isoformat") else cached["observation_time"],
+                "wind_direction": cached.get("wind_direction"),
+                "wind_speed_kts": cached.get("wind_speed_kts", 0),
+                "wind_gust_kts": cached.get("wind_gust_kts"),
+                "visibility_sm": float(cached["visibility_sm"]),
+                "clouds": cached.get("clouds", []),
+                "temperature_c": cached["temperature_c"],
+                "dewpoint_c": cached["dewpoint_c"],
+                "altimeter_inhg": float(cached["altimeter_inhg"]),
+                "weather": cached.get("weather", []),
+                "flight_category": cached["flight_category"],
+                "raw_metar": cached.get("raw_metar"),
+            })
+            taf = TAF(
+                station=cached["station"],
+                issue_time=cached.get("observation_time") or datetime.now(timezone.utc),
+                valid_from=cached.get("taf_valid_from") or datetime.now(timezone.utc),
+                valid_to=cached.get("taf_valid_to") or datetime.now(timezone.utc),
+                forecast_text=cached.get("taf_text", ""),
+            )
+        else:
+            # Fallback to in-memory generator
+            logger.debug(f"Weather from generator for {station}")
+            generated = get_cached_weather(station=station)
+            metar = _dict_to_metar(generated["metar"])
+            taf = _dict_to_taf(generated["taf"])
 
         logger.info(f"Weather service returning {metar.flight_category} conditions for {station}")
 
