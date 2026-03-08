@@ -184,25 +184,27 @@ export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProp
       />
 
       {/* Selection ring - visible indicator when aircraft is selected */}
+      {/* Ring sized for ~35m wingspan aircraft (inner 20, outer 25) */}
       {selected && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3, 0]}>
-          <ringGeometry args={[18, 22, 32]} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.5, 0]}>
+          <ringGeometry args={[20, 25, 32]} />
           <meshBasicMaterial color={0x00ff00} transparent opacity={0.8} side={THREE.DoubleSide} />
         </mesh>
       )}
 
-      {/* Pulsing selection indicator */}
+      {/* Pulsing selection indicator - outer ring */}
       {selected && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]}>
-          <ringGeometry args={[24, 26, 32]} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.3, 0]}>
+          <ringGeometry args={[28, 30, 32]} />
           <meshBasicMaterial color={0x00ff00} transparent opacity={0.4} side={THREE.DoubleSide} />
         </mesh>
       )}
 
       {/* Label - shows on hover OR when selected */}
+      {/* Position above aircraft (~15m height for narrow body) */}
       {(hovered || selected) && (
         <Html
-          position={[0, 25, 0]}
+          position={[0, 20, 0]}
           center
           style={{
             pointerEvents: 'none',
