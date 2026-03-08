@@ -49,12 +49,13 @@ export const MAX_TAXI_AIRCRAFT = 2;
 
 // Gate definitions (matching backend fallback.py)
 // Gate positions SOUTH of terminal (lower lat = positive z in 3D)
+// Wide spacing (0.015 deg = ~120 units) for clean visual separation in 3D
 export const GATE_POSITIONS: Record<string, [number, number]> = {
-  'A1': [37.491, -122.016],  // Wide-body capable
-  'A2': [37.491, -122.008],
-  'A3': [37.491, -122.000],  // Center gate
-  'B1': [37.491, -121.992],
-  'B2': [37.491, -121.984],  // Wide-body capable
+  'A1': [37.491, -122.030],  // Wide-body capable (x≈-240)
+  'A2': [37.491, -122.015],  // x≈-120
+  'A3': [37.491, -122.000],  // Center gate (x≈0)
+  'B1': [37.491, -121.985],  // x≈+120
+  'B2': [37.491, -121.970],  // Wide-body capable (x≈+240)
 };
 
 // GeoJSON FeatureCollection for airport layout
