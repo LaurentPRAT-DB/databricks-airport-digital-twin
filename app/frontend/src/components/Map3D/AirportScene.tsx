@@ -2,14 +2,18 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import { AIRPORT_3D_CONFIG, RUNWAY_MARKING_COLOR } from '../../constants/airport3D';
 import { Flight } from '../../types/flight';
+import { OSMTerminal } from '../../types/airportFormats';
 import { Aircraft3D } from './Aircraft3D';
 import { Trajectory3D } from './Trajectory3D';
 import { Building3D } from './Building3D';
+import { TerminalGroup } from './Terminal3D';
 
 interface AirportSceneProps {
   flights?: Flight[];
   selectedFlight?: string | null;
   onSelectFlight?: (icao24: string) => void;
+  /** OSM terminal buildings to render */
+  terminals?: OSMTerminal[];
 }
 
 /**
@@ -17,30 +21,37 @@ interface AirportSceneProps {
  *
  * Renders the 3D airport environment including:
  * - Ground plane (grass)
- * - Terminal building
- * - Runways with center line markings
- * - Taxiways connecting runways to terminal
+ * - Runways with center line markings (real SFO FAA data)
+ * - Taxiways connecting runways to gate areas
+ * - Buildings (control tower, hangars, etc.)
  * - Aircraft at their current positions
+ *
+ * Note: Terminal buildings are not rendered as placeholders.
+ * Real terminal geometry can be imported via OSM or IFC.
  */
 export function AirportScene({
   flights = [],
   selectedFlight = null,
   onSelectFlight,
+  terminals = [],
 }: AirportSceneProps) {
-  const { terminal, runways, taxiways, buildings, ground } = AIRPORT_3D_CONFIG;
+  const { runways, taxiways, buildings, ground } = AIRPORT_3D_CONFIG;
+
+  // Only show default buildings if no OSM terminals are loaded
+  const hasOSMData = terminals && terminals.length > 0;
 
   return (
     <group>
       {/* Ground plane */}
       <Ground size={ground.size} color={ground.color} />
 
-      {/* Terminal building (main terminal) */}
-      <Terminal config={terminal} />
-
-      {/* Additional buildings (GLTF or procedural) */}
-      {buildings.map((building) => (
+      {/* Default buildings (only if no OSM data) */}
+      {!hasOSMData && buildings.map((building) => (
         <Building3D key={building.id} placement={building} />
       ))}
+
+      {/* OSM Terminal Buildings (imported from OpenStreetMap) */}
+      <TerminalGroup terminals={terminals} />
 
       {/* Runways */}
       {runways.map((runway) => (
@@ -77,21 +88,6 @@ function Ground({ size, color }: { size: number; color: number }) {
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
       <planeGeometry args={[size, size]} />
       <meshStandardMaterial color={color} side={THREE.DoubleSide} />
-    </mesh>
-  );
-}
-
-/**
- * Terminal Component
- * Box geometry representing the main terminal building
- */
-function Terminal({ config }: { config: typeof AIRPORT_3D_CONFIG.terminal }) {
-  const { position, dimensions, color } = config;
-
-  return (
-    <mesh position={[position.x, position.y, position.z]} castShadow receiveShadow>
-      <boxGeometry args={[dimensions.width, dimensions.height, dimensions.depth]} />
-      <meshStandardMaterial color={color} />
     </mesh>
   );
 }

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { AirportScene } from './AirportScene';
 import { AIRPORT_3D_CONFIG } from '../../constants/airport3D';
 import { Flight } from '../../types/flight';
+import { useAirportConfig } from '../../hooks/useAirportConfig';
 
 interface Map3DProps {
   className?: string;
@@ -29,6 +30,8 @@ export function Map3D({
   onSelectFlight,
 }: Map3DProps) {
   const { lighting } = AIRPORT_3D_CONFIG;
+  const { getTerminals } = useAirportConfig();
+  const terminals = getTerminals();
 
   return (
     <div className={className} style={{ width: '100%', height: '100%' }}>
@@ -71,6 +74,7 @@ export function Map3D({
           flights={flights}
           selectedFlight={selectedFlight}
           onSelectFlight={onSelectFlight}
+          terminals={terminals}
         />
 
         {/* Orbit controls for user interaction */}

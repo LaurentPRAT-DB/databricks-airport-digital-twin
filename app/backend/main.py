@@ -15,6 +15,8 @@ from app.backend.api.websocket import websocket_router
 from app.backend.api.predictions import prediction_router
 from app.backend.api.data_ops import router as data_ops_router
 from app.backend.services.data_generator_service import get_data_generator_service
+from app.backend.services.airport_config_service import get_airport_config_service
+from src.ingestion.fallback import reload_gates
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,23 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
     logger.info("Starting Airport Digital Twin API")
     logger.info("=" * 60)
+
+    # Pre-load airport configuration from OpenStreetMap
+    try:
+        airport_config = get_airport_config_service()
+        config, warnings = airport_config.import_osm(
+            icao_code="KSFO",
+            include_terminals=True,
+            include_gates=True,
+        )
+        logger.info(f"Loaded OSM data: {len(config.get('terminals', []))} terminals, {len(config.get('gates', []))} gates")
+        if warnings:
+            logger.warning(f"OSM import warnings: {warnings}")
+        # Reload gates for synthetic data generator
+        gates = reload_gates()
+        logger.info(f"Reloaded {len(gates)} gates for synthetic data generation")
+    except Exception as e:
+        logger.warning(f"Failed to load OSM data on startup: {e}")
 
     data_generator = get_data_generator_service()
 

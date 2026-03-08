@@ -13,6 +13,7 @@ import {
   AIDMImportResponse,
   OSMImportResponse,
   FAAImportResponse,
+  OSMTerminal,
 } from '../types/airportFormats';
 import { AIRPORT_3D_CONFIG, RunwayConfig, TaxiwayConfig } from '../constants/airport3D';
 import { BuildingPlacement } from '../config/buildingModels';
@@ -58,6 +59,9 @@ interface UseAirportConfigReturn {
 
   /** Get building placements for 3D view */
   getBuildingPlacements: () => BuildingPlacement[];
+
+  /** Get OSM terminals for 3D view */
+  getTerminals: () => OSMTerminal[];
 }
 
 interface ImportOptions {
@@ -429,6 +433,13 @@ export function useAirportConfig(): UseAirportConfigReturn {
     return ifcBuildings.length > 0 ? ifcBuildings : AIRPORT_3D_CONFIG.buildings;
   }, [config.buildings, config.sources]);
 
+  /**
+   * Get OSM terminals for 3D view
+   */
+  const getTerminals = useCallback((): OSMTerminal[] => {
+    return config.terminals || [];
+  }, [config.terminals]);
+
   // Load config on mount
   useEffect(() => {
     refresh();
@@ -448,6 +459,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
     getRunwayConfigs,
     getTaxiwayConfigs,
     getBuildingPlacements,
+    getTerminals,
   };
 }
 

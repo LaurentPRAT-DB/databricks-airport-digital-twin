@@ -34,12 +34,6 @@ export interface TaxiwayConfig {
   color: number;
 }
 
-export interface TerminalConfig {
-  position: Position3D;
-  dimensions: Dimensions3D;
-  color: number;
-}
-
 export interface GroundConfig {
   size: number;
   color: number;
@@ -58,7 +52,6 @@ export interface LightingConfig {
 export interface Airport3DConfig {
   center: Position3D;
   scale: number;
-  terminal: TerminalConfig;
   runways: RunwayConfig[];
   taxiways: TaxiwayConfig[];
   buildings: BuildingPlacement[];
@@ -72,13 +65,6 @@ export const AIRPORT_3D_CONFIG: Airport3DConfig = {
 
   // Scale factor: convert meters to scene units
   scale: 0.001,
-
-  // Terminal building configuration (International Terminal area)
-  terminal: {
-    position: { x: -87, y: 10, z: 63 },
-    dimensions: { width: 300, height: 20, depth: 120 },
-    color: 0x4a90d9, // Blue-gray
-  },
 
   // Runway configurations - Real SFO 4-runway layout from FAA data
   // Coordinates converted from lat/lon using latLonTo3D transformation

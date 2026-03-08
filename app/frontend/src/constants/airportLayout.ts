@@ -153,25 +153,6 @@ export const airportLayout: FeatureCollection = {
       },
     } as Feature<Polygon>,
 
-    // Terminal complex (International Terminal area)
-    {
-      type: 'Feature',
-      properties: {
-        type: 'terminal',
-        name: 'International Terminal',
-      },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [[
-          [-122.396, 37.618],
-          [-122.386, 37.618],
-          [-122.386, 37.612],
-          [-122.396, 37.612],
-          [-122.396, 37.618],
-        ]],
-      },
-    } as Feature<Polygon>,
-
     // Taxiway connecting terminals to runways
     {
       type: 'Feature',

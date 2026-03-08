@@ -265,6 +265,32 @@ export interface AIDMConfig {
 }
 
 // ============================================================================
+// OSM Types (OpenStreetMap Data)
+// ============================================================================
+
+export interface OSMGate {
+  id: string;
+  osmId: number;
+  ref: string;
+  terminal?: string;
+  name?: string;
+  position: Position3D;
+  geo: GeoPosition;
+}
+
+export interface OSMTerminal {
+  id: string;
+  osmId: number;
+  name: string;
+  type: 'terminal';
+  position: Position3D;
+  dimensions: Dimensions3D;
+  polygon: Position3D[];
+  color: number;
+  geo: GeoPosition;
+}
+
+// ============================================================================
 // Combined Airport Configuration
 // ============================================================================
 
@@ -279,6 +305,10 @@ export interface AirportConfig {
   aprons: AIXMApron[];
   navaids: AIXMNavaid[];
   buildings: IFCBuilding[];
+
+  // OSM data (from OpenStreetMap)
+  terminals?: OSMTerminal[];
+  gates?: OSMGate[];
 
   // Operational data (from AIDM)
   aidmFlights?: AIDMFlight[];

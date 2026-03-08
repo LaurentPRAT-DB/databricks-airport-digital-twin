@@ -200,9 +200,13 @@ def reload_gates() -> Dict[str, tuple]:
     Returns:
         Updated dictionary mapping gate refs to (latitude, longitude) tuples
     """
-    global _loaded_gates
+    global _loaded_gates, _flight_states
     _loaded_gates = None
-    return get_gates()
+    gates = get_gates()
+    # Reset gate states and flight states to use new gates
+    _reset_gate_states()
+    _flight_states.clear()  # Clear flights so they regenerate with new gates
+    return gates
 
 
 # Backward compatibility: GATES is now a function call result
@@ -356,8 +360,14 @@ def _init_gate_states():
     """Initialize gate states if not done."""
     global _gate_states
     if not _gate_states:
-        for gate in GATES:
+        for gate in get_gates():
             _gate_states[gate] = GateState()
+
+def _reset_gate_states():
+    """Reset gate states when gates are reloaded."""
+    global _gate_states
+    _gate_states = {}
+    _init_gate_states()
 
 def _get_wake_category(aircraft_type: str) -> str:
     """Get wake turbulence category for aircraft type."""
@@ -651,7 +661,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             # All gates occupied - switch to approaching or enroute
             return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING)
 
-        lat, lon = GATES[gate]
+        lat, lon = get_gates()[gate]
         _occupy_gate(icao24, gate)
 
         return FlightState(
@@ -742,7 +752,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             # Create as enroute instead to avoid gate collision
             return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE)
 
-        lat, lon = GATES[gate]
+        lat, lon = get_gates()[gate]
         _occupy_gate(icao24, gate)
 
         return FlightState(
@@ -889,7 +899,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.waypoint_index += 1
         else:
             # Head to gate
-            target = GATES[state.assigned_gate]
+            target = get_gates()[state.assigned_gate]
 
             # Check if our gate is still available
             _init_gate_states()
@@ -900,7 +910,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 if new_gate:
                     state.assigned_gate = new_gate
                     _occupy_gate(state.icao24, new_gate)
-                    target = GATES[new_gate]
+                    target = get_gates()[new_gate]
                 else:
                     # No gates available - hold position
                     state.velocity = 0
@@ -1112,7 +1122,7 @@ def generate_synthetic_flights(
             # - Max 4 on approach (separation)
             # - Max 3 taxiing at once (more realistic with larger airport)
             # Adjust weights based on current counts to prevent overcrowding
-            max_parked = len(GATES)  # 9 gates at SFO
+            max_parked = len(get_gates())  # Dynamic based on loaded gates
             approach_weight = 0.15 if approach_count < 4 else 0.0
             parked_weight = 0.20 if parked_count < max_parked else 0.0
             taxi_in_weight = 0.05 if taxi_count < 3 else 0.0
