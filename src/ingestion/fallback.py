@@ -62,8 +62,8 @@ NM_TO_DEG = 1.0 / 60.0
 
 # Minimum separation distances
 MIN_APPROACH_SEPARATION_DEG = 3.0 * NM_TO_DEG  # 3 NM minimum on approach
-MIN_TAXI_SEPARATION_DEG = 0.001  # ~100m / ~330ft for taxi operations
-MIN_GATE_SEPARATION_DEG = 0.002  # ~200m for gate area
+MIN_TAXI_SEPARATION_DEG = 0.003  # ~300m for taxi operations (larger for 3D visibility)
+MIN_GATE_SEPARATION_DEG = 0.010  # ~800m in 3D scale for gate area (prevents overlap)
 
 # Common US airline callsign prefixes with typical aircraft types
 AIRLINE_FLEET = {
@@ -100,19 +100,19 @@ TERMINAL_CENTER = (37.5, -122.0)
 # Gate spacing calculation:
 # - Aircraft wingspan: ~35m (A320/B737) to ~80m (A380)
 # - Aircraft length: ~40m (A320/B737) to ~73m (A380)
-# - 3D scale: 10000, so 0.006 deg lon ≈ 48 units spacing
+# - 3D scale: 10000, so 0.015 deg lon ≈ 120 units spacing
 # - Terminal edge at z=+40, need ~50m margin for aircraft nose + jetbridge
 # - Gates at z=+90 gives 50 units margin from terminal edge
-# - Minimum spacing: 0.008 deg longitude (~64 units) for narrow-body
+# - Wide spacing (0.015 deg = ~120 units) to prevent visual overlap in 3D
 GATES = {
     # Gate positions SOUTH of terminal (lower lat = positive z)
     # Terminal edge at z=+40, gates at z≈+90 (50 units margin for aircraft)
-    # Wider spacing (0.008 deg = ~64 units) to avoid overlap and allow ground equipment
-    "A1": (37.491, -122.016),   # x≈-128, z≈+90 (wide-body capable)
-    "A2": (37.491, -122.008),   # x≈-64, z≈+90
+    # Wide spacing (0.015 deg = ~120 units) for clean visual separation
+    "A1": (37.491, -122.030),   # x≈-240, z≈+90 (wide-body capable)
+    "A2": (37.491, -122.015),   # x≈-120, z≈+90
     "A3": (37.491, -122.000),   # x≈0, z≈+90 (center gate)
-    "B1": (37.491, -121.992),   # x≈+64, z≈+90
-    "B2": (37.491, -121.984),   # x≈+128, z≈+90 (wide-body capable)
+    "B1": (37.491, -121.985),   # x≈+120, z≈+90
+    "B2": (37.491, -121.970),   # x≈+240, z≈+90 (wide-body capable)
 }
 
 # Taxiway waypoints aligned with 3D scene
@@ -129,20 +129,26 @@ TAXI_WAYPOINTS_DEPARTURE = [
     (-122.03, 37.49),     # Runway threshold west (x≈-240)
 ]
 
-# Approach path (from east, descending to runway 28R at z=+100)
-# Approach from east/southeast, landing heading west
+# ILS Approach to Runway 28L (heading 280°, from east to west)
+# All waypoints at same latitude (37.49) for straight-in approach aligned with runway
+# Standard 3° glideslope: ~318 ft per NM descent rate
+# Runway 28L east threshold at (-121.95, 37.49)
 APPROACH_WAYPOINTS = [
-    (-121.90, 37.48, 6000),   # Initial approach (x≈800, z≈200) - east of airport
-    (-121.94, 37.49, 3000),   # Intermediate (x≈480, z≈100)
-    (-121.97, 37.49, 1000),   # Final approach (x≈240, z≈100)
-    (-122.00, 37.49, 50),     # Touchdown (x=0, z=100 - runway 28R)
+    (-121.75, 37.49, 6000),   # FAF - Final Approach Fix, ~12 NM out
+    (-121.82, 37.49, 4000),   # Intermediate fix, ~8 NM out
+    (-121.88, 37.49, 2000),   # 4 NM from threshold
+    (-121.93, 37.49, 500),    # Short final, 1 NM from threshold
+    (-121.95, 37.49, 50),     # Runway 28L threshold
 ]
 
-# Departure path (climbing to west from runway 28R)
+# Departure path from Runway 28L (climb on runway heading, then turn)
+# Standard departure: maintain runway heading to 3000ft before turn
+# Runway 28L west end at (-122.05, 37.49)
 DEPARTURE_WAYPOINTS = [
-    (-122.03, 37.49, 1500),   # Initial climb (x≈-240, z=100)
-    (-122.06, 37.48, 4000),   # Continued climb (x≈-480, z=200)
-    (-122.10, 37.46, 8000),   # Departure fix (x≈-800, z≈400)
+    (-122.08, 37.49, 1500),   # Initial climb, runway heading (280°)
+    (-122.15, 37.49, 3000),   # Continue climb, runway heading
+    (-122.22, 37.47, 5000),   # Turn south after 3000ft
+    (-122.30, 37.44, 8000),   # Departure fix, climbing
 ]
 
 
@@ -1123,3 +1129,31 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         })
 
     return points
+
+
+def reset_synthetic_state() -> dict:
+    """Reset all synthetic flight state to start fresh.
+
+    Clears all flight states, runway occupancy, and gate assignments
+    to regenerate flights with proper separation from scratch.
+
+    Returns:
+        dict with count of cleared items.
+    """
+    global _flight_states, _last_update, _runway_28L, _runway_28R, _gate_states
+
+    cleared_flights = len(_flight_states)
+    cleared_gates = len(_gate_states)
+
+    # Clear all state
+    _flight_states.clear()
+    _last_update = 0.0
+    _runway_28L = RunwayState()
+    _runway_28R = RunwayState()
+    _gate_states.clear()
+
+    return {
+        "cleared_flights": cleared_flights,
+        "cleared_gates": cleared_gates,
+        "status": "reset_complete",
+    }
