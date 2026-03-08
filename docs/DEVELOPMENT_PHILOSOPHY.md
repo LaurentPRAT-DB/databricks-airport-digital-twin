@@ -238,12 +238,266 @@ What becomes easier or more difficult because of this change?
 
 ---
 
+## Security Best Practices
+
+### OWASP Top 10 Awareness
+
+| Vulnerability | Prevention | Status |
+|---------------|------------|--------|
+| **SQL Injection** | Parameterized queries (`:param` syntax) | Implemented |
+| **XSS** | React auto-escapes, no `dangerouslySetInnerHTML` | Implemented |
+| **CSRF** | Restrict CORS origins in production | TODO |
+| **Broken Auth** | Implement OAuth2/API keys | TODO |
+| **Sensitive Data** | Use Databricks Secrets, not env vars | TODO |
+| **Security Misconfig** | Remove debug endpoints in prod | TODO |
+| **Injection** | Validate all inputs with Pydantic | Implemented |
+
+### Backend Security (FastAPI)
+
+**1. SQL Injection Prevention**
+```python
+# NEVER do this:
+query = f"SELECT * FROM table WHERE id = '{user_input}'"
+
+# ALWAYS do this:
+query = "SELECT * FROM table WHERE id = :id"
+cursor.execute(query, {"id": user_input})
+```
+
+**2. Input Validation**
+```python
+from fastapi import Path, Query
+from pydantic import BaseModel, Field, validator
+
+# Path parameters - use regex constraints
+@router.get("/flights/{icao24}")
+async def get_flight(
+    icao24: str = Path(..., regex="^[a-f0-9]{6}$", description="ICAO24 hex address")
+):
+    ...
+
+# Query parameters - use bounds
+@router.get("/flights")
+async def get_flights(
+    limit: int = Query(default=100, ge=1, le=1000),
+    minutes: int = Query(default=60, ge=1, le=1440)
+):
+    ...
+
+# Request body - use Pydantic with validators
+class FlightRequest(BaseModel):
+    callsign: str = Field(..., min_length=1, max_length=8)
+    altitude: float = Field(..., ge=-1000, le=60000)
+
+    @validator('callsign')
+    def callsign_alphanumeric(cls, v):
+        if not v.replace(' ', '').isalnum():
+            raise ValueError('Callsign must be alphanumeric')
+        return v.upper().strip()
+```
+
+**3. CORS Configuration**
+```python
+# Development (permissive)
+allow_origins=["*"]  # OK for local dev only
+
+# Production (restrictive)
+allow_origins=[
+    "https://your-app.databricksapps.com",
+    "https://your-domain.com"
+]
+allow_credentials=True  # Only with specific origins, NEVER with "*"
+```
+
+**4. Authentication Patterns**
+```python
+from fastapi.security import HTTPBearer, OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status
+
+# Option 1: API Key (simple)
+async def verify_api_key(x_api_key: str = Header(...)):
+    if x_api_key != os.getenv("API_KEY"):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+# Option 2: OAuth2 Bearer Token
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    # Validate token with your auth provider
+    ...
+
+# Apply to routes
+@router.get("/protected", dependencies=[Depends(verify_api_key)])
+async def protected_route():
+    ...
+```
+
+**5. Rate Limiting**
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
+@app.get("/api/flights")
+@limiter.limit("100/minute")
+async def get_flights(request: Request):
+    ...
+```
+
+### Frontend Security (React)
+
+**1. XSS Prevention**
+```typescript
+// React auto-escapes by default - this is safe:
+<div>{userInput}</div>
+
+// NEVER do this unless content is trusted:
+<div dangerouslySetInnerHTML={{__html: userInput}} />
+
+// If you must render HTML, sanitize first:
+import DOMPurify from 'dompurify';
+<div dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(userInput)}} />
+```
+
+**2. URL Handling**
+```typescript
+// Validate URLs before using
+const isValidUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+};
+
+// Never construct URLs from user input without validation
+const safeNavigate = (path: string) => {
+  if (path.startsWith('/') && !path.includes('//')) {
+    navigate(path);
+  }
+};
+```
+
+**3. Sensitive Data Handling**
+```typescript
+// Never log sensitive data
+console.log('User:', user.name);  // OK
+console.log('Token:', token);     // NEVER
+
+// Clear sensitive data when unmounting
+useEffect(() => {
+  return () => {
+    setAuthToken(null);
+  };
+}, []);
+```
+
+**4. Content Security Policy**
+```html
+<!-- In index.html or via headers -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self';
+               style-src 'self' 'unsafe-inline';
+               img-src 'self' data: https:;
+               connect-src 'self' https://api.example.com;">
+```
+
+### Secrets Management
+
+**1. Never Commit Secrets**
+```gitignore
+# .gitignore
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+```
+
+**2. Use Databricks Secrets**
+```python
+# Instead of environment variables:
+token = os.getenv("API_TOKEN")  # Visible in process list
+
+# Use Databricks Secrets:
+from databricks.sdk import WorkspaceClient
+w = WorkspaceClient()
+token = w.dbutils.secrets.get("scope-name", "api-token")
+```
+
+**3. Rotate Credentials Regularly**
+- API keys: Every 90 days
+- Service accounts: Every 180 days
+- After any security incident: Immediately
+
+### Security Checklist (Pre-Deployment)
+
+```markdown
+## Security Review Checklist
+
+### Authentication & Authorization
+- [ ] All sensitive endpoints require authentication
+- [ ] CORS configured for specific origins (not "*" in prod)
+- [ ] API keys/tokens not hardcoded
+- [ ] Debug endpoints disabled or protected
+
+### Input Validation
+- [ ] All user inputs validated with Pydantic
+- [ ] SQL queries use parameterized statements
+- [ ] File paths validated (no path traversal)
+- [ ] URL parameters have type/range constraints
+
+### Data Protection
+- [ ] Secrets stored in Databricks Secrets (not env vars)
+- [ ] No sensitive data in logs
+- [ ] HTTPS enforced (handled by Databricks Apps)
+- [ ] Sensitive data encrypted at rest
+
+### Frontend
+- [ ] No `dangerouslySetInnerHTML` with user content
+- [ ] No sensitive data in localStorage
+- [ ] CSP headers configured
+- [ ] Dependencies audited (`npm audit`)
+
+### Infrastructure
+- [ ] Rate limiting enabled
+- [ ] WebSocket connection limits set
+- [ ] Error messages don't leak internal details
+- [ ] Health check endpoints don't expose sensitive info
+```
+
+### Security Audit Process
+
+Run periodic security audits:
+
+```bash
+# Python dependencies
+uv pip audit
+
+# JavaScript dependencies
+cd app/frontend && npm audit
+
+# Check for secrets in git history
+git secrets --scan-history
+
+# Static analysis
+bandit -r app/backend/
+```
+
+**Reference:** See `SECURITY_AUDIT.md` for detailed vulnerability assessment.
+
+---
+
 ## TODO / Future Best Practices to Define
 
 - [ ] Error boundary patterns for React
 - [ ] Caching strategies (React Query vs. manual)
 - [ ] Performance optimization guidelines
-- [ ] Security best practices (input validation, auth)
+- [x] Security best practices (input validation, auth) - **Added**
 - [ ] Monitoring and observability patterns
 - [ ] CI/CD pipeline standards
 - [ ] Code review checklist
