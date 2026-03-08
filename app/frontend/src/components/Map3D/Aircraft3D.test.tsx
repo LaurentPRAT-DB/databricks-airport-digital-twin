@@ -35,7 +35,7 @@ const createMockFlight = (overrides: Partial<Flight> = {}): Flight => ({
   heading: 270,
   vertical_rate: -500,
   on_ground: false,
-  last_seen: Date.now(),
+  last_seen: new Date().toISOString(),
   data_source: 'synthetic',
   flight_phase: 'descending',
   aircraft_type: 'B737',
