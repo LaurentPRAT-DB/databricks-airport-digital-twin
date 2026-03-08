@@ -1,10 +1,10 @@
 """REST API routes for the Airport Digital Twin."""
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from app.backend.models.flight import (
     FlightListResponse,
@@ -26,7 +26,16 @@ from app.backend.services.schedule_service import get_schedule_service
 from app.backend.services.weather_service import get_weather_service
 from app.backend.services.gse_service import get_gse_service
 from app.backend.services.baggage_service import get_baggage_service
+from app.backend.services.airport_config_service import get_airport_config_service
+from app.backend.models.airport_config import (
+    ImportResponse,
+    AIDMImportResponse,
+    AirportConfigResponse,
+    OSMImportResponse,
+    FAAImportResponse,
+)
 from src.ingestion.fallback import generate_synthetic_trajectory
+from src.formats.base import ParseError, ValidationError
 
 
 router = APIRouter(prefix="/api", tags=["flights"])
@@ -174,7 +183,7 @@ async def collect_web_vitals(request_data: dict) -> dict:
         "id": request_data.get("id"),
         "navigationType": request_data.get("navigationType"),
         "timestamp": request_data.get("timestamp"),
-        "received_at": datetime.utcnow().isoformat(),
+        "received_at": datetime.now(timezone.utc).isoformat(),
     }
 
     # Add to buffer (simple in-memory store)
@@ -368,3 +377,268 @@ async def get_baggage_alerts() -> BaggageAlertsResponse:
     """
     service = get_baggage_service()
     return service.get_alerts()
+
+
+# ==============================================================================
+# Airport Configuration Routes
+# ==============================================================================
+
+@router.get("/airport/config", tags=["airport"])
+async def get_airport_config() -> dict:
+    """
+    Get current airport configuration.
+
+    Returns the merged configuration from all imported sources
+    (AIXM, IFC, AIDM) or default configuration if nothing imported.
+    """
+    service = get_airport_config_service()
+    config = service.get_config()
+    last_updated = service.get_last_updated()
+
+    return {
+        "config": config,
+        "lastUpdated": last_updated.isoformat() if last_updated else None,
+        "elementCounts": service.get_element_counts(),
+    }
+
+
+@router.post("/airport/import/aixm", response_model=ImportResponse, tags=["airport"])
+async def import_aixm(
+    request: Request,
+    reference_lat: Optional[float] = Query(default=None, description="Reference latitude"),
+    reference_lon: Optional[float] = Query(default=None, description="Reference longitude"),
+    merge: bool = Query(default=True, description="Merge with existing config"),
+):
+    """
+    Import AIXM aeronautical data.
+
+    Accepts AIXM 5.1.1 XML data containing runway, taxiway, and apron
+    definitions. Data is parsed and converted to the internal configuration
+    format for 3D visualization.
+
+    Args:
+        file: AIXM XML file content
+        reference_lat: Optional reference latitude for coordinate conversion
+        reference_lon: Optional reference longitude for coordinate conversion
+        merge: Whether to merge with existing configuration
+
+    Returns:
+        Import result with element counts and any warnings
+    """
+    service = get_airport_config_service()
+    file = await request.body()
+
+    # Update reference point if provided
+    if reference_lat is not None and reference_lon is not None:
+        service.set_reference_point(reference_lat, reference_lon)
+
+    try:
+        config, warnings = service.import_aixm(file, merge=merge)
+
+        return ImportResponse(
+            success=True,
+            format="AIXM",
+            elementsImported={
+                "runways": len(config.get("runways", [])),
+                "taxiways": len(config.get("taxiways", [])),
+                "aprons": len(config.get("aprons", [])),
+                "navaids": len(config.get("navaids", [])),
+            },
+            warnings=warnings,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    except ParseError as e:
+        raise HTTPException(status_code=400, detail=f"AIXM parsing error: {str(e)}")
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=f"AIXM validation error: {str(e)}")
+
+
+@router.post("/airport/import/ifc", response_model=ImportResponse, tags=["airport"])
+async def import_ifc(
+    request: Request,
+    reference_lat: Optional[float] = Query(default=None, description="Reference latitude"),
+    reference_lon: Optional[float] = Query(default=None, description="Reference longitude"),
+    include_geometry: bool = Query(default=False, description="Extract detailed geometry"),
+    merge: bool = Query(default=True, description="Merge with existing config"),
+):
+    """
+    Import IFC building data.
+
+    Accepts IFC4 files containing building geometry and structure.
+    Requires ifcopenshell library to be installed.
+
+    Args:
+        file: IFC file content
+        reference_lat: Optional reference latitude for coordinate conversion
+        reference_lon: Optional reference longitude for coordinate conversion
+        include_geometry: Whether to extract detailed mesh geometry
+        merge: Whether to merge with existing configuration
+
+    Returns:
+        Import result with element counts and any warnings
+    """
+    service = get_airport_config_service()
+    file = await request.body()
+
+    if reference_lat is not None and reference_lon is not None:
+        service.set_reference_point(reference_lat, reference_lon)
+
+    try:
+        config, warnings = service.import_ifc(
+            file,
+            merge=merge,
+            include_geometry=include_geometry,
+        )
+
+        return ImportResponse(
+            success=True,
+            format="IFC",
+            elementsImported={
+                "buildings": len(config.get("buildings", [])),
+                "elements": len(config.get("elements", [])),
+            },
+            warnings=warnings,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    except ParseError as e:
+        raise HTTPException(status_code=400, detail=f"IFC parsing error: {str(e)}")
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=f"IFC validation error: {str(e)}")
+
+
+@router.post("/airport/import/aidm", response_model=AIDMImportResponse, tags=["airport"])
+async def import_aidm(
+    request: Request,
+    local_airport: str = Query(default="SFO", description="Local airport IATA code"),
+):
+    """
+    Import AIDM operational data.
+
+    Accepts AIDM 12.0 JSON or XML containing flight schedules,
+    resource allocations, and operational events.
+
+    Args:
+        file: AIDM JSON or XML content
+        local_airport: Local airport code for context
+
+    Returns:
+        Import result with flight and resource counts
+    """
+    service = get_airport_config_service()
+    file = await request.body()
+
+    try:
+        config, warnings = service.import_aidm(file, local_airport=local_airport)
+
+        return AIDMImportResponse(
+            success=True,
+            flightsImported=len(config.get("flights", [])),
+            resourcesImported=len(config.get("resources", [])),
+            eventsImported=len(config.get("events", [])),
+            warnings=warnings,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    except ParseError as e:
+        raise HTTPException(status_code=400, detail=f"AIDM parsing error: {str(e)}")
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=f"AIDM validation error: {str(e)}")
+
+
+@router.post("/airport/import/osm", response_model=OSMImportResponse, tags=["airport"])
+async def import_osm(
+    icao_code: str = Query(default="KSFO", description="ICAO airport code"),
+    include_gates: bool = Query(default=True, description="Import gate positions"),
+    include_terminals: bool = Query(default=True, description="Import terminal buildings"),
+    include_taxiways: bool = Query(default=False, description="Import taxiway geometry"),
+    include_aprons: bool = Query(default=False, description="Import apron areas"),
+    merge: bool = Query(default=True, description="Merge with existing config"),
+):
+    """
+    Import airport data from OpenStreetMap.
+
+    Fetches gates, terminals, and other aeroway features from OSM
+    via the Overpass API. OSM provides community-contributed data
+    that complements official AIXM sources.
+
+    Args:
+        icao_code: ICAO airport code (e.g., "KSFO", "KJFK", "EGLL")
+        include_gates: Whether to import gate positions
+        include_terminals: Whether to import terminal building outlines
+        include_taxiways: Whether to import taxiway centerlines
+        include_aprons: Whether to import apron/ramp areas
+        merge: Whether to merge with existing configuration
+
+    Returns:
+        Import result with element counts and warnings
+    """
+    service = get_airport_config_service()
+
+    try:
+        config, warnings = service.import_osm(
+            icao_code=icao_code,
+            include_gates=include_gates,
+            include_terminals=include_terminals,
+            include_taxiways=include_taxiways,
+            include_aprons=include_aprons,
+            merge=merge,
+        )
+
+        return OSMImportResponse(
+            success=True,
+            icaoCode=icao_code,
+            gatesImported=len(config.get("gates", [])),
+            terminalsImported=len(config.get("terminals", [])),
+            taxiwaysImported=len(config.get("taxiways", [])),
+            apronsImported=len(config.get("aprons", [])),
+            warnings=warnings,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    except ParseError as e:
+        raise HTTPException(status_code=400, detail=f"OSM fetch error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OSM import error: {str(e)}")
+
+
+@router.post("/airport/import/faa", response_model=FAAImportResponse, tags=["airport"])
+async def import_faa(
+    facility_id: str = Query(default="SFO", description="FAA facility ID or ICAO code"),
+    merge: bool = Query(default=True, description="Merge with existing config"),
+):
+    """
+    Import FAA runway data for a US airport.
+
+    Fetches authoritative runway geometry and metadata from FAA
+    NASR (National Airspace System Resources) data. This is the
+    official source for US airport runway information.
+
+    Args:
+        facility_id: FAA facility ID (e.g., "SFO") or ICAO code ("KSFO")
+        merge: Whether to merge with existing configuration
+
+    Returns:
+        Import result with runway count and warnings
+    """
+    service = get_airport_config_service()
+
+    try:
+        config, warnings = service.import_faa(
+            facility_id=facility_id,
+            merge=merge,
+        )
+
+        return FAAImportResponse(
+            success=True,
+            facilityId=facility_id,
+            runwaysImported=len(config.get("runways", [])),
+            warnings=warnings,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    except ParseError as e:
+        raise HTTPException(status_code=400, detail=f"FAA fetch error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"FAA import error: {str(e)}")

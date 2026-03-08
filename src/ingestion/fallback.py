@@ -80,80 +80,214 @@ AIRLINE_FLEET = {
 
 CALLSIGN_PREFIXES = list(AIRLINE_FLEET.keys())
 
-# Airport geometry (matching frontend airportLayout.ts)
-AIRPORT_CENTER = (37.5, -122.0)
+# ============================================================================
+# AIRPORT GEOMETRY - SFO Coordinates (aligned with frontend maps)
+# ============================================================================
+# These coordinates MUST match the frontend definitions in:
+# - app/frontend/src/constants/airportLayout.ts (2D map)
+# - app/frontend/src/constants/airport3D.ts (3D scene)
+#
+# Coordinate system reference:
+# - 2D Map: Direct lat/lon (GeoJSON/Leaflet)
+# - 3D Map: Converted via latLonTo3D() with center (37.6213, -122.379), scale 10000
+# ============================================================================
 
-# Runway endpoints aligned with 3D scene
-# 3D: Runway 28L at z=-100 (south), Runway 28R at z=100 (north)
-# x from -500 to 500
-# Runway coordinates aligned with frontend airportLayout.ts
-# 10R/28L (south runway): lat ~37.498, lon -122.012 to -121.988
-# 10L/28R (north runway): lat ~37.502, lon -122.015 to -121.985
-RUNWAY_28L_WEST = (-122.012, 37.498)   # West end of runway 10R/28L
-RUNWAY_28L_EAST = (-121.988, 37.498)   # East end of runway 10R/28L (landing threshold)
-RUNWAY_28R_WEST = (-122.015, 37.502)   # West end of runway 10L/28R
-RUNWAY_28R_EAST = (-121.985, 37.502)   # East end of runway 10L/28R
+# Airport center (matches frontend DEFAULT_CENTER_LAT/LON)
+AIRPORT_CENTER = (37.6213, -122.379)
 
-# Terminal and gate positions (aligned with 3D jetbridge positions)
-# 3D scene: terminal at z=0 (spans z=-40 to z=+40), gates SOUTH of terminal
-# Aircraft at gates should be SOUTH of terminal (positive z = lower latitude)
-# z = -(lat - 37.5) * 10000, so lat 37.492 → z = +80
-TERMINAL_CENTER = (37.5, -122.0)
+# Real SFO runway endpoints from FAA Airport/Facility Directory
+# These match the frontend airportLayout.ts polygon coordinates
+# 4 runways: 28L/10R, 28R/10L (parallel E-W), 01L/19R, 01R/19L (crosswind N-S)
 
-# Gate spacing calculation:
-# - Aircraft wingspan: ~35m (A320/B737) to ~80m (A380)
-# - Aircraft length: ~40m (A320/B737) to ~73m (A380)
-# - 3D scale: 10000, so 0.015 deg lon ≈ 120 units spacing
-# - Terminal edge at z=+40, need ~50m margin for aircraft nose + jetbridge
-# - Gates at z=+90 gives 50 units margin from terminal edge
-# - Wide spacing (0.015 deg = ~120 units) to prevent visual overlap in 3D
-GATES = {
-    # Gate positions SOUTH of terminal (lower lat = positive z)
-    # Terminal edge at z=+40, gates at z≈+90 (50 units margin for aircraft)
-    # Wide spacing (0.015 deg = ~120 units) for clean visual separation
-    "A1": (37.491, -122.030),   # x≈-240, z≈+90 (wide-body capable)
-    "A2": (37.491, -122.015),   # x≈-120, z≈+90
-    "A3": (37.491, -122.000),   # x≈0, z≈+90 (center gate)
-    "B1": (37.491, -121.985),   # x≈+120, z≈+90
-    "B2": (37.491, -121.970),   # x≈+240, z≈+90 (wide-body capable)
+# Runway 28L/10R - 11,381 ft (south parallel, extends into bay)
+# Primary landing runway for arrivals from the east
+RUNWAY_28L_THRESHOLD = (-122.358349, 37.611712)   # 28L threshold (west end, touchdown)
+RUNWAY_10R_THRESHOLD = (-122.393105, 37.626291)   # 10R threshold (east end)
+
+# Runway 28R/10L - 11,870 ft (north parallel, extends into bay)
+# Primary departure runway
+RUNWAY_28R_THRESHOLD = (-122.357141, 37.613534)   # 28R threshold (west end)
+RUNWAY_10L_THRESHOLD = (-122.393392, 37.628739)   # 10L threshold (east end)
+
+# Runway 01L/19R - 7,650 ft (west crosswind)
+RUNWAY_01L_THRESHOLD = (-122.381929, 37.607898)   # 01L threshold (south end)
+RUNWAY_19R_THRESHOLD = (-122.369609, 37.626481)   # 19R threshold (north end)
+
+# Runway 01R/19L - 8,650 ft (east crosswind)
+RUNWAY_01R_THRESHOLD = (-122.380041, 37.606330)   # 01R threshold (south end)
+RUNWAY_19L_THRESHOLD = (-122.366111, 37.627342)   # 19L threshold (north end)
+
+# Legacy aliases for backward compatibility
+RUNWAY_28L_WEST = RUNWAY_28L_THRESHOLD
+RUNWAY_28L_EAST = RUNWAY_10R_THRESHOLD
+RUNWAY_28R_WEST = RUNWAY_28R_THRESHOLD
+RUNWAY_28R_EAST = RUNWAY_10L_THRESHOLD
+
+# Terminal area - International Terminal (southwest area of airport)
+# Matches frontend airportLayout.ts terminal polygon
+TERMINAL_CENTER = (37.615, -122.391)
+
+# Gate positions - MUST match frontend airportLayout.ts GATE_POSITIONS
+# These are the actual gate locations used in both 2D and 3D visualization
+# NOTE: This is the fallback when no OSM data is imported
+_DEFAULT_GATES = {
+    # International Terminal - Boarding Area G
+    "G1": (37.6145, -122.3955),  # Wide-body capable
+    "G2": (37.6140, -122.3945),
+    "G3": (37.6135, -122.3935),
+    # International Terminal - Boarding Area A
+    "A1": (37.6155, -122.3900),  # Wide-body capable
+    "A2": (37.6150, -122.3890),
+    # Domestic Terminal 1
+    "B1": (37.6165, -122.3850),
+    "B2": (37.6160, -122.3840),
+    # Domestic Terminal 2/3
+    "C1": (37.6175, -122.3800),
+    "C2": (37.6170, -122.3790),
 }
 
-# Taxiway waypoints aligned with frontend runway positions
-# Runway 10R/28L at lat 37.498, gates at lat 37.491
+# Cache for dynamically loaded gates
+_loaded_gates: Optional[Dict[str, tuple]] = None
+
+
+def get_gates() -> Dict[str, tuple]:
+    """
+    Get gate positions, preferring imported OSM data over defaults.
+
+    Returns:
+        Dictionary mapping gate refs to (latitude, longitude) tuples
+    """
+    global _loaded_gates
+
+    if _loaded_gates is not None:
+        return _loaded_gates
+
+    # Try to load from airport config service
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+
+        osm_gates = config.get("gates", [])
+        if osm_gates:
+            _loaded_gates = {}
+            for gate in osm_gates:
+                ref = gate.get("ref") or gate.get("id")
+                geo = gate.get("geo", {})
+                lat = geo.get("latitude")
+                lon = geo.get("longitude")
+                if ref and lat and lon:
+                    _loaded_gates[ref] = (lat, lon)
+
+            if _loaded_gates:
+                return _loaded_gates
+    except ImportError:
+        # App backend not available (e.g., running standalone)
+        pass
+    except Exception:
+        # Service not initialized or no gates loaded
+        pass
+
+    return _DEFAULT_GATES
+
+
+def reload_gates() -> Dict[str, tuple]:
+    """
+    Force reload of gates from airport config service.
+
+    Call this after importing new OSM data to refresh the gate positions.
+
+    Returns:
+        Updated dictionary mapping gate refs to (latitude, longitude) tuples
+    """
+    global _loaded_gates
+    _loaded_gates = None
+    return get_gates()
+
+
+# Backward compatibility: GATES is now a function call result
+# Code using GATES directly will get the default gates
+GATES = _DEFAULT_GATES
+
+# ============================================================================
+# TAXIWAY WAYPOINTS
+# ============================================================================
+# Routes from runways to gates, aligned with frontend taxiway definitions
+# Coordinates follow actual SFO ground movement paths
+
+# Arrival route: Runway 28L → Terminal gates
+# Aircraft land heading west (280°), exit via high-speed taxiway, turn north to terminal
 TAXI_WAYPOINTS_ARRIVAL = [
-    (-121.99, 37.498),    # Runway rollout after touchdown (slowing down)
-    (-122.000, 37.498),   # Exit runway at high-speed taxiway
-    (-122.000, 37.495),   # Turn south toward terminal
-    (-122.000, 37.491),   # Approach gate area
+    (-122.370, 37.615),    # High-speed exit from 28L (midpoint rollout)
+    (-122.378, 37.616),    # Taxiway Alpha intersection
+    (-122.385, 37.617),    # Turn toward terminal complex
+    (-122.390, 37.616),    # Terminal apron entry
 ]
 
+# Departure route: Terminal gates → Runway 28R
+# Aircraft push back, taxi south then east to runway 28R for departure
 TAXI_WAYPOINTS_DEPARTURE = [
-    (-122.000, 37.491),   # Leave gate area
-    (-122.000, 37.495),   # Head toward runway
-    (-122.000, 37.498),   # Join runway 10R/28L
-    (-122.010, 37.498),   # Runway threshold west for takeoff
+    (-122.390, 37.616),    # Leave terminal apron
+    (-122.385, 37.618),    # Taxiway Bravo
+    (-122.378, 37.620),    # Join main taxiway
+    (-122.370, 37.622),    # Hold short runway 28R
+    (-122.360, 37.614),    # Runway 28R entry point
 ]
 
-# ILS Approach to Runway 10R/28L (heading 280°, from east to west)
-# All waypoints at same latitude (37.498) for straight-in approach aligned with runway
-# Standard 3° glideslope: ~318 ft per NM descent rate
-# Runway threshold at (-121.988, 37.498)
+# ============================================================================
+# ILS APPROACH PATH - Runway 28L
+# ============================================================================
+# Standard ILS approach from the east over San Francisco Bay
+# Runway 28L heading: 284° magnetic (298° true)
+# 28L threshold: 37.611712, -122.358349
+#
+# Approach path angles align aircraft with the extended runway centerline
+# The approach course passes over the bay, descending from 6000ft to touchdown
+
+# Calculate approach path aligned with runway centerline
+# Runway centerline vector: from 28L threshold toward 10R threshold
+_RWY_28L_LAT = 37.611712
+_RWY_28L_LON = -122.358349
+_RWY_10R_LAT = 37.626291
+_RWY_10R_LON = -122.393105
+
+# Approach path extends east from 28L threshold, following the extended centerline
+# Each waypoint: (longitude, latitude, altitude_feet)
 APPROACH_WAYPOINTS = [
-    (-121.75, 37.498, 6000),   # FAF - Final Approach Fix, ~12 NM out
-    (-121.82, 37.498, 4000),   # Intermediate fix, ~8 NM out
-    (-121.88, 37.498, 2000),   # 4 NM from threshold
-    (-121.93, 37.498, 500),    # Short final, 1 NM from threshold
-    (-121.988, 37.498, 50),    # Runway 10R/28L threshold
+    # Initial approach fix - 15 NM east of threshold, over San Pablo Bay
+    (-122.10, 37.58, 6000),
+    # Intermediate fix - 10 NM from threshold
+    (-122.20, 37.595, 4000),
+    # Final approach fix - 5 NM from threshold
+    (-122.28, 37.605, 2500),
+    # Glideslope intercept - 3 NM from threshold
+    (-122.32, 37.608, 1000),
+    # Short final - 1 NM from threshold
+    (-122.345, 37.610, 300),
+    # Runway 28L threshold (touchdown zone)
+    (_RWY_28L_LON, _RWY_28L_LAT, 15),
 ]
 
-# Departure path from Runway 10R/28L (climb on runway heading, then turn)
-# Standard departure: maintain runway heading to 3000ft before turn
-# Runway west end at (-122.012, 37.498)
+# ============================================================================
+# DEPARTURE PATH - Runway 28R
+# ============================================================================
+# Standard departure from runway 28R (north parallel)
+# Initial climb on runway heading, then turn per SID
+
+_RWY_28R_LAT = 37.613534
+_RWY_28R_LON = -122.357141
+
 DEPARTURE_WAYPOINTS = [
-    (-122.03, 37.498, 1500),   # Initial climb, runway heading (280°)
-    (-122.08, 37.498, 3000),   # Continue climb, runway heading
-    (-122.15, 37.48, 5000),    # Turn south after 3000ft
-    (-122.25, 37.45, 8000),    # Departure fix, climbing
+    # Initial climb - runway 28R at rotation
+    (_RWY_28R_LON + 0.02, _RWY_28R_LAT, 500),
+    # Climbing runway heading (284° true)
+    (-122.32, 37.608, 2000),
+    # Continue climb over bay
+    (-122.28, 37.60, 4000),
+    # Departure fix - climbing to cruise
+    (-122.20, 37.58, 8000),
+    # Enroute - over the bay
+    (-122.10, 37.55, 12000),
 ]
 
 
@@ -974,14 +1108,15 @@ def generate_synthetic_flights(
                          _count_aircraft_in_phase(FlightPhase.TAXI_TO_RUNWAY))
 
             # Distribute phases realistically WITH CAPACITY LIMITS
-            # - Max 5 parked (gates)
+            # - Max parked = number of gates (dynamically)
             # - Max 4 on approach (separation)
-            # - Max 2 taxiing at once
+            # - Max 3 taxiing at once (more realistic with larger airport)
             # Adjust weights based on current counts to prevent overcrowding
+            max_parked = len(GATES)  # 9 gates at SFO
             approach_weight = 0.15 if approach_count < 4 else 0.0
-            parked_weight = 0.15 if parked_count < 5 else 0.0
-            taxi_in_weight = 0.05 if taxi_count < 2 else 0.0
-            taxi_out_weight = 0.05 if taxi_count < 2 else 0.0
+            parked_weight = 0.20 if parked_count < max_parked else 0.0
+            taxi_in_weight = 0.05 if taxi_count < 3 else 0.0
+            taxi_out_weight = 0.05 if taxi_count < 3 else 0.0
 
             # Redistribute unused weight to enroute
             total_ground = approach_weight + parked_weight + taxi_in_weight + taxi_out_weight
@@ -1059,7 +1194,14 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     """Generate synthetic trajectory data for a flight.
 
     Creates a realistic approach-to-landing trajectory pattern for demo purposes.
-    Works with mock mode when Delta tables are not available.
+    The trajectory follows the ILS approach path to runway 28L at SFO:
+    - Approach from the east over San Francisco Bay
+    - Descend on the 3° glideslope
+    - Land heading approximately 284° (true heading)
+    - Taxi to gate via the terminal apron
+
+    The generated trajectory aligns with both the 2D map (Leaflet) and
+    3D visualization (Three.js) using the same coordinate reference.
 
     Args:
         icao24: The ICAO24 address of the aircraft.
@@ -1088,16 +1230,10 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
     callsign = flight_info.get("callsign", "UNKNOWN")
 
-    # Generate trajectory points - simulate an approach pattern
-    points = []
-    num_points = min(limit, 30)  # Generate up to 30 points
-    now = datetime.now(timezone.utc)
-    interval_seconds = (minutes * 60) / num_points
-
     # Get the current flight state if available
     current_state = _flight_states.get(icao24)
 
-    # Use actual flight position if available, otherwise default
+    # Determine aircraft's current situation
     if current_state:
         end_lat = current_state.latitude
         end_lon = current_state.longitude
@@ -1105,95 +1241,217 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         current_heading = current_state.heading
         current_phase = current_state.phase.value if current_state.phase else "descending"
     else:
-        # Fallback to SFO area
-        end_lat = 37.62
-        end_lon = -122.38
-        end_alt = 5000
-        current_heading = 280
+        # Fallback to approach position
+        end_lat = APPROACH_WAYPOINTS[-1][1]
+        end_lon = APPROACH_WAYPOINTS[-1][0]
+        end_alt = APPROACH_WAYPOINTS[-1][2]
+        current_heading = 284  # Runway 28L heading
         current_phase = "descending"
 
-    # Generate trajectory backwards from current position
-    # Calculate starting position based on heading and time
-    heading_rad = math.radians(current_heading)
-
-    # Distance to travel back in degrees (roughly 0.5 deg = 30 NM for approach)
-    total_distance = 0.3  # degrees, roughly 18 NM
-
-    # Determine if this is a ground-based aircraft that should show approach history
+    # Determine if aircraft is on ground
     ground_phases = ["ground", "parked", "taxi_to_gate", "taxi_to_runway", "pushback"]
     is_on_ground = current_phase in ground_phases or end_alt < 100
 
-    # For ground aircraft, use runway approach heading (280° for runway 28)
+    # =========================================================================
+    # Generate trajectory following the ILS approach path
+    # =========================================================================
+    # The ILS approach to runway 28L comes from the east (higher longitude)
+    # Aircraft descend on a 3° glideslope (approximately 300 ft/NM)
+    # Touchdown zone is at the runway 28L threshold
+
+    points = []
+    num_points = min(limit, 40)
+    now = datetime.now(timezone.utc)
+    interval_seconds = (minutes * 60) / num_points
+
+    # Runway 28L approach parameters
+    # Approach course: ~284° true heading (from east to west)
+    runway_28l_lat = _RWY_28L_LAT  # 37.611712
+    runway_28l_lon = _RWY_28L_LON  # -122.358349
+
     if is_on_ground:
-        approach_heading = 280  # ILS approach heading
-        heading_rad = math.radians(approach_heading)
-        # Approach starts further east (higher longitude)
-        total_distance = 0.25  # ~15 NM approach path
+        # Aircraft is on ground - show approach + landing + taxi trajectory
+        # Divide trajectory: 60% approach, 10% landing roll, 30% taxi
 
-    for i in range(num_points):
-        t = i / (num_points - 1) if num_points > 1 else 0  # Progress 0 to 1 (past to present)
+        for i in range(num_points):
+            progress = i / (num_points - 1) if num_points > 1 else 0
 
-        # Interpolate from start position to current position
-        progress = t  # 0 = oldest, 1 = current
+            if progress < 0.60:
+                # APPROACH PHASE: Following ILS glideslope
+                approach_progress = progress / 0.60  # 0 to 1
 
-        # Calculate position along flight path (reverse from current heading)
-        # Start further back, end at current position
-        distance_back = total_distance * (1 - progress)
-        lat = end_lat - distance_back * math.cos(heading_rad)
-        lon = end_lon - distance_back * math.sin(heading_rad) / math.cos(math.radians(end_lat))
+                # Interpolate along the approach waypoints
+                # Start from initial approach fix, end at threshold
+                wp_count = len(APPROACH_WAYPOINTS)
+                wp_progress = approach_progress * (wp_count - 1)
+                wp_idx = int(wp_progress)
+                wp_frac = wp_progress - wp_idx
 
-        # Altitude calculation
-        if is_on_ground:
-            # For parked/taxi aircraft, show a proper approach and landing trajectory
-            # Aircraft was on approach, then landed, then taxied to current position
-            if progress < 0.7:
-                # Approach phase: descending from 5000ft to touchdown
-                approach_progress = progress / 0.7  # 0 to 1 during approach
-                start_alt = 5000
-                alt = start_alt * (1 - approach_progress)  # Linear descent to 0
+                if wp_idx >= wp_count - 1:
+                    wp_idx = wp_count - 2
+                    wp_frac = 1.0
+
+                # Interpolate between waypoints
+                wp1 = APPROACH_WAYPOINTS[wp_idx]
+                wp2 = APPROACH_WAYPOINTS[min(wp_idx + 1, wp_count - 1)]
+
+                lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
+                lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
+                alt = wp1[2] + (wp2[2] - wp1[2]) * wp_frac
+
+                # Calculate heading toward next waypoint
+                heading = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
+
                 phase = "approaching" if alt > 500 else "landing"
-                velocity = 180 - approach_progress * 40  # Slowing from 180 to 140 kts
-                vertical_rate = -700
-            else:
-                # Ground phase: taxiing to gate
+                velocity = 180 - approach_progress * 50  # Slow from 180 to 130 kts
+                vertical_rate = -700 if alt > 100 else -300
+
+            elif progress < 0.70:
+                # LANDING ROLL: Decelerating on runway
+                roll_progress = (progress - 0.60) / 0.10
+
+                # Move along runway 28L from threshold toward high-speed exit
+                lat = runway_28l_lat + roll_progress * 0.004  # Move north-ish
+                lon = runway_28l_lon - roll_progress * 0.012  # Move west on runway
                 alt = 0
+
+                heading = 284  # Runway heading
+                phase = "ground"
+                velocity = 130 - roll_progress * 100  # Decelerate to 30 kts
+                vertical_rate = 0
+
+            else:
+                # TAXI PHASE: From runway to current position
+                taxi_progress = (progress - 0.70) / 0.30
+
+                # Interpolate from runway exit toward current position
+                exit_lat = runway_28l_lat + 0.004
+                exit_lon = runway_28l_lon - 0.012
+
+                lat = exit_lat + taxi_progress * (end_lat - exit_lat)
+                lon = exit_lon + taxi_progress * (end_lon - exit_lon)
+                alt = 0
+
+                heading = _calculate_heading((lat, lon), (end_lat, end_lon))
                 phase = "ground"
                 velocity = 15
                 vertical_rate = 0
-        elif current_phase in ["climbing", "cruising", "departing", "takeoff", "enroute"]:
-            # For climbing/cruising, was at lower altitude before
-            start_alt = max(0, end_alt - 3000)
+
+            # Append point for this iteration (inside the for loop)
+            timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
+
+            points.append({
+                "timestamp": timestamp.isoformat(),
+                "icao24": icao24,
+                "callsign": callsign,
+                "latitude": lat + random.uniform(-0.0005, 0.0005),
+                "longitude": lon + random.uniform(-0.0005, 0.0005),
+                "altitude": max(0, alt + random.uniform(-20, 20)),
+                "velocity": max(10, velocity + random.uniform(-3, 3)),
+                "heading": heading + random.uniform(-1, 1),
+                "vertical_rate": vertical_rate,
+                "on_ground": alt < 50,
+                "flight_phase": phase,
+                "data_source": "synthetic",
+            })
+
+    elif current_phase in ["climbing", "cruising", "departing", "takeoff", "enroute"]:
+        # DEPARTURE trajectory - show takeoff and climb
+        for i in range(num_points):
+            progress = i / (num_points - 1) if num_points > 1 else 0
+
+            if progress < 0.20:
+                # Takeoff roll and initial climb
+                takeoff_progress = progress / 0.20
+                wp = DEPARTURE_WAYPOINTS[0]
+                lat = _RWY_28R_LAT + takeoff_progress * (wp[1] - _RWY_28R_LAT)
+                lon = _RWY_28R_LON + takeoff_progress * (wp[0] - _RWY_28R_LON)
+                alt = takeoff_progress * wp[2]
+                heading = 284
+                velocity = 100 + takeoff_progress * 100
+                vertical_rate = 2000 if takeoff_progress > 0.3 else 0
+                phase = "takeoff" if takeoff_progress < 0.5 else "climbing"
+            else:
+                # Climb out following departure path
+                climb_progress = (progress - 0.20) / 0.80
+
+                wp_count = len(DEPARTURE_WAYPOINTS)
+                wp_progress = climb_progress * (wp_count - 1)
+                wp_idx = int(wp_progress)
+                wp_frac = wp_progress - wp_idx
+
+                if wp_idx >= wp_count - 1:
+                    wp_idx = wp_count - 2
+                    wp_frac = 1.0
+
+                wp1 = DEPARTURE_WAYPOINTS[wp_idx]
+                wp2 = DEPARTURE_WAYPOINTS[min(wp_idx + 1, wp_count - 1)]
+
+                lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
+                lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
+                alt = wp1[2] + (wp2[2] - wp1[2]) * wp_frac
+
+                heading = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
+                velocity = 200 + climb_progress * 150
+                vertical_rate = 1500 if climb_progress < 0.7 else 500
+                phase = "departing"
+
+            timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
+
+            points.append({
+                "timestamp": timestamp.isoformat(),
+                "icao24": icao24,
+                "callsign": callsign,
+                "latitude": lat + random.uniform(-0.001, 0.001),
+                "longitude": lon + random.uniform(-0.001, 0.001),
+                "altitude": max(0, alt + random.uniform(-50, 50)),
+                "velocity": max(50, velocity + random.uniform(-5, 5)),
+                "heading": heading + random.uniform(-2, 2),
+                "vertical_rate": vertical_rate,
+                "on_ground": alt < 50,
+                "flight_phase": phase,
+                "data_source": "synthetic",
+            })
+
+    else:
+        # APPROACH trajectory (aircraft still descending)
+        # Trajectory ends at the aircraft's current position
+        # Start point is calculated based on how far back on the approach the aircraft was
+
+        # Calculate a start position further back on approach (higher altitude, east of current)
+        start_alt = min(end_alt + 3000, 6000)  # Start 3000ft higher or max 6000ft
+        start_lon = end_lon + 0.15  # Start ~9NM further east
+        start_lat = end_lat - 0.02  # Slightly south (approach path angle)
+
+        for i in range(num_points):
+            progress = i / (num_points - 1) if num_points > 1 else 0
+
+            # Interpolate from start position to current (end) position
+            lat = start_lat + progress * (end_lat - start_lat)
+            lon = start_lon + progress * (end_lon - start_lon)
             alt = start_alt + progress * (end_alt - start_alt)
-            phase = current_phase
-            velocity = 200 + progress * 100  # Accelerating
-            vertical_rate = 1500 if progress < 0.8 else 0
-        else:
-            # Descending: was higher before
-            start_alt = end_alt + 5000  # Was 5000 ft higher
-            alt = start_alt - progress * (start_alt - end_alt)
-            phase = "descending" if alt > 500 else "landing"
-            velocity = 200 - progress * 50  # Slowing down on approach
-            vertical_rate = -800 if alt > 100 else 0
 
-        # Calculate heading with minor variation
-        heading = (approach_heading if is_on_ground else current_heading) + random.uniform(-2, 2)
+            heading = _calculate_heading((lat, lon), (end_lat, end_lon))
+            velocity = 200 - progress * 60  # Slow from 200 to 140
+            vertical_rate = -800 if alt > 500 else -400
+            phase = "approaching" if alt > 500 else "landing"
 
-        timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
+            timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
 
-        points.append({
-            "timestamp": timestamp.isoformat(),
-            "icao24": icao24,
-            "callsign": callsign,
-            "latitude": lat + random.uniform(-0.001, 0.001),  # Small jitter
-            "longitude": lon + random.uniform(-0.001, 0.001),
-            "altitude": max(0, alt + random.uniform(-50, 50)),
-            "velocity": max(10, velocity + random.uniform(-5, 5)),
-            "heading": heading,
-            "vertical_rate": vertical_rate,
-            "on_ground": alt < 50,
-            "flight_phase": phase,
-            "data_source": "synthetic",
-        })
+            points.append({
+                "timestamp": timestamp.isoformat(),
+                "icao24": icao24,
+                "callsign": callsign,
+                "latitude": lat + random.uniform(-0.001, 0.001),
+                "longitude": lon + random.uniform(-0.001, 0.001),
+                "altitude": max(0, alt + random.uniform(-50, 50)),
+                "velocity": max(100, velocity + random.uniform(-5, 5)),
+                "heading": heading + random.uniform(-2, 2),
+                "vertical_rate": vertical_rate,
+                "on_ground": alt < 50,
+                "flight_phase": phase,
+                "data_source": "synthetic",
+            })
 
     return points
 
