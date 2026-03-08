@@ -2,6 +2,8 @@ import { useFlightContext } from '../../context/FlightContext';
 import { Flight } from '../../types/flight';
 import { useDelayPrediction, useGateRecommendations } from '../../hooks/usePredictions';
 import { useTrajectory } from '../../hooks/useTrajectory';
+import TurnaroundTimeline from './TurnaroundTimeline';
+import BaggageStatus from '../Baggage/BaggageStatus';
 
 const phaseColors: Record<Flight['flight_phase'], string> = {
   ground: 'bg-gray-500',
@@ -105,7 +107,7 @@ export default function FlightDetail() {
     );
   }
 
-  const { flight_phase, callsign, icao24, latitude, longitude, altitude, velocity, heading, vertical_rate, last_seen, data_source } = selectedFlight;
+  const { flight_phase, callsign, icao24, latitude, longitude, altitude, velocity, heading, vertical_rate, last_seen, data_source, aircraft_type } = selectedFlight;
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
@@ -286,6 +288,28 @@ export default function FlightDetail() {
           ) : (
             <div className="text-sm text-slate-400">No recommendations available</div>
           )}
+        </div>
+      )}
+
+      {/* Turnaround Timeline (for ground flights) */}
+      {flight_phase === 'ground' && (
+        <div className="mb-4">
+          <TurnaroundTimeline
+            icao24={icao24}
+            gate={recommendations.length > 0 ? recommendations[0].gate_id : undefined}
+            aircraftType={aircraft_type || 'A320'}
+          />
+        </div>
+      )}
+
+      {/* Baggage Status (for all flights with callsign) */}
+      {callsign?.trim() && (
+        <div className="mb-4">
+          <BaggageStatus
+            flightNumber={callsign.trim()}
+            aircraftType={aircraft_type || 'A320'}
+            isArrival={flight_phase === 'ground' || flight_phase === 'descending'}
+          />
         </div>
       )}
 

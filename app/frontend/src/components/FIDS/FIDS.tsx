@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useFlightContext } from '../../context/FlightContext';
+import { Flight } from '../../types/flight';
 
 interface ScheduledFlight {
   flight_number: string;
@@ -62,6 +64,30 @@ export default function FIDS({ onClose }: FIDSProps) {
   const [departures, setDepartures] = useState<ScheduledFlight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Get tracked flights for linking
+  const { flights: trackedFlights, setSelectedFlight } = useFlightContext();
+
+  // Create callsign → tracked flight mapping
+  const callsignToFlight = useMemo(() => {
+    const map = new Map<string, Flight>();
+    trackedFlights.forEach(flight => {
+      if (flight.callsign?.trim()) {
+        // Map both with and without spaces
+        map.set(flight.callsign.trim().toUpperCase(), flight);
+      }
+    });
+    return map;
+  }, [trackedFlights]);
+
+  // Handle flight click - select tracked flight and close FIDS
+  const handleFlightClick = (flightNumber: string) => {
+    const tracked = callsignToFlight.get(flightNumber.toUpperCase());
+    if (tracked) {
+      setSelectedFlight(tracked);
+      onClose();
+    }
+  };
 
   useEffect(() => {
     async function fetchSchedule() {
@@ -158,10 +184,15 @@ export default function FIDS({ onClose }: FIDSProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {flights.map((flight, index) => (
+                {flights.map((flight, index) => {
+                  const isTracked = callsignToFlight.has(flight.flight_number.toUpperCase());
+                  return (
                   <tr
                     key={`${flight.flight_number}-${index}`}
-                    className="text-white hover:bg-slate-800/50"
+                    className={`text-white hover:bg-slate-800/50 ${
+                      isTracked ? 'cursor-pointer hover:bg-blue-900/30' : ''
+                    }`}
+                    onClick={isTracked ? () => handleFlightClick(flight.flight_number) : undefined}
                   >
                     <td className="px-4 py-3 font-mono">
                       <div>{formatTime(flight.scheduled_time)}</div>
@@ -172,7 +203,14 @@ export default function FIDS({ onClose }: FIDSProps) {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-bold">{flight.flight_number}</div>
+                      <div className="font-bold flex items-center gap-2">
+                        {flight.flight_number}
+                        {isTracked && (
+                          <span className="px-1.5 py-0.5 bg-blue-600 text-[10px] rounded uppercase">
+                            Live
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-slate-400">{flight.airline}</div>
                     </td>
                     <td className="px-4 py-3 font-mono">
@@ -199,7 +237,8 @@ export default function FIDS({ onClose }: FIDSProps) {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
