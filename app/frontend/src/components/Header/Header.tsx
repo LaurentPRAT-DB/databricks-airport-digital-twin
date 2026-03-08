@@ -1,7 +1,12 @@
 import { useFlightContext } from '../../context/FlightContext';
 import PlatformLinks from '../PlatformLinks/PlatformLinks';
+import WeatherWidget from '../Weather/WeatherWidget';
 
-export default function Header() {
+interface HeaderProps {
+  onShowFIDS?: () => void;
+}
+
+export default function Header({ onShowFIDS }: HeaderProps) {
   const { flights, isLoading, error, lastUpdated, dataSource } = useFlightContext();
 
   return (
@@ -25,6 +30,19 @@ export default function Header() {
       </div>
 
       <div className="flex items-center gap-6">
+        {/* Weather Widget */}
+        <WeatherWidget />
+
+        {/* FIDS Button */}
+        {onShowFIDS && (
+          <button
+            onClick={onShowFIDS}
+            className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm transition-colors"
+          >
+            <span>FIDS</span>
+          </button>
+        )}
+
         {/* Flight phase legend */}
         <div className="flex items-center gap-4 text-sm">
           <span className="flex items-center gap-1.5">

@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -11,8 +12,20 @@ from app.backend.models.flight import (
     TrajectoryPoint,
     TrajectoryResponse,
 )
+from app.backend.models.schedule import ScheduleResponse
+from app.backend.models.weather import WeatherResponse
+from app.backend.models.gse import GSEFleetStatus, TurnaroundResponse
+from app.backend.models.baggage import (
+    FlightBaggageResponse,
+    BaggageStatsResponse,
+    BaggageAlertsResponse,
+)
 from app.backend.services.flight_service import FlightService, get_flight_service
 from app.backend.services.delta_service import get_delta_service
+from app.backend.services.schedule_service import get_schedule_service
+from app.backend.services.weather_service import get_weather_service
+from app.backend.services.gse_service import get_gse_service
+from app.backend.services.baggage_service import get_baggage_service
 from src.ingestion.fallback import generate_synthetic_trajectory
 
 
@@ -209,3 +222,149 @@ async def get_web_vitals_summary() -> dict:
         "total_metrics": len(_web_vitals_buffer),
         "metrics": summary,
     }
+
+
+# ==============================================================================
+# Schedule/FIDS Routes
+# ==============================================================================
+
+@router.get("/schedule/arrivals", response_model=ScheduleResponse, tags=["schedule"])
+async def get_arrivals(
+    hours_ahead: int = Query(default=2, ge=1, le=12, description="Hours into future"),
+    hours_behind: int = Query(default=1, ge=0, le=6, description="Hours into past"),
+    limit: int = Query(default=50, ge=1, le=200, description="Max flights"),
+) -> ScheduleResponse:
+    """
+    Get scheduled arrivals for FIDS display.
+
+    Returns arrival flights within the specified time window,
+    sorted by scheduled time.
+    """
+    service = get_schedule_service()
+    return service.get_arrivals(
+        hours_ahead=hours_ahead,
+        hours_behind=hours_behind,
+        limit=limit,
+    )
+
+
+@router.get("/schedule/departures", response_model=ScheduleResponse, tags=["schedule"])
+async def get_departures(
+    hours_ahead: int = Query(default=2, ge=1, le=12, description="Hours into future"),
+    hours_behind: int = Query(default=1, ge=0, le=6, description="Hours into past"),
+    limit: int = Query(default=50, ge=1, le=200, description="Max flights"),
+) -> ScheduleResponse:
+    """
+    Get scheduled departures for FIDS display.
+
+    Returns departure flights within the specified time window,
+    sorted by scheduled time.
+    """
+    service = get_schedule_service()
+    return service.get_departures(
+        hours_ahead=hours_ahead,
+        hours_behind=hours_behind,
+        limit=limit,
+    )
+
+
+# ==============================================================================
+# Weather Routes
+# ==============================================================================
+
+@router.get("/weather/current", response_model=WeatherResponse, tags=["weather"])
+async def get_current_weather(
+    station: Optional[str] = Query(default=None, description="ICAO station (default: KSFO)"),
+) -> WeatherResponse:
+    """
+    Get current weather observation and forecast.
+
+    Returns METAR (current conditions) and TAF (forecast) for the specified
+    or default airport station.
+    """
+    service = get_weather_service()
+    return service.get_current_weather(station=station)
+
+
+# ==============================================================================
+# GSE (Ground Support Equipment) Routes
+# ==============================================================================
+
+@router.get("/gse/status", response_model=GSEFleetStatus, tags=["gse"])
+async def get_gse_fleet_status() -> GSEFleetStatus:
+    """
+    Get overall GSE fleet status.
+
+    Returns inventory and availability of all ground support equipment
+    including tugs, fuel trucks, belt loaders, etc.
+    """
+    service = get_gse_service()
+    return service.get_fleet_status()
+
+
+@router.get("/turnaround/{icao24}", response_model=TurnaroundResponse, tags=["gse"])
+async def get_turnaround_status(
+    icao24: str,
+    gate: Optional[str] = Query(default=None, description="Gate assignment"),
+    aircraft_type: str = Query(default="A320", description="Aircraft type"),
+) -> TurnaroundResponse:
+    """
+    Get turnaround status for an aircraft at gate.
+
+    Returns current phase, progress, GSE allocation, and estimated departure
+    time for an aircraft undergoing turnaround operations.
+    """
+    service = get_gse_service()
+    return service.get_turnaround_status(
+        icao24=icao24,
+        gate=gate,
+        aircraft_type=aircraft_type,
+    )
+
+
+# ==============================================================================
+# Baggage Routes
+# ==============================================================================
+
+@router.get("/baggage/stats", response_model=BaggageStatsResponse, tags=["baggage"])
+async def get_baggage_stats() -> BaggageStatsResponse:
+    """
+    Get overall baggage handling statistics.
+
+    Returns airport-wide baggage metrics including throughput,
+    misconnect rate, and processing times.
+    """
+    service = get_baggage_service()
+    return service.get_overall_stats()
+
+
+@router.get("/baggage/flight/{flight_number}", response_model=FlightBaggageResponse, tags=["baggage"])
+async def get_flight_baggage(
+    flight_number: str,
+    aircraft_type: str = Query(default="A320", description="Aircraft type"),
+    include_bags: bool = Query(default=False, description="Include bag list"),
+) -> FlightBaggageResponse:
+    """
+    Get baggage information for a specific flight.
+
+    Returns loading/unloading progress, bag counts, and optionally
+    a sample of individual bags.
+    """
+    service = get_baggage_service()
+    return service.get_flight_baggage(
+        flight_number=flight_number,
+        aircraft_type=aircraft_type,
+        include_bags=include_bags,
+    )
+
+
+@router.get("/baggage/alerts", response_model=BaggageAlertsResponse, tags=["baggage"])
+async def get_baggage_alerts() -> BaggageAlertsResponse:
+    """
+    Get active baggage alerts.
+
+    Returns alerts for misconnects, delayed loading, and other
+    baggage handling issues requiring attention.
+    """
+    service = get_baggage_service()
+    return service.get_alerts()

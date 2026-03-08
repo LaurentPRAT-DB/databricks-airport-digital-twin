@@ -1,0 +1,194 @@
+import { useState, useEffect } from 'react';
+
+interface GSEUnit {
+  unit_id: string;
+  gse_type: string;
+  status: string;
+}
+
+interface TurnaroundStatus {
+  icao24: string;
+  flight_number: string | null;
+  gate: string;
+  current_phase: string;
+  phase_progress_pct: number;
+  total_progress_pct: number;
+  estimated_departure: string;
+  assigned_gse: GSEUnit[];
+  aircraft_type: string;
+}
+
+interface TurnaroundResponse {
+  turnaround: TurnaroundStatus;
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  arrival_taxi: 'Arrival Taxi',
+  chocks_on: 'Chocks On',
+  deboarding: 'Deboarding',
+  unloading: 'Unloading',
+  cleaning: 'Cleaning',
+  catering: 'Catering',
+  refueling: 'Refueling',
+  loading: 'Loading',
+  boarding: 'Boarding',
+  chocks_off: 'Chocks Off',
+  pushback: 'Pushback',
+  departure_taxi: 'Departure',
+  complete: 'Complete',
+};
+
+const PHASE_ORDER = [
+  'arrival_taxi',
+  'chocks_on',
+  'deboarding',
+  'cleaning',
+  'refueling',
+  'boarding',
+  'pushback',
+];
+
+interface TurnaroundTimelineProps {
+  icao24: string;
+  gate?: string;
+  aircraftType?: string;
+}
+
+export default function TurnaroundTimeline({
+  icao24,
+  gate,
+  aircraftType = 'A320',
+}: TurnaroundTimelineProps) {
+  const [turnaround, setTurnaround] = useState<TurnaroundStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchTurnaround() {
+      try {
+        const params = new URLSearchParams({
+          aircraft_type: aircraftType,
+        });
+        if (gate) params.append('gate', gate);
+
+        const response = await fetch(`/api/turnaround/${icao24}?${params}`);
+        if (!response.ok) throw new Error('Failed to fetch turnaround');
+
+        const data: TurnaroundResponse = await response.json();
+        setTurnaround(data.turnaround);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchTurnaround();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchTurnaround, 30 * 1000);
+    return () => clearInterval(interval);
+  }, [icao24, gate, aircraftType]);
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg shadow p-4 animate-pulse">
+        <div className="h-4 bg-slate-200 rounded w-1/2 mb-3"></div>
+        <div className="h-8 bg-slate-200 rounded"></div>
+      </div>
+    );
+  }
+
+  if (error || !turnaround) {
+    return null; // Silently hide if not at gate
+  }
+
+  const currentPhaseIndex = PHASE_ORDER.indexOf(turnaround.current_phase);
+  const estDeparture = new Date(turnaround.estimated_departure);
+
+  return (
+    <div className="bg-white rounded-lg shadow p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-slate-800">Turnaround Progress</h3>
+        <span className="text-sm text-slate-500">
+          Gate {turnaround.gate}
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="mb-4">
+        <div className="flex justify-between text-xs text-slate-500 mb-1">
+          <span>{PHASE_LABELS[turnaround.current_phase] || turnaround.current_phase}</span>
+          <span>{turnaround.total_progress_pct}%</span>
+        </div>
+        <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-blue-500 transition-all duration-500"
+            style={{ width: `${turnaround.total_progress_pct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Phase indicators */}
+      <div className="flex justify-between mb-4">
+        {PHASE_ORDER.map((phase, idx) => {
+          const isCompleted = idx < currentPhaseIndex;
+          const isCurrent = phase === turnaround.current_phase;
+
+          return (
+            <div
+              key={phase}
+              className="flex flex-col items-center"
+              title={PHASE_LABELS[phase]}
+            >
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                  isCompleted
+                    ? 'bg-green-500 text-white'
+                    : isCurrent
+                    ? 'bg-blue-500 text-white animate-pulse'
+                    : 'bg-slate-200 text-slate-400'
+                }`}
+              >
+                {isCompleted ? '✓' : idx + 1}
+              </div>
+              <span className="text-[10px] text-slate-500 mt-1 truncate w-12 text-center">
+                {PHASE_LABELS[phase]?.split(' ')[0]}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* EST departure */}
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-slate-500">Est. Departure</span>
+        <span className="font-mono font-medium">
+          {estDeparture.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      </div>
+
+      {/* Active GSE */}
+      {turnaround.assigned_gse.filter(g => g.status === 'servicing').length > 0 && (
+        <div className="mt-3 pt-3 border-t">
+          <div className="text-xs text-slate-500 mb-2">Active Equipment</div>
+          <div className="flex flex-wrap gap-1">
+            {turnaround.assigned_gse
+              .filter(g => g.status === 'servicing')
+              .map(gse => (
+                <span
+                  key={gse.unit_id}
+                  className="px-2 py-0.5 bg-slate-100 rounded text-xs text-slate-600"
+                >
+                  {gse.gse_type.replace('_', ' ')}
+                </span>
+              ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -5,6 +5,7 @@ import FlightList from './components/FlightList/FlightList';
 import AirportMap from './components/Map/AirportMap';
 import FlightDetail from './components/FlightDetail/FlightDetail';
 import GateStatus from './components/GateStatus/GateStatus';
+import FIDS from './components/FIDS/FIDS';
 
 // Lazy load 3D map to reduce initial bundle size
 const Map3D = lazy(() => import('./components/Map3D').then(m => ({ default: m.Map3D })));
@@ -62,6 +63,7 @@ function ViewToggle({
 
 function AppContent() {
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
+  const [showFIDS, setShowFIDS] = useState(false);
   const { flights, selectedFlight, setSelectedFlight } = useFlightContext();
 
   // Handler for 3D map flight selection (uses icao24 string)
@@ -74,7 +76,8 @@ function AppContent() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <Header />
+      <Header onShowFIDS={() => setShowFIDS(true)} />
+      {showFIDS && <FIDS onClose={() => setShowFIDS(false)} />}
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List */}
         <div className="w-80 flex-shrink-0 overflow-hidden">
