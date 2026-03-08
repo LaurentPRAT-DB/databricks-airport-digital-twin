@@ -746,6 +746,16 @@ For comprehensive documentation, see the [User Guide](docs/USER_GUIDE.md), which
 - **Administrator Guide**: Data persistence strategy with Lakebase and Unity Catalog synchronization
 - **Data Scientist Guide**: ML model documentation including feature engineering and prediction algorithms
 
+### Additional Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Data Dictionary](docs/DATA_DICTIONARY.md) | Complete schema documentation for all tables and API models |
+| [Pipeline Documentation](docs/PIPELINE.md) | End-to-end data pipeline architecture with Mermaid diagrams |
+| [ML Models](docs/ML_MODELS.md) | Detailed ML model documentation with algorithms and API reference |
+| [Synthetic Data](docs/SYNTHETIC_DATA_GENERATION.md) | How synthetic flight data is generated for demos |
+| [Aircraft Separation](docs/AIRCRAFT_SEPARATION.md) | 3D visualization aircraft separation algorithms |
+
 ### Quick Demo Tips
 
 1. **Start with 2D view** - Show the real-time map with flight markers
@@ -777,6 +787,18 @@ For comprehensive documentation, see the [User Guide](docs/USER_GUIDE.md), which
 ## License
 
 Internal Databricks Field Engineering demo. Not for external distribution.
+
+---
+
+## Documentation
+
+All documentation follows the data-documentation-generator skill standards:
+
+- **README.md**: Project overview, architecture, and quick start
+- **docs/DATA_DICTIONARY.md**: Complete schema documentation
+- **docs/PIPELINE.md**: Data pipeline architecture and SLAs
+- **docs/ML_MODELS.md**: ML model algorithms and API reference
+- **docs/USER_GUIDE.md**: End-user, admin, and data scientist guides
 
 ---
 

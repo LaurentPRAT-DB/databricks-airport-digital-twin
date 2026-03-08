@@ -10,7 +10,9 @@ This document describes all data tables, schemas, and fields in the Airport Digi
   - [Bronze Layer](#bronze-layer)
   - [Silver Layer](#silver-layer)
   - [Gold Layer](#gold-layer)
+- [Lakebase Tables](#lakebase-tables)
 - [API Models](#api-models)
+- [ML Model Types](#ml-model-types)
 - [Frontend Types](#frontend-types)
 
 ---
@@ -147,6 +149,63 @@ END
 
 ---
 
+## Lakebase Tables
+
+### Table: `flight_status`
+
+**Description**: Low-latency serving table for real-time frontend queries. Synchronized from Unity Catalog Gold table.
+
+**Database**: `airport_digital_twin`
+
+**Host**: `ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com`
+
+**Sync Frequency**: Every 1 minute (from Delta Gold table)
+
+**Query Latency**: <10ms P99
+
+| Column | Data Type | Nullable | Description | Example | Constraints |
+|--------|-----------|----------|-------------|---------|-------------|
+| `icao24` | VARCHAR(6) | NO | Unique aircraft identifier | `"a12345"` | PRIMARY KEY |
+| `callsign` | VARCHAR(8) | YES | Flight callsign | `"UAL123"` | |
+| `latitude` | DOUBLE PRECISION | YES | Latitude in degrees | `37.6213` | -90 to 90 |
+| `longitude` | DOUBLE PRECISION | YES | Longitude in degrees | `-122.3790` | -180 to 180 |
+| `altitude` | DOUBLE PRECISION | YES | Altitude in meters | `5000.0` | >= 0 |
+| `velocity` | DOUBLE PRECISION | YES | Ground speed in m/s | `200.0` | >= 0 |
+| `heading` | DOUBLE PRECISION | YES | Heading in degrees | `270.0` | 0 to 360 |
+| `on_ground` | BOOLEAN | YES | Aircraft on ground | `false` | |
+| `vertical_rate` | DOUBLE PRECISION | YES | Vertical rate in m/s | `5.0` | |
+| `flight_phase` | VARCHAR(20) | YES | Computed flight phase | `"climbing"` | |
+| `last_seen` | TIMESTAMPTZ | YES | Last position update | `2026-03-06T10:00:00Z` | |
+| `updated_at` | TIMESTAMPTZ | NO | Row update time | `2026-03-06T10:00:30Z` | DEFAULT NOW() |
+
+**Indexes**:
+- Primary Key: `icao24`
+- `idx_flight_status_last_seen` on `last_seen DESC` (for recent flights query)
+- `idx_flight_status_on_ground` on `on_ground` (for ground operations filter)
+
+**DDL**:
+```sql
+CREATE TABLE flight_status (
+    icao24 VARCHAR(6) PRIMARY KEY,
+    callsign VARCHAR(8),
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    altitude DOUBLE PRECISION,
+    velocity DOUBLE PRECISION,
+    heading DOUBLE PRECISION,
+    on_ground BOOLEAN,
+    vertical_rate DOUBLE PRECISION,
+    flight_phase VARCHAR(20),
+    last_seen TIMESTAMP WITH TIME ZONE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_flight_status_last_seen ON flight_status(last_seen DESC);
+CREATE INDEX idx_flight_status_on_ground ON flight_status(on_ground);
+```
+
+---
+
 ## API Models
 
 ### FlightPosition
@@ -215,6 +274,72 @@ END
 
 ---
 
+## ML Model Types
+
+### FeatureSet
+
+**Description**: Features extracted from flight data for ML model input.
+
+**Module**: `src/ml/features.py`
+
+| Field | Type | Description | Value Range |
+|-------|------|-------------|-------------|
+| `hour_of_day` | int | Hour of position timestamp | 0-23 |
+| `day_of_week` | int | Day of week | 0=Mon, 6=Sun |
+| `is_weekend` | bool | Saturday or Sunday | true/false |
+| `flight_distance_category` | str | Inferred flight distance | "short", "medium", "long" |
+| `altitude_category` | str | Altitude classification | "ground", "low", "cruise" |
+| `heading_quadrant` | int | Heading direction | 1=N, 2=E, 3=S, 4=W |
+| `velocity_normalized` | float | Normalized ground speed | 0.0-1.0 |
+
+### Gate
+
+**Description**: Airport gate configuration.
+
+**Module**: `src/ml/gate_model.py`
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `gate_id` | str | Unique gate identifier | "A1", "B3" |
+| `terminal` | str | Terminal assignment | "A", "B" |
+| `status` | GateStatus | Current availability | AVAILABLE, OCCUPIED |
+| `current_flight` | str | ICAO24 of current flight | "a12345" |
+| `available_at` | datetime | When gate becomes free | 2026-03-06T10:30:00Z |
+
+### GateStatus (Enum)
+
+| Value | Description |
+|-------|-------------|
+| `AVAILABLE` | Gate is free for assignment |
+| `OCCUPIED` | Gate currently in use |
+| `DELAYED` | Gate will be available soon |
+| `MAINTENANCE` | Gate under maintenance |
+
+### CongestionLevel (Enum)
+
+| Value | Capacity Ratio | Description |
+|-------|---------------|-------------|
+| `LOW` | <50% | Normal operations |
+| `MODERATE` | 50-75% | Minor delays possible |
+| `HIGH` | 75-90% | Significant delays expected |
+| `CRITICAL` | >90% | Operations at capacity |
+
+### AirportArea
+
+**Description**: Airport area definition for congestion tracking.
+
+**Module**: `src/ml/congestion_model.py`
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `area_id` | str | Unique area identifier | "runway_28L" |
+| `area_type` | str | Area classification | "runway", "taxiway", "apron" |
+| `capacity` | int | Maximum flight capacity | 2 (runway), 5 (taxiway) |
+| `lat_range` | tuple | Latitude bounds | (37.497, 37.499) |
+| `lon_range` | tuple | Longitude bounds | (-122.015, -121.985) |
+
+---
+
 ## Frontend Types
 
 ### TypeScript Interfaces
@@ -249,29 +374,53 @@ interface FlightsResponse {
 
 ## Data Lineage
 
+```mermaid
+graph TB
+    subgraph "Data Sources"
+        A[OpenSky API] --> B{Circuit Breaker}
+        C[Synthetic Fallback] --> B
+    end
+
+    subgraph "Storage"
+        B --> D[Cloud Storage<br/>/mnt/airport_digital_twin/raw/]
+    end
+
+    subgraph "Delta Live Tables"
+        D --> E[flights_bronze<br/>Raw JSON]
+        E -->|Data Quality| F[flights_silver<br/>Cleaned & Validated]
+        F -->|Aggregation| G[flight_status_gold<br/>Latest State]
+    end
+
+    subgraph "Serving Layer"
+        G --> H[Unity Catalog<br/>Governed Tables]
+        H -->|Sync Job| I[Lakebase<br/>PostgreSQL]
+        H --> J[Databricks SQL]
+    end
+
+    subgraph "Application"
+        I -->|<10ms| K[FastAPI Backend]
+        J -->|~100ms| K
+        K --> L[React Frontend]
+        K --> M[ML Predictions]
+    end
+
+    subgraph "Analytics"
+        H --> N[Lakeview Dashboards]
+        H --> O[Genie NL Queries]
+    end
 ```
-OpenSky API
-    │
-    ▼
-Cloud Storage (/mnt/airport_digital_twin/raw/opensky/)
-    │
-    ▼
-flights_bronze (raw JSON, exploded states array)
-    │
-    ▼ Data Quality Expectations
-flights_silver (cleaned, validated, deduplicated)
-    │
-    ▼ Aggregation + Computed Metrics
-flight_status_gold (latest state per aircraft)
-    │
-    ▼
-Unity Catalog (Governed Access)
-    │
-    ├──▶ FastAPI Backend ──▶ React Frontend
-    │
-    └──▶ Lakeview Dashboards / Genie Queries
-```
+
+### Data Flow Summary
+
+| Stage | Source | Destination | Latency | Description |
+|-------|--------|-------------|---------|-------------|
+| Ingestion | OpenSky API | Cloud Storage | ~1 min | Raw JSON polling |
+| Bronze | Cloud Storage | flights_bronze | ~10s | Auto Loader ingestion |
+| Silver | flights_bronze | flights_silver | ~20s | Data quality + dedup |
+| Gold | flights_silver | flight_status_gold | ~30s | Aggregation to latest |
+| Sync | flight_status_gold | Lakebase | ~1 min | PostgreSQL UPSERT |
+| Serve | Lakebase | Frontend | <10ms | Real-time queries |
 
 ---
 
-*Last updated: 2026-03-06*
+*Last updated: 2026-03-08*

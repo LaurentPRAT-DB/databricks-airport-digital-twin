@@ -16,6 +16,7 @@ from fastapi import APIRouter, Query, BackgroundTasks
 from app.backend.services.data_ops_service import get_data_ops_service
 from app.backend.services.delta_service import get_delta_service
 from app.backend.services.flight_service import get_flight_service
+from src.ingestion.fallback import reset_synthetic_state
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +266,31 @@ async def get_dashboard_data() -> dict:
         "endpoints": stats.acquisition_by_endpoint,
         "recent_acquisitions": recent_acquisitions,
         "recent_syncs": recent_syncs,
+    }
+
+
+@router.post("/reset-synthetic")
+async def reset_synthetic_data() -> dict:
+    """
+    Reset all synthetic flight state.
+
+    Clears all flight states, runway occupancy, and gate assignments
+    to regenerate flights with proper separation from scratch.
+
+    Use this when:
+    - Aircraft overlap in 3D view (old stale data)
+    - Separation constraints need to be re-applied
+    - Starting fresh demo session
+
+    Returns:
+        dict with count of cleared items.
+    """
+    result = reset_synthetic_state()
+    logger.info(f"Synthetic state reset: {result}")
+    return {
+        "status": "success",
+        "message": "Synthetic flight state has been reset",
+        **result,
     }
 
 
