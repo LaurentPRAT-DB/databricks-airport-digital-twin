@@ -174,13 +174,14 @@ class TestSeparationCalculations:
         assert abs(MIN_APPROACH_SEPARATION_DEG - expected_deg) < 0.001
 
     def test_min_taxi_separation(self):
-        """Test minimum taxi separation (~100m / 330ft)."""
-        # 0.001 deg ≈ 111m at equator, reasonable approximation
-        assert MIN_TAXI_SEPARATION_DEG == 0.001
+        """Test minimum taxi separation (~300m for 3D visibility)."""
+        # 0.003 deg ≈ 300m at equator, larger for 3D visualization
+        assert MIN_TAXI_SEPARATION_DEG == 0.003
 
     def test_min_gate_separation(self):
-        """Test minimum gate separation (~200m)."""
-        assert MIN_GATE_SEPARATION_DEG == 0.002
+        """Test minimum gate separation (~800m for 3D scale)."""
+        # 0.010 deg ≈ 800m in 3D scale to prevent visual overlap
+        assert MIN_GATE_SEPARATION_DEG == 0.010
 
     def test_get_required_separation_large_to_large(self):
         """Test required separation calculation for LARGE → LARGE."""
