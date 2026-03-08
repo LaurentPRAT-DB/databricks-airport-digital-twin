@@ -151,30 +151,43 @@ export const AIRPORT_3D_CONFIG: Airport3DConfig = {
       position: { x: -350, y: 0, z: 50 },
       rotation: 0,
     },
-    // Jetbridges - attached to terminal
+    // Jetbridges - 5 gates matching backend GATES positions
+    // Backend gate positions map to 3D x:
+    //   A1: lon -122.016 → x ≈ -128 (wide-body)
+    //   A2: lon -122.008 → x ≈ -64
+    //   A3: lon -122.000 → x ≈ 0 (center)
+    //   B1: lon -121.992 → x ≈ +64
+    //   B2: lon -121.984 → x ≈ +128 (wide-body)
+    // Gate spacing: 0.008 deg = ~64 3D units (ensures MIN_GATE_SEPARATION)
     {
-      id: 'jetbridge-1',
+      id: 'jetbridge-A1',
       type: 'jetbridge',
-      position: { x: -60, y: 0, z: -40 },
-      rotation: -Math.PI / 2,
+      position: { x: -128, y: 0, z: 40 },  // Gate A1 (wide-body)
+      rotation: Math.PI / 2,
     },
     {
-      id: 'jetbridge-2',
+      id: 'jetbridge-A2',
       type: 'jetbridge',
-      position: { x: -20, y: 0, z: -40 },
-      rotation: -Math.PI / 2,
+      position: { x: -64, y: 0, z: 40 },   // Gate A2
+      rotation: Math.PI / 2,
     },
     {
-      id: 'jetbridge-3',
+      id: 'jetbridge-A3',
       type: 'jetbridge',
-      position: { x: 20, y: 0, z: -40 },
-      rotation: -Math.PI / 2,
+      position: { x: 0, y: 0, z: 40 },     // Gate A3 (center)
+      rotation: Math.PI / 2,
     },
     {
-      id: 'jetbridge-4',
+      id: 'jetbridge-B1',
       type: 'jetbridge',
-      position: { x: 60, y: 0, z: -40 },
-      rotation: -Math.PI / 2,
+      position: { x: 64, y: 0, z: 40 },    // Gate B1
+      rotation: Math.PI / 2,
+    },
+    {
+      id: 'jetbridge-B2',
+      type: 'jetbridge',
+      position: { x: 128, y: 0, z: 40 },   // Gate B2 (wide-body)
+      rotation: Math.PI / 2,
     },
     // Fire station - near runway
     {
@@ -221,4 +234,40 @@ export const COLORS = {
   aircraftSelected: 0x00ff00, // Green
   aircraftArriving: 0x4a90d9, // Blue
   aircraftDeparting: 0xd94a4a, // Red
+  separationWarning: 0xffaa00, // Orange - close to minimum separation
+  separationViolation: 0xff0000, // Red - below minimum separation
+} as const;
+
+// ============================================================================
+// SEPARATION CONSTRAINTS (FAA/ICAO Standards) - 3D Scale
+// Convert from degrees to 3D scene units
+// Scale: 1 deg ≈ 10000 scene units (approx)
+// ============================================================================
+
+// 3D scene scale factor for separations
+export const SCENE_SCALE = 10000;
+
+// Minimum approach separation in 3D units (3 NM = ~3000 scene units)
+export const MIN_APPROACH_SEPARATION_3D = 3.0 * (1 / 60) * SCENE_SCALE;
+
+// Minimum taxi separation in 3D units (~100m = ~10 scene units)
+export const MIN_TAXI_SEPARATION_3D = 0.001 * SCENE_SCALE;
+
+// Minimum gate separation in 3D units (~200m = ~20 scene units)
+export const MIN_GATE_SEPARATION_3D = 0.002 * SCENE_SCALE;
+
+// Capacity limits (same as backend)
+export const CAPACITY_LIMITS = {
+  maxApproach: 4,    // Max aircraft on approach
+  maxParked: 5,      // Max parked at gates
+  maxTaxi: 2,        // Max taxiing at once
+} as const;
+
+// Gate positions in 3D coordinates (matching backend)
+export const GATE_POSITIONS_3D = {
+  A1: { x: -128, y: 0, z: 90 },  // Wide-body capable
+  A2: { x: -64, y: 0, z: 90 },
+  A3: { x: 0, y: 0, z: 90 },     // Center gate
+  B1: { x: 64, y: 0, z: 90 },
+  B2: { x: 128, y: 0, z: 90 },   // Wide-body capable
 } as const;
