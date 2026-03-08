@@ -1,6 +1,6 @@
 """Circuit breaker pattern for API failover."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 
@@ -48,7 +48,7 @@ class APICircuitBreaker:
         Increments failure counter. If threshold reached, transitions to open state.
         """
         self.failures += 1
-        self.last_failure_time = datetime.utcnow()
+        self.last_failure_time = datetime.now(timezone.utc)
 
         if self.failures >= self.failure_threshold:
             self.state = "open"
@@ -77,7 +77,7 @@ class APICircuitBreaker:
             if self.last_failure_time is None:
                 return True
 
-            elapsed = (datetime.utcnow() - self.last_failure_time).total_seconds()
+            elapsed = (datetime.now(timezone.utc) - self.last_failure_time).total_seconds()
             if elapsed >= self.recovery_timeout:
                 self.state = "half-open"
                 return True

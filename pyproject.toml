@@ -22,6 +22,9 @@ dependencies = [
     # Data serving layer
     "databricks-sql-connector>=3.0.0",
     "psycopg2-binary>=2.9.9",
+    # Airport format parsers
+    "lxml>=5.0.0",
+    "defusedxml>=0.7.0",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +33,12 @@ dev = [
     "pytest-mock>=3.12",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
+]
+# Optional: IFC parsing (requires system dependencies)
+# Install with: pip install airport-digital-twin[formats]
+formats = [
+    "ifcopenshell>=0.8.0",
+    "trimesh>=4.0.0",
 ]
 
 [build-system]

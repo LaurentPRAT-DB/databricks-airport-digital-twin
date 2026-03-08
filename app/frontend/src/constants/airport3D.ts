@@ -73,52 +73,84 @@ export const AIRPORT_3D_CONFIG: Airport3DConfig = {
   // Scale factor: convert meters to scene units
   scale: 0.001,
 
-  // Terminal building configuration
+  // Terminal building configuration (International Terminal area)
   terminal: {
-    position: { x: 0, y: 10, z: 0 },
-    dimensions: { width: 200, height: 20, depth: 80 },
+    position: { x: -87, y: 10, z: 63 },
+    dimensions: { width: 300, height: 20, depth: 120 },
     color: 0x4a90d9, // Blue-gray
   },
 
-  // Runway configurations (parallel runways)
+  // Runway configurations - Real SFO 4-runway layout from FAA data
+  // Coordinates converted from lat/lon using latLonTo3D transformation
   runways: [
     {
-      id: '28L',
-      start: { x: -500, y: 0.1, z: -100 },
-      end: { x: 500, y: 0.1, z: -100 },
-      width: 45,
-      color: 0x333333, // Dark gray
+      // Runway 28L/10R - 11,381 ft, heading 298°/118° (south parallel)
+      id: '28L/10R',
+      start: { x: 163.6, y: 0.1, z: 95.9 },   // 28L threshold (west)
+      end: { x: -111.7, y: 0.1, z: -49.9 },   // 10R threshold (east)
+      width: 61,  // 200 ft = ~61m
+      color: 0x333333,
     },
     {
-      id: '28R',
-      start: { x: -500, y: 0.1, z: 100 },
-      end: { x: 500, y: 0.1, z: 100 },
-      width: 45,
-      color: 0x333333, // Dark gray
+      // Runway 28R/10L - 11,870 ft, heading 298°/118° (north parallel)
+      id: '28R/10L',
+      start: { x: 173.1, y: 0.1, z: 77.7 },   // 28R threshold (west)
+      end: { x: -114.0, y: 0.1, z: -74.4 },   // 10L threshold (east)
+      width: 61,
+      color: 0x333333,
+    },
+    {
+      // Runway 01L/19R - 7,650 ft, heading 028°/208° (west crosswind)
+      id: '01L/19R',
+      start: { x: -31.1, y: 0.1, z: 134.0 },  // 01L threshold (south)
+      end: { x: 66.5, y: 0.1, z: -51.8 },     // 19R threshold (north)
+      width: 61,
+      color: 0x333333,
+    },
+    {
+      // Runway 01R/19L - 8,650 ft, heading 028°/208° (east crosswind)
+      id: '01R/19L',
+      start: { x: -16.2, y: 0.1, z: 149.7 },  // 01R threshold (south)
+      end: { x: 94.2, y: 0.1, z: -60.4 },     // 19L threshold (north)
+      width: 61,
+      color: 0x333333,
     },
   ],
 
-  // Taxiway configurations
+  // Taxiway configurations - simplified main taxiways
   taxiways: [
     {
+      // Taxiway connecting 28L/10R to terminal
       id: 'A',
       points: [
-        { x: 0, y: 0.05, z: -100 },
-        { x: 0, y: 0.05, z: -50 },
-        { x: 0, y: 0.05, z: 0 },
+        { x: 0, y: 0.05, z: 95 },    // Near 28L
+        { x: -40, y: 0.05, z: 80 },
+        { x: -70, y: 0.05, z: 63 },  // To terminal
       ],
       width: 20,
-      color: 0x555555, // Medium gray
+      color: 0x555555,
     },
     {
+      // Taxiway connecting 28R/10L to terminal
       id: 'B',
       points: [
-        { x: 0, y: 0.05, z: 100 },
-        { x: 0, y: 0.05, z: 50 },
-        { x: 0, y: 0.05, z: 0 },
+        { x: 0, y: 0.05, z: 77 },    // Near 28R
+        { x: -40, y: 0.05, z: 70 },
+        { x: -70, y: 0.05, z: 63 },  // To terminal
       ],
       width: 20,
-      color: 0x555555, // Medium gray
+      color: 0x555555,
+    },
+    {
+      // Taxiway connecting crosswind runways
+      id: 'C',
+      points: [
+        { x: -20, y: 0.05, z: 140 },  // Near 01L/01R
+        { x: -50, y: 0.05, z: 100 },
+        { x: -70, y: 0.05, z: 63 },   // To terminal
+      ],
+      width: 20,
+      color: 0x555555,
     },
   ],
 

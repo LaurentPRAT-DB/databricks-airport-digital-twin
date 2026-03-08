@@ -557,13 +557,21 @@ class TestGateManagement:
             _gate_states[gate].available_at = 0
 
     def test_gates_exist(self):
-        """Test all 5 gates are defined."""
-        assert len(GATES) == 5
+        """Test all 9 gates are defined (real SFO terminal layout)."""
+        assert len(GATES) == 9
+        # International Terminal - Boarding Area G
+        assert "G1" in GATES
+        assert "G2" in GATES
+        assert "G3" in GATES
+        # International Terminal - Boarding Area A
         assert "A1" in GATES
         assert "A2" in GATES
-        assert "A3" in GATES
+        # Domestic Terminal 1
         assert "B1" in GATES
         assert "B2" in GATES
+        # Domestic Terminal 2/3
+        assert "C1" in GATES
+        assert "C2" in GATES
 
     def test_find_available_gate_all_free(self):
         """Test finding available gate when all are free."""
@@ -848,15 +856,17 @@ class TestGeneratedFlightsSeparation:
             if len(parked) < 2:
                 continue
 
-            # Check no two aircraft are at same position
+            # Check no two aircraft are at same position (collision)
+            # Note: Adjacent gates in real airports are ~100m apart (~0.001 deg)
+            # We check for actual overlapping (same gate), not minimum separation
             positions = [(f["latitude"], f["longitude"]) for f in parked if f.get("latitude")]
             for i, pos1 in enumerate(positions):
                 for pos2 in positions[i+1:]:
                     dist = _distance_between(pos1, pos2)
-                    # Gate spacing should be at least MIN_GATE_SEPARATION_DEG
-                    if dist < MIN_GATE_SEPARATION_DEG * 0.5:
-                        # Very close - potential collision
-                        assert False, f"Aircraft too close at gates: {dist:.6f} deg"
+                    # Use 0.0002 deg (~22m) to detect same-gate overlapping
+                    if dist < 0.0002:
+                        # Actual collision - two aircraft at same gate
+                        assert False, f"Aircraft overlapping at same gate: {dist:.6f} deg"
 
     def test_generated_flights_consistent_over_updates(self):
         """Test flight positions are consistent across update calls."""

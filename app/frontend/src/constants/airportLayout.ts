@@ -1,7 +1,7 @@
 import { FeatureCollection, Feature, Polygon, LineString, Point } from 'geojson';
 
-// Airport center coordinates (fictional airport near San Francisco Bay Area)
-export const AIRPORT_CENTER: [number, number] = [37.5, -122.0];
+// Airport center coordinates (SFO - San Francisco International Airport)
+export const AIRPORT_CENTER: [number, number] = [37.6213, -122.379];
 
 // Zoom level for initial view
 export const DEFAULT_ZOOM = 14;
@@ -47,83 +47,132 @@ export const MAX_APPROACH_AIRCRAFT = 4;
 export const MAX_PARKED_AIRCRAFT = 5;  // Number of gates
 export const MAX_TAXI_AIRCRAFT = 2;
 
-// Gate definitions (matching backend fallback.py)
-// Gate positions SOUTH of terminal (lower lat = positive z in 3D)
-// Wide spacing (0.015 deg = ~120 units) for clean visual separation in 3D
+// Gate definitions (matching backend fallback.py) - Real SFO terminal positions
+// Gates spread across International Terminal (G, A) and Domestic Terminals (B, C)
 export const GATE_POSITIONS: Record<string, [number, number]> = {
-  'A1': [37.491, -122.030],  // Wide-body capable (x≈-240)
-  'A2': [37.491, -122.015],  // x≈-120
-  'A3': [37.491, -122.000],  // Center gate (x≈0)
-  'B1': [37.491, -121.985],  // x≈+120
-  'B2': [37.491, -121.970],  // Wide-body capable (x≈+240)
+  // International Terminal - Boarding Area G
+  'G1': [37.6145, -122.3955],  // Wide-body capable
+  'G2': [37.6140, -122.3945],
+  'G3': [37.6135, -122.3935],
+  // International Terminal - Boarding Area A
+  'A1': [37.6155, -122.3900],  // Wide-body capable
+  'A2': [37.6150, -122.3890],
+  // Domestic Terminal 1
+  'B1': [37.6165, -122.3850],
+  'B2': [37.6160, -122.3840],
+  // Domestic Terminal 2/3
+  'C1': [37.6175, -122.3800],
+  'C2': [37.6170, -122.3790],
 };
 
-// GeoJSON FeatureCollection for airport layout
+// GeoJSON FeatureCollection for airport layout - Real SFO from FAA data
 export const airportLayout: FeatureCollection = {
   type: 'FeatureCollection',
   features: [
-    // Runway 10L/28R (main runway)
+    // Runway 28R/10L - 11,870 ft (north parallel, extends into bay)
     {
       type: 'Feature',
       properties: {
         type: 'runway',
-        name: '10L/28R',
-        length: 3000,
-        width: 45,
+        name: '28R/10L',
+        length: 11870,
+        width: 200,
       },
       geometry: {
         type: 'Polygon',
         coordinates: [[
-          [-122.015, 37.502],
-          [-121.985, 37.502],
-          [-121.985, 37.5015],
-          [-122.015, 37.5015],
-          [-122.015, 37.502],
+          [-122.393392, 37.629739],  // 10L threshold + offset
+          [-122.357141, 37.614534],  // 28R threshold + offset
+          [-122.357141, 37.612534],  // 28R threshold - offset
+          [-122.393392, 37.627739],  // 10L threshold - offset
+          [-122.393392, 37.629739],
         ]],
       },
     } as Feature<Polygon>,
 
-    // Runway 10R/28L (parallel runway)
+    // Runway 28L/10R - 11,381 ft (south parallel, extends into bay)
     {
       type: 'Feature',
       properties: {
         type: 'runway',
-        name: '10R/28L',
-        length: 2800,
-        width: 45,
+        name: '28L/10R',
+        length: 11381,
+        width: 200,
       },
       geometry: {
         type: 'Polygon',
         coordinates: [[
-          [-122.012, 37.498],
-          [-121.988, 37.498],
-          [-121.988, 37.4975],
-          [-122.012, 37.4975],
-          [-122.012, 37.498],
+          [-122.393105, 37.627291],  // 10R threshold + offset
+          [-122.358349, 37.612712],  // 28L threshold + offset
+          [-122.358349, 37.610712],  // 28L threshold - offset
+          [-122.393105, 37.625291],  // 10R threshold - offset
+          [-122.393105, 37.627291],
         ]],
       },
     } as Feature<Polygon>,
 
-    // Terminal building
+    // Runway 01R/19L - 8,650 ft (east crosswind)
+    {
+      type: 'Feature',
+      properties: {
+        type: 'runway',
+        name: '01R/19L',
+        length: 8650,
+        width: 200,
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[
+          [-122.380041, 37.606330],  // 01R threshold - offset
+          [-122.366111, 37.627342],  // 19L threshold - offset
+          [-122.368111, 37.627342],  // 19L threshold + offset
+          [-122.382041, 37.606330],  // 01R threshold + offset
+          [-122.380041, 37.606330],
+        ]],
+      },
+    } as Feature<Polygon>,
+
+    // Runway 01L/19R - 7,650 ft (west crosswind)
+    {
+      type: 'Feature',
+      properties: {
+        type: 'runway',
+        name: '01L/19R',
+        length: 7650,
+        width: 200,
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[
+          [-122.381929, 37.607898],  // 01L threshold - offset
+          [-122.369609, 37.626481],  // 19R threshold - offset
+          [-122.371609, 37.626481],  // 19R threshold + offset
+          [-122.383929, 37.607898],  // 01L threshold + offset
+          [-122.381929, 37.607898],
+        ]],
+      },
+    } as Feature<Polygon>,
+
+    // Terminal complex (International Terminal area)
     {
       type: 'Feature',
       properties: {
         type: 'terminal',
-        name: 'Main Terminal',
+        name: 'International Terminal',
       },
       geometry: {
         type: 'Polygon',
         coordinates: [[
-          [-122.005, 37.505],
-          [-121.995, 37.505],
-          [-121.995, 37.503],
-          [-122.005, 37.503],
-          [-122.005, 37.505],
+          [-122.396, 37.618],
+          [-122.386, 37.618],
+          [-122.386, 37.612],
+          [-122.396, 37.612],
+          [-122.396, 37.618],
         ]],
       },
     } as Feature<Polygon>,
 
-    // Taxiway Alpha
+    // Taxiway connecting terminals to runways
     {
       type: 'Feature',
       properties: {
@@ -133,9 +182,9 @@ export const airportLayout: FeatureCollection = {
       geometry: {
         type: 'LineString',
         coordinates: [
-          [-122.005, 37.503],
-          [-122.005, 37.502],
-          [-122.010, 37.502],
+          [-122.390, 37.615],
+          [-122.385, 37.618],
+          [-122.380, 37.622],
         ],
       },
     } as Feature<LineString>,
@@ -150,14 +199,14 @@ export const airportLayout: FeatureCollection = {
       geometry: {
         type: 'LineString',
         coordinates: [
-          [-121.995, 37.503],
-          [-121.995, 37.502],
-          [-121.990, 37.502],
+          [-122.385, 37.615],
+          [-122.380, 37.618],
+          [-122.375, 37.622],
         ],
       },
     } as Feature<LineString>,
 
-    // Taxiway Charlie (connecting runways)
+    // Taxiway connecting to crosswind runways
     {
       type: 'Feature',
       properties: {
@@ -167,8 +216,9 @@ export const airportLayout: FeatureCollection = {
       geometry: {
         type: 'LineString',
         coordinates: [
-          [-122.000, 37.502],
-          [-122.000, 37.498],
+          [-122.383, 37.610],
+          [-122.380, 37.615],
+          [-122.378, 37.620],
         ],
       },
     } as Feature<LineString>,

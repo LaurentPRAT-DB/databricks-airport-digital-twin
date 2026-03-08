@@ -1,7 +1,7 @@
 """Databricks job entrypoint for polling OpenSky API and writing to landing zone."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any
 
@@ -33,7 +33,7 @@ def poll_and_write(
     Returns:
         Count of state vectors written.
     """
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = datetime.now(timezone.utc).isoformat()
     source: str
     data: Dict[str, Any]
 

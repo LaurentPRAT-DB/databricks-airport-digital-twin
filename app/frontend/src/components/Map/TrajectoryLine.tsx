@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import { Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 import { useFlightContext } from '../../context/FlightContext';
-import { useTrajectory } from '../../hooks/useTrajectory';
+import { useTrajectory, TrajectoryPoint } from '../../hooks/useTrajectory';
 
 export default function TrajectoryLine() {
   const { selectedFlight, showTrajectory } = useFlightContext();
@@ -9,16 +10,46 @@ export default function TrajectoryLine() {
     showTrajectory
   );
 
-  if (!showTrajectory || !trajectory || trajectory.points.length === 0) {
-    return null;
-  }
+  // Combine historical trajectory with current position for real-time updates
+  const validPoints = useMemo(() => {
+    if (!trajectory) return [];
 
-  // Filter out points with null coordinates
-  const validPoints = trajectory.points.filter(
-    (p) => p.latitude !== null && p.longitude !== null
-  );
+    // Filter out points with null coordinates from historical data
+    const historicalPoints = trajectory.points.filter(
+      (p) => p.latitude !== null && p.longitude !== null
+    );
 
-  if (validPoints.length < 2) {
+    // Append current aircraft position if available and different from last point
+    if (selectedFlight?.latitude != null && selectedFlight?.longitude != null) {
+      const lastPoint = historicalPoints[historicalPoints.length - 1];
+      const currentPos = {
+        icao24: selectedFlight.icao24,
+        callsign: selectedFlight.callsign,
+        latitude: selectedFlight.latitude,
+        longitude: selectedFlight.longitude,
+        altitude: selectedFlight.altitude,
+        velocity: selectedFlight.velocity,
+        heading: selectedFlight.heading,
+        vertical_rate: selectedFlight.vertical_rate,
+        on_ground: selectedFlight.on_ground,
+        flight_phase: selectedFlight.flight_phase,
+        timestamp: Date.now() / 1000,
+      } as TrajectoryPoint;
+
+      // Only append if position is different from last historical point
+      if (
+        !lastPoint ||
+        Math.abs(lastPoint.latitude! - currentPos.latitude!) > 0.0001 ||
+        Math.abs(lastPoint.longitude! - currentPos.longitude!) > 0.0001
+      ) {
+        return [...historicalPoints, currentPos];
+      }
+    }
+
+    return historicalPoints;
+  }, [trajectory, selectedFlight]);
+
+  if (!showTrajectory || validPoints.length < 2) {
     return null;
   }
 

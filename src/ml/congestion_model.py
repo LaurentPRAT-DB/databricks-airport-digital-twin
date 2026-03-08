@@ -43,49 +43,63 @@ class CongestionPredictor:
 
     def _define_airport_areas(self) -> Dict[str, AirportArea]:
         """Define airport areas with their capacities and bounds."""
-        # Airport center: 37.5, -122.0
+        # Real SFO airport areas from FAA data
         return {
-            "runway_28L": AirportArea(
-                area_id="runway_28L",
+            # Runway 28L/10R (south parallel) - 11,381 ft
+            "runway_28L_10R": AirportArea(
+                area_id="runway_28L_10R",
                 area_type="runway",
                 capacity=2,
-                lat_range=(37.497, 37.499),
-                lon_range=(-122.015, -121.985)
+                lat_range=(37.610, 37.628),
+                lon_range=(-122.395, -122.355)
             ),
-            "runway_28R": AirportArea(
-                area_id="runway_28R",
+            # Runway 28R/10L (north parallel) - 11,870 ft
+            "runway_28R_10L": AirportArea(
+                area_id="runway_28R_10L",
                 area_type="runway",
                 capacity=2,
-                lat_range=(37.501, 37.503),
-                lon_range=(-122.015, -121.985)
+                lat_range=(37.612, 37.630),
+                lon_range=(-122.395, -122.355)
             ),
-            "taxiway_A": AirportArea(
-                area_id="taxiway_A",
+            # Runway 01L/19R (west crosswind) - 7,650 ft
+            "runway_01L_19R": AirportArea(
+                area_id="runway_01L_19R",
+                area_type="runway",
+                capacity=2,
+                lat_range=(37.606, 37.628),
+                lon_range=(-122.385, -122.368)
+            ),
+            # Runway 01R/19L (east crosswind) - 8,650 ft
+            "runway_01R_19L": AirportArea(
+                area_id="runway_01R_19L",
+                area_type="runway",
+                capacity=2,
+                lat_range=(37.605, 37.629),
+                lon_range=(-122.383, -122.365)
+            ),
+            # Main taxiway area
+            "taxiway_main": AirportArea(
+                area_id="taxiway_main",
                 area_type="taxiway",
-                capacity=5,
-                lat_range=(37.502, 37.503),
-                lon_range=(-122.010, -122.005)
+                capacity=8,
+                lat_range=(37.614, 37.620),
+                lon_range=(-122.392, -122.375)
             ),
-            "taxiway_B": AirportArea(
-                area_id="taxiway_B",
-                area_type="taxiway",
-                capacity=5,
-                lat_range=(37.502, 37.503),
-                lon_range=(-121.995, -121.990)
-            ),
-            "terminal_A_apron": AirportArea(
-                area_id="terminal_A_apron",
+            # International Terminal apron (Boarding Areas G, A)
+            "intl_terminal_apron": AirportArea(
+                area_id="intl_terminal_apron",
                 area_type="apron",
-                capacity=10,
-                lat_range=(37.503, 37.506),
-                lon_range=(-122.006, -121.994)
+                capacity=15,
+                lat_range=(37.612, 37.618),
+                lon_range=(-122.398, -122.385)
             ),
-            "terminal_B_apron": AirportArea(
-                area_id="terminal_B_apron",
+            # Domestic Terminal apron (Terminals 1, 2, 3)
+            "domestic_terminal_apron": AirportArea(
+                area_id="domestic_terminal_apron",
                 area_type="apron",
-                capacity=10,
-                lat_range=(37.503, 37.506),
-                lon_range=(-122.006, -121.994)
+                capacity=20,
+                lat_range=(37.614, 37.620),
+                lon_range=(-122.388, -122.375)
             ),
         }
 

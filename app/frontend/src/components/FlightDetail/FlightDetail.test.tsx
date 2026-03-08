@@ -236,20 +236,20 @@ describe('FlightDetail', () => {
       )
     })
 
-    it('trajectory toggle starts off', async () => {
+    it('trajectory toggle is auto-enabled on flight selection', async () => {
       renderWithFlightSelection(0)
 
       await waitFor(
         () => {
           const button = screen.getByRole('button', { name: /show trajectory/i })
-          // Should have slate background indicating off state
-          expect(button).toHaveClass('bg-slate-50')
+          // Should have blue background indicating on state (auto-enabled on selection)
+          expect(button).toHaveClass('bg-blue-50')
         },
         { timeout: 5000 }
       )
     })
 
-    it('clicking trajectory toggle enables it', async () => {
+    it('clicking trajectory toggle toggles it off (auto-enabled on selection)', async () => {
       const user = userEvent.setup()
       renderWithFlightSelection(0)
 
@@ -260,11 +260,16 @@ describe('FlightDetail', () => {
         { timeout: 5000 }
       )
 
+      // Trajectory is auto-enabled when flight is selected (see FlightContext line 37)
       const button = screen.getByRole('button', { name: /show trajectory/i })
+      expect(button).toHaveClass('bg-blue-50')
+
+      // Click toggles it off
       await user.click(button)
 
       await waitFor(() => {
-        expect(button).toHaveClass('bg-blue-50')
+        const updatedButton = screen.getByRole('button', { name: /show trajectory/i })
+        expect(updatedButton).toHaveClass('bg-slate-50')
       })
     })
   })

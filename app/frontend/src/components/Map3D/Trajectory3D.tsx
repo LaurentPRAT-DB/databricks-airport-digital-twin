@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useFlightContext } from '../../context/FlightContext';
-import { useTrajectory } from '../../hooks/useTrajectory';
+import { useTrajectory, TrajectoryPoint } from '../../hooks/useTrajectory';
 import { latLonTo3D } from './Aircraft3D';
 
 export function Trajectory3D() {
@@ -12,14 +12,46 @@ export function Trajectory3D() {
     showTrajectory
   );
 
-  const linePoints = useMemo(() => {
-    if (!trajectory || trajectory.points.length < 2) return null;
+  // Combine historical trajectory with current position for real-time updates
+  const validPoints = useMemo(() => {
+    if (!trajectory) return [];
 
-    // Filter out points with null coordinates
-    const validPoints = trajectory.points.filter(
+    // Filter out points with null coordinates from historical data
+    const historicalPoints = trajectory.points.filter(
       (p) => p.latitude !== null && p.longitude !== null
     );
 
+    // Append current aircraft position if available and different from last point
+    if (selectedFlight?.latitude != null && selectedFlight?.longitude != null) {
+      const lastPoint = historicalPoints[historicalPoints.length - 1];
+      const currentPos = {
+        icao24: selectedFlight.icao24,
+        callsign: selectedFlight.callsign,
+        latitude: selectedFlight.latitude,
+        longitude: selectedFlight.longitude,
+        altitude: selectedFlight.altitude,
+        velocity: selectedFlight.velocity,
+        heading: selectedFlight.heading,
+        vertical_rate: selectedFlight.vertical_rate,
+        on_ground: selectedFlight.on_ground,
+        flight_phase: selectedFlight.flight_phase,
+        timestamp: Date.now() / 1000,
+      } as TrajectoryPoint;
+
+      // Only append if position is different from last historical point
+      if (
+        !lastPoint ||
+        Math.abs(lastPoint.latitude! - currentPos.latitude!) > 0.0001 ||
+        Math.abs(lastPoint.longitude! - currentPos.longitude!) > 0.0001
+      ) {
+        return [...historicalPoints, currentPos];
+      }
+    }
+
+    return historicalPoints;
+  }, [trajectory, selectedFlight]);
+
+  const linePoints = useMemo(() => {
     if (validPoints.length < 2) return null;
 
     // Convert lat/lon to 3D coordinates
@@ -27,15 +59,10 @@ export function Trajectory3D() {
       const pos = latLonTo3D(p.latitude!, p.longitude!, p.altitude);
       return new THREE.Vector3(pos.x, pos.y, pos.z);
     });
-  }, [trajectory]);
+  }, [validPoints]);
 
   const colors = useMemo(() => {
-    if (!trajectory || trajectory.points.length < 2) return null;
-
-    // Create color gradient based on time (older = more transparent blue, newer = bright blue)
-    const validPoints = trajectory.points.filter(
-      (p) => p.latitude !== null && p.longitude !== null
-    );
+    if (validPoints.length < 2) return null;
 
     return validPoints.map((_, index) => {
       const t = index / (validPoints.length - 1);
@@ -45,7 +72,7 @@ export function Trajectory3D() {
       const b = 0.8 + t * 0.2;
       return new THREE.Color(r, g, b);
     });
-  }, [trajectory]);
+  }, [validPoints]);
 
   if (!showTrajectory || !linePoints || linePoints.length < 2) {
     return null;

@@ -226,9 +226,15 @@ describe('FlightContext', () => {
       // Suppress console.error for this test
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-      expect(() => {
+      let thrownError: Error | null = null
+      try {
         renderHook(() => useFlightContext())
-      }).toThrow('useFlightContext must be used within FlightProvider')
+      } catch (error) {
+        thrownError = error as Error
+      }
+
+      expect(thrownError).not.toBeNull()
+      expect(thrownError?.message).toBe('useFlightContext must be used within FlightProvider')
 
       consoleSpy.mockRestore()
     })

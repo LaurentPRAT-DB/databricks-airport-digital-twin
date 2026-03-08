@@ -470,21 +470,22 @@ class TestCongestionModel:
         """Verify areas are defined."""
         predictor = CongestionPredictor()
 
-        # Should have 6 areas defined
-        assert len(predictor.areas) == 6
+        # Should have 7 areas defined (4 runways + 1 taxiway + 2 aprons)
+        assert len(predictor.areas) == 7
 
-        # Check specific areas exist
-        assert "runway_28L" in predictor.areas
-        assert "runway_28R" in predictor.areas
-        assert "taxiway_A" in predictor.areas
-        assert "taxiway_B" in predictor.areas
-        assert "terminal_A_apron" in predictor.areas
-        assert "terminal_B_apron" in predictor.areas
+        # Check specific areas exist (real SFO layout)
+        assert "runway_28L_10R" in predictor.areas
+        assert "runway_28R_10L" in predictor.areas
+        assert "runway_01L_19R" in predictor.areas
+        assert "runway_01R_19L" in predictor.areas
+        assert "taxiway_main" in predictor.areas
+        assert "intl_terminal_apron" in predictor.areas
+        assert "domestic_terminal_apron" in predictor.areas
 
         # Check capacities are set
-        assert predictor.areas["runway_28L"].capacity == 2
-        assert predictor.areas["taxiway_A"].capacity == 5
-        assert predictor.areas["terminal_A_apron"].capacity == 10
+        assert predictor.areas["runway_28L_10R"].capacity == 2
+        assert predictor.areas["taxiway_main"].capacity == 8
+        assert predictor.areas["intl_terminal_apron"].capacity == 15
 
     def test_congestion_prediction(self):
         """Verify returns AreaCongestion list."""
@@ -493,7 +494,7 @@ class TestCongestionModel:
         # Empty flights should still return predictions for all areas
         results = predictor.predict([])
 
-        assert len(results) == 6
+        assert len(results) == 7
         for result in results:
             assert isinstance(result, AreaCongestion)
             assert result.area_id is not None
@@ -551,7 +552,7 @@ class TestCongestionModel:
         results = predictor.predict([])
 
         # Should return predictions for all areas
-        assert len(results) == 6
+        assert len(results) == 7
 
         # All should be LOW congestion with zero flights
         for result in results:
@@ -563,7 +564,7 @@ class TestCongestionModel:
         """Test the predict_congestion convenience function."""
         results = predict_congestion([])
 
-        assert len(results) == 6
+        assert len(results) == 7
         for result in results:
             assert isinstance(result, AreaCongestion)
 
@@ -571,20 +572,21 @@ class TestCongestionModel:
         """Test that flights in runway area are counted."""
         predictor = CongestionPredictor()
 
-        # Flight on runway_28L
+        # Flight on runway_28L_10R (Real SFO coordinates)
+        # runway_28L_10R: lat_range=(37.610, 37.628), lon_range=(-122.395, -122.355)
         flights = [
             {
                 "icao24": "abc123",
-                "latitude": 37.498,
-                "longitude": -122.000,
+                "latitude": 37.615,
+                "longitude": -122.370,
                 "on_ground": True,
                 "baro_altitude": 0,
                 "velocity": 50
             },
             {
                 "icao24": "def456",
-                "latitude": 37.498,
-                "longitude": -122.005,
+                "latitude": 37.620,
+                "longitude": -122.375,
                 "on_ground": True,
                 "baro_altitude": 0,
                 "velocity": 30
@@ -593,8 +595,8 @@ class TestCongestionModel:
 
         results = predictor.predict(flights)
 
-        # Find runway_28L result
-        runway_result = next(r for r in results if r.area_id == "runway_28L")
+        # Find runway_28L_10R result
+        runway_result = next(r for r in results if r.area_id == "runway_28L_10R")
         assert runway_result.flight_count == 2
         assert runway_result.level == CongestionLevel.CRITICAL  # 2/2 = 100%
 
@@ -602,12 +604,13 @@ class TestCongestionModel:
         """Test that stationary flights in apron area are counted."""
         predictor = CongestionPredictor()
 
-        # Flight in terminal_A_apron (stationary)
+        # Flight in intl_terminal_apron (stationary) (Real SFO coordinates)
+        # intl_terminal_apron: lat_range=(37.612, 37.618), lon_range=(-122.398, -122.385)
         flights = [
             {
                 "icao24": "ghi789",
-                "latitude": 37.504,
-                "longitude": -122.000,
+                "latitude": 37.615,
+                "longitude": -122.390,
                 "on_ground": True,
                 "baro_altitude": 0,
                 "velocity": 0  # Stationary
@@ -616,7 +619,7 @@ class TestCongestionModel:
 
         results = predictor.predict(flights)
 
-        # Find terminal_A_apron result
-        apron_result = next(r for r in results if r.area_id == "terminal_A_apron")
+        # Find intl_terminal_apron result
+        apron_result = next(r for r in results if r.area_id == "intl_terminal_apron")
         assert apron_result.flight_count == 1
-        assert apron_result.level == CongestionLevel.LOW  # 1/10 = 10%
+        assert apron_result.level == CongestionLevel.LOW  # 1/15 < 10%
