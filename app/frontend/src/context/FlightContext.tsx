@@ -33,8 +33,8 @@ export function FlightProvider({ children }: { children: ReactNode }) {
   // Stable callback for setting selected flight
   const setSelectedFlight = useCallback((flight: Flight | null) => {
     setSelectedFlightId(flight?.icao24 || null);
-    // Reset trajectory when deselecting
-    if (!flight) setShowTrajectoryState(false);
+    // Auto-enable trajectory when selecting, disable when deselecting
+    setShowTrajectoryState(!!flight);
   }, []);
 
   // Stable callback for trajectory toggle

@@ -1076,40 +1076,45 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     now = datetime.now(timezone.utc)
     interval_seconds = (minutes * 60) / num_points
 
-    # Create an approach trajectory (from far to runway)
+    # Get the current flight state if available
+    current_state = _flight_states.get(icao24)
+
+    # Create trajectory based on flight's current phase
+    # Use ILS approach path aligned with runway 28L (lat 37.49)
     for i in range(num_points):
         t = i / (num_points - 1) if num_points > 1 else 0  # Progress 0 to 1
 
-        # Interpolate along approach path
-        if t < 0.3:
-            # Initial approach - high altitude, far from airport
-            lat = 37.52 - (t / 0.3) * 0.02
-            lon = -121.92 - (t / 0.3) * 0.03
-            alt = 6000 - (t / 0.3) * 3000
+        # Straight-in ILS approach aligned with runway 28L centerline (lat 37.49)
+        if t < 0.2:
+            # FAF - Initial approach at 12 NM, 6000 ft
+            lat = 37.49  # On centerline
+            lon = -121.75 + t * 0.35  # Moving west from -121.75 to -121.82
+            alt = 6000 - t * 10000  # 6000 to 4000 ft
             phase = "approaching"
-        elif t < 0.6:
+        elif t < 0.5:
             # Intermediate approach
-            lat = 37.50 - ((t - 0.3) / 0.3) * 0.01
-            lon = -121.95 - ((t - 0.3) / 0.3) * 0.03
-            alt = 3000 - ((t - 0.3) / 0.3) * 2000
+            lat = 37.49  # On centerline
+            lon = -121.82 + (t - 0.2) * 0.33  # -121.82 to -121.92
+            alt = 4000 - (t - 0.2) * 6667  # 4000 to 2000 ft
             phase = "descending"
-        elif t < 0.8:
-            # Final approach
-            lat = 37.49
-            lon = -121.98 - ((t - 0.6) / 0.2) * 0.02
-            alt = 1000 - ((t - 0.6) / 0.2) * 900
+        elif t < 0.75:
+            # Final approach - short final
+            lat = 37.49  # On centerline
+            lon = -121.92 + (t - 0.5) * 0.12  # -121.92 to -121.95
+            alt = 2000 - (t - 0.5) * 8000  # 2000 to 0 ft
             phase = "landing"
         else:
-            # On ground, taxiing
-            lat = 37.49 + ((t - 0.8) / 0.2) * 0.014
-            lon = -122.0 - ((t - 0.8) / 0.2) * 0.004
+            # On ground, taxiing to gate
+            progress = (t - 0.75) / 0.25
+            lat = 37.49 + progress * 0.001  # Move slightly north toward terminal
+            lon = -121.95 - progress * 0.05  # Move west along taxiway
             alt = 0
             phase = "ground"
 
-        # Calculate heading (roughly west for approach)
-        heading = 270 + random.uniform(-5, 5)
-        velocity = 150 if alt > 0 else 15  # Ground speed
-        vertical_rate = -500 if alt > 0 else 0
+        # Calculate heading (280° for runway 28, roughly west)
+        heading = 280 + random.uniform(-2, 2) if alt > 0 else 0
+        velocity = 150 - t * 100 if alt > 0 else 15  # Slow down on approach
+        vertical_rate = -500 if alt > 100 else 0
 
         timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
 
@@ -1117,10 +1122,10 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
             "timestamp": timestamp.isoformat(),
             "icao24": icao24,
             "callsign": callsign,
-            "latitude": lat + random.uniform(-0.001, 0.001),
-            "longitude": lon + random.uniform(-0.001, 0.001),
-            "altitude": max(0, alt + random.uniform(-50, 50)),
-            "velocity": velocity + random.uniform(-5, 5),
+            "latitude": lat + random.uniform(-0.0005, 0.0005),  # Small jitter
+            "longitude": lon + random.uniform(-0.0005, 0.0005),
+            "altitude": max(0, alt + random.uniform(-20, 20)),
+            "velocity": max(10, velocity + random.uniform(-5, 5)),
             "heading": heading,
             "vertical_rate": vertical_rate,
             "on_ground": alt == 0,
