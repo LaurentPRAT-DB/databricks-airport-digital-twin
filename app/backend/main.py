@@ -18,7 +18,7 @@ from app.backend.api.data_ops import router as data_ops_router
 from app.backend.services.data_generator_service import get_data_generator_service
 from app.backend.services.airport_config_service import get_airport_config_service
 from app.backend.services.prediction_service import get_prediction_service
-from src.ingestion.fallback import reload_gates
+from src.ingestion.fallback import reload_gates, set_airport_center, AIRPORT_CENTER
 from src.ml.gate_model import reload_gate_recommender
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,8 @@ async def _background_init(app: FastAPI):
                 f"{len(config.get('osmTaxiways', []))} taxiways, "
                 f"{len(config.get('osmAprons', []))} aprons"
             )
+            # Ensure airport center is set to SFO default on startup
+            set_airport_center(AIRPORT_CENTER[0], AIRPORT_CENTER[1])
             gates = reload_gates()
             logger.info(f"Reloaded {len(gates)} gates for synthetic data generation")
 

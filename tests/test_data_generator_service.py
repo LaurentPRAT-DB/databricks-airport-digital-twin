@@ -73,7 +73,7 @@ class TestDataGeneratorServiceInitialization:
 
     @pytest.mark.asyncio
     async def test_initialize_all_data_lakebase_unavailable(self):
-        """Test initialization returns False when Lakebase unavailable."""
+        """Test initialization succeeds even when Lakebase unavailable (in-memory generators still work)."""
         service = DataGeneratorService()
 
         mock_lakebase = MagicMock()
@@ -85,8 +85,8 @@ class TestDataGeneratorServiceInitialization:
         ):
             result = await service.initialize_all_data()
 
-        assert result is False
-        assert service._initialized is False
+        assert result is True
+        assert service._initialized is True
 
     @pytest.mark.asyncio
     async def test_initialize_all_data_success(self):

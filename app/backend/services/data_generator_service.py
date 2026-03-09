@@ -88,18 +88,16 @@ class DataGeneratorService:
             logger.info(f"Data already initialized for {airport_icao}, skipping")
             return True
 
-        lakebase = get_lakebase_service()
-        if not lakebase.is_available:
-            logger.warning("Lakebase not available, skipping data initialization")
-            return False
-
         # Update current airport context
         self._current_airport_icao = airport_icao
         self._airport = _icao_to_iata(airport_icao)
         self._weather_station = airport_icao
 
+        lakebase = get_lakebase_service()
+        has_lakebase = lakebase.is_available
+
         logger.info("=" * 60)
-        logger.info(f"Initializing synthetic data to Lakebase for {airport_icao}")
+        logger.info(f"Initializing synthetic data for {airport_icao} (Lakebase: {'available' if has_lakebase else 'unavailable'})")
         logger.info("=" * 60)
 
         total_steps = 7
@@ -107,22 +105,22 @@ class DataGeneratorService:
         try:
             if progress_callback:
                 await progress_callback(4, total_steps, "Generating flight schedule...", False)
-            schedule_count = await self._generate_schedule()
+            schedule_count = await self._generate_schedule() if has_lakebase else 0
             logger.info(f"  Schedule: {schedule_count} flights")
 
             if progress_callback:
                 await progress_callback(5, total_steps, "Generating weather data...", False)
-            weather_count = await self._generate_weather()
+            weather_count = await self._generate_weather() if has_lakebase else 0
             logger.info(f"  Weather: {weather_count} station(s)")
 
             if progress_callback:
                 await progress_callback(6, total_steps, "Generating baggage data...", False)
-            baggage_count = await self._generate_baggage()
+            baggage_count = await self._generate_baggage() if has_lakebase else 0
             logger.info(f"  Baggage: {baggage_count} flight stats")
 
             if progress_callback:
                 await progress_callback(7, total_steps, "Generating GSE fleet data...", False)
-            gse_count = await self._generate_gse_fleet()
+            gse_count = await self._generate_gse_fleet() if has_lakebase else 0
             logger.info(f"  GSE Fleet: {gse_count} units")
 
             logger.info("=" * 60)

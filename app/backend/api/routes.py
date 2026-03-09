@@ -769,17 +769,16 @@ async def activate_airport(icao_code: str) -> dict:
     gates = reload_gates()
     gate_recommender_count = reload_gate_recommender()
 
-    # Step 3: Reset state (fast)
+    # Step 3: Set airport center BEFORE resetting state, so any concurrent
+    # flight generation uses the new center immediately
     await broadcaster.broadcast_progress(3, total_steps, "Resetting flight state...", icao_code)
-    reset_result = reset_synthetic_state()
-
-    # Update airport center for synthetic flight generation
     from src.ingestion.schedule_generator import AIRPORT_COORDINATES
     from app.backend.services.data_generator_service import _icao_to_iata
     iata_code = _icao_to_iata(icao_code)
     if iata_code in AIRPORT_COORDINATES:
         lat, lon = AIRPORT_COORDINATES[iata_code]
         set_airport_center(lat, lon)
+    reset_result = reset_synthetic_state()
 
     # Check if data generation is needed
     data_generator = get_data_generator_service()

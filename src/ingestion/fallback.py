@@ -1867,7 +1867,7 @@ def reset_synthetic_state() -> dict:
     cleared_flights = len(_flight_states)
     cleared_gates = len(_gate_states)
 
-    # Clear all state
+    # Clear flight state only — airport center is managed by the activate endpoint
     _flight_states.clear()
     _last_update = 0.0
     _runway_28L = RunwayState()
