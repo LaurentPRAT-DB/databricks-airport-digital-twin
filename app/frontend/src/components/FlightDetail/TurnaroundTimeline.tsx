@@ -62,6 +62,7 @@ export default function TurnaroundTimeline({
   const [turnaround, setTurnaround] = useState<TurnaroundStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPhase, setSelectedPhase] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchTurnaround() {
@@ -130,31 +131,48 @@ export default function TurnaroundTimeline({
       </div>
 
       {/* Phase indicators */}
-      <div className="flex justify-between mb-4">
+      {selectedPhase && (
+        <div className="text-xs text-slate-600 bg-slate-50 rounded px-2 py-1 mb-2 flex justify-between items-center">
+          <span>
+            <span className="font-medium">{PHASE_LABELS[selectedPhase]}</span>
+            {' — '}
+            {PHASE_ORDER.indexOf(selectedPhase) < currentPhaseIndex
+              ? 'Completed'
+              : selectedPhase === turnaround.current_phase
+              ? `In progress (${turnaround.phase_progress_pct}%)`
+              : 'Pending'}
+          </span>
+          <button
+            onClick={() => setSelectedPhase(null)}
+            className="text-slate-400 hover:text-slate-600 ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      <div className="flex items-center mb-4">
         {PHASE_ORDER.map((phase, idx) => {
           const isCompleted = idx < currentPhaseIndex;
           const isCurrent = phase === turnaround.current_phase;
+          const isSelected = selectedPhase === phase;
 
           return (
             <div
               key={phase}
-              className="flex flex-col items-center"
-              title={PHASE_LABELS[phase]}
+              className="flex flex-col items-center flex-1 min-w-0 cursor-pointer group"
+              onClick={() => setSelectedPhase(prev => prev === phase ? null : phase)}
             >
               <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] shrink-0 transition-transform ${
                   isCompleted
                     ? 'bg-green-500 text-white'
                     : isCurrent
                     ? 'bg-blue-500 text-white animate-pulse'
                     : 'bg-slate-200 text-slate-400'
-                }`}
+                } ${isSelected ? 'ring-2 ring-blue-300 scale-110' : 'group-hover:scale-110'}`}
               >
                 {isCompleted ? '✓' : idx + 1}
               </div>
-              <span className="text-[10px] text-slate-500 mt-1 truncate w-12 text-center">
-                {PHASE_LABELS[phase]?.split(' ')[0]}
-              </span>
             </div>
           );
         })}

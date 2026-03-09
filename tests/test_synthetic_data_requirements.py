@@ -1301,11 +1301,18 @@ class TestValidationChecklist:
         assert callable(_find_available_gate)
 
     def test_delay_distribution_matches_bts(self):
-        """Checklist: Delay distribution matches BTS statistics (15% delayed)."""
+        """Checklist: Delay distribution matches BTS statistics (15% delayed).
+
+        Uses multiple schedule generations to reduce variance from random sampling.
+        """
         random.seed(42)
-        schedule = generate_daily_schedule("SFO")
-        delayed = sum(1 for f in schedule if f["delay_minutes"] > 0)
-        rate = delayed / len(schedule) if schedule else 0
+        total = 0
+        delayed = 0
+        for _ in range(5):
+            schedule = generate_daily_schedule("SFO")
+            total += len(schedule)
+            delayed += sum(1 for f in schedule if f["delay_minutes"] > 0)
+        rate = delayed / total if total else 0
         assert 0.08 <= rate <= 0.25
 
     def test_baggage_counts_match_formula(self):

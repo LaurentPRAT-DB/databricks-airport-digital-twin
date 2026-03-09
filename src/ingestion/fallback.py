@@ -784,20 +784,24 @@ def _get_origin_country(origin_iata: Optional[str]) -> str:
     return "United States"
 
 
-def _pick_random_origin() -> str:
-    """Pick a random origin airport for arriving flights."""
+def _pick_random_airport(exclude: Optional[str] = None) -> str:
+    """Pick a random airport, excluding the specified one (typically the local airport)."""
     from src.ingestion.schedule_generator import DOMESTIC_AIRPORTS, INTERNATIONAL_AIRPORTS
     if random.random() < 0.7:
-        return random.choice(DOMESTIC_AIRPORTS)
-    return random.choice(INTERNATIONAL_AIRPORTS)
+        pool = [a for a in DOMESTIC_AIRPORTS if a != exclude] or DOMESTIC_AIRPORTS
+    else:
+        pool = [a for a in INTERNATIONAL_AIRPORTS if a != exclude] or INTERNATIONAL_AIRPORTS
+    return random.choice(pool)
+
+
+def _pick_random_origin() -> str:
+    """Pick a random origin airport for arriving flights (never the local airport)."""
+    return _pick_random_airport(exclude=get_current_airport_iata())
 
 
 def _pick_random_destination() -> str:
-    """Pick a random destination airport for departing flights."""
-    from src.ingestion.schedule_generator import DOMESTIC_AIRPORTS, INTERNATIONAL_AIRPORTS
-    if random.random() < 0.7:
-        return random.choice(DOMESTIC_AIRPORTS)
-    return random.choice(INTERNATIONAL_AIRPORTS)
+    """Pick a random destination airport for departing flights (never the local airport)."""
+    return _pick_random_airport(exclude=get_current_airport_iata())
 
 
 def _create_new_flight(
@@ -1481,8 +1485,13 @@ def generate_synthetic_flights(
                 origin = local_iata
                 dest = _pick_random_destination()
             elif selected_phase == FlightPhase.PARKED:
-                origin = _pick_random_origin()
-                dest = _pick_random_destination()
+                # Parked at local airport: randomly arrived here or about to depart
+                if random.random() < 0.5:
+                    origin = _pick_random_origin()
+                    dest = local_iata
+                else:
+                    origin = local_iata
+                    dest = _pick_random_destination()
 
             _flight_states[icao24] = _create_new_flight(icao24, callsign, selected_phase, origin=origin, destination=dest)
 
