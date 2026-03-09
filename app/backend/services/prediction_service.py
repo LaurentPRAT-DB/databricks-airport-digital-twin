@@ -1,16 +1,17 @@
-"""Prediction service for orchestrating all ML models."""
+"""Prediction service for orchestrating all ML models.
+
+Uses AirportModelRegistry for per-airport model instances so that
+predictions are correct regardless of which airport is active.
+"""
 
 import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
-from src.ml.delay_model import DelayPredictor, DelayPrediction
-from src.ml.gate_model import (
-    GateRecommendation,
-    get_gate_recommender,
-    reload_gate_recommender,
-)
-from src.ml.congestion_model import CongestionPredictor, AreaCongestion
+from src.ml.delay_model import DelayPrediction
+from src.ml.gate_model import GateRecommendation
+from src.ml.congestion_model import AreaCongestion
+from src.ml.registry import AirportModelRegistry, get_model_registry
 
 logger = logging.getLogger(__name__)
 
@@ -18,56 +19,69 @@ logger = logging.getLogger(__name__)
 class PredictionService:
     """Service for orchestrating delay, gate, and congestion predictions.
 
-    The gate recommender automatically uses OSM gate data when available,
-    providing accurate recommendations based on real airport layout.
+    Models are resolved per-airport via AirportModelRegistry, so
+    switching airports automatically uses the correct model set.
     """
 
-    def __init__(self):
-        """Initialize prediction service with all ML models."""
-        self.delay_predictor = DelayPredictor()
-        # Use singleton gate recommender (loads OSM gates automatically)
-        self._gate_recommender = None
-        self.congestion_predictor = CongestionPredictor()
+    def __init__(self, airport_code: str = "KSFO"):
+        """Initialize prediction service.
+
+        Args:
+            airport_code: Initial ICAO airport code.
+        """
+        self._airport_code = airport_code
+        self._registry: AirportModelRegistry = get_model_registry()
+
+    @property
+    def airport_code(self) -> str:
+        return self._airport_code
+
+    def set_airport(self, airport_code: str) -> None:
+        """Switch the active airport for predictions.
+
+        Args:
+            airport_code: ICAO code of the new airport.
+        """
+        self._airport_code = airport_code
+        logger.info(f"PredictionService switched to {airport_code}")
+
+    def _models(self) -> Dict[str, Any]:
+        return self._registry.get_models(self._airport_code)
+
+    @property
+    def delay_predictor(self):
+        return self._models()["delay"]
 
     @property
     def gate_recommender(self):
-        """Get gate recommender (lazy-loaded singleton with OSM data)."""
-        if self._gate_recommender is None:
-            self._gate_recommender = get_gate_recommender()
-            logger.info(
-                f"PredictionService using {len(self._gate_recommender.gates)} gates"
-            )
-        return self._gate_recommender
+        return self._models()["gate"]
 
-    def reload_gates(self) -> int:
-        """
-        Reload gate data from OSM configuration.
+    @property
+    def congestion_predictor(self):
+        return self._models()["congestion"]
 
-        Call this after importing new OSM airport data.
+    def reload_gates(self, airport_code: Optional[str] = None) -> int:
+        """Retrain models for an airport (picks up latest OSM config).
+
+        Args:
+            airport_code: ICAO code. Defaults to current airport.
 
         Returns:
-            Number of gates loaded
+            Number of gates in the new gate recommender.
         """
-        count = reload_gate_recommender()
-        self._gate_recommender = get_gate_recommender()
-        logger.info(f"Reloaded {count} gates from OSM data")
+        code = airport_code or self._airport_code
+        models = self._registry.retrain(code)
+        count = len(models["gate"].gates)
+        logger.info(f"Reloaded models for {code} ({count} gates)")
         return count
 
     async def get_flight_predictions(
         self, flights: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """
-        Get all predictions for a list of flights.
+        """Get all predictions for a list of flights.
 
         Runs delay, gate, and congestion predictions in parallel.
-
-        Args:
-            flights: List of flight data dictionaries.
-
-        Returns:
-            Dictionary with delays, gates, and congestion predictions.
         """
-        # Run all predictions concurrently
         delay_task = asyncio.create_task(self._get_all_delays(flights))
         gate_task = asyncio.create_task(self._get_all_gates(flights))
         congestion_task = asyncio.create_task(self._get_congestion_internal(flights))
@@ -85,13 +99,10 @@ class PredictionService:
     async def _get_all_delays(
         self, flights: List[Dict[str, Any]]
     ) -> Dict[str, DelayPrediction]:
-        """Get delay predictions for all flights keyed by icao24."""
-        # Run in thread pool to avoid blocking
         loop = asyncio.get_event_loop()
         predictions = await loop.run_in_executor(
             None, self.delay_predictor.predict_batch, flights
         )
-
         return {
             flight.get("icao24", f"unknown_{i}"): pred
             for i, (flight, pred) in enumerate(zip(flights, predictions))
@@ -100,7 +111,6 @@ class PredictionService:
     async def _get_all_gates(
         self, flights: List[Dict[str, Any]]
     ) -> Dict[str, GateRecommendation]:
-        """Get gate recommendations for all flights keyed by icao24."""
         result = {}
         for flight in flights:
             icao24 = flight.get("icao24")
@@ -113,7 +123,6 @@ class PredictionService:
     async def _get_congestion_internal(
         self, flights: List[Dict[str, Any]]
     ) -> List[AreaCongestion]:
-        """Get congestion for all areas."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None, self.congestion_predictor.predict, flights
@@ -122,15 +131,6 @@ class PredictionService:
     async def get_delay_prediction(
         self, flight: Dict[str, Any]
     ) -> DelayPrediction:
-        """
-        Get delay prediction for a single flight.
-
-        Args:
-            flight: Flight data dictionary.
-
-        Returns:
-            DelayPrediction with delay estimate and confidence.
-        """
         loop = asyncio.get_event_loop()
         predictions = await loop.run_in_executor(
             None, self.delay_predictor.predict_batch, [flight]
@@ -140,31 +140,11 @@ class PredictionService:
     async def get_gate_recommendations(
         self, flight: Dict[str, Any], top_k: int = 3
     ) -> List[GateRecommendation]:
-        """
-        Get gate recommendations for a single flight.
-
-        Args:
-            flight: Flight data dictionary.
-            top_k: Number of recommendations to return.
-
-        Returns:
-            List of GateRecommendation sorted by score.
-        """
         return self.gate_recommender.recommend(flight, top_k=top_k)
 
     async def get_congestion(
         self, flights: Optional[List[Dict[str, Any]]] = None
     ) -> List[AreaCongestion]:
-        """
-        Get current congestion for all airport areas.
-
-        Args:
-            flights: Optional list of flights. If None, returns predictions
-                     based on empty flight list.
-
-        Returns:
-            List of AreaCongestion for all defined areas.
-        """
         if flights is None:
             flights = []
         return self.congestion_predictor.predict(flights)
@@ -172,15 +152,6 @@ class PredictionService:
     async def get_bottlenecks(
         self, flights: Optional[List[Dict[str, Any]]] = None
     ) -> List[AreaCongestion]:
-        """
-        Get only HIGH and CRITICAL congestion areas.
-
-        Args:
-            flights: Optional list of flights.
-
-        Returns:
-            List of AreaCongestion with HIGH or CRITICAL levels only.
-        """
         if flights is None:
             flights = []
         return self.congestion_predictor.get_bottlenecks(flights)
@@ -191,12 +162,7 @@ _prediction_service: Optional[PredictionService] = None
 
 
 def get_prediction_service() -> PredictionService:
-    """
-    Dependency function for FastAPI injection.
-
-    Returns:
-        PredictionService singleton instance.
-    """
+    """Dependency function for FastAPI injection."""
     global _prediction_service
     if _prediction_service is None:
         _prediction_service = PredictionService()

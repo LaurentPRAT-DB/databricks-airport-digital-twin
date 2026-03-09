@@ -41,6 +41,8 @@ from app.backend.models.airport_config import (
 )
 from src.ingestion.fallback import generate_synthetic_trajectory, reload_gates, reset_synthetic_state, set_airport_center
 from src.ml.gate_model import reload_gate_recommender
+from src.ml.registry import get_model_registry
+from app.backend.services.prediction_service import get_prediction_service
 from src.formats.base import ParseError, ValidationError
 
 
@@ -764,10 +766,16 @@ async def activate_airport(icao_code: str) -> dict:
     config = service.get_config()
     source = "lakehouse" if config.get("source") == "LAKEHOUSE" else "osm"
 
-    # Step 2: Reload gates (fast)
-    await broadcaster.broadcast_progress(2, total_steps, "Reloading gate positions...", icao_code)
+    # Step 2: Reload gates and swap ML models (fast)
+    await broadcaster.broadcast_progress(2, total_steps, "Reloading gate positions and ML models...", icao_code)
     gates = reload_gates()
     gate_recommender_count = reload_gate_recommender()
+
+    # Swap ML models to airport-specific instances
+    registry = get_model_registry()
+    registry.retrain(icao_code)
+    prediction_service = get_prediction_service()
+    prediction_service.set_airport(icao_code)
 
     # Step 3: Set airport center BEFORE resetting state, so any concurrent
     # flight generation uses the new center immediately

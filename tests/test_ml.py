@@ -383,7 +383,7 @@ class TestGateModel:
             Gate("A2", "A", GateStatus.OCCUPIED),
             Gate("A3", "A", GateStatus.AVAILABLE),
         ]
-        recommender = GateRecommender(gates)
+        recommender = GateRecommender(gates=gates)
 
         flight = {"icao24": "abc123", "callsign": "SWA123"}  # Domestic
         recommendations = recommender.recommend(flight, top_k=10)

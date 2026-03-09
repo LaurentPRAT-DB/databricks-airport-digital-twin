@@ -349,13 +349,45 @@ def generate_gse_positions(
     return gse_units
 
 
-def get_fleet_status() -> dict:
-    """
-    Get overall GSE fleet status.
+def _get_gate_count(airport_code: str = "KSFO") -> int:
+    """Get gate count for an airport from OSM config.
 
-    Returns simulated fleet inventory and availability.
+    Returns:
+        Number of gates, defaulting to 120 (SFO baseline).
     """
-    fleet = {
+    try:
+        from app.backend.services.airport_config_service import (
+            get_airport_config_service,
+        )
+        service = get_airport_config_service()
+        config = service.get_config()
+        gates = config.get("gates", [])
+        if gates:
+            return len(gates)
+    except Exception:
+        pass
+    return 120  # SFO baseline
+
+
+def get_fleet_status(airport_code: str = "KSFO") -> dict:
+    """
+    Get overall GSE fleet status scaled by airport size.
+
+    Fleet sizes are proportional to gate count. SFO (120 gates) is the
+    baseline. Larger airports get scaled-up fleets, smaller airports
+    get scaled-down fleets.
+
+    Args:
+        airport_code: ICAO airport code to scale fleet for.
+
+    Returns:
+        Simulated fleet inventory and availability.
+    """
+    gate_count = _get_gate_count(airport_code)
+    scale = gate_count / 120.0  # SFO = 120 gates baseline
+
+    # SFO baseline fleet numbers
+    base_fleet = {
         "pushback_tug": {"total": 15, "available": 8, "in_service": 5, "maintenance": 2},
         "fuel_truck": {"total": 12, "available": 6, "in_service": 5, "maintenance": 1},
         "belt_loader": {"total": 30, "available": 15, "in_service": 12, "maintenance": 3},
@@ -364,6 +396,12 @@ def get_fleet_status() -> dict:
         "lavatory_truck": {"total": 10, "available": 5, "in_service": 4, "maintenance": 1},
         "ground_power": {"total": 25, "available": 12, "in_service": 10, "maintenance": 3},
     }
+
+    fleet = {}
+    for gse_type, counts in base_fleet.items():
+        fleet[gse_type] = {
+            k: max(1, round(v * scale)) for k, v in counts.items()
+        }
 
     total_units = sum(v["total"] for v in fleet.values())
     available = sum(v["available"] for v in fleet.values())

@@ -37,15 +37,113 @@ class AirportArea:
 class CongestionPredictor:
     """Predicts congestion levels for airport areas."""
 
-    def __init__(self):
-        """Initialize the congestion predictor with airport area definitions."""
-        self.areas = self._define_airport_areas()
+    def __init__(self, airport_code: str = "KSFO"):
+        """Initialize the congestion predictor with airport area definitions.
 
-    def _define_airport_areas(self) -> Dict[str, AirportArea]:
-        """Define airport areas with their capacities and bounds."""
-        # Real SFO airport areas from FAA data
+        Args:
+            airport_code: ICAO airport code. Areas are built dynamically from
+                OSM config when available, falling back to hardcoded SFO areas.
+        """
+        self.airport_code = airport_code
+        self.areas = self._build_areas_from_config() or self._define_sfo_fallback_areas()
+
+    def _build_areas_from_config(self) -> Optional[Dict[str, AirportArea]]:
+        """Build airport areas dynamically from OSM config data.
+
+        Returns:
+            Dictionary of areas, or None if OSM data not available.
+        """
+        try:
+            from app.backend.services.airport_config_service import (
+                get_airport_config_service,
+            )
+            service = get_airport_config_service()
+            config = service.get_config()
+        except Exception:
+            return None
+
+        areas: Dict[str, AirportArea] = {}
+
+        # Build runway areas from OSM runways
+        osm_runways = config.get("osmRunways", [])
+        for i, rw in enumerate(osm_runways):
+            geo_points = rw.get("geoPoints", [])
+            if not geo_points:
+                continue
+            lats = [p["latitude"] for p in geo_points]
+            lons = [p["longitude"] for p in geo_points]
+            ref = rw.get("ref", f"rw_{i}")
+            area_id = f"runway_{ref}".replace("/", "_")
+            areas[area_id] = AirportArea(
+                area_id=area_id,
+                area_type="runway",
+                capacity=2,
+                lat_range=(min(lats) - 0.001, max(lats) + 0.001),
+                lon_range=(min(lons) - 0.001, max(lons) + 0.001),
+            )
+
+        # Build taxiway area from OSM taxiways (aggregate bounding box)
+        osm_taxiways = config.get("osmTaxiways", [])
+        if osm_taxiways:
+            all_lats = []
+            all_lons = []
+            for tw in osm_taxiways:
+                for p in tw.get("geoPoints", []):
+                    all_lats.append(p["latitude"])
+                    all_lons.append(p["longitude"])
+            if all_lats:
+                areas["taxiway_main"] = AirportArea(
+                    area_id="taxiway_main",
+                    area_type="taxiway",
+                    capacity=max(8, len(osm_taxiways) // 10),
+                    lat_range=(min(all_lats), max(all_lats)),
+                    lon_range=(min(all_lons), max(all_lons)),
+                )
+
+        # Build apron areas from OSM aprons
+        osm_aprons = config.get("osmAprons", [])
+        for i, apron in enumerate(osm_aprons):
+            geo_poly = apron.get("geoPolygon", [])
+            if not geo_poly:
+                continue
+            lats = [p["latitude"] for p in geo_poly]
+            lons = [p["longitude"] for p in geo_poly]
+            area_id = f"apron_{apron.get('ref', i)}"
+            areas[area_id] = AirportArea(
+                area_id=area_id,
+                area_type="apron",
+                capacity=max(5, len(osm_aprons)),
+                lat_range=(min(lats), max(lats)),
+                lon_range=(min(lons), max(lons)),
+            )
+
+        # If we got at least some areas, merge aprons into fewer groups for readability
+        if areas:
+            # If too many small aprons, consolidate into a single apron area
+            apron_areas = {k: v for k, v in areas.items() if v.area_type == "apron"}
+            if len(apron_areas) > 4:
+                all_lats = []
+                all_lons = []
+                total_cap = 0
+                for a in apron_areas.values():
+                    all_lats.extend(a.lat_range)
+                    all_lons.extend(a.lon_range)
+                    total_cap += a.capacity
+                for k in apron_areas:
+                    del areas[k]
+                areas["apron_main"] = AirportArea(
+                    area_id="apron_main",
+                    area_type="apron",
+                    capacity=total_cap,
+                    lat_range=(min(all_lats), max(all_lats)),
+                    lon_range=(min(all_lons), max(all_lons)),
+                )
+
+        return areas if areas else None
+
+    def _define_sfo_fallback_areas(self) -> Dict[str, AirportArea]:
+        """Hardcoded SFO areas as fallback when no OSM data available."""
         return {
-            # Runway 28L/10R (south parallel) - 11,381 ft
             "runway_28L_10R": AirportArea(
                 area_id="runway_28L_10R",
                 area_type="runway",
@@ -53,7 +151,6 @@ class CongestionPredictor:
                 lat_range=(37.610, 37.628),
                 lon_range=(-122.395, -122.355)
             ),
-            # Runway 28R/10L (north parallel) - 11,870 ft
             "runway_28R_10L": AirportArea(
                 area_id="runway_28R_10L",
                 area_type="runway",
@@ -61,7 +158,6 @@ class CongestionPredictor:
                 lat_range=(37.612, 37.630),
                 lon_range=(-122.395, -122.355)
             ),
-            # Runway 01L/19R (west crosswind) - 7,650 ft
             "runway_01L_19R": AirportArea(
                 area_id="runway_01L_19R",
                 area_type="runway",
@@ -69,7 +165,6 @@ class CongestionPredictor:
                 lat_range=(37.606, 37.628),
                 lon_range=(-122.385, -122.368)
             ),
-            # Runway 01R/19L (east crosswind) - 8,650 ft
             "runway_01R_19L": AirportArea(
                 area_id="runway_01R_19L",
                 area_type="runway",
@@ -77,7 +172,6 @@ class CongestionPredictor:
                 lat_range=(37.605, 37.629),
                 lon_range=(-122.383, -122.365)
             ),
-            # Main taxiway area
             "taxiway_main": AirportArea(
                 area_id="taxiway_main",
                 area_type="taxiway",
@@ -85,7 +179,6 @@ class CongestionPredictor:
                 lat_range=(37.614, 37.620),
                 lon_range=(-122.392, -122.375)
             ),
-            # International Terminal apron (Boarding Areas G, A)
             "intl_terminal_apron": AirportArea(
                 area_id="intl_terminal_apron",
                 area_type="apron",
@@ -93,7 +186,6 @@ class CongestionPredictor:
                 lat_range=(37.612, 37.618),
                 lon_range=(-122.398, -122.385)
             ),
-            # Domestic Terminal apron (Terminals 1, 2, 3)
             "domestic_terminal_apron": AirportArea(
                 area_id="domestic_terminal_apron",
                 area_type="apron",

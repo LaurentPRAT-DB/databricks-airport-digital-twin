@@ -26,32 +26,42 @@ except ImportError:
 
 def train_delay_model(
     training_data: List[Dict[str, Any]],
-    experiment_name: str = "delay_model",
+    airport_code: str = "KSFO",
+    experiment_name: Optional[str] = None,
     model_output_path: Optional[str] = None,
+    catalog: str = "",
+    schema: str = "",
 ) -> Dict[str, Any]:
     """Train and evaluate the delay prediction model.
 
     This function:
-    1. Sets up MLflow experiment (if available)
-    2. Creates a DelayPredictor instance
+    1. Sets up MLflow experiment (if available) namespaced by airport
+    2. Creates a DelayPredictor instance for the airport
     3. Runs predictions on training data
     4. Logs metrics and parameters
     5. Saves model artifact
+    6. Optionally registers to Unity Catalog
 
     Args:
         training_data: List of flight data dictionaries
-        experiment_name: Name for MLflow experiment
+        airport_code: ICAO airport code for namespacing
+        experiment_name: Name for MLflow experiment (auto-generated if None)
         model_output_path: Optional path to save model artifact
+        catalog: Unity Catalog catalog name for model registration
+        schema: Unity Catalog schema name for model registration
 
     Returns:
         Dictionary with run_id, metrics, and model_path
     """
+    if experiment_name is None:
+        experiment_name = f"airport_models/{airport_code}/delay_model"
+
     run_id = None
     metrics: Dict[str, float] = {}
     model_path = model_output_path
 
-    # Create predictor instance
-    predictor = DelayPredictor()
+    # Create predictor instance for the airport
+    predictor = DelayPredictor(airport_code=airport_code)
 
     # Run predictions on training data
     predictions = predictor.predict_batch(training_data)
@@ -88,7 +98,7 @@ def train_delay_model(
 
     # Save model artifact
     if model_path is None:
-        model_dir = Path(tempfile.gettempdir()) / "airport_ml_models"
+        model_dir = Path(tempfile.gettempdir()) / "airport_ml_models" / airport_code
         model_dir.mkdir(parents=True, exist_ok=True)
         model_path = str(
             model_dir / f"delay_model_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
@@ -108,6 +118,7 @@ def train_delay_model(
 
                 # Log parameters
                 mlflow.log_param("model_type", "rule_based")
+                mlflow.log_param("airport_code", airport_code)
                 mlflow.log_param("feature_count", 14)  # Based on features_to_array
                 mlflow.log_param("training_samples", len(training_data))
 
@@ -123,6 +134,15 @@ def train_delay_model(
                 with open(category_file, "w") as f:
                     json.dump(category_counts, f, indent=2)
                 mlflow.log_artifact(str(category_file), "metrics")
+
+                # Register to Unity Catalog if configured
+                if catalog and schema:
+                    uc_model_name = f"{catalog}.{schema}.delay_model_{airport_code}"
+                    try:
+                        model_uri = f"runs:/{run_id}/model"
+                        mlflow.register_model(model_uri, uc_model_name)
+                    except Exception as uc_err:
+                        print(f"UC registration failed for {uc_model_name}: {uc_err}")
 
         except Exception as e:
             # MLflow tracking failed, but model training succeeded

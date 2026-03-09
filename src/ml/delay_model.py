@@ -35,12 +35,14 @@ class DelayPredictor:
     - Historical patterns (random factor for realism)
     """
 
-    def __init__(self, model_path: Optional[str] = None):
+    def __init__(self, airport_code: str = "KSFO", model_path: Optional[str] = None):
         """Initialize the delay predictor.
 
         Args:
+            airport_code: ICAO airport code for this predictor instance
             model_path: Optional path to a saved model (ignored for demo)
         """
+        self.airport_code = airport_code
         self.model_path = model_path
         # Seed for reproducibility in tests (but still random per instance)
         self._random = random.Random()

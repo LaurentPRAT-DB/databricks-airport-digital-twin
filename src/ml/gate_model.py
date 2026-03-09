@@ -140,19 +140,47 @@ class GateRecommender:
     based on real airport layout, terminal assignments, and airline operators.
     """
 
-    def __init__(self, gates: Optional[List[Gate]] = None):
+    def __init__(self, airport_code: str = "KSFO", gates: Optional[List[Gate]] = None):
         """
         Initialize the gate recommender.
 
         Args:
+            airport_code: ICAO airport code for this recommender instance.
             gates: List of available gates. If None, attempts to load from
                    airport config service (OSM data), falling back to defaults.
         """
+        self.airport_code = airport_code
+        self._runway_coords = self._load_runway_coords()
         if gates is not None:
             self.gates = {g.gate_id: g for g in gates}
         else:
             self.gates = self._load_osm_gates() or self._create_default_gates()
-            logger.info(f"GateRecommender initialized with {len(self.gates)} gates")
+            logger.info(f"GateRecommender initialized with {len(self.gates)} gates for {airport_code}")
+
+    def _load_runway_coords(self) -> tuple:
+        """Load primary runway coordinates from OSM config.
+
+        Returns:
+            (lat, lon) tuple of the first runway centroid, or a default.
+        """
+        try:
+            from app.backend.services.airport_config_service import (
+                get_airport_config_service,
+            )
+            service = get_airport_config_service()
+            config = service.get_config()
+            osm_runways = config.get("osmRunways", [])
+            if osm_runways:
+                rw = osm_runways[0]
+                geo_points = rw.get("geoPoints", [])
+                if geo_points:
+                    avg_lat = sum(p["latitude"] for p in geo_points) / len(geo_points)
+                    avg_lon = sum(p["longitude"] for p in geo_points) / len(geo_points)
+                    return (avg_lat, avg_lon)
+        except Exception:
+            pass
+        # Fallback: SFO runway 28L
+        return (37.6117, -122.3583)
 
     def _load_osm_gates(self) -> Optional[Dict[str, Gate]]:
         """
@@ -392,20 +420,42 @@ class GateRecommender:
 
     def _is_international_flight(self, callsign: str) -> bool:
         """
-        Determine if a flight is international based on callsign.
+        Determine if a flight is international based on callsign and airport.
 
-        Simple heuristic: non-US airline prefixes are international.
+        For US airports (ICAO starting with K): non-US airline prefixes are international.
+        For non-US airports: all non-local carriers are treated as international.
         """
         if not callsign:
             return False
 
-        # Common US domestic airline prefixes
-        domestic_prefixes = {
-            "AAL", "UAL", "DAL", "SWA", "JBU", "NKS", "ASA", "FFT", "SKW"
+        prefix = callsign[:3].upper()
+
+        # US airport: domestic = US airline prefixes
+        if self.airport_code.startswith("K"):
+            domestic_prefixes = {
+                "AAL", "UAL", "DAL", "SWA", "JBU", "NKS", "ASA", "FFT", "SKW"
+            }
+            return prefix not in domestic_prefixes
+
+        # Country-specific domestic airline mappings by ICAO prefix
+        country_domestic = {
+            "O": {"UAE", "ETD", "FDB", "ABY", "AXB"},  # UAE (OMAA, OMDB, etc.)
+            "EG": {"BAW", "EZY", "VIR", "TOM", "BEE"},  # UK
+            "LF": {"AFR", "HOP", "TVF", "EJU"},  # France
+            "ED": {"DLH", "EWG", "GWI"},  # Germany
+            "RJ": {"RJA", "RJD"},  # Jordan
+            "VH": {"AIC", "IGO", "SEJ"},  # India
         }
 
-        prefix = callsign[:3].upper()
-        return prefix not in domestic_prefixes
+        # Find matching country prefix (try 2-char first, then 1-char)
+        icao_2 = self.airport_code[:2]
+        icao_1 = self.airport_code[:1]
+        domestic = country_domestic.get(icao_2) or country_domestic.get(icao_1, set())
+
+        # If we have a mapping, check it; otherwise treat all flights as international
+        if domestic:
+            return prefix not in domestic
+        return True
 
     def _generate_reasons(self, gate: Gate, flight: dict, score: float) -> List[str]:
         """Generate human-readable reasons for the recommendation."""
@@ -471,8 +521,7 @@ class GateRecommender:
 
         # If we have coordinates, estimate based on distance from runway
         if gate.latitude and gate.longitude:
-            # SFO runway 28L touchdown zone (approximate)
-            runway_lat, runway_lon = 37.6117, -122.3583
+            runway_lat, runway_lon = self._runway_coords
 
             # Simple distance calculation (degrees to approximate minutes)
             lat_diff = abs(gate.latitude - runway_lat)
