@@ -143,6 +143,8 @@ class FlightService:
 
             # Use aircraft type if available (index 19)
             aircraft_type = state[19] if len(state) > 19 else None
+            origin_airport = state[20] if len(state) > 20 else None
+            destination_airport = state[21] if len(state) > 21 else None
 
             flight = FlightPosition(
                 icao24=state[0],
@@ -158,6 +160,8 @@ class FlightService:
                 data_source="synthetic",
                 flight_phase=flight_phase,
                 aircraft_type=aircraft_type,
+                origin_airport=origin_airport,
+                destination_airport=destination_airport,
             )
             flights.append(flight)
 

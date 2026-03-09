@@ -46,6 +46,8 @@ class FlightPosition(BaseModel):
     data_source: str = Field("synthetic", description="Source of the data")
     flight_phase: Optional[str] = Field(None, description="Current flight phase")
     aircraft_type: Optional[str] = Field(None, description="ICAO aircraft type code (e.g., A320, B738)")
+    origin_airport: Optional[str] = Field(None, description="Origin airport IATA code")
+    destination_airport: Optional[str] = Field(None, description="Destination airport IATA code")
 
 
 class FlightListResponse(BaseModel):

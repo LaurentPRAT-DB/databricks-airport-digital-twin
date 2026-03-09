@@ -39,7 +39,7 @@ from app.backend.models.airport_config import (
     OSMImportResponse,
     FAAImportResponse,
 )
-from src.ingestion.fallback import generate_synthetic_trajectory, reload_gates, reset_synthetic_state
+from src.ingestion.fallback import generate_synthetic_trajectory, reload_gates, reset_synthetic_state, set_airport_center
 from src.ml.gate_model import reload_gate_recommender
 from src.formats.base import ParseError, ValidationError
 
@@ -772,6 +772,14 @@ async def activate_airport(icao_code: str) -> dict:
     # Step 3: Reset state (fast)
     await broadcaster.broadcast_progress(3, total_steps, "Resetting flight state...", icao_code)
     reset_result = reset_synthetic_state()
+
+    # Update airport center for synthetic flight generation
+    from src.ingestion.schedule_generator import AIRPORT_COORDINATES
+    from app.backend.services.data_generator_service import _icao_to_iata
+    iata_code = _icao_to_iata(icao_code)
+    if iata_code in AIRPORT_COORDINATES:
+        lat, lon = AIRPORT_COORDINATES[iata_code]
+        set_airport_center(lat, lon)
 
     # Check if data generation is needed
     data_generator = get_data_generator_service()

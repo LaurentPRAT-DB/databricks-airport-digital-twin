@@ -92,8 +92,27 @@ CALLSIGN_PREFIXES = list(AIRLINE_FLEET.keys())
 # - 3D Map: Converted via latLonTo3D() with center (37.6213, -122.379), scale 10000
 # ============================================================================
 
-# Airport center (matches frontend DEFAULT_CENTER_LAT/LON)
+# Airport center — dynamic, updated when airport switches
+# Default is SFO (matches frontend DEFAULT_CENTER_LAT/LON)
+_airport_center = (37.6213, -122.379)
+
+# Keep the constant for backward compatibility in tests
 AIRPORT_CENTER = (37.6213, -122.379)
+
+
+def get_airport_center() -> tuple:
+    """Get the current airport center coordinates (lat, lon)."""
+    return _airport_center
+
+
+def set_airport_center(lat: float, lon: float) -> None:
+    """Set the current airport center for synthetic flight generation.
+
+    Called when the user switches airports. Updates the center used for
+    spawning flights, generating trajectories, and computing bearings.
+    """
+    global _airport_center
+    _airport_center = (lat, lon)
 
 # Real SFO runway endpoints from FAA Airport/Facility Directory
 # These match the frontend airportLayout.ts polygon coordinates
@@ -300,6 +319,61 @@ DEPARTURE_WAYPOINTS = [
     # Enroute - over the bay
     (-122.10, 37.55, 12000),
 ]
+
+
+def _get_approach_waypoints() -> list:
+    """Get approach waypoints relative to current airport center.
+
+    For SFO, returns the static APPROACH_WAYPOINTS.
+    For other airports, generates generic approach from the east.
+    """
+    center = get_airport_center()
+    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01 and abs(center[1] - AIRPORT_CENTER[1]) < 0.01:
+        return APPROACH_WAYPOINTS
+    lat, lon = center
+    return [
+        (lon + 0.25, lat - 0.04, 6000),
+        (lon + 0.17, lat - 0.025, 4000),
+        (lon + 0.10, lat - 0.015, 2500),
+        (lon + 0.05, lat - 0.01, 1000),
+        (lon + 0.02, lat - 0.005, 300),
+        (lon, lat, 15),
+    ]
+
+
+def _get_departure_waypoints() -> list:
+    """Get departure waypoints relative to current airport center.
+
+    For SFO, returns the static DEPARTURE_WAYPOINTS.
+    For other airports, generates generic departure to the east.
+    """
+    center = get_airport_center()
+    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01 and abs(center[1] - AIRPORT_CENTER[1]) < 0.01:
+        return DEPARTURE_WAYPOINTS
+    lat, lon = center
+    return [
+        (lon + 0.02, lat, 500),
+        (lon + 0.05, lat - 0.01, 2000),
+        (lon + 0.10, lat - 0.02, 4000),
+        (lon + 0.17, lat - 0.03, 8000),
+        (lon + 0.25, lat - 0.04, 12000),
+    ]
+
+
+def _get_runway_threshold() -> tuple:
+    """Get approximate runway threshold (lon, lat) for current airport."""
+    center = get_airport_center()
+    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01 and abs(center[1] - AIRPORT_CENTER[1]) < 0.01:
+        return (_RWY_28L_LON, _RWY_28L_LAT)
+    return (center[1], center[0])  # (lon, lat)
+
+
+def _get_departure_runway() -> tuple:
+    """Get approximate departure runway start (lon, lat) for current airport."""
+    center = get_airport_center()
+    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01 and abs(center[1] - AIRPORT_CENTER[1]) < 0.01:
+        return (_RWY_28R_LON, _RWY_28R_LAT)
+    return (center[1], center[0])  # (lon, lat)
 
 
 class FlightPhase(Enum):
@@ -617,7 +691,7 @@ def _get_airport_coordinates() -> dict:
 
 
 def _bearing_from_airport(origin_iata: str) -> float:
-    """Compute initial bearing FROM origin airport TO SFO (degrees, 0=N, 90=E).
+    """Compute initial bearing FROM origin airport TO current airport center (degrees, 0=N, 90=E).
 
     This gives the direction from which an arriving flight should appear.
     """
@@ -625,8 +699,9 @@ def _bearing_from_airport(origin_iata: str) -> float:
     if origin_iata not in coords:
         return random.uniform(0, 360)
 
+    center = get_airport_center()
     lat1, lon1 = math.radians(coords[origin_iata][0]), math.radians(coords[origin_iata][1])
-    lat2, lon2 = math.radians(AIRPORT_CENTER[0]), math.radians(AIRPORT_CENTER[1])
+    lat2, lon2 = math.radians(center[0]), math.radians(center[1])
 
     dlon = lon2 - lon1
     x = math.sin(dlon) * math.cos(lat2)
@@ -636,7 +711,7 @@ def _bearing_from_airport(origin_iata: str) -> float:
 
 
 def _bearing_to_airport(dest_iata: str) -> float:
-    """Compute initial bearing FROM SFO TO destination airport (degrees, 0=N, 90=E).
+    """Compute initial bearing FROM current airport center TO destination airport (degrees, 0=N, 90=E).
 
     This gives the direction a departing flight should head toward.
     """
@@ -644,7 +719,8 @@ def _bearing_to_airport(dest_iata: str) -> float:
     if dest_iata not in coords:
         return random.uniform(0, 360)
 
-    lat1, lon1 = math.radians(AIRPORT_CENTER[0]), math.radians(AIRPORT_CENTER[1])
+    center = get_airport_center()
+    lat1, lon1 = math.radians(center[0]), math.radians(center[1])
     lat2, lon2 = math.radians(coords[dest_iata][0]), math.radians(coords[dest_iata][1])
 
     dlon = lon2 - lon1
@@ -678,6 +754,29 @@ def _is_international_airport(iata: str) -> bool:
     return iata in INTERNATIONAL_AIRPORTS
 
 
+# Country lookup for origin_country field
+_AIRPORT_COUNTRY = {
+    "SFO": "United States", "LAX": "United States", "ORD": "United States",
+    "DFW": "United States", "JFK": "United States", "ATL": "United States",
+    "DEN": "United States", "SEA": "United States", "BOS": "United States",
+    "PHX": "United States", "LAS": "United States", "MCO": "United States",
+    "MIA": "United States", "CLT": "United States", "MSP": "United States",
+    "DTW": "United States", "EWR": "United States", "PHL": "United States",
+    "IAH": "United States", "SAN": "United States", "PDX": "United States",
+    "LHR": "United Kingdom", "CDG": "France", "FRA": "Germany",
+    "AMS": "Netherlands", "HKG": "Hong Kong", "NRT": "Japan",
+    "SIN": "Singapore", "SYD": "Australia", "DXB": "UAE", "ICN": "South Korea",
+    "HND": "Japan",
+}
+
+
+def _get_origin_country(origin_iata: Optional[str]) -> str:
+    """Get the country for an airport IATA code."""
+    if origin_iata and origin_iata in _AIRPORT_COUNTRY:
+        return _AIRPORT_COUNTRY[origin_iata]
+    return "United States"
+
+
 def _pick_random_origin() -> str:
     """Pick a random origin airport for arriving flights."""
     from src.ingestion.schedule_generator import DOMESTIC_AIRPORTS, INTERNATIONAL_AIRPORTS
@@ -704,7 +803,7 @@ def _create_new_flight(
 
     if phase == FlightPhase.APPROACHING:
         # Start on approach from the east WITH PROPER WAKE TURBULENCE SEPARATION
-        base_wp = APPROACH_WAYPOINTS[0]
+        base_wp = _get_approach_waypoints()[0]
 
         # Find how many aircraft are already approaching
         approaching_count = _count_aircraft_in_phase(FlightPhase.APPROACHING)
@@ -793,14 +892,14 @@ def _create_new_flight(
             bearing_to_sfo = _bearing_from_airport(origin)
             # The aircraft appears FROM that bearing, so spawn on the circle at the reciprocal
             spawn_bearing = (bearing_to_sfo + 180) % 360
+            center = get_airport_center()
             spawn_point = _point_on_circle(
-                AIRPORT_CENTER[0], AIRPORT_CENTER[1],
+                center[0], center[1],
                 spawn_bearing,
                 VISIBILITY_RADIUS_DEG + random.uniform(-0.05, 0.05),
             )
             lat, lon = spawn_point
-            # Heading toward SFO
-            heading = _calculate_heading((lat, lon), AIRPORT_CENTER)
+            heading = _calculate_heading((lat, lon), center)
             # International = higher altitude
             alt = random.uniform(15000, 25000) if is_intl else random.uniform(8000, 15000)
         elif destination:
@@ -808,22 +907,24 @@ def _create_new_flight(
             bearing = _bearing_to_airport(destination)
             # Spawn somewhere between airport and edge of circle
             dist = random.uniform(0.1, 0.3)
+            center = get_airport_center()
             spawn_point = _point_on_circle(
-                AIRPORT_CENTER[0], AIRPORT_CENTER[1], bearing, dist,
+                center[0], center[1], bearing, dist,
             )
             lat, lon = spawn_point
             heading = bearing + random.uniform(-5, 5)
             alt = random.uniform(8000, 15000)
         else:
             # No origin/destination — random position on the circle edge
+            center = get_airport_center()
             bearing = random.uniform(0, 360)
             spawn_point = _point_on_circle(
-                AIRPORT_CENTER[0], AIRPORT_CENTER[1],
+                center[0], center[1],
                 bearing,
                 VISIBILITY_RADIUS_DEG + random.uniform(-0.1, 0.0),
             )
             lat, lon = spawn_point
-            heading = _calculate_heading((lat, lon), AIRPORT_CENTER)
+            heading = _calculate_heading((lat, lon), center)
             alt = random.uniform(8000, 15000)
 
         return FlightState(
@@ -932,8 +1033,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
     if state.phase == FlightPhase.APPROACHING:
         # Descend toward airport following approach waypoints WITH SEPARATION
-        if state.waypoint_index < len(APPROACH_WAYPOINTS):
-            wp = APPROACH_WAYPOINTS[state.waypoint_index]
+        approach_wps = _get_approach_waypoints()
+        if state.waypoint_index < len(approach_wps):
+            wp = approach_wps[state.waypoint_index]
             target = (wp[1], wp[0])  # lat, lon
             target_alt = wp[2]
 
@@ -1152,8 +1254,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
     elif state.phase == FlightPhase.DEPARTING:
         # Climb out following departure path
-        if state.waypoint_index < len(DEPARTURE_WAYPOINTS):
-            wp = DEPARTURE_WAYPOINTS[state.waypoint_index]
+        departure_wps = _get_departure_waypoints()
+        if state.waypoint_index < len(departure_wps):
+            wp = departure_wps[state.waypoint_index]
             target = (wp[1], wp[0])
             target_alt = wp[2]
 
@@ -1176,15 +1279,16 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         EXIT_RADIUS_DEG = 0.5  # ~30 NM — remove when exiting this circle
         APPROACH_RADIUS_DEG = 0.25  # ~15 NM — transition to approach
 
+        center = get_airport_center()
         dist_from_airport = _distance_between(
             (state.latitude, state.longitude),
-            AIRPORT_CENTER,
+            center,
         )
 
         if state.origin_airport and not state.destination_airport:
-            # ARRIVING enroute: heading toward SFO, transition to approach when close
+            # ARRIVING enroute: heading toward airport, transition to approach when close
             target_heading = _calculate_heading(
-                (state.latitude, state.longitude), AIRPORT_CENTER
+                (state.latitude, state.longitude), center
             )
             # Gently steer toward target (smooth turns)
             heading_diff = (target_heading - state.heading + 540) % 360 - 180
@@ -1222,7 +1326,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # No origin/destination — legacy random behavior, head toward airport
             if dist_from_airport > EXIT_RADIUS_DEG:
                 state.heading = _calculate_heading(
-                    (state.latitude, state.longitude), AIRPORT_CENTER
+                    (state.latitude, state.longitude), center
                 )
             else:
                 state.heading += random.uniform(-1, 1) * dt
@@ -1383,7 +1487,7 @@ def generate_synthetic_flights(
         state_vector = [
             state.icao24,                              # 0: icao24
             state.callsign.ljust(8),                   # 1: callsign
-            "United States",                           # 2: origin_country
+            _get_origin_country(state.origin_airport), # 2: origin_country
             int(current_time) - random.randint(0, 2), # 3: time_position
             int(current_time),                         # 4: last_contact
             state.longitude,                           # 5: longitude
@@ -1401,6 +1505,8 @@ def generate_synthetic_flights(
             random.randint(2, 6),                      # 17: category
             _get_flight_phase_name(state.phase),       # 18: flight_phase (custom)
             state.aircraft_type,                       # 19: aircraft_type (custom)
+            state.origin_airport,                      # 20: origin_airport (custom)
+            state.destination_airport,                 # 21: destination_airport (custom)
         ]
         states.append(state_vector)
 
@@ -1472,9 +1578,10 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         current_phase = current_state.phase.value if current_state.phase else "descending"
     else:
         # Fallback to approach position
-        end_lat = APPROACH_WAYPOINTS[-1][1]
-        end_lon = APPROACH_WAYPOINTS[-1][0]
-        end_alt = APPROACH_WAYPOINTS[-1][2]
+        _app_wps = _get_approach_waypoints()
+        end_lat = _app_wps[-1][1]
+        end_lon = _app_wps[-1][0]
+        end_alt = _app_wps[-1][2]
         current_heading = 284  # Runway 28L heading
         current_phase = "descending"
 
@@ -1494,10 +1601,11 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     now = datetime.now(timezone.utc)
     interval_seconds = (minutes * 60) / num_points
 
-    # Runway 28L approach parameters
-    # Approach course: ~284° true heading (from east to west)
-    runway_28l_lat = _RWY_28L_LAT  # 37.611712
-    runway_28l_lon = _RWY_28L_LON  # -122.358349
+    # Runway approach parameters (dynamic per airport)
+    _rwy_threshold = _get_runway_threshold()
+    runway_28l_lon, runway_28l_lat = _rwy_threshold[0], _rwy_threshold[1]
+    _dep_threshold = _get_departure_runway()
+    dep_rwy_lon, dep_rwy_lat = _dep_threshold[0], _dep_threshold[1]
 
     if is_on_ground:
         # Aircraft is on ground - show approach + landing + taxi trajectory
@@ -1512,7 +1620,8 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
                 # Interpolate along the approach waypoints
                 # Start from initial approach fix, end at threshold
-                wp_count = len(APPROACH_WAYPOINTS)
+                _traj_app_wps = _get_approach_waypoints()
+                wp_count = len(_traj_app_wps)
                 wp_progress = approach_progress * (wp_count - 1)
                 wp_idx = int(wp_progress)
                 wp_frac = wp_progress - wp_idx
@@ -1522,8 +1631,8 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                     wp_frac = 1.0
 
                 # Interpolate between waypoints
-                wp1 = APPROACH_WAYPOINTS[wp_idx]
-                wp2 = APPROACH_WAYPOINTS[min(wp_idx + 1, wp_count - 1)]
+                wp1 = _traj_app_wps[wp_idx]
+                wp2 = _traj_app_wps[min(wp_idx + 1, wp_count - 1)]
 
                 lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
                 lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
@@ -1593,12 +1702,13 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
+            _traj_dep_wps = _get_departure_waypoints()
             if progress < 0.15:
                 # Takeoff roll and initial climb
                 takeoff_progress = progress / 0.15
-                wp = DEPARTURE_WAYPOINTS[0]
-                lat = _RWY_28R_LAT + takeoff_progress * (wp[1] - _RWY_28R_LAT)
-                lon = _RWY_28R_LON + takeoff_progress * (wp[0] - _RWY_28R_LON)
+                wp = _traj_dep_wps[0]
+                lat = dep_rwy_lat + takeoff_progress * (wp[1] - dep_rwy_lat)
+                lon = dep_rwy_lon + takeoff_progress * (wp[0] - dep_rwy_lon)
                 alt = takeoff_progress * wp[2]
                 heading = 284
                 velocity = 100 + takeoff_progress * 100
@@ -1608,7 +1718,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 # Climb out following departure waypoints
                 climb_progress = (progress - 0.15) / 0.35
 
-                wp_count = len(DEPARTURE_WAYPOINTS)
+                wp_count = len(_traj_dep_wps)
                 wp_progress = climb_progress * (wp_count - 1)
                 wp_idx = int(wp_progress)
                 wp_frac = wp_progress - wp_idx
@@ -1617,8 +1727,8 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                     wp_idx = wp_count - 2
                     wp_frac = 1.0
 
-                wp1 = DEPARTURE_WAYPOINTS[wp_idx]
-                wp2 = DEPARTURE_WAYPOINTS[min(wp_idx + 1, wp_count - 1)]
+                wp1 = _traj_dep_wps[wp_idx]
+                wp2 = _traj_dep_wps[min(wp_idx + 1, wp_count - 1)]
 
                 lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
                 lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
@@ -1631,7 +1741,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
             else:
                 # Turn toward destination and continue climbing
                 enroute_progress = (progress - 0.50) / 0.50
-                last_wp = DEPARTURE_WAYPOINTS[-1]
+                last_wp = _traj_dep_wps[-1]
                 start_lat_dep = last_wp[1]
                 start_lon_dep = last_wp[0]
                 start_alt_dep = last_wp[2]
@@ -1666,31 +1776,33 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
     else:
         # APPROACH trajectory (aircraft still descending)
-        # Start from the direction of origin airport, then curve onto ILS approach
+        # Start from the direction of origin airport, then curve onto approach
         origin_airport = current_state.origin_airport if current_state else None
+        center = get_airport_center()
+        _traj_app_wps2 = _get_approach_waypoints()
 
         # Clamp end position to reasonable airport vicinity
-        clamped_lat = max(AIRPORT_CENTER[0] - 0.5, min(AIRPORT_CENTER[0] + 0.5, end_lat))
-        clamped_lon = max(AIRPORT_CENTER[1] - 0.5, min(AIRPORT_CENTER[1] + 0.5, end_lon))
+        clamped_lat = max(center[0] - 0.5, min(center[0] + 0.5, end_lat))
+        clamped_lon = max(center[1] - 0.5, min(center[1] + 0.5, end_lon))
 
         if origin_airport:
             # Calculate where the flight entered from (edge of visibility circle)
-            bearing_to_sfo = _bearing_from_airport(origin_airport)
-            spawn_bearing = (bearing_to_sfo + 180) % 360
-            entry_point = _point_on_circle(AIRPORT_CENTER[0], AIRPORT_CENTER[1], spawn_bearing, 0.4)
+            bearing_to_apt = _bearing_from_airport(origin_airport)
+            spawn_bearing = (bearing_to_apt + 180) % 360
+            entry_point = _point_on_circle(center[0], center[1], spawn_bearing, 0.4)
             start_lat, start_lon = entry_point
             start_alt = 15000 if _is_international_airport(origin_airport) else 10000
         else:
             # Fallback to first approach waypoint
-            start_wp = APPROACH_WAYPOINTS[0]
+            start_wp = _traj_app_wps2[0]
             start_lat = start_wp[1]
             start_lon = start_wp[0]
             start_alt = start_wp[2]
 
-        final_alt = end_alt if abs(end_lat - AIRPORT_CENTER[0]) < 0.5 else 3000
+        final_alt = end_alt if abs(end_lat - center[0]) < 0.5 else 3000
 
         # Build trajectory: entry point → first approach waypoint → current position
-        first_wp = APPROACH_WAYPOINTS[0]
+        first_wp = _traj_app_wps2[0]
         mid_lat, mid_lon = first_wp[1], first_wp[0]
         mid_alt = first_wp[2]
 

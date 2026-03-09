@@ -107,7 +107,7 @@ export default function FlightDetail() {
     );
   }
 
-  const { flight_phase, callsign, icao24, latitude, longitude, altitude, velocity, heading, vertical_rate, last_seen, data_source, aircraft_type } = selectedFlight;
+  const { flight_phase, callsign, icao24, latitude, longitude, altitude, velocity, heading, vertical_rate, last_seen, data_source, aircraft_type, origin_airport, destination_airport } = selectedFlight;
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
@@ -140,6 +140,38 @@ export default function FlightDetail() {
           {phaseLabels[flight_phase]}
         </span>
       </div>
+
+      {/* Route (Origin → Destination) */}
+      {(origin_airport || destination_airport) && (
+        <div className="mb-4 pb-3 border-b border-slate-200">
+          <div className="flex items-center justify-between">
+            <div className="text-center flex-1">
+              <div className="text-lg font-bold font-mono text-slate-800">
+                {origin_airport || '---'}
+              </div>
+              <div className="text-xs text-slate-400">Origin</div>
+            </div>
+            <div className="px-3 text-slate-300">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </div>
+            <div className="text-center flex-1">
+              <div className="text-lg font-bold font-mono text-slate-800">
+                {destination_airport || '---'}
+              </div>
+              <div className="text-xs text-slate-400">Destination</div>
+            </div>
+          </div>
+          {aircraft_type && (
+            <div className="text-center mt-1">
+              <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">
+                {aircraft_type}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Trajectory Toggle */}
       <div className="mb-4 pb-3 border-b border-slate-200">
