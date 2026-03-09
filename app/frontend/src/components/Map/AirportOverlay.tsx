@@ -2,6 +2,7 @@ import { GeoJSON, CircleMarker, Tooltip } from 'react-leaflet';
 import { PathOptions } from 'leaflet';
 import { Feature, Geometry } from 'geojson';
 import { airportLayout, getFeaturesByType } from '../../constants/airportLayout';
+import useAirportConfig from '../../hooks/useAirportConfig';
 
 // Style function for different feature types
 function getFeatureStyle(feature: Feature<Geometry> | undefined): PathOptions {
@@ -59,7 +60,12 @@ const nonGateFeatures = {
 };
 
 export default function AirportOverlay() {
-  const gates = getFeaturesByType('gate');
+  const { getGates } = useAirportConfig();
+  const osmGates = getGates();
+
+  // Fall back to hardcoded gates only if no OSM gates available
+  const hardcodedGates = getFeaturesByType('gate');
+  const useOsmGates = osmGates.length > 0;
 
   return (
     <>
@@ -70,8 +76,27 @@ export default function AirportOverlay() {
         onEachFeature={onEachFeature}
       />
 
-      {/* Render gates as circle markers */}
-      {gates.map((gate) => {
+      {/* Render OSM gates as circle markers (preferred) */}
+      {useOsmGates && osmGates.map((gate) => (
+        <CircleMarker
+          key={gate.id}
+          center={[gate.geo.latitude, gate.geo.longitude]}
+          radius={6}
+          pathOptions={{
+            fillColor: '#10b981', // emerald-500
+            fillOpacity: 0.8,
+            color: '#059669', // emerald-600
+            weight: 2,
+          }}
+        >
+          <Tooltip direction="top" offset={[0, -5]}>
+            Gate {gate.ref || gate.name || gate.id}
+          </Tooltip>
+        </CircleMarker>
+      ))}
+
+      {/* Fallback: Render hardcoded gates as circle markers */}
+      {!useOsmGates && hardcodedGates.map((gate) => {
         const coords = (gate.geometry as GeoJSON.Point).coordinates;
         return (
           <CircleMarker

@@ -287,8 +287,9 @@ def merge_osm_config(
     if osm_config.get("gates"):
         result["gates"] = osm_config["gates"]
 
-    # Merge terminals (add OSM terminals to existing buildings)
+    # Merge terminals (add OSM terminals to existing buildings AND set terminals field)
     if osm_config.get("terminals"):
+        result["terminals"] = osm_config["terminals"]
         existing_buildings = result.get("buildings", [])
         osm_buildings = osm_config["terminals"]
         # Don't duplicate - check by name/id
