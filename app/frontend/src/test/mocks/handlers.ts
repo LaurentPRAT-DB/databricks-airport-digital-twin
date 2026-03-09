@@ -327,6 +327,26 @@ export const handlers = [
     })
   }),
 
+  // Airport config endpoint
+  http.get('/api/airport/config', async () => {
+    await delay(30)
+    return HttpResponse.json({
+      config: {
+        sources: ['osm'],
+        runways: [],
+        taxiways: [],
+        aprons: [],
+        navaids: [],
+        buildings: [],
+        gates: [],
+        terminals: [],
+        icaoCode: 'KSFO',
+      },
+      lastUpdated: new Date().toISOString(),
+      elementCounts: { gates: 120, terminals: 8, taxiways: 244, aprons: 17 },
+    })
+  }),
+
   // Airport activate endpoint
   http.post('/api/airports/:icaoCode/activate', async ({ params }) => {
     await delay(50)
