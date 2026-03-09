@@ -103,15 +103,17 @@ export const mockCongestion = {
 // Mock trajectory data
 export const mockTrajectory = {
   icao24: 'a12345',
-  positions: [
-    { latitude: 37.50, longitude: -122.50, altitude: 10000, timestamp: Date.now() - 300000 },
-    { latitude: 37.55, longitude: -122.45, altitude: 8000, timestamp: Date.now() - 240000 },
-    { latitude: 37.58, longitude: -122.42, altitude: 6000, timestamp: Date.now() - 180000 },
-    { latitude: 37.60, longitude: -122.40, altitude: 5000, timestamp: Date.now() - 120000 },
-    { latitude: 37.62, longitude: -122.38, altitude: 5000, timestamp: Date.now() },
+  callsign: 'UAL123',
+  points: [
+    { icao24: 'a12345', callsign: 'UAL123', latitude: 37.50, longitude: -122.50, altitude: 10000, velocity: 250, heading: 90, vertical_rate: -500, on_ground: false, flight_phase: 'descending', timestamp: (Date.now() - 300000) / 1000 },
+    { icao24: 'a12345', callsign: 'UAL123', latitude: 37.55, longitude: -122.45, altitude: 8000, velocity: 230, heading: 95, vertical_rate: -400, on_ground: false, flight_phase: 'descending', timestamp: (Date.now() - 240000) / 1000 },
+    { icao24: 'a12345', callsign: 'UAL123', latitude: 37.58, longitude: -122.42, altitude: 6000, velocity: 210, heading: 100, vertical_rate: -300, on_ground: false, flight_phase: 'descending', timestamp: (Date.now() - 180000) / 1000 },
+    { icao24: 'a12345', callsign: 'UAL123', latitude: 37.60, longitude: -122.40, altitude: 5000, velocity: 200, heading: 270, vertical_rate: -500, on_ground: false, flight_phase: 'descending', timestamp: (Date.now() - 120000) / 1000 },
+    { icao24: 'a12345', callsign: 'UAL123', latitude: 37.62, longitude: -122.38, altitude: 5000, velocity: 200, heading: 270, vertical_rate: -500, on_ground: false, flight_phase: 'descending', timestamp: Date.now() / 1000 },
   ],
   count: 5,
-  timestamp: new Date().toISOString(),
+  start_time: (Date.now() - 300000) / 1000,
+  end_time: Date.now() / 1000,
 }
 
 // Mock turnaround data
@@ -209,7 +211,7 @@ export const handlers = [
     if (params.icao24 === 'a12345') {
       return HttpResponse.json(mockTrajectory)
     }
-    return HttpResponse.json({ icao24: params.icao24, positions: [], count: 0, timestamp: new Date().toISOString() })
+    return HttpResponse.json({ icao24: params.icao24, callsign: null, points: [], count: 0, start_time: null, end_time: null })
   }),
 
   // Weather endpoint
@@ -323,6 +325,36 @@ export const handlers = [
       ],
       timestamp: new Date().toISOString(),
     })
+  }),
+
+  // Airport activate endpoint
+  http.post('/api/airports/:icaoCode/activate', async ({ params }) => {
+    await delay(50)
+    return HttpResponse.json({
+      config: {
+        sources: ['osm'],
+        runways: [],
+        taxiways: [],
+        aprons: [],
+        navaids: [],
+        buildings: [],
+        gates: [],
+        terminals: [],
+        icaoCode: params.icaoCode,
+      },
+      source: 'osm',
+      icaoCode: params.icaoCode,
+      elementCounts: { gates: 120, terminals: 8, taxiways: 244, aprons: 17 },
+      dataReady: true,
+      gatesLoaded: 120,
+      gateRecommenderCount: 120,
+      stateReset: { cleared_flights: 0, cleared_gates: 0, status: 'reset_complete' },
+    })
+  }),
+
+  // Readiness endpoint (backend startup status)
+  http.get('/api/ready', async () => {
+    return HttpResponse.json({ ready: true, status: 'Ready' })
   }),
 
   // Health check
