@@ -2,7 +2,7 @@ import { GeoJSON, CircleMarker, Tooltip, Polygon, Polyline } from 'react-leaflet
 import { PathOptions, LatLngExpression } from 'leaflet';
 import { Feature, Geometry } from 'geojson';
 import { airportLayout, getFeaturesByType } from '../../constants/airportLayout';
-import useAirportConfig from '../../hooks/useAirportConfig';
+import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { GeoPosition } from '../../types/airportFormats';
 
 // Style function for different feature types
@@ -67,7 +67,7 @@ function geoToLatLng(geoPoints: GeoPosition[] | undefined): LatLngExpression[] {
 }
 
 export default function AirportOverlay() {
-  const { getGates, getTerminals, getTaxiways, getAprons } = useAirportConfig();
+  const { getGates, getTerminals, getTaxiways, getAprons } = useAirportConfigContext();
   const osmGates = getGates();
   const osmTerminals = getTerminals();
   const osmTaxiways = getTaxiways();
