@@ -5,7 +5,7 @@
  * from the API. Falls back to static configuration if no imports.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   AirportConfig,
   ConfigResponse,
@@ -23,6 +23,13 @@ import { BuildingPlacement } from '../config/buildingModels';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+export interface SwitchProgress {
+  step: number;
+  total: number;
+  message: string;
+  done: boolean;
+}
+
 interface UseAirportConfigReturn {
   /** Current merged configuration */
   config: AirportConfig;
@@ -35,6 +42,9 @@ interface UseAirportConfigReturn {
 
   /** Last error message */
   error: string | null;
+
+  /** Airport switch progress from WebSocket */
+  switchProgress: SwitchProgress | null;
 
   /** Import AIXM data */
   importAIXM: (file: File, options?: ImportOptions) => Promise<ImportResponse>;
@@ -139,6 +149,39 @@ export function useAirportConfig(): UseAirportConfigReturn {
   const [currentAirport, setCurrentAirport] = useState<string | null>('KSFO');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [switchProgress, setSwitchProgress] = useState<SwitchProgress | null>(null);
+  const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Listen for airport_switch_progress on the existing WS connection
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsBase = API_BASE
+      ? API_BASE.replace(/^http/, 'ws')
+      : `${protocol}//${window.location.host}`;
+    const ws = new WebSocket(`${wsBase}/ws/flights`);
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'airport_switch_progress') {
+          const data = msg.data as SwitchProgress;
+          setSwitchProgress(data);
+          // Auto-clear after done
+          if (data.done) {
+            if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
+            progressTimerRef.current = setTimeout(() => setSwitchProgress(null), 1500);
+          }
+        }
+      } catch {
+        // ignore non-JSON or irrelevant messages
+      }
+    };
+
+    return () => {
+      ws.close();
+      if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
+    };
+  }, []);
 
   /**
    * Fetch current configuration from API
@@ -532,6 +575,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
     currentAirport,
     isLoading,
     error,
+    switchProgress,
     importAIXM,
     importIFC,
     importAIDM,

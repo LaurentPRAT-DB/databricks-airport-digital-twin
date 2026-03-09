@@ -7,6 +7,7 @@
 
 import { createContext, useContext, ReactNode } from 'react';
 import { useAirportConfig } from '../hooks/useAirportConfig';
+import type { SwitchProgress } from '../hooks/useAirportConfig';
 import type { AirportConfig, OSMTerminal, OSMGate, OSMTaxiway, OSMApron } from '../types/airportFormats';
 import type { RunwayConfig, TaxiwayConfig } from '../constants/airport3D';
 import type { BuildingPlacement } from '../config/buildingModels';
@@ -16,6 +17,7 @@ interface AirportConfigContextValue {
   currentAirport: string | null;
   isLoading: boolean;
   error: string | null;
+  switchProgress: SwitchProgress | null;
   loadAirport: (icaoCode: string) => Promise<void>;
   refresh: () => Promise<void>;
   getRunwayConfigs: () => RunwayConfig[];

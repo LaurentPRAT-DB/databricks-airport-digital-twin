@@ -1,5 +1,6 @@
 """REST API routes for the Airport Digital Twin."""
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timezone
@@ -732,13 +733,8 @@ async def activate_airport(icao_code: str) -> dict:
     """
     Activate an airport: load config, reset state, and ensure synthetic data.
 
-    Orchestrates the full airport switch:
-    1. Load airport config (3-tier: Lakebase cache → Unity Catalog → OSM)
-    2. Reload gates for synthetic data generator
-    3. Reset in-memory flight state
-    4. Check if Lakebase has synthetic data for this airport
-    5. If not → generate schedule, weather, baggage, GSE and persist
-    6. Return airport config + readiness status
+    Returns the config immediately once loaded, then generates synthetic data
+    in the background while broadcasting progress via WebSocket.
 
     Args:
         icao_code: ICAO airport code (e.g., "KSFO", "KJFK")
@@ -746,15 +742,20 @@ async def activate_airport(icao_code: str) -> dict:
     Returns:
         Airport configuration with data readiness info
     """
+    from app.backend.api.websocket import broadcaster
+
+    total_steps = 7
     service = get_airport_config_service()
 
-    # Step 1: Load airport config
+    # Step 1: Load airport config (fast)
+    await broadcaster.broadcast_progress(1, total_steps, "Loading airport configuration...", icao_code)
     loaded = service.initialize_from_lakehouse(
         icao_code=icao_code,
         fallback_to_osm=True,
     )
 
     if not loaded:
+        await broadcaster.broadcast_progress(1, total_steps, "Airport not found", icao_code, done=True)
         raise HTTPException(
             status_code=404,
             detail=f"Airport {icao_code} not found (tried lakehouse and OSM)"
@@ -763,23 +764,45 @@ async def activate_airport(icao_code: str) -> dict:
     config = service.get_config()
     source = "lakehouse" if config.get("source") == "LAKEHOUSE" else "osm"
 
-    # Step 2: Reload gates and gate recommender
+    # Step 2: Reload gates (fast)
+    await broadcaster.broadcast_progress(2, total_steps, "Reloading gate positions...", icao_code)
     gates = reload_gates()
     gate_recommender_count = reload_gate_recommender()
 
-    # Step 3: Reset in-memory flight positions
+    # Step 3: Reset state (fast)
+    await broadcaster.broadcast_progress(3, total_steps, "Resetting flight state...", icao_code)
     reset_result = reset_synthetic_state()
 
-    # Step 4+5: Check/generate Lakebase synthetic data
+    # Check if data generation is needed
     data_generator = get_data_generator_service()
-    data_ready = await data_generator.switch_airport(icao_code)
+    already_initialized = icao_code in data_generator._initialized_airports
+
+    if already_initialized:
+        await broadcaster.broadcast_progress(total_steps, total_steps, "Airport ready", icao_code, done=True)
+    else:
+        # Launch data generation as background task with progress
+        async def _generate_data_background():
+            async def _progress(step, total, message, done):
+                await broadcaster.broadcast_progress(step, total, message, icao_code, done)
+
+            try:
+                await data_generator.switch_airport(icao_code, progress_callback=_progress)
+            except Exception as e:
+                logger.error(f"Background data generation failed for {icao_code}: {e}")
+            finally:
+                await broadcaster.broadcast_progress(
+                    total_steps, total_steps, "Airport ready", icao_code, done=True
+                )
+
+        asyncio.create_task(_generate_data_background())
 
     return {
         "config": config,
         "source": source,
         "icaoCode": icao_code,
         "elementCounts": service.get_element_counts(),
-        "dataReady": data_ready,
+        "dataReady": already_initialized,
+        "dataGenerating": not already_initialized,
         "gatesLoaded": len(gates),
         "gateRecommenderCount": gate_recommender_count,
         "stateReset": reset_result,

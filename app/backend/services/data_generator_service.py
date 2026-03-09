@@ -11,7 +11,9 @@ and refreshes it periodically:
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Coroutine, Optional
+
+ProgressCallback = Optional[Callable[[int, int, str, bool], Coroutine]]
 
 from src.ingestion.weather_generator import generate_metar, generate_taf
 from src.ingestion.schedule_generator import generate_daily_schedule
@@ -67,12 +69,17 @@ class DataGeneratorService:
         self._initialized = False
         self._initialized_airports: set[str] = set()
 
-    async def initialize_all_data(self, airport_icao: str = "KSFO") -> bool:
+    async def initialize_all_data(
+        self,
+        airport_icao: str = "KSFO",
+        progress_callback: ProgressCallback = None,
+    ) -> bool:
         """
         Initialize all data sources on startup.
 
         Args:
             airport_icao: ICAO code for the airport to generate data for.
+            progress_callback: Optional async callback(step, total, message, done).
 
         Returns:
             True if initialization successful, False otherwise.
@@ -95,20 +102,26 @@ class DataGeneratorService:
         logger.info(f"Initializing synthetic data to Lakebase for {airport_icao}")
         logger.info("=" * 60)
 
-        try:
-            # Initialize weather
-            weather_count = await self._generate_weather()
-            logger.info(f"  Weather: {weather_count} station(s)")
+        total_steps = 7
 
-            # Initialize schedule
+        try:
+            if progress_callback:
+                await progress_callback(4, total_steps, "Generating flight schedule...", False)
             schedule_count = await self._generate_schedule()
             logger.info(f"  Schedule: {schedule_count} flights")
 
-            # Initialize baggage (for active flights)
+            if progress_callback:
+                await progress_callback(5, total_steps, "Generating weather data...", False)
+            weather_count = await self._generate_weather()
+            logger.info(f"  Weather: {weather_count} station(s)")
+
+            if progress_callback:
+                await progress_callback(6, total_steps, "Generating baggage data...", False)
             baggage_count = await self._generate_baggage()
             logger.info(f"  Baggage: {baggage_count} flight stats")
 
-            # Initialize GSE fleet
+            if progress_callback:
+                await progress_callback(7, total_steps, "Generating GSE fleet data...", False)
             gse_count = await self._generate_gse_fleet()
             logger.info(f"  GSE Fleet: {gse_count} units")
 
@@ -124,7 +137,11 @@ class DataGeneratorService:
             logger.error(f"Data initialization failed: {e}", exc_info=True)
             return False
 
-    async def switch_airport(self, icao_code: str) -> bool:
+    async def switch_airport(
+        self,
+        icao_code: str,
+        progress_callback: ProgressCallback = None,
+    ) -> bool:
         """Switch synthetic data generation to a new airport.
 
         Checks if Lakebase already has data for this airport.
@@ -134,6 +151,7 @@ class DataGeneratorService:
 
         Args:
             icao_code: ICAO airport code (e.g., "KJFK").
+            progress_callback: Optional async callback(step, total, message, done).
 
         Returns:
             True if airport context was switched (always True).
@@ -158,7 +176,9 @@ class DataGeneratorService:
 
             # Generate fresh data to Lakebase
             logger.info(f"Generating synthetic data for new airport {icao_code}")
-            await self.initialize_all_data(airport_icao=icao_code)
+            await self.initialize_all_data(
+                airport_icao=icao_code, progress_callback=progress_callback
+            )
         except Exception as e:
             logger.warning(f"Lakebase data generation failed for {icao_code}: {e}")
             # Mark as initialized anyway — in-memory generators still work
