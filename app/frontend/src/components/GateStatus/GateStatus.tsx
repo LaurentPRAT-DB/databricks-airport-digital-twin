@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
 import { useCongestion } from '../../hooks/usePredictions';
+import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { CongestionArea } from '../../types/flight';
+import { OSMGate } from '../../types/airportFormats';
 
 interface Gate {
   id: string;
-  terminal: 'A' | 'B';
-  number: number;
+  ref: string;
+  terminal: string;
   isOccupied: boolean;
 }
 
@@ -17,40 +19,50 @@ const congestionColors: Record<string, { bg: string; text: string; border: strin
   critical: { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300' },
 };
 
-// Generate gates with random occupancy for demo
-function generateGates(): Gate[] {
+// Build gates from OSM data, falling back to hardcoded defaults
+function buildGates(osmGates: OSMGate[]): Gate[] {
+  if (osmGates.length > 0) {
+    return osmGates.map((g) => ({
+      id: g.id,
+      ref: g.ref || g.id,
+      terminal: g.terminal || 'Unknown',
+      isOccupied: Math.random() > 0.6, // ~40% occupied (demo)
+    }));
+  }
+
+  // Fallback: hardcoded defaults
   const gates: Gate[] = [];
-
-  // Terminal A: A1-A10
   for (let i = 1; i <= 10; i++) {
-    gates.push({
-      id: `A${i}`,
-      terminal: 'A',
-      number: i,
-      isOccupied: Math.random() > 0.6, // ~40% occupied
-    });
+    gates.push({ id: `A${i}`, ref: `A${i}`, terminal: 'Terminal A', isOccupied: Math.random() > 0.6 });
   }
-
-  // Terminal B: B1-B10
   for (let i = 1; i <= 10; i++) {
-    gates.push({
-      id: `B${i}`,
-      terminal: 'B',
-      number: i,
-      isOccupied: Math.random() > 0.6, // ~40% occupied
-    });
+    gates.push({ id: `B${i}`, ref: `B${i}`, terminal: 'Terminal B', isOccupied: Math.random() > 0.6 });
   }
-
   return gates;
 }
 
-// Get congestion for a terminal apron
+// Group gates by terminal name
+function groupByTerminal(gates: Gate[]): Map<string, Gate[]> {
+  const groups = new Map<string, Gate[]>();
+  for (const gate of gates) {
+    const existing = groups.get(gate.terminal) || [];
+    existing.push(gate);
+    groups.set(gate.terminal, existing);
+  }
+  return groups;
+}
+
+// Get congestion for a terminal (try exact match, then normalized match)
 function getTerminalCongestion(
-  terminal: 'A' | 'B',
+  terminalName: string,
   congestion: CongestionArea[]
 ): CongestionArea | undefined {
-  const areaId = `terminal_${terminal}_apron`;
-  return congestion.find((c) => c.area_id === areaId);
+  // Try exact area_id match first
+  const normalized = terminalName.toLowerCase().replace(/\s+/g, '_');
+  return congestion.find((c) => {
+    const cNorm = c.area_id.toLowerCase();
+    return cNorm === normalized || cNorm === `${normalized}_apron` || cNorm.includes(normalized);
+  });
 }
 
 // Congestion indicator component
@@ -74,22 +86,29 @@ function CongestionIndicator({ congestion }: { congestion?: CongestionArea }) {
   );
 }
 
+// Pick adaptive grid columns based on gate count
+function gridColsClass(count: number): string {
+  if (count <= 5) return 'grid-cols-5';
+  if (count <= 8) return 'grid-cols-8';
+  if (count <= 10) return 'grid-cols-10';
+  if (count <= 12) return 'grid-cols-12';
+  // For large counts, cap at 15 per row
+  return 'grid-cols-[repeat(15,minmax(0,1fr))]';
+}
+
 export default function GateStatus() {
-  // Memoize gates so they don't change on every render
-  const gates = useMemo(() => generateGates(), []);
+  const { getGates } = useAirportConfigContext();
+  const osmGates = getGates();
+
+  // Memoize gates so they don't change on every render (stable per osmGates reference)
+  const gates = useMemo(() => buildGates(osmGates), [osmGates]);
+  const terminalGroups = useMemo(() => groupByTerminal(gates), [gates]);
 
   // Fetch congestion data
   const { congestion, isLoading: isCongestionLoading } = useCongestion();
 
-  const terminalA = gates.filter((g) => g.terminal === 'A');
-  const terminalB = gates.filter((g) => g.terminal === 'B');
-
   const occupiedCount = gates.filter((g) => g.isOccupied).length;
   const availableCount = gates.length - occupiedCount;
-
-  // Get congestion for each terminal
-  const terminalACongestion = getTerminalCongestion('A', congestion);
-  const terminalBCongestion = getTerminalCongestion('B', congestion);
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
@@ -107,59 +126,36 @@ export default function GateStatus() {
         </div>
       </div>
 
-      {/* Terminal A */}
-      <div className="mb-4">
-        <div className="flex items-center mb-2">
-          <span className="text-xs font-medium text-slate-500">Terminal A</span>
-          {!isCongestionLoading && <CongestionIndicator congestion={terminalACongestion} />}
+      {/* Dynamic terminal sections */}
+      {Array.from(terminalGroups.entries()).map(([terminalName, terminalGates], idx) => (
+        <div key={terminalName} className={idx < terminalGroups.size - 1 ? 'mb-4' : ''}>
+          <div className="flex items-center mb-2">
+            <span className="text-xs font-medium text-slate-500">{terminalName}</span>
+            {!isCongestionLoading && (
+              <CongestionIndicator congestion={getTerminalCongestion(terminalName, congestion)} />
+            )}
+          </div>
+          <div className={`grid ${gridColsClass(terminalGates.length)} gap-1`}>
+            {terminalGates.map((gate) => (
+              <div
+                key={gate.id}
+                className={`
+                  aspect-square flex items-center justify-center
+                  text-xs font-medium rounded cursor-pointer
+                  transition-colors duration-150
+                  ${gate.isOccupied
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                  }
+                `}
+                title={`${gate.ref}: ${gate.isOccupied ? 'Occupied' : 'Available'}`}
+              >
+                {gate.ref}
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-10 gap-1">
-          {terminalA.map((gate) => (
-            <div
-              key={gate.id}
-              className={`
-                aspect-square flex items-center justify-center
-                text-xs font-medium rounded cursor-pointer
-                transition-colors duration-150
-                ${gate.isOccupied
-                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                  : 'bg-green-100 text-green-700 hover:bg-green-200'
-                }
-              `}
-              title={`${gate.id}: ${gate.isOccupied ? 'Occupied' : 'Available'}`}
-            >
-              {gate.number}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Terminal B */}
-      <div>
-        <div className="flex items-center mb-2">
-          <span className="text-xs font-medium text-slate-500">Terminal B</span>
-          {!isCongestionLoading && <CongestionIndicator congestion={terminalBCongestion} />}
-        </div>
-        <div className="grid grid-cols-10 gap-1">
-          {terminalB.map((gate) => (
-            <div
-              key={gate.id}
-              className={`
-                aspect-square flex items-center justify-center
-                text-xs font-medium rounded cursor-pointer
-                transition-colors duration-150
-                ${gate.isOccupied
-                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                  : 'bg-green-100 text-green-700 hover:bg-green-200'
-                }
-              `}
-              title={`${gate.id}: ${gate.isOccupied ? 'Occupied' : 'Available'}`}
-            >
-              {gate.number}
-            </div>
-          ))}
-        </div>
-      </div>
+      ))}
 
       {/* Congestion Legend */}
       <div className="mt-3 pt-3 border-t border-slate-100">

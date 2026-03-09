@@ -119,9 +119,11 @@ describe('End-to-end user interaction flows', () => {
         { timeout: 5000 },
       )
 
-      // At least one gate recommendation should render
+      // At least one gate recommendation should render (A1 from mock predictions)
       await waitFor(() => {
-        expect(screen.getByText(/A1/)).toBeInTheDocument()
+        expect(screen.getByText(/gate recommendations/i)).toBeInTheDocument()
+        // gate_id "A1" is rendered in the recommendations section
+        expect(screen.getAllByText(/A1/).length).toBeGreaterThanOrEqual(1)
       })
     })
 
@@ -582,9 +584,9 @@ describe('End-to-end user interaction flows', () => {
       // Gate status should be visible in right panel
       expect(screen.getByText(/gate status/i)).toBeInTheDocument()
 
-      // Should show Terminal A and Terminal B labels
-      expect(screen.getByText(/terminal a/i)).toBeInTheDocument()
-      expect(screen.getByText(/terminal b/i)).toBeInTheDocument()
+      // Should show at least one terminal label (real OSM names or fallback)
+      const terminalLabels = screen.getAllByText(/terminal/i)
+      expect(terminalLabels.length).toBeGreaterThanOrEqual(1)
 
       // Should show available/occupied count labels
       expect(screen.getByText(/available/i)).toBeInTheDocument()
