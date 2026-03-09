@@ -15,9 +15,11 @@ export default function Header({ onShowFIDS }: HeaderProps) {
 
   return (
     <header className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between shadow-lg z-[1002] relative">
-      {/* Airport switch progress overlay */}
-      {switchProgress && !switchProgress.done && (
-        <AirportSwitchProgress progress={switchProgress} />
+      {/* Airport switch progress overlay — show whenever loading, with WS details when available */}
+      {isLoadingAirport && (
+        <AirportSwitchProgress
+          progress={switchProgress && !switchProgress.done ? switchProgress : { step: 0, total: 7, message: 'Switching airport...', done: false }}
+        />
       )}
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-bold">Airport Digital Twin</h1>
