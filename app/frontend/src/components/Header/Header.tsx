@@ -18,7 +18,7 @@ export default function Header({ onShowFIDS }: HeaderProps) {
       {/* Airport switch progress overlay — show whenever loading, with WS details when available */}
       {isLoadingAirport && (
         <AirportSwitchProgress
-          progress={switchProgress && !switchProgress.done ? switchProgress : { step: 0, total: 7, message: 'Switching airport...', done: false }}
+          progress={switchProgress && !switchProgress.done ? switchProgress : { step: 0, total: 7, message: 'Loading airport data, please wait...', done: false }}
         />
       )}
       <div className="flex items-center gap-4">

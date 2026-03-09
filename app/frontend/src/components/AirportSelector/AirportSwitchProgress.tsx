@@ -10,7 +10,8 @@ interface AirportSwitchProgressProps {
 }
 
 export default function AirportSwitchProgress({ progress }: AirportSwitchProgressProps) {
-  const pct = Math.round((progress.step / progress.total) * 100);
+  const hasSteps = progress.step > 0;
+  const pct = hasSteps ? Math.round((progress.step / progress.total) * 100) : 0;
 
   return (
     <div className="absolute top-full left-0 right-0 bg-slate-700 border-t border-slate-600 px-4 py-2 shadow-lg z-[1001] flex items-center gap-3">
@@ -39,17 +40,23 @@ export default function AirportSwitchProgress({ progress }: AirportSwitchProgres
         {progress.message}
       </span>
 
-      {/* Step counter */}
-      <span className="text-xs text-slate-400 whitespace-nowrap">
-        {progress.step}/{progress.total}
-      </span>
+      {/* Step counter — only when real progress arrives */}
+      {hasSteps && (
+        <span className="text-xs text-slate-400 whitespace-nowrap">
+          {progress.step}/{progress.total}
+        </span>
+      )}
 
-      {/* Progress bar */}
+      {/* Progress bar — indeterminate pulse when waiting, determinate when steps arrive */}
       <div className="flex-1 h-1.5 bg-slate-600 rounded-full overflow-hidden min-w-[80px]">
-        <div
-          className="h-full bg-blue-500 rounded-full transition-all duration-300"
-          style={{ width: `${pct}%` }}
-        />
+        {hasSteps ? (
+          <div
+            className="h-full bg-blue-500 rounded-full transition-all duration-300"
+            style={{ width: `${pct}%` }}
+          />
+        ) : (
+          <div className="h-full w-1/3 bg-blue-500/60 rounded-full animate-pulse" />
+        )}
       </div>
     </div>
   );
