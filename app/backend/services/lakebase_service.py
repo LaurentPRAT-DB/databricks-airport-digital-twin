@@ -69,6 +69,7 @@ class LakebaseService:
         self._endpoint_name = os.getenv("LAKEBASE_ENDPOINT_NAME")
         self._use_oauth = os.getenv("LAKEBASE_USE_OAUTH", "false").lower() == "true"
         self._cached_credentials: Optional[tuple[str, str]] = None
+        self._airport_columns_ensured = False
 
     @property
     def is_available(self) -> bool:
@@ -126,6 +127,29 @@ class LakebaseService:
         finally:
             if conn:
                 conn.close()
+
+    def _ensure_airport_columns(self) -> None:
+        """Run ALTER TABLE ADD COLUMN IF NOT EXISTS for airport_icao migration.
+
+        Safe to call multiple times — only runs once per service lifetime.
+        """
+        if self._airport_columns_ensured or not self.is_available:
+            return
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Add airport_icao column to tables that need it
+                    for table in ["flight_schedule", "baggage_status", "gse_fleet", "gse_turnaround"]:
+                        cur.execute(
+                            f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
+                            f"airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO'"
+                        )
+                    conn.commit()
+            self._airport_columns_ensured = True
+            logger.debug("Ensured airport_icao columns exist on all tables")
+        except Exception as e:
+            logger.debug(f"Airport column migration check: {e}")
 
     def get_flights(self, limit: int = 100) -> Optional[list[dict]]:
         """
@@ -345,21 +369,24 @@ class LakebaseService:
             return None
 
     # =========================================================================
-    # Schedule Operations
+    # Schedule Operations (airport-scoped)
     # =========================================================================
 
-    def upsert_schedule(self, flights: list[dict]) -> int:
+    def upsert_schedule(self, flights: list[dict], airport_icao: str = "KSFO") -> int:
         """
         Upsert flight schedule to Lakebase.
 
         Args:
             flights: List of scheduled flight dictionaries.
+            airport_icao: ICAO code to scope the schedule to.
 
         Returns:
             Number of flights upserted.
         """
         if not self.is_available or not flights:
             return 0
+
+        self._ensure_airport_columns()
 
         try:
             with self._get_connection() as conn:
@@ -369,15 +396,15 @@ class LakebaseService:
                         cur.execute(
                             """
                             INSERT INTO flight_schedule (
-                                flight_number, airline, airline_code, origin, destination,
+                                airport_icao, flight_number, airline, airline_code, origin, destination,
                                 scheduled_time, estimated_time, actual_time, gate, status,
                                 delay_minutes, delay_reason, aircraft_type, flight_type
                             ) VALUES (
-                                %(flight_number)s, %(airline)s, %(airline_code)s, %(origin)s, %(destination)s,
+                                %(airport_icao)s, %(flight_number)s, %(airline)s, %(airline_code)s, %(origin)s, %(destination)s,
                                 %(scheduled_time)s, %(estimated_time)s, %(actual_time)s, %(gate)s, %(status)s,
                                 %(delay_minutes)s, %(delay_reason)s, %(aircraft_type)s, %(flight_type)s
                             )
-                            ON CONFLICT (flight_number, scheduled_time) DO UPDATE SET
+                            ON CONFLICT (airport_icao, flight_number, scheduled_time) DO UPDATE SET
                                 airline = EXCLUDED.airline,
                                 airline_code = EXCLUDED.airline_code,
                                 origin = EXCLUDED.origin,
@@ -391,11 +418,11 @@ class LakebaseService:
                                 aircraft_type = EXCLUDED.aircraft_type,
                                 flight_type = EXCLUDED.flight_type
                             """,
-                            flight
+                            {**flight, "airport_icao": airport_icao}
                         )
                         count += 1
                     conn.commit()
-                    logger.info(f"Upserted {count} flights to Lakebase schedule")
+                    logger.info(f"Upserted {count} flights to Lakebase schedule for {airport_icao}")
                     return count
 
         except Exception as e:
@@ -409,6 +436,7 @@ class LakebaseService:
         hours_behind: int = 1,
         hours_ahead: int = 2,
         limit: int = 100,
+        airport_icao: str = "KSFO",
     ) -> Optional[list[dict]]:
         """
         Get flight schedule from Lakebase.
@@ -418,6 +446,7 @@ class LakebaseService:
             hours_behind: Hours into past to include.
             hours_ahead: Hours into future to include.
             limit: Maximum flights to return.
+            airport_icao: ICAO code to filter by.
 
         Returns:
             List of scheduled flights, or None if query fails.
@@ -425,11 +454,13 @@ class LakebaseService:
         if not self.is_available:
             return None
 
+        self._ensure_airport_columns()
+
         try:
             with self._get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     type_clause = ""
-                    params: list = []
+                    params: list = [airport_icao]
                     if flight_type:
                         type_clause = "AND flight_type = %s"
                         params.append(flight_type)
@@ -441,12 +472,13 @@ class LakebaseService:
                             scheduled_time, estimated_time, actual_time, gate, status,
                             delay_minutes, delay_reason, aircraft_type, flight_type
                         FROM flight_schedule
-                        WHERE scheduled_time BETWEEN NOW() - INTERVAL '%s hours' AND NOW() + INTERVAL '%s hours'
+                        WHERE airport_icao = %s
+                        AND scheduled_time BETWEEN NOW() - INTERVAL '%s hours' AND NOW() + INTERVAL '%s hours'
                         {type_clause}
                         ORDER BY scheduled_time ASC
                         LIMIT %s
                         """,
-                        [hours_behind, hours_ahead] + params + [limit],
+                        params[:1] + [hours_behind, hours_ahead] + params[1:] + [limit],
                     )
                     rows = cur.fetchall()
                     return [dict(row) for row in rows]
@@ -456,8 +488,8 @@ class LakebaseService:
             self._cached_credentials = None
             return None
 
-    def clear_old_schedule(self, hours_old: int = 24) -> int:
-        """Remove old schedule entries from Lakebase."""
+    def clear_old_schedule(self, hours_old: int = 24, airport_icao: str = "KSFO") -> int:
+        """Remove old schedule entries from Lakebase for a specific airport."""
         if not self.is_available:
             return 0
 
@@ -465,8 +497,8 @@ class LakebaseService:
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "DELETE FROM flight_schedule WHERE scheduled_time < NOW() - INTERVAL '%s hours'",
-                        (hours_old,)
+                        "DELETE FROM flight_schedule WHERE airport_icao = %s AND scheduled_time < NOW() - INTERVAL '%s hours'",
+                        (airport_icao, hours_old)
                     )
                     deleted = cur.rowcount
                     conn.commit()
@@ -477,16 +509,46 @@ class LakebaseService:
             self._cached_credentials = None
             return 0
 
+    def has_synthetic_data(self, airport_icao: str) -> bool:
+        """Check if Lakebase has synthetic schedule data for this airport.
+
+        Args:
+            airport_icao: ICAO code to check.
+
+        Returns:
+            True if flight_schedule has rows for this airport.
+        """
+        if not self.is_available:
+            return False
+
+        self._ensure_airport_columns()
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT EXISTS(SELECT 1 FROM flight_schedule WHERE airport_icao = %s LIMIT 1)",
+                        (airport_icao,),
+                    )
+                    row = cur.fetchone()
+                    return row[0] if row else False
+
+        except Exception as e:
+            logger.warning(f"Lakebase has_synthetic_data check failed for {airport_icao}: {e}")
+            self._cached_credentials = None
+            return False
+
     # =========================================================================
-    # Baggage Operations
+    # Baggage Operations (airport-scoped)
     # =========================================================================
 
-    def upsert_baggage_stats(self, stats: dict) -> bool:
+    def upsert_baggage_stats(self, stats: dict, airport_icao: str = "KSFO") -> bool:
         """
         Upsert baggage statistics for a flight to Lakebase.
 
         Args:
             stats: Baggage stats dictionary with flight_number as key.
+            airport_icao: ICAO code to scope the data to.
 
         Returns:
             True if successful, False otherwise.
@@ -494,19 +556,21 @@ class LakebaseService:
         if not self.is_available:
             return False
 
+        self._ensure_airport_columns()
+
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
                         INSERT INTO baggage_status (
-                            flight_number, total_bags, checked_in, loaded, unloaded,
+                            airport_icao, flight_number, total_bags, checked_in, loaded, unloaded,
                             on_carousel, loading_progress_pct, connecting_bags, misconnects, carousel
                         ) VALUES (
-                            %(flight_number)s, %(total_bags)s, %(checked_in)s, %(loaded)s, %(unloaded)s,
+                            %(airport_icao)s, %(flight_number)s, %(total_bags)s, %(checked_in)s, %(loaded)s, %(unloaded)s,
                             %(on_carousel)s, %(loading_progress_pct)s, %(connecting_bags)s, %(misconnects)s, %(carousel)s
                         )
-                        ON CONFLICT (flight_number) DO UPDATE SET
+                        ON CONFLICT (airport_icao, flight_number) DO UPDATE SET
                             total_bags = EXCLUDED.total_bags,
                             checked_in = EXCLUDED.checked_in,
                             loaded = EXCLUDED.loaded,
@@ -517,7 +581,7 @@ class LakebaseService:
                             misconnects = EXCLUDED.misconnects,
                             carousel = EXCLUDED.carousel
                         """,
-                        stats
+                        {**stats, "airport_icao": airport_icao}
                     )
                     conn.commit()
                     return True
@@ -527,18 +591,21 @@ class LakebaseService:
             self._cached_credentials = None
             return False
 
-    def get_baggage_stats(self, flight_number: str) -> Optional[dict]:
+    def get_baggage_stats(self, flight_number: str, airport_icao: str = "KSFO") -> Optional[dict]:
         """
         Get baggage statistics for a flight from Lakebase.
 
         Args:
             flight_number: Flight number to look up.
+            airport_icao: ICAO code to scope the query to.
 
         Returns:
             Baggage stats dictionary, or None if not found.
         """
         if not self.is_available:
             return None
+
+        self._ensure_airport_columns()
 
         try:
             with self._get_connection() as conn:
@@ -549,9 +616,9 @@ class LakebaseService:
                             flight_number, total_bags, checked_in, loaded, unloaded,
                             on_carousel, loading_progress_pct, connecting_bags, misconnects, carousel
                         FROM baggage_status
-                        WHERE flight_number = %s
+                        WHERE airport_icao = %s AND flight_number = %s
                         """,
-                        (flight_number,),
+                        (airport_icao, flight_number),
                     )
                     row = cur.fetchone()
                     return dict(row) if row else None
@@ -562,21 +629,24 @@ class LakebaseService:
             return None
 
     # =========================================================================
-    # GSE Fleet Operations
+    # GSE Fleet Operations (airport-scoped)
     # =========================================================================
 
-    def upsert_gse_fleet(self, units: list[dict]) -> int:
+    def upsert_gse_fleet(self, units: list[dict], airport_icao: str = "KSFO") -> int:
         """
         Upsert GSE fleet units to Lakebase.
 
         Args:
             units: List of GSE unit dictionaries.
+            airport_icao: ICAO code to scope the data to.
 
         Returns:
             Number of units upserted.
         """
         if not self.is_available or not units:
             return 0
+
+        self._ensure_airport_columns()
 
         try:
             with self._get_connection() as conn:
@@ -586,13 +656,13 @@ class LakebaseService:
                         cur.execute(
                             """
                             INSERT INTO gse_fleet (
-                                unit_id, gse_type, status, assigned_flight,
+                                airport_icao, unit_id, gse_type, status, assigned_flight,
                                 assigned_gate, position_x, position_y
                             ) VALUES (
-                                %(unit_id)s, %(gse_type)s, %(status)s, %(assigned_flight)s,
+                                %(airport_icao)s, %(unit_id)s, %(gse_type)s, %(status)s, %(assigned_flight)s,
                                 %(assigned_gate)s, %(position_x)s, %(position_y)s
                             )
-                            ON CONFLICT (unit_id) DO UPDATE SET
+                            ON CONFLICT (airport_icao, unit_id) DO UPDATE SET
                                 gse_type = EXCLUDED.gse_type,
                                 status = EXCLUDED.status,
                                 assigned_flight = EXCLUDED.assigned_flight,
@@ -600,7 +670,7 @@ class LakebaseService:
                                 position_x = EXCLUDED.position_x,
                                 position_y = EXCLUDED.position_y
                             """,
-                            unit
+                            {**unit, "airport_icao": airport_icao}
                         )
                         count += 1
                     conn.commit()
@@ -611,15 +681,20 @@ class LakebaseService:
             self._cached_credentials = None
             return 0
 
-    def get_gse_fleet(self) -> Optional[list[dict]]:
+    def get_gse_fleet(self, airport_icao: str = "KSFO") -> Optional[list[dict]]:
         """
         Get all GSE fleet units from Lakebase.
+
+        Args:
+            airport_icao: ICAO code to filter by.
 
         Returns:
             List of GSE unit dictionaries, or None if query fails.
         """
         if not self.is_available:
             return None
+
+        self._ensure_airport_columns()
 
         try:
             with self._get_connection() as conn:
@@ -630,8 +705,10 @@ class LakebaseService:
                             unit_id, gse_type, status, assigned_flight,
                             assigned_gate, position_x, position_y
                         FROM gse_fleet
+                        WHERE airport_icao = %s
                         ORDER BY gse_type, unit_id
-                        """
+                        """,
+                        (airport_icao,)
                     )
                     rows = cur.fetchall()
                     return [dict(row) for row in rows]
@@ -642,19 +719,11 @@ class LakebaseService:
             return None
 
     # =========================================================================
-    # GSE Turnaround Operations
+    # Airport Config Cache Operations
     # =========================================================================
 
-    def upsert_turnaround(self, turnaround: dict) -> bool:
-        """
-        Upsert turnaround status to Lakebase.
-
-        Args:
-            turnaround: Turnaround status dictionary.
-
-        Returns:
-            True if successful, False otherwise.
-        """
+    def _ensure_airport_config_table(self) -> bool:
+        """Create airport_config_cache table if it doesn't exist."""
         if not self.is_available:
             return False
 
@@ -663,14 +732,129 @@ class LakebaseService:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
+                        CREATE TABLE IF NOT EXISTS airport_config_cache (
+                            icao_code VARCHAR(10) PRIMARY KEY,
+                            config_json JSONB NOT NULL,
+                            updated_at TIMESTAMPTZ DEFAULT NOW()
+                        )
+                        """
+                    )
+                    conn.commit()
+                    return True
+
+        except Exception as e:
+            logger.warning(f"Failed to create airport_config_cache table: {e}")
+            self._cached_credentials = None
+            return False
+
+    def upsert_airport_config(self, icao_code: str, config: dict) -> bool:
+        """
+        Upsert airport configuration to Lakebase cache.
+
+        Args:
+            icao_code: ICAO airport code (e.g., KSFO).
+            config: Airport configuration dictionary.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not self.is_available:
+            return False
+
+        try:
+            import json
+            self._ensure_airport_config_table()
+
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO airport_config_cache (icao_code, config_json, updated_at)
+                        VALUES (%s, %s, NOW())
+                        ON CONFLICT (icao_code) DO UPDATE SET
+                            config_json = EXCLUDED.config_json,
+                            updated_at = EXCLUDED.updated_at
+                        """,
+                        (icao_code, json.dumps(config)),
+                    )
+                    conn.commit()
+                    logger.info(f"Cached airport config for {icao_code} in Lakebase")
+                    return True
+
+        except Exception as e:
+            logger.warning(f"Lakebase airport config upsert failed: {e}")
+            self._cached_credentials = None
+            return False
+
+    def get_airport_config(self, icao_code: str) -> Optional[dict]:
+        """
+        Get airport configuration from Lakebase cache.
+
+        Args:
+            icao_code: ICAO airport code (e.g., KSFO).
+
+        Returns:
+            Airport configuration dictionary, or None if not found.
+        """
+        if not self.is_available:
+            return None
+
+        try:
+            import json
+            self._ensure_airport_config_table()
+
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT config_json FROM airport_config_cache WHERE icao_code = %s",
+                        (icao_code,),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        config = row["config_json"]
+                        if isinstance(config, str):
+                            config = json.loads(config)
+                        return config
+                    return None
+
+        except Exception as e:
+            logger.warning(f"Lakebase airport config query failed for {icao_code}: {e}")
+            self._cached_credentials = None
+            return None
+
+    # =========================================================================
+    # GSE Turnaround Operations (airport-scoped)
+    # =========================================================================
+
+    def upsert_turnaround(self, turnaround: dict, airport_icao: str = "KSFO") -> bool:
+        """
+        Upsert turnaround status to Lakebase.
+
+        Args:
+            turnaround: Turnaround status dictionary.
+            airport_icao: ICAO code to scope the data to.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not self.is_available:
+            return False
+
+        self._ensure_airport_columns()
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
                         INSERT INTO gse_turnaround (
-                            icao24, flight_number, gate, arrival_time, current_phase,
+                            airport_icao, icao24, flight_number, gate, arrival_time, current_phase,
                             phase_progress_pct, total_progress_pct, estimated_departure, aircraft_type
                         ) VALUES (
-                            %(icao24)s, %(flight_number)s, %(gate)s, %(arrival_time)s, %(current_phase)s,
+                            %(airport_icao)s, %(icao24)s, %(flight_number)s, %(gate)s, %(arrival_time)s, %(current_phase)s,
                             %(phase_progress_pct)s, %(total_progress_pct)s, %(estimated_departure)s, %(aircraft_type)s
                         )
-                        ON CONFLICT (icao24) DO UPDATE SET
+                        ON CONFLICT (airport_icao, icao24) DO UPDATE SET
                             flight_number = EXCLUDED.flight_number,
                             gate = EXCLUDED.gate,
                             arrival_time = EXCLUDED.arrival_time,
@@ -680,7 +864,7 @@ class LakebaseService:
                             estimated_departure = EXCLUDED.estimated_departure,
                             aircraft_type = EXCLUDED.aircraft_type
                         """,
-                        turnaround
+                        {**turnaround, "airport_icao": airport_icao}
                     )
                     conn.commit()
                     return True
@@ -690,18 +874,21 @@ class LakebaseService:
             self._cached_credentials = None
             return False
 
-    def get_turnaround(self, icao24: str) -> Optional[dict]:
+    def get_turnaround(self, icao24: str, airport_icao: str = "KSFO") -> Optional[dict]:
         """
         Get turnaround status from Lakebase.
 
         Args:
             icao24: Aircraft ICAO24 address.
+            airport_icao: ICAO code to scope the query to.
 
         Returns:
             Turnaround status dictionary, or None if not found.
         """
         if not self.is_available:
             return None
+
+        self._ensure_airport_columns()
 
         try:
             with self._get_connection() as conn:
@@ -712,9 +899,9 @@ class LakebaseService:
                             icao24, flight_number, gate, arrival_time, current_phase,
                             phase_progress_pct, total_progress_pct, estimated_departure, aircraft_type
                         FROM gse_turnaround
-                        WHERE icao24 = %s
+                        WHERE airport_icao = %s AND icao24 = %s
                         """,
-                        (icao24,),
+                        (airport_icao, icao24),
                     )
                     row = cur.fetchone()
                     return dict(row) if row else None
@@ -724,17 +911,19 @@ class LakebaseService:
             self._cached_credentials = None
             return None
 
-    def delete_turnaround(self, icao24: str) -> bool:
+    def delete_turnaround(self, icao24: str, airport_icao: str = "KSFO") -> bool:
         """Delete turnaround when aircraft departs."""
         if not self.is_available:
             return False
+
+        self._ensure_airport_columns()
 
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "DELETE FROM gse_turnaround WHERE icao24 = %s",
-                        (icao24,)
+                        "DELETE FROM gse_turnaround WHERE airport_icao = %s AND icao24 = %s",
+                        (airport_icao, icao24)
                     )
                     conn.commit()
                     return cur.rowcount > 0

@@ -130,6 +130,10 @@ class OSMImportResponse(BaseModel):
     terminals_imported: int = Field(alias="terminalsImported")
     taxiways_imported: int = Field(alias="taxiwaysImported")
     aprons_imported: int = Field(alias="apronsImported")
+    runways_imported: int = Field(0, alias="runwaysImported")
+    hangars_imported: int = Field(0, alias="hangarsImported")
+    helipads_imported: int = Field(0, alias="helipadsImported")
+    parking_positions_imported: int = Field(0, alias="parkingPositionsImported")
     warnings: list[str] = Field(default_factory=list)
     timestamp: datetime
 

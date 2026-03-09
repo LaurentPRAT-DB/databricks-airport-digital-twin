@@ -126,6 +126,12 @@ class CongestionPredictor:
             if lat is None or lon is None:
                 continue
 
+            # Cast to float — Lakebase may return strings
+            lat = float(lat)
+            lon = float(lon)
+            altitude = float(altitude) if altitude is not None else 0
+            velocity = float(velocity) if velocity is not None else 0
+
             # Check if position is within area bounds
             in_lat_range = area.lat_range[0] <= lat <= area.lat_range[1]
             in_lon_range = area.lon_range[0] <= lon <= area.lon_range[1]

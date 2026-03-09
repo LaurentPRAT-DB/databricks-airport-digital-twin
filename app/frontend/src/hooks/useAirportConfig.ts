@@ -27,6 +27,9 @@ interface UseAirportConfigReturn {
   /** Current merged configuration */
   config: AirportConfig;
 
+  /** Current airport ICAO code */
+  currentAirport: string | null;
+
   /** Whether config is loading */
   isLoading: boolean;
 
@@ -47,6 +50,9 @@ interface UseAirportConfigReturn {
 
   /** Import FAA runway data for a US airport */
   importFAA: (facilityId: string, merge?: boolean) => Promise<FAAImportResponse>;
+
+  /** Load airport from lakehouse */
+  loadAirport: (icaoCode: string) => Promise<void>;
 
   /** Reload configuration from API */
   refresh: () => Promise<void>;
@@ -130,6 +136,7 @@ function createDefaultConfig(): AirportConfig {
  */
 export function useAirportConfig(): UseAirportConfigReturn {
   const [config, setConfig] = useState<AirportConfig>(createDefaultConfig);
+  const [currentAirport, setCurrentAirport] = useState<string | null>('KSFO');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -149,16 +156,58 @@ export function useAirportConfig(): UseAirportConfigReturn {
       const data: ConfigResponse = await response.json();
 
       if (data.config && Object.keys(data.config).length > 0) {
+        const configData = data.config as AirportConfig & { icaoCode?: string };
         setConfig((prev) => ({
           ...prev,
-          ...data.config,
-          sources: (data.config.sources as AirportConfig['sources']) || prev.sources,
+          ...configData,
+          sources: configData.sources || prev.sources,
           lastUpdated: data.lastUpdated || undefined,
         }));
+        // Update current airport from config
+        if (configData.icaoCode) {
+          setCurrentAirport(configData.icaoCode);
+        }
       }
     } catch (err) {
       // API might not have config yet, fall back to default
       console.warn('Failed to load config from API, using defaults:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  /**
+   * Load airport (lakehouse first, OSM fallback, auto-persists)
+   */
+  const loadAirport = useCallback(async (icaoCode: string) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Activate endpoint: loads config, resets state, and ensures synthetic data
+      const response = await fetch(`${API_BASE}/api/airports/${icaoCode}/activate`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `Failed to activate airport: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (data.config && Object.keys(data.config).length > 0) {
+        setConfig((prev) => ({
+          ...prev,
+          ...data.config,
+          sources: (data.config.sources as AirportConfig['sources']) || prev.sources,
+          lastUpdated: new Date().toISOString(),
+        }));
+        setCurrentAirport(icaoCode);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to activate airport';
+      setError(message);
+      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -480,6 +529,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
 
   return {
     config,
+    currentAirport,
     isLoading,
     error,
     importAIXM,
@@ -487,6 +537,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
     importAIDM,
     importOSM,
     importFAA,
+    loadAirport,
     refresh,
     reset,
     getRunwayConfigs,

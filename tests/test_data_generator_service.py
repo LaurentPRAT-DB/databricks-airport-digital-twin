@@ -24,12 +24,14 @@ class TestDataGeneratorServiceInit:
 
         assert service._airport == "SFO"
         assert service._weather_station == "KSFO"
+        assert service._current_airport_icao == "KSFO"
         assert service._weather_interval == 600  # 10 minutes
         assert service._schedule_interval == 60  # 1 minute
         assert service._baggage_interval == 30  # 30 seconds
         assert service._gse_interval == 30  # 30 seconds
         assert service._running is False
         assert service._initialized is False
+        assert service._initialized_airports == set()
         assert service._tasks == []
 
     def test_custom_config(self):
@@ -152,6 +154,7 @@ class TestDataGeneratorServiceInitialization:
 
         assert result is True
         assert service._initialized is True
+        assert "KSFO" in service._initialized_airports
         mock_lakebase.upsert_weather.assert_called_once()
         mock_lakebase.upsert_schedule.assert_called_once()
 
@@ -159,7 +162,7 @@ class TestDataGeneratorServiceInitialization:
     async def test_initialize_all_data_already_initialized(self):
         """Test that re-initialization is skipped."""
         service = DataGeneratorService()
-        service._initialized = True
+        service._initialized_airports.add("KSFO")
 
         mock_lakebase = MagicMock()
         mock_lakebase.is_available = True
@@ -168,7 +171,7 @@ class TestDataGeneratorServiceInitialization:
             "app.backend.services.data_generator_service.get_lakebase_service",
             return_value=mock_lakebase,
         ):
-            result = await service.initialize_all_data()
+            result = await service.initialize_all_data(airport_icao="KSFO")
 
         assert result is True
         # Should not call any Lakebase methods
@@ -346,8 +349,8 @@ class TestScheduleGeneration:
             result = await service._generate_schedule()
 
         assert result == 50
-        mock_lakebase.clear_old_schedule.assert_called_once_with(hours_old=24)
-        mock_lakebase.upsert_schedule.assert_called_once_with(mock_schedule)
+        mock_lakebase.clear_old_schedule.assert_called_once_with(hours_old=24, airport_icao="KSFO")
+        mock_lakebase.upsert_schedule.assert_called_once_with(mock_schedule, airport_icao="KSFO")
 
 
 class TestBaggageGeneration:

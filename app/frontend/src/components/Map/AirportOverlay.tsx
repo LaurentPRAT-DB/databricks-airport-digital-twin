@@ -63,7 +63,7 @@ const nonGateFeatures = {
 // Helper to convert GeoPosition array to LatLngExpression array
 function geoToLatLng(geoPoints: GeoPosition[] | undefined): LatLngExpression[] {
   if (!geoPoints) return [];
-  return geoPoints.map((p) => [p.latitude, p.longitude] as LatLngExpression);
+  return geoPoints.map((p) => [Number(p.latitude), Number(p.longitude)] as LatLngExpression);
 }
 
 export default function AirportOverlay() {
@@ -93,7 +93,7 @@ export default function AirportOverlay() {
       {useOsmGates && osmGates.map((gate) => (
         <CircleMarker
           key={gate.id}
-          center={[gate.geo.latitude, gate.geo.longitude]}
+          center={[Number(gate.geo.latitude), Number(gate.geo.longitude)]}
           radius={6}
           pathOptions={{
             fillColor: '#10b981', // emerald-500

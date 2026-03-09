@@ -1,5 +1,6 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { FlightProvider, useFlightContext } from './context/FlightContext';
+import { AirportConfigProvider, useAirportConfigContext } from './context/AirportConfigContext';
 import Header from './components/Header/Header';
 import FlightList from './components/FlightList/FlightList';
 import AirportMap from './components/Map/AirportMap';
@@ -18,6 +19,76 @@ function Map3DLoadingFallback() {
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
         <p className="text-lg">Loading 3D View...</p>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Full-screen loading overlay shown during initial data fetch.
+ * Displays an animated radar sweep, airport name, and live backend status.
+ */
+function LoadingScreen({ airportCode, statusMessage }: { airportCode?: string; statusMessage?: string }) {
+  const [dotCount, setDotCount] = useState(0);
+
+  useEffect(() => {
+    const dotTimer = setInterval(() => setDotCount((d) => (d + 1) % 4), 400);
+    return () => clearInterval(dotTimer);
+  }, []);
+
+  return (
+    <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white">
+      {/* Radar sweep animation */}
+      <div className="relative w-32 h-32 mb-8">
+        {/* Outer ring */}
+        <div className="absolute inset-0 rounded-full border-2 border-slate-600" />
+        {/* Middle ring */}
+        <div className="absolute inset-4 rounded-full border border-slate-700" />
+        {/* Inner ring */}
+        <div className="absolute inset-8 rounded-full border border-slate-700" />
+        {/* Center dot */}
+        <div className="absolute inset-[3.5rem] rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
+        {/* Sweep line */}
+        <div
+          className="absolute inset-0 origin-center"
+          style={{ animation: 'radar-sweep 2.4s linear infinite' }}
+        >
+          <div
+            className="absolute left-1/2 bottom-1/2 w-0.5 h-1/2 origin-bottom"
+            style={{
+              background: 'linear-gradient(to top, rgba(16,185,129,0.8), transparent)',
+            }}
+          />
+        </div>
+        {/* Blips */}
+        <div className="absolute w-1.5 h-1.5 rounded-full bg-emerald-400 top-6 left-10 animate-pulse" />
+        <div
+          className="absolute w-1.5 h-1.5 rounded-full bg-emerald-400 top-14 right-5 animate-pulse"
+          style={{ animationDelay: '0.7s' }}
+        />
+        <div
+          className="absolute w-1 h-1 rounded-full bg-emerald-400 bottom-8 left-7 animate-pulse"
+          style={{ animationDelay: '1.4s' }}
+        />
+      </div>
+
+      {/* Title */}
+      <h1 className="text-2xl font-bold mb-2">Airport Digital Twin</h1>
+      {airportCode && (
+        <p className="text-lg text-slate-400 mb-6 font-mono">{airportCode}</p>
+      )}
+
+      {/* Status text */}
+      <p className="text-sm text-slate-400 h-5">
+        {(statusMessage || 'Initializing')}{'.'.repeat(dotCount)}
+      </p>
+
+      {/* Inline keyframes for the radar sweep */}
+      <style>{`
+        @keyframes radar-sweep {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -64,7 +135,50 @@ function ViewToggle({
 function AppContent() {
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
   const [showFIDS, setShowFIDS] = useState(false);
+  const [backendReady, setBackendReady] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('Initializing');
   const { flights, selectedFlight, setSelectedFlight } = useFlightContext();
+  const { currentAirport, refresh: refreshConfig } = useAirportConfigContext();
+
+  // Poll /api/ready until backend signals readiness
+  useEffect(() => {
+    if (backendReady) return;
+
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch('/api/ready');
+        if (res.ok) {
+          const data = await res.json();
+          setStatusMessage(data.status || 'Initializing');
+          if (data.ready) {
+            setBackendReady(true);
+            refreshConfig();
+          }
+        }
+      } catch {
+        // Backend not up yet — keep polling
+      }
+    }, 1500);
+
+    // Also fire immediately on mount
+    (async () => {
+      try {
+        const res = await fetch('/api/ready');
+        if (res.ok) {
+          const data = await res.json();
+          setStatusMessage(data.status || 'Initializing');
+          if (data.ready) {
+            setBackendReady(true);
+            refreshConfig();
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => clearInterval(poll);
+  }, [backendReady, refreshConfig]);
 
   // Handler for 3D map flight selection (uses icao24 string)
   const handleFlightSelect = (icao24: string) => {
@@ -73,6 +187,11 @@ function AppContent() {
       setSelectedFlight(flight);
     }
   };
+
+  // Show loading screen until backend is ready
+  if (!backendReady) {
+    return <LoadingScreen airportCode={currentAirport || undefined} statusMessage={statusMessage} />;
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
@@ -112,9 +231,11 @@ function AppContent() {
 
 function App() {
   return (
-    <FlightProvider>
-      <AppContent />
-    </FlightProvider>
+    <AirportConfigProvider>
+      <FlightProvider>
+        <AppContent />
+      </FlightProvider>
+    </AirportConfigProvider>
   );
 }
 

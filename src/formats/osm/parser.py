@@ -62,6 +62,10 @@ class OSMParser(AirportFormatParser[OSMDocument]):
         include_terminals: bool = True,
         include_taxiways: bool = False,
         include_aprons: bool = False,
+        include_runways: bool = False,
+        include_hangars: bool = False,
+        include_helipads: bool = False,
+        include_parking_positions: bool = False,
     ) -> str:
         """
         Build Overpass QL query for airport features.
@@ -72,6 +76,10 @@ class OSMParser(AirportFormatParser[OSMDocument]):
             include_terminals: Fetch terminal buildings
             include_taxiways: Fetch taxiway ways
             include_aprons: Fetch apron areas
+            include_runways: Fetch runway ways
+            include_hangars: Fetch hangar buildings
+            include_helipads: Fetch helipad nodes/ways
+            include_parking_positions: Fetch parking position nodes
 
         Returns:
             Overpass QL query string
@@ -92,11 +100,28 @@ class OSMParser(AirportFormatParser[OSMDocument]):
         if include_aprons:
             selectors.append('way["aeroway"="apron"](area.airport);')
 
+        if include_runways:
+            selectors.append('way["aeroway"="runway"](area.airport);')
+
+        if include_hangars:
+            selectors.append('way["aeroway"="hangar"](area.airport);')
+            selectors.append('way["building"="hangar"](area.airport);')
+
+        if include_helipads:
+            selectors.append('node["aeroway"="helipad"](area.airport);')
+            selectors.append('way["aeroway"="helipad"](area.airport);')
+
+        if include_parking_positions:
+            selectors.append('node["aeroway"="parking_position"](area.airport);')
+
         features = "\n  ".join(selectors)
 
+        # Include airport area itself to get name/iata metadata
         query = f"""[out:json][timeout:25];
 area["icao"="{icao_code}"]->.airport;
 (
+  way["icao"="{icao_code}"]["aeroway"="aerodrome"];
+  relation["icao"="{icao_code}"]["aeroway"="aerodrome"];
   {features}
 );
 out body geom;
@@ -110,6 +135,10 @@ out body geom;
         include_terminals: bool = True,
         include_taxiways: bool = False,
         include_aprons: bool = False,
+        include_runways: bool = False,
+        include_hangars: bool = False,
+        include_helipads: bool = False,
+        include_parking_positions: bool = False,
     ) -> dict:
         """
         Fetch airport data from Overpass API.
@@ -120,6 +149,10 @@ out body geom;
             include_terminals: Fetch terminal buildings
             include_taxiways: Fetch taxiway ways
             include_aprons: Fetch apron areas
+            include_runways: Fetch runway ways
+            include_hangars: Fetch hangar buildings
+            include_helipads: Fetch helipad nodes/ways
+            include_parking_positions: Fetch parking position nodes
 
         Returns:
             Raw JSON response from Overpass API
@@ -133,6 +166,10 @@ out body geom;
             include_terminals=include_terminals,
             include_taxiways=include_taxiways,
             include_aprons=include_aprons,
+            include_runways=include_runways,
+            include_hangars=include_hangars,
+            include_helipads=include_helipads,
+            include_parking_positions=include_parking_positions,
         )
 
         logger.info(f"Fetching OSM data for {icao_code}")
@@ -195,8 +232,22 @@ out body geom;
         nodes: list[OSMNode] = []
         ways: list[OSMWay] = []
 
+        # Airport metadata from aerodrome element
+        icao_code = None
+        iata_code = None
+        airport_name = None
+        airport_operator = None
+
         for elem in elements:
             elem_type = elem.get("type")
+            tags = elem.get("tags", {})
+
+            # Check if this is the aerodrome (airport boundary/metadata)
+            if tags.get("aeroway") == "aerodrome":
+                icao_code = tags.get("icao")
+                iata_code = tags.get("iata")
+                airport_name = tags.get("name")
+                airport_operator = tags.get("operator")
 
             if elem_type == "node":
                 node = self._parse_node(elem)
@@ -204,9 +255,6 @@ out body geom;
             elif elem_type == "way":
                 way = self._parse_way(elem)
                 ways.append(way)
-
-        # Extract ICAO from airport area if available
-        icao_code = None
 
         version = data.get("version", "0.6")
         if not isinstance(version, str):
@@ -216,6 +264,9 @@ out body geom;
             version=version,
             generator=data.get("generator", "Overpass API"),
             icao_code=icao_code,
+            iata_code=iata_code,
+            airport_name=airport_name,
+            airport_operator=airport_operator,
             timestamp=datetime.now(timezone.utc),
             nodes=nodes,
             ways=ways,

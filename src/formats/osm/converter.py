@@ -23,6 +23,8 @@ class OSMConverter:
     TERMINAL_COLOR = 0x444444
     TAXIWAY_COLOR = 0x555555
     APRON_COLOR = 0x666666
+    RUNWAY_COLOR = 0x333333
+    HANGAR_COLOR = 0x777777
 
     def __init__(self, coord_converter: CoordinateConverter):
         """
@@ -46,10 +48,18 @@ class OSMConverter:
         config: dict[str, Any] = {
             "source": "OSM",
             "icaoCode": doc.icao_code,
+            "iataCode": doc.iata_code,
+            "airportName": doc.airport_name,
+            "airportOperator": doc.airport_operator,
+            "osmTimestamp": doc.timestamp.isoformat() if doc.timestamp else None,
             "gates": [],
             "terminals": [],
             "osmTaxiways": [],
             "osmAprons": [],
+            "osmRunways": [],
+            "osmHangars": [],
+            "osmHelipads": [],
+            "osmParkingPositions": [],
         }
 
         # Update converter reference point from centroid of all elements
@@ -78,6 +88,30 @@ class OSMConverter:
             converted = self._convert_apron(apron)
             if converted:
                 config["osmAprons"].append(converted)
+
+        # Convert runways
+        for runway in doc.runways:
+            converted = self._convert_runway(runway)
+            if converted:
+                config["osmRunways"].append(converted)
+
+        # Convert hangars
+        for hangar in doc.hangars:
+            converted = self._convert_hangar(hangar)
+            if converted:
+                config["osmHangars"].append(converted)
+
+        # Convert helipads
+        for helipad in doc.helipads:
+            converted = self._convert_helipad(helipad)
+            if converted:
+                config["osmHelipads"].append(converted)
+
+        # Convert parking positions
+        for pp in doc.parking_positions:
+            converted = self._convert_parking_position(pp)
+            if converted:
+                config["osmParkingPositions"].append(converted)
 
         return config
 
@@ -122,6 +156,9 @@ class OSMConverter:
             "ref": ref,
             "terminal": gate.terminal_name,
             "name": gate.tags.name,
+            "level": gate.tags.level,  # Floor level for multi-story terminals
+            "operator": gate.tags.operator,  # Airline operator (if assigned)
+            "elevation": gate.tags.ele,  # Elevation in meters
             "position": {
                 "x": pos.x,
                 "y": pos.y,
@@ -165,6 +202,8 @@ class OSMConverter:
             "osmId": terminal.id,
             "name": terminal.tags.name or f"Terminal {terminal.id}",
             "type": "terminal",
+            "operator": terminal.tags.operator,  # Airport authority or airline operator
+            "level": terminal.tags.level,  # Number of levels/floors
             "position": {
                 "x": center_pos.x,
                 "y": 0.0,
@@ -205,6 +244,7 @@ class OSMConverter:
             "points": points,
             "geoPoints": geo_points,  # For 2D map rendering
             "width": taxiway.tags.width or 20.0,
+            "surface": taxiway.tags.surface,  # Paving material (asphalt, concrete, etc.)
             "color": self.TAXIWAY_COLOR,
         }
 
@@ -236,12 +276,108 @@ class OSMConverter:
             "id": apron.tags.ref or f"APRON_{apron.id}",
             "osmId": apron.id,
             "name": apron.tags.name,
+            "surface": apron.tags.surface,  # Paving material (asphalt, concrete, etc.)
             "position": {"x": center_pos.x, "y": 0.02, "z": center_pos.z},
             "dimensions": {"width": width, "height": 0.1, "depth": depth},
             "polygon": points,
             "geoPolygon": geo_polygon,  # For 2D map rendering
             "geo": {"latitude": center_lat, "longitude": center_lon},
             "color": self.APRON_COLOR,
+        }
+
+    def _convert_runway(self, runway: OSMWay) -> dict[str, Any] | None:
+        """Convert OSM runway way to internal format."""
+        if not runway.geometry:
+            return None
+
+        points = []
+        geo_points = []
+        for pt in runway.geometry:
+            pos = self.coord_converter.geo_to_local(
+                GeoPosition(pt.lat, pt.lon, 0.0)
+            )
+            points.append({"x": pos.x, "y": 0.0, "z": pos.z})
+            geo_points.append({"latitude": pt.lat, "longitude": pt.lon})
+
+        return {
+            "id": runway.tags.ref or f"RWY_{runway.id}",
+            "osmId": runway.id,
+            "name": runway.tags.name or runway.tags.ref,
+            "ref": runway.tags.ref,
+            "points": points,
+            "geoPoints": geo_points,
+            "width": runway.tags.width or 45.0,
+            "surface": runway.tags.surface,
+            "color": self.RUNWAY_COLOR,
+        }
+
+    def _convert_hangar(self, hangar: OSMWay) -> dict[str, Any] | None:
+        """Convert OSM hangar way to internal building format."""
+        if not hangar.geometry:
+            return None
+
+        center_lat, center_lon = hangar.center
+        center_pos = self.coord_converter.geo_to_local(
+            GeoPosition(center_lat, center_lon, 0.0)
+        )
+
+        points = []
+        geo_polygon = []
+        for pt in hangar.geometry:
+            pos = self.coord_converter.geo_to_local(
+                GeoPosition(pt.lat, pt.lon, 0.0)
+            )
+            points.append({"x": pos.x, "y": pos.y, "z": pos.z})
+            geo_polygon.append({"latitude": pt.lat, "longitude": pt.lon})
+
+        xs = [p["x"] for p in points]
+        zs = [p["z"] for p in points]
+        width = max(xs) - min(xs) if xs else 50
+        depth = max(zs) - min(zs) if zs else 50
+        height = hangar.tags.height or 12.0
+
+        return {
+            "id": f"hangar_{hangar.id}",
+            "osmId": hangar.id,
+            "name": hangar.tags.name or f"Hangar {hangar.id}",
+            "type": "hangar",
+            "operator": hangar.tags.operator,
+            "position": {"x": center_pos.x, "y": 0.0, "z": center_pos.z},
+            "dimensions": {"width": width, "height": height, "depth": depth},
+            "polygon": points,
+            "geoPolygon": geo_polygon,
+            "color": self.HANGAR_COLOR,
+            "geo": {"latitude": center_lat, "longitude": center_lon},
+        }
+
+    def _convert_helipad(self, helipad: OSMNode) -> dict[str, Any] | None:
+        """Convert OSM helipad node to internal format."""
+        pos = self.coord_converter.geo_to_local(
+            GeoPosition(helipad.lat, helipad.lon, helipad.tags.ele or 0.0)
+        )
+
+        return {
+            "id": helipad.tags.ref or f"HELI_{helipad.id}",
+            "osmId": helipad.id,
+            "name": helipad.tags.name,
+            "ref": helipad.tags.ref,
+            "position": {"x": pos.x, "y": pos.y, "z": pos.z},
+            "geo": {"latitude": helipad.lat, "longitude": helipad.lon},
+        }
+
+    def _convert_parking_position(self, pp: OSMNode) -> dict[str, Any] | None:
+        """Convert OSM parking position node to internal format."""
+        pos = self.coord_converter.geo_to_local(
+            GeoPosition(pp.lat, pp.lon, pp.tags.ele or 0.0)
+        )
+
+        return {
+            "id": pp.tags.ref or f"PP_{pp.id}",
+            "osmId": pp.id,
+            "ref": pp.tags.ref,
+            "name": pp.tags.name,
+            "position": {"x": pos.x, "y": pos.y, "z": pos.z},
+            "geo": {"latitude": pp.lat, "longitude": pp.lon},
         }
 
     def to_gates_dict(self, doc: OSMDocument) -> dict[str, dict[str, Any]]:
@@ -269,6 +405,9 @@ class OSMConverter:
                 "longitude": gate.lon,
                 "terminal": gate.terminal_name,
                 "name": gate.tags.name,
+                "level": gate.tags.level,  # Floor level
+                "operator": gate.tags.operator,  # Airline operator
+                "elevation": gate.tags.ele,  # Elevation in meters
             }
 
         return gates_dict
@@ -316,6 +455,22 @@ def merge_osm_config(
     # Add OSM aprons
     if osm_config.get("osmAprons"):
         result["osmAprons"] = osm_config["osmAprons"]
+
+    # Add OSM runways
+    if osm_config.get("osmRunways"):
+        result["osmRunways"] = osm_config["osmRunways"]
+
+    # Add OSM hangars
+    if osm_config.get("osmHangars"):
+        result["osmHangars"] = osm_config["osmHangars"]
+
+    # Add OSM helipads
+    if osm_config.get("osmHelipads"):
+        result["osmHelipads"] = osm_config["osmHelipads"]
+
+    # Add OSM parking positions
+    if osm_config.get("osmParkingPositions"):
+        result["osmParkingPositions"] = osm_config["osmParkingPositions"]
 
     # Track source
     sources = result.get("sources", [])

@@ -339,25 +339,27 @@ class TestGateModel:
     """Tests for the gate recommendation model."""
 
     def test_gate_recommender_init(self):
-        """Verify default gates are created."""
+        """Verify default gates are created with proper properties."""
         recommender = GateRecommender()
 
         # Should have 10 gates: A1-A5 and B1-B5
         assert len(recommender.gates) == 10
 
-        # Check Terminal A gates
+        # Check Terminal A gates (domestic)
         for i in range(1, 6):
             gate = recommender.get_gate(f"A{i}")
             assert gate is not None
-            assert gate.terminal == "A"
+            assert "A" in gate.terminal  # Full name: "Domestic Terminal A"
             assert gate.status == GateStatus.AVAILABLE
+            assert gate.is_international is False
 
-        # Check Terminal B gates
+        # Check Terminal B gates (international)
         for i in range(1, 6):
             gate = recommender.get_gate(f"B{i}")
             assert gate is not None
-            assert gate.terminal == "B"
+            assert "B" in gate.terminal  # Full name: "International Terminal B"
             assert gate.status == GateStatus.AVAILABLE
+            assert gate.is_international is True
 
     def test_gate_recommendation(self):
         """Verify recommendation returns GateRecommendation."""
@@ -460,6 +462,87 @@ class TestGateModel:
         # Just verify both get valid recommendations
         assert domestic_rec.gate_id.startswith("A") or domestic_rec.gate_id.startswith("B")
         assert intl_rec.gate_id.startswith("A") or intl_rec.gate_id.startswith("B")
+
+    def test_gate_from_osm_data(self):
+        """Test creating Gate from OSM-style configuration."""
+        from src.ml.gate_model import Gate, GateSize
+
+        osm_gate = {
+            "id": "G92",
+            "ref": "G92",
+            "terminal": "International Terminal G",
+            "name": "Gate G92",
+            "operator": "United Airlines",
+            "level": "2",
+            "geo": {"latitude": 37.6145, "longitude": -122.3955},
+            "osmId": 123456789,
+        }
+
+        gate = Gate.from_osm_gate(osm_gate)
+
+        assert gate.gate_id == "G92"
+        assert gate.terminal == "International Terminal G"
+        assert gate.name == "Gate G92"
+        assert gate.operator == "United Airlines"
+        assert gate.level == "2"
+        assert gate.latitude == 37.6145
+        assert gate.longitude == -122.3955
+        assert gate.osm_id == 123456789
+        assert gate.is_international is True  # Terminal name contains "international"
+        assert gate.gate_size == GateSize.LARGE  # International gates default to large
+
+    def test_aircraft_size_scoring(self):
+        """Test that gate/aircraft size compatibility affects scoring."""
+        from src.ml.gate_model import Gate, GateSize
+
+        # Create gates with different sizes including SUPER for A380
+        gates = [
+            Gate(gate_id="S1", terminal="T1", gate_size=GateSize.SMALL),
+            Gate(gate_id="M1", terminal="T1", gate_size=GateSize.MEDIUM),
+            Gate(gate_id="L1", terminal="T1", gate_size=GateSize.LARGE),
+            Gate(gate_id="X1", terminal="T1", gate_size=GateSize.SUPER),
+        ]
+        recommender = GateRecommender(gates=gates)
+
+        # Wide-body aircraft (B777) - should prefer large gate
+        widebody_flight = {
+            "icao24": "abc123",
+            "callsign": "UAE100",
+            "aircraft_type": "B777",
+        }
+        recs = recommender.recommend(widebody_flight, top_k=4)
+        gate_ids = [r.gate_id for r in recs]
+
+        # Large gate should score highest for B777 (perfect size match)
+        assert recs[0].gate_id == "L1"
+
+        # Super gate is usable (oversized) - should be ranked second
+        assert gate_ids.index("X1") < gate_ids.index("S1")
+        assert gate_ids.index("X1") < gate_ids.index("M1")
+
+        # Small/Medium gates should have lower scores (too small)
+        # They're still returned but ranked lower than appropriate-sized gates
+        l1_score = recs[gate_ids.index("L1")].score
+        s1_score = recs[gate_ids.index("S1")].score
+        assert l1_score > s1_score  # Perfect match beats too-small gate
+
+    def test_operator_matching(self):
+        """Test that gates with matching operators score higher."""
+        from src.ml.gate_model import Gate
+
+        gates = [
+            Gate(gate_id="UA1", terminal="T1", operator="United Airlines"),
+            Gate(gate_id="DL1", terminal="T1", operator="Delta Air Lines"),
+            Gate(gate_id="G1", terminal="T1"),  # No operator assigned
+        ]
+        recommender = GateRecommender(gates=gates)
+
+        # United flight should prefer United gate
+        united_flight = {"icao24": "abc123", "callsign": "UAL500"}
+        recs = recommender.recommend(united_flight, top_k=3)
+
+        # United gate should be top recommendation
+        assert recs[0].gate_id == "UA1"
 
 
 @pytest.mark.skipif(not GATE_MODELS_AVAILABLE, reason="Gate models not available yet")

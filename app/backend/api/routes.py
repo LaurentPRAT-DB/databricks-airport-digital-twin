@@ -1,10 +1,13 @@
 """REST API routes for the Airport Digital Twin."""
 
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+
+logger = logging.getLogger(__name__)
 
 from app.backend.models.flight import (
     FlightListResponse,
@@ -27,6 +30,7 @@ from app.backend.services.weather_service import get_weather_service
 from app.backend.services.gse_service import get_gse_service
 from app.backend.services.baggage_service import get_baggage_service
 from app.backend.services.airport_config_service import get_airport_config_service
+from app.backend.services.data_generator_service import get_data_generator_service
 from app.backend.models.airport_config import (
     ImportResponse,
     AIDMImportResponse,
@@ -34,7 +38,8 @@ from app.backend.models.airport_config import (
     OSMImportResponse,
     FAAImportResponse,
 )
-from src.ingestion.fallback import generate_synthetic_trajectory
+from src.ingestion.fallback import generate_synthetic_trajectory, reload_gates, reset_synthetic_state
+from src.ml.gate_model import reload_gate_recommender
 from src.formats.base import ParseError, ValidationError
 
 
@@ -51,7 +56,11 @@ async def get_flights(
 
     Returns a list of flight positions with their current status.
     """
-    return await service.get_flights(count=count)
+    try:
+        return await service.get_flights(count=count)
+    except Exception as e:
+        logger.error(f"Failed to get flights: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Flight service error: {str(e)}")
 
 
 @router.get("/flights/{icao24}", response_model=FlightPosition)
@@ -554,6 +563,10 @@ async def import_osm(
     include_terminals: bool = Query(default=True, description="Import terminal buildings"),
     include_taxiways: bool = Query(default=False, description="Import taxiway geometry"),
     include_aprons: bool = Query(default=False, description="Import apron areas"),
+    include_runways: bool = Query(default=False, description="Import runway geometry"),
+    include_hangars: bool = Query(default=False, description="Import hangar buildings"),
+    include_helipads: bool = Query(default=False, description="Import helipad positions"),
+    include_parking_positions: bool = Query(default=False, description="Import parking positions"),
     merge: bool = Query(default=True, description="Merge with existing config"),
 ):
     """
@@ -569,6 +582,10 @@ async def import_osm(
         include_terminals: Whether to import terminal building outlines
         include_taxiways: Whether to import taxiway centerlines
         include_aprons: Whether to import apron/ramp areas
+        include_runways: Whether to import runway geometry
+        include_hangars: Whether to import hangar buildings
+        include_helipads: Whether to import helipad positions
+        include_parking_positions: Whether to import parking positions
         merge: Whether to merge with existing configuration
 
     Returns:
@@ -583,6 +600,10 @@ async def import_osm(
             include_terminals=include_terminals,
             include_taxiways=include_taxiways,
             include_aprons=include_aprons,
+            include_runways=include_runways,
+            include_hangars=include_hangars,
+            include_helipads=include_helipads,
+            include_parking_positions=include_parking_positions,
             merge=merge,
         )
 
@@ -591,8 +612,12 @@ async def import_osm(
             icaoCode=icao_code,
             gatesImported=len(config.get("gates", [])),
             terminalsImported=len(config.get("terminals", [])),
-            taxiwaysImported=len(config.get("taxiways", [])),
-            apronsImported=len(config.get("aprons", [])),
+            taxiwaysImported=len(config.get("osmTaxiways", [])),
+            apronsImported=len(config.get("osmAprons", [])),
+            runwaysImported=len(config.get("osmRunways", [])),
+            hangarsImported=len(config.get("osmHangars", [])),
+            helipadsImported=len(config.get("osmHelipads", [])),
+            parkingPositionsImported=len(config.get("osmParkingPositions", [])),
             warnings=warnings,
             timestamp=datetime.now(timezone.utc),
         )
@@ -642,3 +667,215 @@ async def import_faa(
         raise HTTPException(status_code=400, detail=f"FAA fetch error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"FAA import error: {str(e)}")
+
+
+# ==============================================================================
+# Airport Persistence Routes
+# ==============================================================================
+
+@router.get("/airports", tags=["airport"])
+async def list_airports() -> dict:
+    """
+    List all airports persisted in the lakehouse.
+
+    Returns a list of airport metadata for all airports that have been
+    imported and persisted to Unity Catalog tables.
+    """
+    service = get_airport_config_service()
+    airports = service.list_persisted_airports()
+
+    return {
+        "airports": airports,
+        "count": len(airports),
+    }
+
+
+@router.get("/airports/{icao_code}", tags=["airport"])
+async def get_airport(icao_code: str) -> dict:
+    """
+    Get airport configuration (lakehouse first, OSM fallback).
+
+    Tries to load from Unity Catalog tables first for speed.
+    Falls back to OSM import if not found, then persists for next time.
+
+    Args:
+        icao_code: ICAO airport code (e.g., "KSFO")
+
+    Returns:
+        Airport configuration with source info
+    """
+    service = get_airport_config_service()
+
+    loaded = service.initialize_from_lakehouse(
+        icao_code=icao_code,
+        fallback_to_osm=True,
+    )
+
+    if loaded:
+        config = service.get_config()
+        source = "lakehouse" if config.get("source") == "LAKEHOUSE" else "osm"
+        return {
+            "config": config,
+            "source": source,
+            "icaoCode": icao_code,
+            "elementCounts": service.get_element_counts(),
+        }
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Airport {icao_code} not found (tried lakehouse and OSM)"
+        )
+
+
+@router.post("/airports/{icao_code}/activate", tags=["airport"])
+async def activate_airport(icao_code: str) -> dict:
+    """
+    Activate an airport: load config, reset state, and ensure synthetic data.
+
+    Orchestrates the full airport switch:
+    1. Load airport config (3-tier: Lakebase cache → Unity Catalog → OSM)
+    2. Reload gates for synthetic data generator
+    3. Reset in-memory flight state
+    4. Check if Lakebase has synthetic data for this airport
+    5. If not → generate schedule, weather, baggage, GSE and persist
+    6. Return airport config + readiness status
+
+    Args:
+        icao_code: ICAO airport code (e.g., "KSFO", "KJFK")
+
+    Returns:
+        Airport configuration with data readiness info
+    """
+    service = get_airport_config_service()
+
+    # Step 1: Load airport config
+    loaded = service.initialize_from_lakehouse(
+        icao_code=icao_code,
+        fallback_to_osm=True,
+    )
+
+    if not loaded:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Airport {icao_code} not found (tried lakehouse and OSM)"
+        )
+
+    config = service.get_config()
+    source = "lakehouse" if config.get("source") == "LAKEHOUSE" else "osm"
+
+    # Step 2: Reload gates and gate recommender
+    gates = reload_gates()
+    gate_recommender_count = reload_gate_recommender()
+
+    # Step 3: Reset in-memory flight positions
+    reset_result = reset_synthetic_state()
+
+    # Step 4+5: Check/generate Lakebase synthetic data
+    data_generator = get_data_generator_service()
+    data_ready = await data_generator.switch_airport(icao_code)
+
+    return {
+        "config": config,
+        "source": source,
+        "icaoCode": icao_code,
+        "elementCounts": service.get_element_counts(),
+        "dataReady": data_ready,
+        "gatesLoaded": len(gates),
+        "gateRecommenderCount": gate_recommender_count,
+        "stateReset": reset_result,
+    }
+
+
+@router.post("/airports/{icao_code}/refresh", tags=["airport"])
+async def refresh_airport(
+    icao_code: str,
+    include_taxiways: bool = Query(default=True, description="Include taxiways"),
+    include_aprons: bool = Query(default=True, description="Include aprons"),
+    include_runways: bool = Query(default=True, description="Include runways"),
+    include_hangars: bool = Query(default=True, description="Include hangars"),
+    include_helipads: bool = Query(default=True, description="Include helipads"),
+    include_parking_positions: bool = Query(default=True, description="Include parking positions"),
+) -> dict:
+    """
+    Refresh airport data from external sources and persist.
+
+    Re-fetches airport data from OSM and FAA APIs, then persists
+    the updated configuration to the lakehouse.
+
+    Args:
+        icao_code: ICAO airport code (e.g., "KSFO")
+        include_taxiways: Whether to fetch taxiway data
+        include_aprons: Whether to fetch apron data
+        include_runways: Whether to fetch runway data
+        include_hangars: Whether to fetch hangar data
+        include_helipads: Whether to fetch helipad data
+        include_parking_positions: Whether to fetch parking position data
+
+    Returns:
+        Updated airport configuration
+    """
+    service = get_airport_config_service()
+
+    try:
+        # Import from OSM
+        osm_config, osm_warnings = service.import_osm(
+            icao_code,
+            include_gates=True,
+            include_terminals=True,
+            include_taxiways=include_taxiways,
+            include_aprons=include_aprons,
+            include_runways=include_runways,
+            include_hangars=include_hangars,
+            include_helipads=include_helipads,
+            include_parking_positions=include_parking_positions,
+        )
+
+        # Try to add FAA runway data (US airports only)
+        faa_warnings = []
+        facility_id = icao_code[1:] if icao_code.startswith("K") else icao_code
+        try:
+            faa_config, faa_warnings = service.import_faa(facility_id)
+        except Exception:
+            faa_warnings.append(f"FAA data not available for {icao_code}")
+
+        return {
+            "success": True,
+            "icaoCode": icao_code,
+            "elementCounts": service.get_element_counts(),
+            "warnings": osm_warnings + faa_warnings,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to refresh airport {icao_code}: {str(e)}"
+        )
+
+
+@router.delete("/airports/{icao_code}", tags=["airport"])
+async def delete_airport(icao_code: str) -> dict:
+    """
+    Delete an airport from the lakehouse.
+
+    Removes all persisted data for the specified airport from
+    Unity Catalog tables.
+
+    Args:
+        icao_code: ICAO airport code to delete
+
+    Returns:
+        Success confirmation
+    """
+    service = get_airport_config_service()
+
+    if service.delete_persisted_airport(icao_code):
+        return {
+            "success": True,
+            "message": f"Deleted airport {icao_code}",
+        }
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete airport {icao_code}"
+        )

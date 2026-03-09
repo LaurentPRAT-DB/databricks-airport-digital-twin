@@ -1,5 +1,6 @@
 """FastAPI application entry point for Airport Digital Twin."""
 
+import asyncio
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -16,7 +17,9 @@ from app.backend.api.predictions import prediction_router
 from app.backend.api.data_ops import router as data_ops_router
 from app.backend.services.data_generator_service import get_data_generator_service
 from app.backend.services.airport_config_service import get_airport_config_service
+from app.backend.services.prediction_service import get_prediction_service
 from src.ingestion.fallback import reload_gates
+from src.ml.gate_model import reload_gate_recommender
 
 logger = logging.getLogger(__name__)
 
@@ -25,52 +28,80 @@ FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 logger.info(f"FRONTEND_DIST resolved to: {FRONTEND_DIST} (exists: {FRONTEND_DIST.exists()})")
 
 
+async def _background_init(app: FastAPI):
+    """Run heavy initialization in the background so the app accepts requests immediately."""
+    try:
+        # Phase 1: Load airport configuration (3-tier: Lakebase cache → Unity Catalog → OSM)
+        app.state.startup_status = "Loading airport config from cache..."
+        logger.info(app.state.startup_status)
+
+        airport_config = get_airport_config_service()
+        loaded = airport_config.initialize_from_lakehouse(
+            icao_code="KSFO",
+            fallback_to_osm=True,
+        )
+        if loaded:
+            config = airport_config.get_config()
+            source = config.get("source", "OSM")
+            logger.info(
+                f"Loaded airport data from {source}: "
+                f"{len(config.get('terminals', []))} terminals, "
+                f"{len(config.get('gates', []))} gates, "
+                f"{len(config.get('osmTaxiways', []))} taxiways, "
+                f"{len(config.get('osmAprons', []))} aprons"
+            )
+            gates = reload_gates()
+            logger.info(f"Reloaded {len(gates)} gates for synthetic data generation")
+
+            gate_count = reload_gate_recommender()
+            logger.info(f"Gate recommender initialized with {gate_count} OSM gates")
+        else:
+            logger.warning("Failed to load airport config from any source")
+
+        if not airport_config.config_ready:
+            logger.warning(
+                "Airport config not ready before data generation — "
+                "synthetic data will use default 9-gate fallback until config loads"
+            )
+
+        # Phase 2: Generate synthetic data
+        app.state.startup_status = "Generating synthetic flight data..."
+        logger.info(app.state.startup_status)
+
+        data_generator = get_data_generator_service()
+        init_success = await data_generator.initialize_all_data(airport_icao="KSFO")
+        if init_success:
+            await data_generator.start_periodic_refresh()
+            logger.info("Data generation service started with periodic refresh")
+        else:
+            logger.warning("Data initialization failed - using fallback generators only")
+
+        app.state.ready = True
+        app.state.startup_status = "Ready"
+        logger.info("Background initialization complete")
+
+    except Exception as e:
+        logger.error(f"Background initialization failed: {e}")
+        app.state.startup_status = f"Initialization error: {e}"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown events."""
-    # Startup: Initialize and start data generation
     logger.info("=" * 60)
     logger.info("Starting Airport Digital Twin API")
     logger.info("=" * 60)
 
-    # Pre-load airport configuration from OpenStreetMap
-    try:
-        airport_config = get_airport_config_service()
-        config, warnings = airport_config.import_osm(
-            icao_code="KSFO",
-            include_terminals=True,
-            include_gates=True,
-            include_taxiways=True,
-            include_aprons=True,
-        )
-        logger.info(
-            f"Loaded OSM data: {len(config.get('terminals', []))} terminals, "
-            f"{len(config.get('gates', []))} gates, "
-            f"{len(config.get('taxiways', []))} taxiways, "
-            f"{len(config.get('aprons', []))} aprons"
-        )
-        if warnings:
-            logger.warning(f"OSM import warnings: {warnings}")
-        # Reload gates for synthetic data generator
-        gates = reload_gates()
-        logger.info(f"Reloaded {len(gates)} gates for synthetic data generation")
-    except Exception as e:
-        logger.warning(f"Failed to load OSM data on startup: {e}")
+    # Mark app as not ready, then kick off heavy init in background
+    app.state.ready = False
+    app.state.startup_status = "Initializing..."
 
-    data_generator = get_data_generator_service()
-
-    # Initialize all data to Lakebase
-    init_success = await data_generator.initialize_all_data()
-    if init_success:
-        # Start periodic refresh tasks
-        await data_generator.start_periodic_refresh()
-        logger.info("Data generation service started with periodic refresh")
-    else:
-        logger.warning("Data initialization failed - using fallback generators only")
+    asyncio.create_task(_background_init(app))
 
     yield
 
     # Shutdown: Stop periodic refresh tasks
+    data_generator = get_data_generator_service()
     logger.info("Shutting down data generation service...")
     await data_generator.stop_periodic_refresh()
     logger.info("Airport Digital Twin API stopped")
@@ -103,6 +134,15 @@ app.include_router(data_ops_router)
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+@app.get("/api/ready")
+async def readiness():
+    """Readiness endpoint — returns background init progress."""
+    return {
+        "ready": getattr(app.state, "ready", False),
+        "status": getattr(app.state, "startup_status", "Initializing..."),
+    }
 
 
 @app.get("/api/debug/paths")

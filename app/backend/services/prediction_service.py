@@ -1,21 +1,57 @@
 """Prediction service for orchestrating all ML models."""
 
 import asyncio
+import logging
 from typing import Any, Dict, List, Optional
 
 from src.ml.delay_model import DelayPredictor, DelayPrediction
-from src.ml.gate_model import GateRecommender, GateRecommendation
+from src.ml.gate_model import (
+    GateRecommendation,
+    get_gate_recommender,
+    reload_gate_recommender,
+)
 from src.ml.congestion_model import CongestionPredictor, AreaCongestion
+
+logger = logging.getLogger(__name__)
 
 
 class PredictionService:
-    """Service for orchestrating delay, gate, and congestion predictions."""
+    """Service for orchestrating delay, gate, and congestion predictions.
+
+    The gate recommender automatically uses OSM gate data when available,
+    providing accurate recommendations based on real airport layout.
+    """
 
     def __init__(self):
         """Initialize prediction service with all ML models."""
         self.delay_predictor = DelayPredictor()
-        self.gate_recommender = GateRecommender()
+        # Use singleton gate recommender (loads OSM gates automatically)
+        self._gate_recommender = None
         self.congestion_predictor = CongestionPredictor()
+
+    @property
+    def gate_recommender(self):
+        """Get gate recommender (lazy-loaded singleton with OSM data)."""
+        if self._gate_recommender is None:
+            self._gate_recommender = get_gate_recommender()
+            logger.info(
+                f"PredictionService using {len(self._gate_recommender.gates)} gates"
+            )
+        return self._gate_recommender
+
+    def reload_gates(self) -> int:
+        """
+        Reload gate data from OSM configuration.
+
+        Call this after importing new OSM airport data.
+
+        Returns:
+            Number of gates loaded
+        """
+        count = reload_gate_recommender()
+        self._gate_recommender = get_gate_recommender()
+        logger.info(f"Reloaded {count} gates from OSM data")
+        return count
 
     async def get_flight_predictions(
         self, flights: List[Dict[str, Any]]

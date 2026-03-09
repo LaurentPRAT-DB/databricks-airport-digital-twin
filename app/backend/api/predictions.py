@@ -1,9 +1,12 @@
 """REST API routes for ML predictions."""
 
+import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 from app.backend.services.prediction_service import (
     PredictionService,
@@ -85,7 +88,11 @@ async def get_delays(
         return DelaysListResponse(delays=[], count=0)
 
     # Get predictions
-    predictions = await prediction_service.get_flight_predictions(flights)
+    try:
+        predictions = await prediction_service.get_flight_predictions(flights)
+    except Exception as e:
+        logger.error(f"Delay prediction failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
     delay_predictions = predictions.get("delays", {})
 
     delays = []

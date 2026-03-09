@@ -1,6 +1,8 @@
 import { useFlightContext } from '../../context/FlightContext';
+import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import PlatformLinks from '../PlatformLinks/PlatformLinks';
 import WeatherWidget from '../Weather/WeatherWidget';
+import AirportSelector from '../AirportSelector/AirportSelector';
 
 interface HeaderProps {
   onShowFIDS?: () => void;
@@ -8,11 +10,20 @@ interface HeaderProps {
 
 export default function Header({ onShowFIDS }: HeaderProps) {
   const { flights, isLoading, error, lastUpdated, dataSource } = useFlightContext();
+  const { currentAirport, isLoading: isLoadingAirport, loadAirport } = useAirportConfigContext();
 
   return (
     <header className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between shadow-lg z-[1002] relative">
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-bold">Airport Digital Twin</h1>
+
+        {/* Airport Selector */}
+        <AirportSelector
+          currentAirport={currentAirport || undefined}
+          onAirportChange={loadAirport}
+          isLoading={isLoadingAirport}
+        />
+
         <div className="flex items-center gap-2 bg-slate-700 px-3 py-1 rounded-full text-sm">
           <span className="text-slate-300">Flights:</span>
           <span className="font-mono font-medium">{flights.length}</span>

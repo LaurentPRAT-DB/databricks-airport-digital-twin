@@ -10,6 +10,8 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from src.ingestion.fallback import get_gates
+
 # Airline data with ICAO codes, names, and hub weighting
 AIRLINES = {
     "UAL": {"name": "United Airlines", "weight": 0.35, "hubs": ["SFO", "ORD", "IAH", "EWR"]},
@@ -196,8 +198,9 @@ def generate_daily_schedule(
                 status = "on_time"
                 actual_time = None
 
-            # Assign gate
-            gate = f"{random.choice(['A', 'B', 'C', 'D', 'G'])}{random.randint(1, 30)}"
+            # Assign gate from actual OSM data (or fallback defaults)
+            available_gates = list(get_gates().keys())
+            gate = random.choice(available_gates) if available_gates else "A1"
 
             flight = {
                 "flight_number": flight_number,

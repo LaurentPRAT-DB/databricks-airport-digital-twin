@@ -44,7 +44,7 @@ def extract_features(flight: Dict[str, Any]) -> FeatureSet:
     # Extract timestamp and compute time-based features
     position_time = flight.get("position_time") or flight.get("last_seen")
     if position_time:
-        dt = datetime.fromtimestamp(position_time)
+        dt = datetime.fromtimestamp(float(position_time))
         hour_of_day = dt.hour
         day_of_week = dt.weekday()
     else:
@@ -56,12 +56,12 @@ def extract_features(flight: Dict[str, Any]) -> FeatureSet:
 
     # Extract altitude and categorize
     # Handle both 'baro_altitude' and 'altitude' keys
-    altitude = flight.get("baro_altitude") or flight.get("altitude") or 0
+    altitude = float(flight.get("baro_altitude") or flight.get("altitude") or 0)
     altitude_category = _categorize_altitude(altitude, flight.get("on_ground", False))
 
     # Extract velocity and normalize (0-500 knots -> 0-1)
     # Velocity in m/s, convert to knots (1 m/s = 1.944 knots)
-    velocity = flight.get("velocity") or 0
+    velocity = float(flight.get("velocity") or 0)
     velocity_knots = velocity * 1.944
     velocity_normalized = min(velocity_knots / 500.0, 1.0)
 
@@ -69,7 +69,7 @@ def extract_features(flight: Dict[str, Any]) -> FeatureSet:
     flight_distance_category = _categorize_distance(velocity_knots, altitude)
 
     # Extract heading and compute quadrant
-    heading = flight.get("true_track") or flight.get("heading") or 0
+    heading = float(flight.get("true_track") or flight.get("heading") or 0)
     heading_quadrant = _compute_heading_quadrant(heading)
 
     return FeatureSet(

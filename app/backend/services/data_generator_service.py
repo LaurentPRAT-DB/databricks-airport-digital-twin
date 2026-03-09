@@ -22,6 +22,25 @@ from app.backend.services.lakebase_service import get_lakebase_service
 
 logger = logging.getLogger(__name__)
 
+# ICAO → IATA mapping for common airports
+_ICAO_TO_IATA = {
+    "KSFO": "SFO", "KJFK": "JFK", "KLAX": "LAX", "KORD": "ORD",
+    "KATL": "ATL", "KDEN": "DEN", "KDFW": "DFW", "KMIA": "MIA",
+    "KBOS": "BOS", "KSEA": "SEA", "KIAH": "IAH", "KLAS": "LAS",
+    "KMSP": "MSP", "KPHX": "PHX", "KEWR": "EWR", "KDTW": "DTW",
+    "EGLL": "LHR", "LFPG": "CDG", "EDDF": "FRA", "EHAM": "AMS",
+    "RJTT": "HND", "VHHH": "HKG", "WSSS": "SIN", "YSSY": "SYD",
+}
+
+
+def _icao_to_iata(icao_code: str) -> str:
+    """Convert ICAO code to IATA. Falls back to stripping leading 'K'."""
+    if icao_code in _ICAO_TO_IATA:
+        return _ICAO_TO_IATA[icao_code]
+    if icao_code.startswith("K") and len(icao_code) == 4:
+        return icao_code[1:]
+    return icao_code
+
 
 class DataGeneratorService:
     """Service for generating and persisting synthetic airport data."""
@@ -37,6 +56,7 @@ class DataGeneratorService:
     ):
         self._airport = airport
         self._weather_station = weather_station
+        self._current_airport_icao = weather_station  # e.g. "KSFO"
         self._weather_interval = weather_interval_seconds
         self._schedule_interval = schedule_interval_seconds
         self._baggage_interval = baggage_interval_seconds
@@ -45,16 +65,20 @@ class DataGeneratorService:
         self._running = False
         self._tasks: list[asyncio.Task] = []
         self._initialized = False
+        self._initialized_airports: set[str] = set()
 
-    async def initialize_all_data(self) -> bool:
+    async def initialize_all_data(self, airport_icao: str = "KSFO") -> bool:
         """
         Initialize all data sources on startup.
+
+        Args:
+            airport_icao: ICAO code for the airport to generate data for.
 
         Returns:
             True if initialization successful, False otherwise.
         """
-        if self._initialized:
-            logger.info("Data already initialized, skipping")
+        if airport_icao in self._initialized_airports:
+            logger.info(f"Data already initialized for {airport_icao}, skipping")
             return True
 
         lakebase = get_lakebase_service()
@@ -62,8 +86,13 @@ class DataGeneratorService:
             logger.warning("Lakebase not available, skipping data initialization")
             return False
 
+        # Update current airport context
+        self._current_airport_icao = airport_icao
+        self._airport = _icao_to_iata(airport_icao)
+        self._weather_station = airport_icao
+
         logger.info("=" * 60)
-        logger.info("Initializing synthetic data to Lakebase")
+        logger.info(f"Initializing synthetic data to Lakebase for {airport_icao}")
         logger.info("=" * 60)
 
         try:
@@ -84,15 +113,58 @@ class DataGeneratorService:
             logger.info(f"  GSE Fleet: {gse_count} units")
 
             logger.info("=" * 60)
-            logger.info("Data initialization complete")
+            logger.info(f"Data initialization complete for {airport_icao}")
             logger.info("=" * 60)
 
             self._initialized = True
+            self._initialized_airports.add(airport_icao)
             return True
 
         except Exception as e:
             logger.error(f"Data initialization failed: {e}", exc_info=True)
             return False
+
+    async def switch_airport(self, icao_code: str) -> bool:
+        """Switch synthetic data generation to a new airport.
+
+        Checks if Lakebase already has data for this airport.
+        If not, generates schedule, weather, baggage, and GSE data.
+        In-memory synthetic data (flight positions) always works regardless
+        of Lakebase availability.
+
+        Args:
+            icao_code: ICAO airport code (e.g., "KJFK").
+
+        Returns:
+            True if airport context was switched (always True).
+        """
+        # Update current airport context
+        self._current_airport_icao = icao_code
+        self._airport = _icao_to_iata(icao_code)
+        self._weather_station = icao_code
+
+        # Skip if already initialized in this session
+        if icao_code in self._initialized_airports:
+            logger.info(f"Airport {icao_code} already initialized in this session")
+            return True
+
+        # Try to populate Lakebase (non-blocking best-effort)
+        try:
+            lakebase = get_lakebase_service()
+            if lakebase.is_available and lakebase.has_synthetic_data(icao_code):
+                logger.info(f"Lakebase already has synthetic data for {icao_code}")
+                self._initialized_airports.add(icao_code)
+                return True
+
+            # Generate fresh data to Lakebase
+            logger.info(f"Generating synthetic data for new airport {icao_code}")
+            await self.initialize_all_data(airport_icao=icao_code)
+        except Exception as e:
+            logger.warning(f"Lakebase data generation failed for {icao_code}: {e}")
+            # Mark as initialized anyway — in-memory generators still work
+            self._initialized_airports.add(icao_code)
+
+        return True
 
     async def start_periodic_refresh(self) -> None:
         """Start background tasks for periodic data refresh."""
@@ -181,10 +253,10 @@ class DataGeneratorService:
         schedule = generate_daily_schedule(airport=self._airport)
 
         # Clean old schedule first
-        lakebase.clear_old_schedule(hours_old=24)
+        lakebase.clear_old_schedule(hours_old=24, airport_icao=self._current_airport_icao)
 
         # Upsert new schedule
-        return lakebase.upsert_schedule(schedule)
+        return lakebase.upsert_schedule(schedule, airport_icao=self._current_airport_icao)
 
     async def _schedule_refresh_loop(self) -> None:
         """Background loop for schedule refresh."""
@@ -210,7 +282,10 @@ class DataGeneratorService:
             return 0
 
         # Get active flights from schedule
-        schedule = lakebase.get_schedule(hours_behind=1, hours_ahead=2, limit=50)
+        schedule = lakebase.get_schedule(
+            hours_behind=1, hours_ahead=2, limit=50,
+            airport_icao=self._current_airport_icao,
+        )
         if not schedule:
             return 0
 
@@ -233,7 +308,7 @@ class DataGeneratorService:
                 is_arrival=is_arrival,
             )
 
-            if lakebase.upsert_baggage_stats(stats):
+            if lakebase.upsert_baggage_stats(stats, airport_icao=self._current_airport_icao):
                 count += 1
 
         return count
@@ -288,7 +363,7 @@ class DataGeneratorService:
                     "position_y": 0.0,
                 })
 
-        return lakebase.upsert_gse_fleet(units)
+        return lakebase.upsert_gse_fleet(units, airport_icao=self._current_airport_icao)
 
     async def _gse_refresh_loop(self) -> None:
         """Background loop for GSE fleet refresh."""

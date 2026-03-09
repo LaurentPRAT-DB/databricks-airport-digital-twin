@@ -3,6 +3,7 @@ Airport Configuration Service
 
 Manages airport configuration state and handles format imports.
 Coordinates between format parsers and the configuration cache.
+Supports persistence to Unity Catalog tables for fast loading.
 """
 
 from datetime import datetime, timezone
@@ -13,6 +14,9 @@ import logging
 from src.formats.base import CoordinateConverter, ParseError, ValidationError
 
 logger = logging.getLogger(__name__)
+
+# Default airport to load on startup
+DEFAULT_AIRPORT = "KSFO"
 
 
 class AirportConfigService:
@@ -27,6 +31,7 @@ class AirportConfigService:
         """Initialize service with default configuration."""
         self._current_config: dict[str, Any] = {}
         self._last_updated: Optional[datetime] = None
+        self._config_ready: bool = False
         self._converter = CoordinateConverter(
             reference_lat=37.6213,  # SFO
             reference_lon=-122.379,
@@ -45,6 +50,11 @@ class AirportConfigService:
     def get_last_updated(self) -> Optional[datetime]:
         """Get timestamp of last configuration update."""
         return self._last_updated
+
+    @property
+    def config_ready(self) -> bool:
+        """Whether airport config has been successfully loaded."""
+        return self._config_ready
 
     def set_reference_point(self, lat: float, lon: float, alt: float = 0.0) -> None:
         """
@@ -193,6 +203,10 @@ class AirportConfigService:
         include_terminals: bool = True,
         include_taxiways: bool = False,
         include_aprons: bool = False,
+        include_runways: bool = False,
+        include_hangars: bool = False,
+        include_helipads: bool = False,
+        include_parking_positions: bool = False,
         merge: bool = True,
     ) -> tuple[dict[str, Any], list[str]]:
         """
@@ -207,6 +221,10 @@ class AirportConfigService:
             include_terminals: Fetch terminal buildings
             include_taxiways: Fetch taxiway ways
             include_aprons: Fetch apron areas
+            include_runways: Fetch runway ways
+            include_hangars: Fetch hangar buildings
+            include_helipads: Fetch helipad nodes/ways
+            include_parking_positions: Fetch parking position nodes
             merge: Whether to merge with existing config
 
         Returns:
@@ -226,6 +244,10 @@ class AirportConfigService:
             include_terminals=include_terminals,
             include_taxiways=include_taxiways,
             include_aprons=include_aprons,
+            include_runways=include_runways,
+            include_hangars=include_hangars,
+            include_helipads=include_helipads,
+            include_parking_positions=include_parking_positions,
         )
         doc = parser._parse_response(data)
         doc.icao_code = icao_code
@@ -239,6 +261,10 @@ class AirportConfigService:
 
         self._current_config = config
         self._last_updated = datetime.now(timezone.utc)
+        self._config_ready = True
+
+        # Auto-persist to lakehouse
+        self.persist_config(icao_code)
 
         return config, warnings
 
@@ -274,6 +300,8 @@ class AirportConfigService:
         if runways:
             self._current_config = config
             self._last_updated = datetime.now(timezone.utc)
+            # Auto-persist to lakehouse
+            self.persist_config()
 
         return config, warnings
 
@@ -281,6 +309,7 @@ class AirportConfigService:
         """Clear current configuration."""
         self._current_config = {}
         self._last_updated = None
+        self._config_ready = False
 
     def get_element_counts(self) -> dict[str, int]:
         """
@@ -299,7 +328,226 @@ class AirportConfigService:
             "aidm_flights": len(self._current_config.get("aidm_flights", [])),
             "gates": len(self._current_config.get("gates", [])),
             "terminals": len(self._current_config.get("terminals", [])),
+            "osmTaxiways": len(self._current_config.get("osmTaxiways", [])),
+            "osmAprons": len(self._current_config.get("osmAprons", [])),
+            "osmRunways": len(self._current_config.get("osmRunways", [])),
+            "osmHangars": len(self._current_config.get("osmHangars", [])),
+            "osmHelipads": len(self._current_config.get("osmHelipads", [])),
+            "osmParkingPositions": len(self._current_config.get("osmParkingPositions", [])),
         }
+
+    # =========================================================================
+    # Persistence Operations
+    # =========================================================================
+
+    def persist_config(self, icao_code: Optional[str] = None) -> bool:
+        """
+        Persist current configuration to Unity Catalog tables.
+
+        Args:
+            icao_code: ICAO code to use (defaults to current config's code)
+
+        Returns:
+            True if successful, False if persistence unavailable
+        """
+        if not self._current_config:
+            logger.warning("No configuration to persist")
+            return False
+
+        icao = icao_code or self._current_config.get("icaoCode")
+        if not icao:
+            logger.warning("No ICAO code available for persistence")
+            return False
+
+        try:
+            from src.persistence import get_airport_repository
+            repo = get_airport_repository()
+            repo.save_airport_config(icao, self._current_config)
+            logger.info(f"Persisted airport config for {icao} to lakehouse")
+            return True
+        except ImportError:
+            logger.warning("Persistence module not available")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to persist airport config: {e}")
+            return False
+
+    def load_from_lakehouse(self, icao_code: str) -> bool:
+        """
+        Load airport configuration from Unity Catalog tables.
+
+        Args:
+            icao_code: ICAO airport code to load
+
+        Returns:
+            True if loaded successfully, False otherwise
+        """
+        try:
+            from src.persistence import get_airport_repository
+            repo = get_airport_repository()
+
+            config = repo.load_airport_config(icao_code)
+            if config:
+                self._current_config = config
+                self._last_updated = datetime.now(timezone.utc)
+                self._config_ready = True
+                logger.info(f"Loaded airport config for {icao_code} from lakehouse")
+                return True
+            else:
+                logger.info(f"Airport {icao_code} not found in lakehouse")
+                return False
+        except ImportError:
+            logger.warning("Persistence module not available")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to load from lakehouse: {e}")
+            return False
+
+    def list_persisted_airports(self) -> list[dict]:
+        """
+        List all airports persisted in the lakehouse.
+
+        Returns:
+            List of airport metadata dictionaries
+        """
+        try:
+            from src.persistence import get_airport_repository
+            repo = get_airport_repository()
+            return repo.list_airports()
+        except ImportError:
+            return []
+        except Exception as e:
+            logger.error(f"Failed to list airports: {e}")
+            return []
+
+    def delete_persisted_airport(self, icao_code: str) -> bool:
+        """
+        Delete an airport from the lakehouse.
+
+        Args:
+            icao_code: ICAO code of airport to delete
+
+        Returns:
+            True if successful
+        """
+        try:
+            from src.persistence import get_airport_repository
+            repo = get_airport_repository()
+            return repo.delete_airport(icao_code)
+        except ImportError:
+            return False
+        except Exception as e:
+            logger.error(f"Failed to delete airport: {e}")
+            return False
+
+    def save_to_lakebase_cache(self, icao_code: str) -> bool:
+        """
+        Write current config to Lakebase cache for fast startup.
+
+        Args:
+            icao_code: ICAO airport code
+
+        Returns:
+            True if successful
+        """
+        if not self._current_config:
+            return False
+
+        try:
+            from app.backend.services.lakebase_service import get_lakebase_service
+            lakebase = get_lakebase_service()
+            return lakebase.upsert_airport_config(icao_code, self._current_config)
+        except Exception as e:
+            logger.warning(f"Failed to cache config in Lakebase: {e}")
+            return False
+
+    def load_from_lakebase_cache(self, icao_code: str) -> bool:
+        """
+        Load airport config from Lakebase cache.
+
+        Args:
+            icao_code: ICAO airport code
+
+        Returns:
+            True if loaded successfully
+        """
+        try:
+            from app.backend.services.lakebase_service import get_lakebase_service
+            lakebase = get_lakebase_service()
+            config = lakebase.get_airport_config(icao_code)
+            if config:
+                self._current_config = config
+                self._last_updated = datetime.now(timezone.utc)
+                self._config_ready = True
+                logger.info(f"Loaded airport config for {icao_code} from Lakebase cache")
+                return True
+            return False
+        except Exception as e:
+            logger.warning(f"Lakebase cache load failed: {e}")
+            return False
+
+    def initialize_from_lakehouse(
+        self,
+        icao_code: str = DEFAULT_AIRPORT,
+        fallback_to_osm: bool = True,
+    ) -> bool:
+        """
+        Initialize configuration with 3-tier loading:
+        1. Lakebase cache (<10ms)
+        2. Unity Catalog (30-60s)
+        3. OSM fallback (external API)
+
+        Args:
+            icao_code: ICAO code to load
+            fallback_to_osm: If True, fetch from OSM as last resort
+
+        Returns:
+            True if configuration was loaded
+        """
+        # Tier 1: Lakebase cache (fastest)
+        if self.load_from_lakebase_cache(icao_code):
+            return True
+
+        # Tier 2: Unity Catalog (SQL Warehouse)
+        if self.load_from_lakehouse(icao_code):
+            # Write-through to Lakebase for next startup
+            self.save_to_lakebase_cache(icao_code)
+            return True
+
+        # Tier 3: OSM fallback
+        if fallback_to_osm:
+            logger.info(f"Falling back to OSM import for {icao_code}")
+            try:
+                self.import_osm(
+                    icao_code,
+                    include_gates=True,
+                    include_terminals=True,
+                    include_taxiways=True,
+                    include_aprons=True,
+                    include_runways=True,
+                    include_hangars=True,
+                    include_helipads=True,
+                    include_parking_positions=True,
+                    merge=False,
+                )
+
+                # For US airports, also import FAA runway data
+                if icao_code.startswith("K"):
+                    try:
+                        self.import_faa(icao_code, merge=True)
+                        logger.info(f"Imported FAA runway data for {icao_code}")
+                    except Exception as e:
+                        logger.warning(f"FAA import failed for {icao_code}: {e}")
+
+                # Persist to both Unity Catalog and Lakebase cache
+                self.persist_config(icao_code)
+                self.save_to_lakebase_cache(icao_code)
+                return True
+            except Exception as e:
+                logger.error(f"OSM fallback failed: {e}")
+                return False
+
+        return False
 
 
 # Singleton instance

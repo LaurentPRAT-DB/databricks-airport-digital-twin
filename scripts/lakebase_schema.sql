@@ -96,11 +96,12 @@ COMMENT ON COLUMN weather_observations.flight_category IS 'VFR, MVFR, IFR, or LI
 
 
 -- ============================================================================
--- Flight Schedule Table (FIDS)
+-- Flight Schedule Table (FIDS) — airport-scoped
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS flight_schedule (
     id SERIAL PRIMARY KEY,
+    airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO',
     flight_number VARCHAR(10) NOT NULL,
     airline VARCHAR(100),
     airline_code VARCHAR(4),
@@ -116,7 +117,7 @@ CREATE TABLE IF NOT EXISTS flight_schedule (
     aircraft_type VARCHAR(10),
     flight_type VARCHAR(10) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_flight_schedule UNIQUE(flight_number, scheduled_time)
+    CONSTRAINT uq_flight_schedule UNIQUE(airport_icao, flight_number, scheduled_time)
 );
 
 CREATE INDEX IF NOT EXISTS idx_schedule_time
@@ -128,6 +129,9 @@ ON flight_schedule(flight_type);
 CREATE INDEX IF NOT EXISTS idx_schedule_status
 ON flight_schedule(status);
 
+CREATE INDEX IF NOT EXISTS idx_schedule_airport
+ON flight_schedule(airport_icao);
+
 DROP TRIGGER IF EXISTS update_flight_schedule_updated_at ON flight_schedule;
 CREATE TRIGGER update_flight_schedule_updated_at
     BEFORE UPDATE ON flight_schedule
@@ -135,16 +139,18 @@ CREATE TRIGGER update_flight_schedule_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 COMMENT ON TABLE flight_schedule IS 'Flight schedule for FIDS display (arrivals and departures)';
+COMMENT ON COLUMN flight_schedule.airport_icao IS 'ICAO code of the airport this schedule belongs to';
 COMMENT ON COLUMN flight_schedule.flight_type IS 'Either "arrival" or "departure"';
 COMMENT ON COLUMN flight_schedule.status IS 'scheduled, on_time, delayed, boarding, departed, arrived, cancelled';
 
 
 -- ============================================================================
--- Baggage Status Table
+-- Baggage Status Table — airport-scoped
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS baggage_status (
-    flight_number VARCHAR(10) PRIMARY KEY,
+    airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO',
+    flight_number VARCHAR(10) NOT NULL,
     total_bags INT DEFAULT 0,
     checked_in INT DEFAULT 0,
     loaded INT DEFAULT 0,
@@ -154,7 +160,8 @@ CREATE TABLE IF NOT EXISTS baggage_status (
     connecting_bags INT DEFAULT 0,
     misconnects INT DEFAULT 0,
     carousel INT,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (airport_icao, flight_number)
 );
 
 DROP TRIGGER IF EXISTS update_baggage_status_updated_at ON baggage_status;
@@ -163,23 +170,25 @@ CREATE TRIGGER update_baggage_status_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE baggage_status IS 'Baggage handling status per flight';
+COMMENT ON TABLE baggage_status IS 'Baggage handling status per flight, scoped by airport';
 COMMENT ON COLUMN baggage_status.loading_progress_pct IS 'Percentage of bags loaded (0-100)';
 
 
 -- ============================================================================
--- GSE Fleet Table
+-- GSE Fleet Table — airport-scoped
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS gse_fleet (
-    unit_id VARCHAR(20) PRIMARY KEY,
+    airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO',
+    unit_id VARCHAR(20) NOT NULL,
     gse_type VARCHAR(30) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'available',
     assigned_flight VARCHAR(10),
     assigned_gate VARCHAR(10),
     position_x DECIMAL(8,2) DEFAULT 0.0,
     position_y DECIMAL(8,2) DEFAULT 0.0,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (airport_icao, unit_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_gse_fleet_type
@@ -194,17 +203,18 @@ CREATE TRIGGER update_gse_fleet_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE gse_fleet IS 'Ground Support Equipment fleet inventory';
+COMMENT ON TABLE gse_fleet IS 'Ground Support Equipment fleet inventory, scoped by airport';
 COMMENT ON COLUMN gse_fleet.gse_type IS 'pushback_tug, fuel_truck, belt_loader, etc.';
 COMMENT ON COLUMN gse_fleet.status IS 'available, en_route, servicing, returning, maintenance';
 
 
 -- ============================================================================
--- GSE Turnaround Table
+-- GSE Turnaround Table — airport-scoped
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS gse_turnaround (
-    icao24 VARCHAR(6) PRIMARY KEY,
+    airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO',
+    icao24 VARCHAR(6) NOT NULL,
     flight_number VARCHAR(10),
     gate VARCHAR(10),
     arrival_time TIMESTAMP WITH TIME ZONE,
@@ -213,7 +223,8 @@ CREATE TABLE IF NOT EXISTS gse_turnaround (
     total_progress_pct INT DEFAULT 0,
     estimated_departure TIMESTAMP WITH TIME ZONE,
     aircraft_type VARCHAR(10),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (airport_icao, icao24)
 );
 
 CREATE INDEX IF NOT EXISTS idx_gse_turnaround_gate
@@ -228,5 +239,31 @@ CREATE TRIGGER update_gse_turnaround_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE gse_turnaround IS 'Active aircraft turnaround operations';
+COMMENT ON TABLE gse_turnaround IS 'Active aircraft turnaround operations, scoped by airport';
 COMMENT ON COLUMN gse_turnaround.current_phase IS 'Turnaround phase: deboarding, refueling, boarding, etc.';
+
+
+-- ============================================================================
+-- Migration: Add airport_icao to existing tables
+-- Run this block on existing deployments to add the new column
+-- ============================================================================
+
+-- flight_schedule migration
+ALTER TABLE flight_schedule ADD COLUMN IF NOT EXISTS airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO';
+ALTER TABLE flight_schedule DROP CONSTRAINT IF EXISTS uq_flight_schedule;
+ALTER TABLE flight_schedule ADD CONSTRAINT uq_flight_schedule UNIQUE(airport_icao, flight_number, scheduled_time);
+
+-- baggage_status migration
+ALTER TABLE baggage_status ADD COLUMN IF NOT EXISTS airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO';
+ALTER TABLE baggage_status DROP CONSTRAINT IF EXISTS baggage_status_pkey;
+ALTER TABLE baggage_status ADD PRIMARY KEY (airport_icao, flight_number);
+
+-- gse_fleet migration
+ALTER TABLE gse_fleet ADD COLUMN IF NOT EXISTS airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO';
+ALTER TABLE gse_fleet DROP CONSTRAINT IF EXISTS gse_fleet_pkey;
+ALTER TABLE gse_fleet ADD PRIMARY KEY (airport_icao, unit_id);
+
+-- gse_turnaround migration
+ALTER TABLE gse_turnaround ADD COLUMN IF NOT EXISTS airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO';
+ALTER TABLE gse_turnaround DROP CONSTRAINT IF EXISTS gse_turnaround_pkey;
+ALTER TABLE gse_turnaround ADD PRIMARY KEY (airport_icao, icao24);

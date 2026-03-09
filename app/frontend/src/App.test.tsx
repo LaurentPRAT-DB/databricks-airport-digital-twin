@@ -20,36 +20,63 @@ function renderApp() {
   )
 }
 
+/** Wait for the loading screen to finish and the main layout to appear */
+async function waitForAppReady() {
+  await waitFor(
+    () => {
+      expect(screen.getByRole('banner')).toBeInTheDocument()
+    },
+    { timeout: 3000 }
+  )
+}
+
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
+  describe('Loading screen', () => {
+    it('shows loading screen with title on initial render', () => {
+      renderApp()
+      expect(screen.getByRole('heading', { name: /airport digital twin/i })).toBeInTheDocument()
+    })
+
+    it('transitions to main layout after loading', async () => {
+      renderApp()
+      await waitForAppReady()
+      expect(screen.getByRole('main')).toBeInTheDocument()
+    })
+  })
+
   describe('Layout', () => {
     it('renders the main application', async () => {
       renderApp()
+      await waitForAppReady()
       expect(screen.getByRole('heading', { name: /airport digital twin/i })).toBeInTheDocument()
     })
 
     it('renders header section', async () => {
       renderApp()
+      await waitForAppReady()
       expect(screen.getByRole('banner')).toBeInTheDocument()
     })
 
     it('renders main content area', async () => {
       renderApp()
+      await waitForAppReady()
       expect(screen.getByRole('main')).toBeInTheDocument()
     })
 
-    it('renders flight list panel', () => {
+    it('renders flight list panel', async () => {
       renderApp()
-      // Flight list panel has "Flights" heading text
+      await waitForAppReady()
       const elements = screen.getAllByText(/flights/i)
       expect(elements.length).toBeGreaterThan(0)
     })
 
     it('renders flight detail panel', async () => {
       renderApp()
+      await waitForAppReady()
       expect(screen.getByRole('heading', { name: /flight details/i })).toBeInTheDocument()
     })
   })
@@ -57,12 +84,14 @@ describe('App', () => {
   describe('View toggle', () => {
     it('renders 2D/3D view toggle', async () => {
       renderApp()
+      await waitForAppReady()
       expect(screen.getByRole('button', { name: /2d/i })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /3d/i })).toBeInTheDocument()
     })
 
     it('2D view is active by default', async () => {
       renderApp()
+      await waitForAppReady()
       const button2D = screen.getByRole('button', { name: /2d/i })
       expect(button2D).toHaveClass('bg-blue-600')
     })
@@ -70,6 +99,7 @@ describe('App', () => {
     it('can switch to 3D view', async () => {
       const user = userEvent.setup()
       renderApp()
+      await waitForAppReady()
 
       const button3D = screen.getByRole('button', { name: /3d/i })
       await user.click(button3D)
@@ -80,6 +110,7 @@ describe('App', () => {
     it('can switch back to 2D view', async () => {
       const user = userEvent.setup()
       renderApp()
+      await waitForAppReady()
 
       const button3D = screen.getByRole('button', { name: /3d/i })
       const button2D = screen.getByRole('button', { name: /2d/i })
@@ -94,6 +125,7 @@ describe('App', () => {
     it('shows loading fallback when switching to 3D', async () => {
       const user = userEvent.setup()
       renderApp()
+      await waitForAppReady()
 
       const button3D = screen.getByRole('button', { name: /3d/i })
       await user.click(button3D)
@@ -106,12 +138,14 @@ describe('App', () => {
   describe('FIDS modal', () => {
     it('shows FIDS button in header', async () => {
       renderApp()
+      await waitForAppReady()
       expect(screen.getByRole('button', { name: /fids/i })).toBeInTheDocument()
     })
 
     it('opens FIDS modal when button clicked', async () => {
       const user = userEvent.setup()
       renderApp()
+      await waitForAppReady()
 
       const fidsButton = screen.getByRole('button', { name: /fids/i })
       await user.click(fidsButton)
@@ -124,6 +158,7 @@ describe('App', () => {
     it('closes FIDS modal when close button clicked', async () => {
       const user = userEvent.setup()
       renderApp()
+      await waitForAppReady()
 
       // Open FIDS
       const fidsButton = screen.getByRole('button', { name: /fids/i })
@@ -147,6 +182,7 @@ describe('App', () => {
     it('clicking a flight in list triggers selection logic', async () => {
       const user = userEvent.setup()
       renderApp()
+      await waitForAppReady()
 
       // Wait for flights to load - look for any flight row button
       await waitFor(
@@ -167,24 +203,24 @@ describe('App', () => {
       }
     })
 
-    it('detail panel shows placeholder when no selection', () => {
+    it('detail panel shows placeholder when no selection', async () => {
       renderApp()
-      // Initially shows placeholder
+      await waitForAppReady()
       expect(screen.getByText(/select a flight to view details/i)).toBeInTheDocument()
     })
   })
 
   describe('Data loading', () => {
-    it('shows flight count label in header', () => {
+    it('shows flight count label in header', async () => {
       renderApp()
-      // Header has "Flights:" label (may appear multiple times)
+      await waitForAppReady()
       const elements = screen.getAllByText(/flights/i)
       expect(elements.length).toBeGreaterThan(0)
     })
 
-    it('shows status indicator in header', () => {
+    it('shows status indicator in header', async () => {
       renderApp()
-      // Header has status area - status dots use rounded-full class
+      await waitForAppReady()
       const statusDots = document.querySelectorAll('.rounded-full')
       expect(statusDots.length).toBeGreaterThan(0)
     })
@@ -199,6 +235,7 @@ describe('App', () => {
     it('FIDS toggle is performant', async () => {
       const user = userEvent.setup()
       renderApp()
+      await waitForAppReady()
 
       const fidsButton = screen.getByRole('button', { name: /fids/i })
 
@@ -215,6 +252,7 @@ describe('App', () => {
     it('view toggle is performant', async () => {
       const user = userEvent.setup()
       renderApp()
+      await waitForAppReady()
 
       const button3D = screen.getByRole('button', { name: /3d/i })
 
@@ -229,6 +267,7 @@ describe('App', () => {
   describe('Accessibility', () => {
     it('has proper document structure', async () => {
       renderApp()
+      await waitForAppReady()
 
       expect(screen.getByRole('banner')).toBeInTheDocument() // header
       expect(screen.getByRole('main')).toBeInTheDocument() // main content
@@ -236,6 +275,7 @@ describe('App', () => {
 
     it('all buttons are keyboard accessible', async () => {
       renderApp()
+      await waitForAppReady()
 
       const buttons = screen.getAllByRole('button')
       buttons.forEach((button) => {

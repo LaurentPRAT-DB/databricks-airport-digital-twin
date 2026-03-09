@@ -154,6 +154,9 @@ def get_gates() -> Dict[str, tuple]:
     """
     Get gate positions, preferring imported OSM data over defaults.
 
+    Only caches the result once the airport config service reports ready,
+    preventing early calls from permanently locking in the 9-gate fallback.
+
     Returns:
         Dictionary mapping gate refs to (latitude, longitude) tuples
     """
@@ -170,17 +173,21 @@ def get_gates() -> Dict[str, tuple]:
 
         osm_gates = config.get("gates", [])
         if osm_gates:
-            _loaded_gates = {}
+            gates = {}
             for gate in osm_gates:
                 ref = gate.get("ref") or gate.get("id")
                 geo = gate.get("geo", {})
                 lat = geo.get("latitude")
                 lon = geo.get("longitude")
                 if ref and lat and lon:
-                    _loaded_gates[ref] = (lat, lon)
+                    gates[ref] = (float(lat), float(lon))
 
-            if _loaded_gates:
-                return _loaded_gates
+            if gates:
+                # Only cache when config is fully loaded to avoid
+                # permanently locking in a partial/default gate set
+                if service.config_ready:
+                    _loaded_gates = gates
+                return gates
     except ImportError:
         # App backend not available (e.g., running standalone)
         pass

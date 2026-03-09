@@ -47,9 +47,15 @@ def _dict_to_scheduled_flight(data: dict) -> ScheduledFlight:
 class ScheduleService:
     """Service for flight schedule operations."""
 
-    def __init__(self, airport: str = "SFO"):
+    def __init__(self, airport: str = "SFO", airport_icao: str = "KSFO"):
         """Initialize schedule service."""
         self._airport = airport
+        self._airport_icao = airport_icao
+
+    def set_airport(self, airport: str, airport_icao: str) -> None:
+        """Update the current airport for schedule queries."""
+        self._airport = airport
+        self._airport_icao = airport_icao
 
     def get_arrivals(
         self,
@@ -80,6 +86,7 @@ class ScheduleService:
                 hours_behind=hours_behind,
                 hours_ahead=hours_ahead,
                 limit=limit,
+                airport_icao=self._airport_icao,
             )
             if raw_arrivals:
                 logger.debug(f"Schedule arrivals from Lakebase: {len(raw_arrivals)}")
@@ -133,6 +140,7 @@ class ScheduleService:
                 hours_behind=hours_behind,
                 hours_ahead=hours_ahead,
                 limit=limit,
+                airport_icao=self._airport_icao,
             )
             if raw_departures:
                 logger.debug(f"Schedule departures from Lakebase: {len(raw_departures)}")

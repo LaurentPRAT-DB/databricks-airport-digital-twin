@@ -313,14 +313,64 @@ export interface OSMApron {
   color: number;
 }
 
+export interface OSMRunway {
+  id: string;
+  osmId: number;
+  name?: string;
+  ref?: string;
+  points: Position3D[];
+  geoPoints?: GeoPosition[];
+  width: number;
+  surface?: string;
+  color: number;
+}
+
+export interface OSMHangar {
+  id: string;
+  osmId: number;
+  name?: string;
+  type: 'hangar';
+  operator?: string;
+  position: Position3D;
+  dimensions: Dimensions3D;
+  polygon: Position3D[];
+  geoPolygon?: GeoPosition[];
+  color: number;
+  geo: GeoPosition;
+}
+
+export interface OSMHelipad {
+  id: string;
+  osmId: number;
+  name?: string;
+  ref?: string;
+  position: Position3D;
+  geo: GeoPosition;
+}
+
+export interface OSMParkingPosition {
+  id: string;
+  osmId: number;
+  ref?: string;
+  name?: string;
+  position: Position3D;
+  geo: GeoPosition;
+}
+
 // ============================================================================
 // Combined Airport Configuration
 // ============================================================================
 
 export interface AirportConfig {
   // Source tracking
-  sources: Array<'AIXM' | 'IFC' | 'AIDM' | 'OSM' | 'FAA' | 'default'>;
+  sources: Array<'AIXM' | 'IFC' | 'AIDM' | 'OSM' | 'FAA' | 'default' | 'lakehouse'>;
   lastUpdated?: string;
+
+  // Airport identification
+  icaoCode?: string;
+  iataCode?: string;
+  airportName?: string;
+  airportOperator?: string;
 
   // Geometry (from AIXM/IFC)
   runways: AIXMRunway[];
@@ -334,6 +384,10 @@ export interface AirportConfig {
   gates?: OSMGate[];
   osmTaxiways?: OSMTaxiway[];
   osmAprons?: OSMApron[];
+  osmRunways?: OSMRunway[];
+  osmHangars?: OSMHangar[];
+  osmHelipads?: OSMHelipad[];
+  osmParkingPositions?: OSMParkingPosition[];
 
   // Operational data (from AIDM)
   aidmFlights?: AIDMFlight[];
@@ -376,6 +430,10 @@ export interface OSMImportResponse {
   terminalsImported: number;
   taxiwaysImported: number;
   apronsImported: number;
+  runwaysImported: number;
+  hangarsImported: number;
+  helipadsImported: number;
+  parkingPositionsImported: number;
   warnings: string[];
   timestamp: string;
 }

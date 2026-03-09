@@ -72,6 +72,16 @@ class OSMNode(BaseModel):
         return self.tags.aeroway == "gate"
 
     @property
+    def is_helipad(self) -> bool:
+        """Check if this node is a helipad."""
+        return self.tags.aeroway == "helipad"
+
+    @property
+    def is_parking_position(self) -> bool:
+        """Check if this node is a parking position."""
+        return self.tags.aeroway == "parking_position"
+
+    @property
     def gate_ref(self) -> Optional[str]:
         """Get gate reference/number."""
         return self.tags.ref if self.is_gate else None
@@ -121,6 +131,16 @@ class OSMWay(BaseModel):
         return self.tags.aeroway == "apron"
 
     @property
+    def is_runway(self) -> bool:
+        """Check if this way is a runway."""
+        return self.tags.aeroway == "runway"
+
+    @property
+    def is_hangar(self) -> bool:
+        """Check if this way is a hangar."""
+        return self.tags.aeroway == "hangar" or self.tags.building == "hangar"
+
+    @property
     def is_closed(self) -> bool:
         """Check if this way forms a closed polygon."""
         return len(self.nodes) >= 3 and self.nodes[0] == self.nodes[-1]
@@ -149,6 +169,9 @@ class OSMDocument(BaseModel):
     version: str = Field(default="0.6", description="OSM API version")
     generator: str = Field(default="Overpass API")
     icao_code: Optional[str] = Field(None, description="Airport ICAO code")
+    iata_code: Optional[str] = Field(None, description="Airport IATA code")
+    airport_name: Optional[str] = Field(None, description="Official airport name")
+    airport_operator: Optional[str] = Field(None, description="Airport operator")
     timestamp: Optional[datetime] = None
     nodes: list[OSMNode] = Field(default_factory=list)
     ways: list[OSMWay] = Field(default_factory=list)
@@ -172,6 +195,26 @@ class OSMDocument(BaseModel):
     def aprons(self) -> list[OSMWay]:
         """Get all apron ways."""
         return [w for w in self.ways if w.is_apron]
+
+    @property
+    def runways(self) -> list[OSMWay]:
+        """Get all runway ways."""
+        return [w for w in self.ways if w.is_runway]
+
+    @property
+    def hangars(self) -> list[OSMWay]:
+        """Get all hangar ways."""
+        return [w for w in self.ways if w.is_hangar]
+
+    @property
+    def helipads(self) -> list[OSMNode]:
+        """Get all helipad nodes."""
+        return [n for n in self.nodes if n.is_helipad]
+
+    @property
+    def parking_positions(self) -> list[OSMNode]:
+        """Get all parking position nodes."""
+        return [n for n in self.nodes if n.is_parking_position]
 
     def get_gates_by_terminal(self) -> dict[str, list[OSMNode]]:
         """Group gates by terminal name."""
