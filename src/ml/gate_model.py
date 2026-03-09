@@ -153,9 +153,16 @@ class GateRecommender:
         self._runway_coords = self._load_runway_coords()
         if gates is not None:
             self.gates = {g.gate_id: g for g in gates}
+            self._using_defaults = False
         else:
-            self.gates = self._load_osm_gates() or self._create_default_gates()
-            logger.info(f"GateRecommender initialized with {len(self.gates)} gates for {airport_code}")
+            osm_gates = self._load_osm_gates()
+            if osm_gates:
+                self.gates = osm_gates
+                self._using_defaults = False
+            else:
+                self.gates = self._create_default_gates()
+                self._using_defaults = True
+            logger.info(f"GateRecommender initialized with {len(self.gates)} gates for {airport_code} (defaults={self._using_defaults})")
 
     def _load_runway_coords(self) -> tuple:
         """Load primary runway coordinates from OSM config.
@@ -265,6 +272,7 @@ class GateRecommender:
         new_gates = self._load_osm_gates()
         if new_gates:
             self.gates = new_gates
+            self._using_defaults = False
         return len(self.gates)
 
     def _score_gate(self, gate: Gate, flight: dict) -> float:
@@ -557,6 +565,15 @@ class GateRecommender:
         Returns:
             List of GateRecommendation sorted by score (descending).
         """
+        # Lazy reload: if still using defaults, try OSM gates once more
+        if self._using_defaults:
+            osm_gates = self._load_osm_gates()
+            if osm_gates:
+                self.gates = osm_gates
+                self._using_defaults = False
+                self._runway_coords = self._load_runway_coords()
+                logger.info(f"Lazy-loaded {len(osm_gates)} OSM gates for {self.airport_code}")
+
         recommendations = []
 
         for gate in self.gates.values():

@@ -20,6 +20,7 @@ from app.backend.services.airport_config_service import get_airport_config_servi
 from app.backend.services.prediction_service import get_prediction_service
 from src.ingestion.fallback import reload_gates, set_airport_center, AIRPORT_CENTER
 from src.ml.gate_model import reload_gate_recommender
+from src.ml.registry import get_model_registry
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,11 @@ async def _background_init(app: FastAPI):
 
             gate_count = reload_gate_recommender()
             logger.info(f"Gate recommender initialized with {gate_count} OSM gates")
+
+            # Refresh the AirportModelRegistry so PredictionService uses OSM gates too
+            registry = get_model_registry()
+            registry.retrain("KSFO")
+            logger.info("AirportModelRegistry retrained with fresh OSM gate data")
         else:
             logger.warning("Failed to load airport config from any source")
 
