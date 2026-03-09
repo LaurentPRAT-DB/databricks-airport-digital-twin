@@ -3,9 +3,13 @@ import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useFlightContext } from '../../context/FlightContext';
 import { useTrajectory, TrajectoryPoint } from '../../hooks/useTrajectory';
-import { latLonTo3D } from './Aircraft3D';
+import { latLonTo3D } from '../../utils/map3d-calculations';
 
-export function Trajectory3D() {
+interface Trajectory3DProps {
+  airportCenter?: { lat: number; lon: number };
+}
+
+export function Trajectory3D({ airportCenter }: Trajectory3DProps) {
   const { selectedFlight, showTrajectory } = useFlightContext();
   const { data: trajectory } = useTrajectory(
     selectedFlight?.icao24 ?? null,
@@ -56,10 +60,10 @@ export function Trajectory3D() {
 
     // Convert lat/lon to 3D coordinates
     return validPoints.map((p) => {
-      const pos = latLonTo3D(p.latitude!, p.longitude!, p.altitude);
+      const pos = latLonTo3D(p.latitude!, p.longitude!, p.altitude, airportCenter?.lat, airportCenter?.lon);
       return new THREE.Vector3(pos.x, pos.y, pos.z);
     });
-  }, [validPoints]);
+  }, [validPoints, airportCenter?.lat, airportCenter?.lon]);
 
   const colors = useMemo(() => {
     if (validPoints.length < 2) return null;

@@ -22,7 +22,7 @@ export const DEFAULT_COORDINATE_SCALE = 10000;
  * Using 0.15 for 50x exaggeration so altitude differences are visible
  *
  * At this scale:
- * - Ground (0 ft) → Y = 5
+ * - Ground (0 ft) → Y = 0.5 (just above surface)
  * - 1,000 ft → Y = 50
  * - 5,000 ft → Y = 234
  * - 10,000 ft → Y = 462
@@ -56,8 +56,15 @@ export function latLonTo3D(
   // Latitude → Z axis (negative because Z points south in scene)
   const z = -(lat - centerLat) * scale;
   // Altitude from feet to scene units (exaggerated for visibility)
-  const altitudeMeters = (altitude || 0) * 0.3048;
-  const y = altitudeMeters * ALTITUDE_SCALE + 5; // Scale + ground offset
+  const altFeet = altitude || 0;
+  let y: number;
+  if (altFeet === 0) {
+    // Ground aircraft sit just above the surface
+    y = 0.5;
+  } else {
+    const altitudeMeters = altFeet * 0.3048;
+    y = altitudeMeters * ALTITUDE_SCALE + 5; // Scale + ground offset for airborne
+  }
 
   return { x, y, z };
 }
@@ -73,8 +80,14 @@ export function position3DToLatLon(
 ): { lat: number; lon: number; altitude: number } {
   const lat = centerLat - pos.z / scale;
   const lon = centerLon + pos.x / (scale * Math.cos(centerLat * Math.PI / 180));
-  const altitudeMeters = (pos.y - 5) / ALTITUDE_SCALE;
-  const altitude = altitudeMeters / 0.3048;
+  let altitude: number;
+  if (pos.y <= 0.5) {
+    // Ground level
+    altitude = 0;
+  } else {
+    const altitudeMeters = (pos.y - 5) / ALTITUDE_SCALE;
+    altitude = altitudeMeters / 0.3048;
+  }
 
   return { lat, lon, altitude };
 }

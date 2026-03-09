@@ -26,6 +26,7 @@ interface Aircraft3DProps {
   flight: Flight;
   selected?: boolean;
   onClick?: () => void;
+  airportCenter?: { lat: number; lon: number };
 }
 
 /**
@@ -39,14 +40,14 @@ interface Aircraft3DProps {
  * - Hover label showing callsign
  * - Smooth position/rotation animation
  */
-export function Aircraft3D({ flight, selected = false, onClick }: Aircraft3DProps) {
+export function Aircraft3D({ flight, selected = false, onClick, airportCenter }: Aircraft3DProps) {
   const groupRef = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
 
   // Calculate target position from flight data
   const targetPosition = useMemo(() =>
-    latLonTo3D(flight.latitude, flight.longitude, flight.altitude),
-    [flight.latitude, flight.longitude, flight.altitude]
+    latLonTo3D(flight.latitude, flight.longitude, flight.altitude, airportCenter?.lat, airportCenter?.lon),
+    [flight.latitude, flight.longitude, flight.altitude, airportCenter?.lat, airportCenter?.lon]
   );
 
   // Calculate target rotation from heading

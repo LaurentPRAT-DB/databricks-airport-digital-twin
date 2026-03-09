@@ -1,76 +1,101 @@
 /**
  * Terminal3D Component
  *
- * Renders OSM terminal buildings in 3D using either polygon geometry
- * (if available) or a simple box fallback based on dimensions.
+ * Renders OSM terminal buildings in 3D using geoPolygon coordinates
+ * converted via latLonTo3D for correct alignment with aircraft positions.
  */
 
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { OSMTerminal } from '../../types/airportFormats';
+import { latLonTo3D } from '../../utils/map3d-calculations';
 
 interface Terminal3DProps {
   terminal: OSMTerminal;
+  airportCenter?: { lat: number; lon: number };
 }
 
 /**
  * Terminal3D Component
  *
- * Renders a terminal building from OSM data. If polygon points are available,
- * creates an extruded shape. Otherwise, renders a simple box.
+ * Renders a terminal building from OSM data. Uses geoPolygon (lat/lon)
+ * converted via latLonTo3D for correct coordinate alignment.
+ * Falls back to backend-computed polygon if geoPolygon is unavailable.
  */
-export function Terminal3D({ terminal }: Terminal3DProps) {
-  const { position, dimensions, polygon, color } = terminal;
+export function Terminal3D({ terminal, airportCenter }: Terminal3DProps) {
+  const { dimensions, color } = terminal;
 
-  // Create geometry from polygon points or fall back to box
-  const geometry = useMemo(() => {
-    if (polygon && polygon.length >= 3) {
-      // Create a shape from the polygon points
+  // Convert geo coordinates to 3D scene coordinates
+  const { geometry, centerPos } = useMemo(() => {
+    const geoPolygon = terminal.geoPolygon;
+    const geo = terminal.geo;
+
+    if (geoPolygon && geoPolygon.length >= 3 && geo) {
+      // Use geo coordinates converted through latLonTo3D for consistent positioning
+      const center3D = latLonTo3D(geo.latitude, geo.longitude, 0, airportCenter?.lat, airportCenter?.lon);
+      const points3D = geoPolygon.map(pt =>
+        latLonTo3D(pt.latitude, pt.longitude, 0, airportCenter?.lat, airportCenter?.lon)
+      );
+
       const shape = new THREE.Shape();
-      const firstPoint = polygon[0];
-      shape.moveTo(firstPoint.x - position.x, firstPoint.z - position.z);
-
-      for (let i = 1; i < polygon.length; i++) {
-        const pt = polygon[i];
-        shape.lineTo(pt.x - position.x, pt.z - position.z);
+      shape.moveTo(points3D[0].x - center3D.x, points3D[0].z - center3D.z);
+      for (let i = 1; i < points3D.length; i++) {
+        shape.lineTo(points3D[i].x - center3D.x, points3D[i].z - center3D.z);
       }
       shape.closePath();
 
-      // Extrude to create 3D building
       const extrudeSettings = {
         steps: 1,
         depth: dimensions.height,
         bevelEnabled: false,
       };
 
-      return new THREE.ExtrudeGeometry(shape, extrudeSettings);
+      return {
+        geometry: new THREE.ExtrudeGeometry(shape, extrudeSettings),
+        centerPos: [center3D.x, 0, center3D.z] as [number, number, number],
+      };
     }
 
-    // Fallback to simple box
-    return new THREE.BoxGeometry(dimensions.width, dimensions.height, dimensions.depth);
-  }, [polygon, position, dimensions]);
-
-  // Rotation for extruded geometry (needs to be rotated to lie flat then stand up)
-  const rotation = useMemo(() => {
+    // Fallback: use backend-computed polygon coordinates
+    const { position, polygon } = terminal;
     if (polygon && polygon.length >= 3) {
-      // Extruded geometry needs rotation: -90 deg on X to stand up
-      return [-Math.PI / 2, 0, 0] as [number, number, number];
-    }
-    return [0, 0, 0] as [number, number, number];
-  }, [polygon]);
+      const shape = new THREE.Shape();
+      shape.moveTo(polygon[0].x - position.x, polygon[0].z - position.z);
+      for (let i = 1; i < polygon.length; i++) {
+        shape.lineTo(polygon[i].x - position.x, polygon[i].z - position.z);
+      }
+      shape.closePath();
 
-  // Position adjustment for extruded geometry
-  const adjustedPosition = useMemo(() => {
-    if (polygon && polygon.length >= 3) {
-      return [position.x, 0, position.z] as [number, number, number];
+      const extrudeSettings = {
+        steps: 1,
+        depth: dimensions.height,
+        bevelEnabled: false,
+      };
+
+      return {
+        geometry: new THREE.ExtrudeGeometry(shape, extrudeSettings),
+        centerPos: [position.x, 0, position.z] as [number, number, number],
+      };
     }
-    // Box geometry: position at center, y offset by half height
-    return [position.x, dimensions.height / 2, position.z] as [number, number, number];
-  }, [polygon, position, dimensions.height]);
+
+    // Last fallback: simple box
+    return {
+      geometry: new THREE.BoxGeometry(dimensions.width, dimensions.height, dimensions.depth),
+      centerPos: [terminal.position.x, dimensions.height / 2, terminal.position.z] as [number, number, number],
+    };
+  }, [terminal, dimensions, airportCenter?.lat, airportCenter?.lon]);
+
+  // Determine if this is extruded (needs rotation) or a box
+  const isExtruded = (terminal.geoPolygon && terminal.geoPolygon.length >= 3) ||
+    (terminal.polygon && terminal.polygon.length >= 3);
+
+  const rotation: [number, number, number] = isExtruded
+    ? [-Math.PI / 2, 0, 0]
+    : [0, 0, 0];
 
   return (
     <mesh
-      position={adjustedPosition}
+      position={centerPos}
       rotation={rotation}
       castShadow
       receiveShadow
@@ -87,6 +112,7 @@ export function Terminal3D({ terminal }: Terminal3DProps) {
 
 interface TerminalGroupProps {
   terminals: OSMTerminal[];
+  airportCenter?: { lat: number; lon: number };
 }
 
 /**
@@ -94,7 +120,7 @@ interface TerminalGroupProps {
  *
  * Renders a collection of OSM terminals.
  */
-export function TerminalGroup({ terminals }: TerminalGroupProps) {
+export function TerminalGroup({ terminals, airportCenter }: TerminalGroupProps) {
   if (!terminals || terminals.length === 0) {
     return null;
   }
@@ -102,7 +128,7 @@ export function TerminalGroup({ terminals }: TerminalGroupProps) {
   return (
     <group name="osm-terminals">
       {terminals.map((terminal) => (
-        <Terminal3D key={terminal.id} terminal={terminal} />
+        <Terminal3D key={terminal.id} terminal={terminal} airportCenter={airportCenter} />
       ))}
     </group>
   );

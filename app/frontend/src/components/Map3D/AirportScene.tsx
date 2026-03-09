@@ -2,11 +2,12 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import { AIRPORT_3D_CONFIG, RUNWAY_MARKING_COLOR } from '../../constants/airport3D';
 import { Flight } from '../../types/flight';
-import { OSMTerminal } from '../../types/airportFormats';
+import { OSMTerminal, OSMTaxiway, OSMApron, OSMRunway } from '../../types/airportFormats';
 import { Aircraft3D } from './Aircraft3D';
 import { Trajectory3D } from './Trajectory3D';
 import { Building3D } from './Building3D';
 import { TerminalGroup } from './Terminal3D';
+import { latLonTo3D } from '../../utils/map3d-calculations';
 
 interface AirportSceneProps {
   flights?: Flight[];
@@ -14,6 +15,14 @@ interface AirportSceneProps {
   onSelectFlight?: (icao24: string) => void;
   /** OSM terminal buildings to render */
   terminals?: OSMTerminal[];
+  /** Airport center for 3D coordinate conversion */
+  airportCenter?: { lat: number; lon: number };
+  /** OSM taxiways */
+  osmTaxiways?: OSMTaxiway[];
+  /** OSM aprons */
+  osmAprons?: OSMApron[];
+  /** OSM runways */
+  osmRunways?: OSMRunway[];
 }
 
 /**
@@ -34,11 +43,17 @@ export function AirportScene({
   selectedFlight = null,
   onSelectFlight,
   terminals = [],
+  airportCenter,
+  osmTaxiways = [],
+  osmAprons = [],
+  osmRunways = [],
 }: AirportSceneProps) {
   const { runways, taxiways, buildings, ground } = AIRPORT_3D_CONFIG;
 
-  // Only show default buildings if no OSM terminals are loaded
+  // Only show default buildings/infrastructure if no OSM data is loaded
   const hasOSMData = terminals && terminals.length > 0;
+  const hasOSMRunways = osmRunways && osmRunways.length > 0;
+  const hasOSMTaxiways = osmTaxiways && osmTaxiways.length > 0;
 
   return (
     <group>
@@ -51,20 +66,33 @@ export function AirportScene({
       ))}
 
       {/* OSM Terminal Buildings (imported from OpenStreetMap) */}
-      <TerminalGroup terminals={terminals} />
+      <TerminalGroup terminals={terminals} airportCenter={airportCenter} />
 
-      {/* Runways */}
-      {runways.map((runway) => (
-        <Runway key={runway.id} config={runway} />
-      ))}
+      {/* Runways: OSM if available, otherwise hardcoded */}
+      {hasOSMRunways ? (
+        <OSMRunwayGroup runways={osmRunways} airportCenter={airportCenter} />
+      ) : (
+        runways.map((runway) => (
+          <Runway key={runway.id} config={runway} />
+        ))
+      )}
 
-      {/* Taxiways */}
-      {taxiways.map((taxiway) => (
-        <Taxiway key={taxiway.id} config={taxiway} />
-      ))}
+      {/* Taxiways: OSM if available, otherwise hardcoded */}
+      {hasOSMTaxiways ? (
+        <OSMTaxiwayGroup taxiways={osmTaxiways} airportCenter={airportCenter} />
+      ) : (
+        taxiways.map((taxiway) => (
+          <Taxiway key={taxiway.id} config={taxiway} />
+        ))
+      )}
+
+      {/* OSM Aprons */}
+      {osmAprons.length > 0 && (
+        <OSMApronGroup aprons={osmAprons} airportCenter={airportCenter} />
+      )}
 
       {/* Trajectory (render before aircraft so it appears behind) */}
-      <Trajectory3D />
+      <Trajectory3D airportCenter={airportCenter} />
 
       {/* Aircraft */}
       {flights.map((flight) => (
@@ -73,6 +101,7 @@ export function AirportScene({
           flight={flight}
           selected={selectedFlight === flight.icao24}
           onClick={() => onSelectFlight?.(flight.icao24)}
+          airportCenter={airportCenter}
         />
       ))}
     </group>
@@ -233,4 +262,158 @@ function Taxiway({ config }: { config: typeof AIRPORT_3D_CONFIG.taxiways[0] }) {
   }, [points, width, color]);
 
   return <group>{segments}</group>;
+}
+
+// ============================================================================
+// OSM-based 3D Components (use geoPoints + latLonTo3D)
+// ============================================================================
+
+/**
+ * Renders OSM runways using geoPoints converted via latLonTo3D
+ */
+function OSMRunwayGroup({ runways, airportCenter }: { runways: OSMRunway[]; airportCenter?: { lat: number; lon: number } }) {
+  return (
+    <group name="osm-runways">
+      {runways.map((runway) => (
+        <OSMRunway3D key={runway.id} runway={runway} airportCenter={airportCenter} />
+      ))}
+    </group>
+  );
+}
+
+function OSMRunway3D({ runway, airportCenter }: { runway: OSMRunway; airportCenter?: { lat: number; lon: number } }) {
+  const segments = useMemo(() => {
+    const geoPoints = runway.geoPoints;
+    if (!geoPoints || geoPoints.length < 2) return null;
+
+    const points3D = geoPoints.map(pt =>
+      latLonTo3D(pt.latitude, pt.longitude, 0, airportCenter?.lat, airportCenter?.lon)
+    );
+
+    const result: JSX.Element[] = [];
+    for (let i = 0; i < points3D.length - 1; i++) {
+      const start = points3D[i];
+      const end = points3D[i + 1];
+      const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.z - start.z, 2));
+      const cx = (start.x + end.x) / 2;
+      const cz = (start.z + end.z) / 2;
+      const angle = Math.atan2(end.z - start.z, end.x - start.x);
+
+      result.push(
+        <mesh
+          key={`osm-rwy-seg-${i}`}
+          position={[cx, 0.1, cz]}
+          rotation={[-Math.PI / 2, 0, -angle]}
+          receiveShadow
+        >
+          <planeGeometry args={[length, runway.width]} />
+          <meshStandardMaterial color={runway.color} />
+        </mesh>
+      );
+    }
+    return result;
+  }, [runway, airportCenter?.lat, airportCenter?.lon]);
+
+  if (!segments) return null;
+  return <group>{segments}</group>;
+}
+
+/**
+ * Renders OSM taxiways using geoPoints converted via latLonTo3D
+ */
+function OSMTaxiwayGroup({ taxiways, airportCenter }: { taxiways: OSMTaxiway[]; airportCenter?: { lat: number; lon: number } }) {
+  return (
+    <group name="osm-taxiways">
+      {taxiways.map((taxiway) => (
+        <OSMTaxiway3D key={taxiway.id} taxiway={taxiway} airportCenter={airportCenter} />
+      ))}
+    </group>
+  );
+}
+
+function OSMTaxiway3D({ taxiway, airportCenter }: { taxiway: OSMTaxiway; airportCenter?: { lat: number; lon: number } }) {
+  const segments = useMemo(() => {
+    const geoPoints = taxiway.geoPoints;
+    if (!geoPoints || geoPoints.length < 2) return null;
+
+    const points3D = geoPoints.map(pt =>
+      latLonTo3D(pt.latitude, pt.longitude, 0, airportCenter?.lat, airportCenter?.lon)
+    );
+
+    const result: JSX.Element[] = [];
+    for (let i = 0; i < points3D.length - 1; i++) {
+      const start = points3D[i];
+      const end = points3D[i + 1];
+      const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.z - start.z, 2));
+      const cx = (start.x + end.x) / 2;
+      const cz = (start.z + end.z) / 2;
+      const angle = Math.atan2(end.z - start.z, end.x - start.x);
+
+      result.push(
+        <mesh
+          key={`osm-twy-seg-${i}`}
+          position={[cx, 0.05, cz]}
+          rotation={[-Math.PI / 2, 0, -angle]}
+          receiveShadow
+        >
+          <planeGeometry args={[length, taxiway.width]} />
+          <meshStandardMaterial color={taxiway.color} />
+        </mesh>
+      );
+    }
+    return result;
+  }, [taxiway, airportCenter?.lat, airportCenter?.lon]);
+
+  if (!segments) return null;
+  return <group>{segments}</group>;
+}
+
+/**
+ * Renders OSM aprons as ground polygons using geoPolygon converted via latLonTo3D
+ */
+function OSMApronGroup({ aprons, airportCenter }: { aprons: OSMApron[]; airportCenter?: { lat: number; lon: number } }) {
+  return (
+    <group name="osm-aprons">
+      {aprons.map((apron) => (
+        <OSMApron3D key={apron.id} apron={apron} airportCenter={airportCenter} />
+      ))}
+    </group>
+  );
+}
+
+function OSMApron3D({ apron, airportCenter }: { apron: OSMApron; airportCenter?: { lat: number; lon: number } }) {
+  const geometry = useMemo(() => {
+    const geoPolygon = apron.geoPolygon;
+    if (!geoPolygon || geoPolygon.length < 3) return null;
+
+    const center3D = latLonTo3D(apron.geo.latitude, apron.geo.longitude, 0, airportCenter?.lat, airportCenter?.lon);
+    const points3D = geoPolygon.map(pt =>
+      latLonTo3D(pt.latitude, pt.longitude, 0, airportCenter?.lat, airportCenter?.lon)
+    );
+
+    const shape = new THREE.Shape();
+    shape.moveTo(points3D[0].x - center3D.x, points3D[0].z - center3D.z);
+    for (let i = 1; i < points3D.length; i++) {
+      shape.lineTo(points3D[i].x - center3D.x, points3D[i].z - center3D.z);
+    }
+    shape.closePath();
+
+    return {
+      geo: new THREE.ShapeGeometry(shape),
+      center: center3D,
+    };
+  }, [apron, airportCenter?.lat, airportCenter?.lon]);
+
+  if (!geometry) return null;
+
+  return (
+    <mesh
+      position={[geometry.center.x, 0.02, geometry.center.z]}
+      rotation={[-Math.PI / 2, 0, 0]}
+      receiveShadow
+    >
+      <primitive object={geometry.geo} />
+      <meshStandardMaterial color={apron.color} side={THREE.DoubleSide} />
+    </mesh>
+  );
 }

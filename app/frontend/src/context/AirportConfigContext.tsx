@@ -8,7 +8,7 @@
 import { createContext, useContext, ReactNode } from 'react';
 import { useAirportConfig } from '../hooks/useAirportConfig';
 import type { SwitchProgress } from '../hooks/useAirportConfig';
-import type { AirportConfig, OSMTerminal, OSMGate, OSMTaxiway, OSMApron } from '../types/airportFormats';
+import type { AirportConfig, OSMTerminal, OSMGate, OSMTaxiway, OSMApron, OSMRunway } from '../types/airportFormats';
 import type { RunwayConfig, TaxiwayConfig } from '../constants/airport3D';
 import type { BuildingPlacement } from '../config/buildingModels';
 
@@ -27,6 +27,8 @@ interface AirportConfigContextValue {
   getGates: () => OSMGate[];
   getTaxiways: () => OSMTaxiway[];
   getAprons: () => OSMApron[];
+  getAirportCenter: () => { lat: number; lon: number };
+  getOSMRunways: () => OSMRunway[];
 }
 
 const AirportConfigContext = createContext<AirportConfigContextValue | null>(null);

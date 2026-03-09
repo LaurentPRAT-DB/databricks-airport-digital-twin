@@ -42,7 +42,7 @@ describe('map3d-calculations', () => {
       const pos = latLonTo3D(DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON, 0);
       expect(pos.x).toBeCloseTo(0, 5);
       expect(pos.z).toBeCloseTo(0, 5);
-      expect(pos.y).toBe(5); // Ground offset
+      expect(pos.y).toBe(0.5); // Ground level (just above surface)
     });
 
     it('handles points north of center (negative Z)', () => {
@@ -73,7 +73,7 @@ describe('map3d-calculations', () => {
 
     it('handles null altitude as 0', () => {
       const pos = latLonTo3D(DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON, null);
-      expect(pos.y).toBe(5); // Ground offset only
+      expect(pos.y).toBe(0.5); // Ground level
     });
 
     it('scales correctly with custom scale factor', () => {
@@ -85,9 +85,10 @@ describe('map3d-calculations', () => {
 
   describe('position3DToLatLon', () => {
     it('converts origin back to center coordinates', () => {
-      const result = position3DToLatLon({ x: 0, y: 5, z: 0 });
+      const result = position3DToLatLon({ x: 0, y: 0.5, z: 0 });
       expect(result.lat).toBeCloseTo(DEFAULT_CENTER_LAT, 5);
       expect(result.lon).toBeCloseTo(DEFAULT_CENTER_LON, 5);
+      expect(result.altitude).toBe(0); // Ground level
     });
 
     it('is inverse of latLonTo3D', () => {

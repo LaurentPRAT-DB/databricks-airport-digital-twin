@@ -30,8 +30,12 @@ export function Map3D({
   onSelectFlight,
 }: Map3DProps) {
   const { lighting } = AIRPORT_3D_CONFIG;
-  const { getTerminals } = useAirportConfig();
+  const { getTerminals, getAirportCenter, getTaxiways: getOSMTaxiwaysHook, getAprons, getOSMRunways } = useAirportConfig();
   const terminals = getTerminals();
+  const airportCenter = getAirportCenter();
+  const osmTaxiways = getOSMTaxiwaysHook();
+  const osmAprons = getAprons();
+  const osmRunways = getOSMRunways();
 
   return (
     <div className={className} style={{ width: '100%', height: '100%' }}>
@@ -75,6 +79,10 @@ export function Map3D({
           selectedFlight={selectedFlight}
           onSelectFlight={onSelectFlight}
           terminals={terminals}
+          airportCenter={airportCenter}
+          osmTaxiways={osmTaxiways}
+          osmAprons={osmAprons}
+          osmRunways={osmRunways}
         />
 
         {/* Orbit controls for user interaction */}

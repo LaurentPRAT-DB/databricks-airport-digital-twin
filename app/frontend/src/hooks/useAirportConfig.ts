@@ -17,9 +17,11 @@ import {
   OSMGate,
   OSMTaxiway,
   OSMApron,
+  OSMRunway,
 } from '../types/airportFormats';
 import { AIRPORT_3D_CONFIG, RunwayConfig, TaxiwayConfig } from '../constants/airport3D';
 import { BuildingPlacement } from '../config/buildingModels';
+import { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON } from '../utils/map3d-calculations';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -90,6 +92,12 @@ interface UseAirportConfigReturn {
 
   /** Get OSM aprons for 2D map */
   getAprons: () => OSMApron[];
+
+  /** Get airport center coordinates for 3D view */
+  getAirportCenter: () => { lat: number; lon: number };
+
+  /** Get OSM runways */
+  getOSMRunways: () => OSMRunway[];
 }
 
 interface ImportOptions {
@@ -565,6 +573,37 @@ export function useAirportConfig(): UseAirportConfigReturn {
     return config.osmAprons || [];
   }, [config.osmAprons]);
 
+  /**
+   * Get OSM runways
+   */
+  const getOSMRunways = useCallback((): OSMRunway[] => {
+    return config.osmRunways || [];
+  }, [config.osmRunways]);
+
+  /**
+   * Get airport center from OSM gate/terminal geo data, falling back to SFO defaults
+   */
+  const getAirportCenter = useCallback((): { lat: number; lon: number } => {
+    // Try gates first (most numerous, good centroid)
+    const gates = config.gates || [];
+    if (gates.length > 0) {
+      const sumLat = gates.reduce((s, g) => s + g.geo.latitude, 0);
+      const sumLon = gates.reduce((s, g) => s + g.geo.longitude, 0);
+      return { lat: sumLat / gates.length, lon: sumLon / gates.length };
+    }
+
+    // Try terminals
+    const terminals = config.terminals || [];
+    if (terminals.length > 0) {
+      const sumLat = terminals.reduce((s, t) => s + t.geo.latitude, 0);
+      const sumLon = terminals.reduce((s, t) => s + t.geo.longitude, 0);
+      return { lat: sumLat / terminals.length, lon: sumLon / terminals.length };
+    }
+
+    // Fallback to SFO defaults
+    return { lat: DEFAULT_CENTER_LAT, lon: DEFAULT_CENTER_LON };
+  }, [config.gates, config.terminals]);
+
   // Load config on mount
   useEffect(() => {
     refresh();
@@ -591,6 +630,8 @@ export function useAirportConfig(): UseAirportConfigReturn {
     getGates,
     getTaxiways,
     getAprons,
+    getAirportCenter,
+    getOSMRunways,
   };
 }
 
