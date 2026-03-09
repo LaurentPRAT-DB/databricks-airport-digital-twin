@@ -1,8 +1,9 @@
-import { GeoJSON, CircleMarker, Tooltip } from 'react-leaflet';
-import { PathOptions } from 'leaflet';
+import { GeoJSON, CircleMarker, Tooltip, Polygon, Polyline } from 'react-leaflet';
+import { PathOptions, LatLngExpression } from 'leaflet';
 import { Feature, Geometry } from 'geojson';
 import { airportLayout, getFeaturesByType } from '../../constants/airportLayout';
 import useAirportConfig from '../../hooks/useAirportConfig';
+import { GeoPosition } from '../../types/airportFormats';
 
 // Style function for different feature types
 function getFeatureStyle(feature: Feature<Geometry> | undefined): PathOptions {
@@ -59,13 +60,25 @@ const nonGateFeatures = {
   ),
 };
 
+// Helper to convert GeoPosition array to LatLngExpression array
+function geoToLatLng(geoPoints: GeoPosition[] | undefined): LatLngExpression[] {
+  if (!geoPoints) return [];
+  return geoPoints.map((p) => [p.latitude, p.longitude] as LatLngExpression);
+}
+
 export default function AirportOverlay() {
-  const { getGates } = useAirportConfig();
+  const { getGates, getTerminals, getTaxiways, getAprons } = useAirportConfig();
   const osmGates = getGates();
+  const osmTerminals = getTerminals();
+  const osmTaxiways = getTaxiways();
+  const osmAprons = getAprons();
 
   // Fall back to hardcoded gates only if no OSM gates available
   const hardcodedGates = getFeaturesByType('gate');
   const useOsmGates = osmGates.length > 0;
+  const useOsmTerminals = osmTerminals.length > 0;
+  const useOsmTaxiways = osmTaxiways.length > 0;
+  const useOsmAprons = osmAprons.length > 0;
 
   return (
     <>
@@ -114,6 +127,75 @@ export default function AirportOverlay() {
               Gate {gate.properties?.name}
             </Tooltip>
           </CircleMarker>
+        );
+      })}
+
+      {/* Render OSM aprons (parking areas) - render first so they're behind other elements */}
+      {useOsmAprons && osmAprons.map((apron) => {
+        const positions = geoToLatLng(apron.geoPolygon);
+        if (positions.length < 3) return null;
+        return (
+          <Polygon
+            key={apron.id}
+            positions={positions}
+            pathOptions={{
+              fillColor: '#6b7280', // gray-500
+              fillOpacity: 0.3,
+              color: '#4b5563', // gray-600
+              weight: 1,
+            }}
+          >
+            {apron.name && (
+              <Tooltip direction="center">
+                {apron.name}
+              </Tooltip>
+            )}
+          </Polygon>
+        );
+      })}
+
+      {/* Render OSM taxiways */}
+      {useOsmTaxiways && osmTaxiways.map((taxiway) => {
+        const positions = geoToLatLng(taxiway.geoPoints);
+        if (positions.length < 2) return null;
+        return (
+          <Polyline
+            key={taxiway.id}
+            positions={positions}
+            pathOptions={{
+              color: '#fbbf24', // amber-400
+              weight: 3,
+              opacity: 0.7,
+            }}
+          >
+            {taxiway.name && (
+              <Tooltip direction="center">
+                TWY {taxiway.name}
+              </Tooltip>
+            )}
+          </Polyline>
+        );
+      })}
+
+      {/* Render OSM terminals */}
+      {useOsmTerminals && osmTerminals.map((terminal) => {
+        const positions = geoToLatLng(terminal.geoPolygon);
+        if (positions.length < 3) return null;
+        return (
+          <Polygon
+            key={terminal.id}
+            positions={positions}
+            pathOptions={{
+              fillColor: '#3b82f6', // blue-500
+              fillOpacity: 0.6,
+              color: '#1d4ed8', // blue-700
+              weight: 2,
+            }}
+          >
+            <Tooltip direction="center">
+              {terminal.name}
+            </Tooltip>
+          </Polygon>
         );
       })}
     </>

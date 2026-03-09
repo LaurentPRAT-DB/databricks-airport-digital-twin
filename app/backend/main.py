@@ -40,8 +40,15 @@ async def lifespan(app: FastAPI):
             icao_code="KSFO",
             include_terminals=True,
             include_gates=True,
+            include_taxiways=True,
+            include_aprons=True,
         )
-        logger.info(f"Loaded OSM data: {len(config.get('terminals', []))} terminals, {len(config.get('gates', []))} gates")
+        logger.info(
+            f"Loaded OSM data: {len(config.get('terminals', []))} terminals, "
+            f"{len(config.get('gates', []))} gates, "
+            f"{len(config.get('taxiways', []))} taxiways, "
+            f"{len(config.get('aprons', []))} aprons"
+        )
         if warnings:
             logger.warning(f"OSM import warnings: {warnings}")
         # Reload gates for synthetic data generator

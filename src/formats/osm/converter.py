@@ -48,8 +48,8 @@ class OSMConverter:
             "icaoCode": doc.icao_code,
             "gates": [],
             "terminals": [],
-            "taxiways": [],
-            "aprons": [],
+            "osmTaxiways": [],
+            "osmAprons": [],
         }
 
         # Update converter reference point from centroid of all elements
@@ -71,13 +71,13 @@ class OSMConverter:
         for taxiway in doc.taxiways:
             converted = self._convert_taxiway(taxiway)
             if converted:
-                config["taxiways"].append(converted)
+                config["osmTaxiways"].append(converted)
 
         # Convert aprons
         for apron in doc.aprons:
             converted = self._convert_apron(apron)
             if converted:
-                config["aprons"].append(converted)
+                config["osmAprons"].append(converted)
 
         return config
 
@@ -144,13 +144,15 @@ class OSMConverter:
             GeoPosition(center_lat, center_lon, 0.0)
         )
 
-        # Calculate dimensions from polygon
+        # Calculate dimensions from polygon (3D coordinates)
         points = []
+        geo_polygon = []
         for pt in terminal.geometry:
             pos = self.coord_converter.geo_to_local(
                 GeoPosition(pt.lat, pt.lon, 0.0)
             )
             points.append({"x": pos.x, "y": pos.y, "z": pos.z})
+            geo_polygon.append({"latitude": pt.lat, "longitude": pt.lon})
 
         xs = [p["x"] for p in points]
         zs = [p["z"] for p in points]
@@ -174,6 +176,7 @@ class OSMConverter:
                 "depth": depth,
             },
             "polygon": points,
+            "geoPolygon": geo_polygon,  # For 2D map rendering
             "color": self.TERMINAL_COLOR,
             "geo": {
                 "latitude": center_lat,
@@ -187,17 +190,20 @@ class OSMConverter:
             return None
 
         points = []
+        geo_points = []
         for pt in taxiway.geometry:
             pos = self.coord_converter.geo_to_local(
                 GeoPosition(pt.lat, pt.lon, 0.0)
             )
             points.append({"x": pos.x, "y": 0.1, "z": pos.z})
+            geo_points.append({"latitude": pt.lat, "longitude": pt.lon})
 
         return {
             "id": taxiway.tags.ref or f"TWY_{taxiway.id}",
             "osmId": taxiway.id,
             "name": taxiway.tags.name or taxiway.tags.ref,
             "points": points,
+            "geoPoints": geo_points,  # For 2D map rendering
             "width": taxiway.tags.width or 20.0,
             "color": self.TAXIWAY_COLOR,
         }
@@ -213,11 +219,13 @@ class OSMConverter:
         )
 
         points = []
+        geo_polygon = []
         for pt in apron.geometry:
             pos = self.coord_converter.geo_to_local(
                 GeoPosition(pt.lat, pt.lon, 0.0)
             )
             points.append({"x": pos.x, "y": 0.02, "z": pos.z})
+            geo_polygon.append({"latitude": pt.lat, "longitude": pt.lon})
 
         xs = [p["x"] for p in points]
         zs = [p["z"] for p in points]
@@ -231,6 +239,8 @@ class OSMConverter:
             "position": {"x": center_pos.x, "y": 0.02, "z": center_pos.z},
             "dimensions": {"width": width, "height": 0.1, "depth": depth},
             "polygon": points,
+            "geoPolygon": geo_polygon,  # For 2D map rendering
+            "geo": {"latitude": center_lat, "longitude": center_lon},
             "color": self.APRON_COLOR,
         }
 
@@ -299,13 +309,13 @@ def merge_osm_config(
                 existing_buildings.append(bldg)
         result["buildings"] = existing_buildings
 
-    # Add taxiways if not already present
-    if osm_config.get("taxiways") and not result.get("taxiways"):
-        result["taxiways"] = osm_config["taxiways"]
+    # Add OSM taxiways
+    if osm_config.get("osmTaxiways"):
+        result["osmTaxiways"] = osm_config["osmTaxiways"]
 
-    # Add aprons if not already present
-    if osm_config.get("aprons") and not result.get("aprons"):
-        result["aprons"] = osm_config["aprons"]
+    # Add OSM aprons
+    if osm_config.get("osmAprons"):
+        result["osmAprons"] = osm_config["osmAprons"]
 
     # Track source
     sources = result.get("sources", [])

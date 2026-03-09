@@ -15,6 +15,8 @@ import {
   FAAImportResponse,
   OSMTerminal,
   OSMGate,
+  OSMTaxiway,
+  OSMApron,
 } from '../types/airportFormats';
 import { AIRPORT_3D_CONFIG, RunwayConfig, TaxiwayConfig } from '../constants/airport3D';
 import { BuildingPlacement } from '../config/buildingModels';
@@ -66,6 +68,12 @@ interface UseAirportConfigReturn {
 
   /** Get OSM gates for 2D map */
   getGates: () => OSMGate[];
+
+  /** Get OSM taxiways for 2D map */
+  getTaxiways: () => OSMTaxiway[];
+
+  /** Get OSM aprons for 2D map */
+  getAprons: () => OSMApron[];
 }
 
 interface ImportOptions {
@@ -451,6 +459,20 @@ export function useAirportConfig(): UseAirportConfigReturn {
     return config.gates || [];
   }, [config.gates]);
 
+  /**
+   * Get OSM taxiways for 2D map view
+   */
+  const getTaxiways = useCallback((): OSMTaxiway[] => {
+    return config.osmTaxiways || [];
+  }, [config.osmTaxiways]);
+
+  /**
+   * Get OSM aprons for 2D map view
+   */
+  const getAprons = useCallback((): OSMApron[] => {
+    return config.osmAprons || [];
+  }, [config.osmAprons]);
+
   // Load config on mount
   useEffect(() => {
     refresh();
@@ -472,6 +494,8 @@ export function useAirportConfig(): UseAirportConfigReturn {
     getBuildingPlacements,
     getTerminals,
     getGates,
+    getTaxiways,
+    getAprons,
   };
 }
 

@@ -286,8 +286,31 @@ export interface OSMTerminal {
   position: Position3D;
   dimensions: Dimensions3D;
   polygon: Position3D[];
+  geoPolygon?: GeoPosition[];  // For 2D map rendering
   color: number;
   geo: GeoPosition;
+}
+
+export interface OSMTaxiway {
+  id: string;
+  osmId: number;
+  name?: string;
+  points: Position3D[];
+  geoPoints?: GeoPosition[];  // For 2D map rendering
+  width: number;
+  color: number;
+}
+
+export interface OSMApron {
+  id: string;
+  osmId: number;
+  name?: string;
+  position: Position3D;
+  dimensions: Dimensions3D;
+  polygon: Position3D[];
+  geoPolygon?: GeoPosition[];  // For 2D map rendering
+  geo: GeoPosition;
+  color: number;
 }
 
 // ============================================================================
@@ -309,6 +332,8 @@ export interface AirportConfig {
   // OSM data (from OpenStreetMap)
   terminals?: OSMTerminal[];
   gates?: OSMGate[];
+  osmTaxiways?: OSMTaxiway[];
+  osmAprons?: OSMApron[];
 
   // Operational data (from AIDM)
   aidmFlights?: AIDMFlight[];
