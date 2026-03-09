@@ -577,14 +577,19 @@ describe('End-to-end user interaction flows', () => {
   // 9. Gate status panel
   // =========================================================================
   describe('Gate status panel', () => {
-    it('renders gate grid with available/occupied counts', async () => {
+    it('renders gate grid with filter pills and available/occupied counts', async () => {
       renderApp()
       await waitForAppReady()
 
       // Gate status should be visible in right panel
       expect(screen.getByText(/gate status/i)).toBeInTheDocument()
 
-      // Should show at least one terminal label (real OSM names or fallback)
+      // Should show "All" pill and at least one terminal pill
+      const tabs = screen.getAllByRole('tab')
+      expect(tabs.length).toBeGreaterThanOrEqual(2) // "All" + at least one terminal
+      expect(tabs[0]).toHaveTextContent('All')
+
+      // Should show at least one terminal in summary view
       const terminalLabels = screen.getAllByText(/terminal/i)
       expect(terminalLabels.length).toBeGreaterThanOrEqual(1)
 
