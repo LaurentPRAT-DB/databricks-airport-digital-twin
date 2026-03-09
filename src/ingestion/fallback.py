@@ -333,6 +333,8 @@ class FlightState:
     waypoint_index: int = 0
     phase_progress: float = 0.0  # 0-1 progress through current phase
     time_at_gate: float = 0.0    # seconds parked
+    origin_airport: Optional[str] = None      # IATA code of origin
+    destination_airport: Optional[str] = None  # IATA code of destination
 
 
 # Global state storage
@@ -591,19 +593,114 @@ def _interpolate_altitude(current_alt: float, target_alt: float, rate: float) ->
         return current_alt - rate
 
 
-def _get_aircraft_type_for_airline(callsign: str) -> str:
-    """Get a random aircraft type based on airline callsign."""
+def _get_aircraft_type_for_airline(callsign: str, is_international: bool = False) -> str:
+    """Get a random aircraft type based on airline callsign and route type."""
     if callsign and len(callsign) >= 3:
         airline_code = callsign[:3].upper()
         if airline_code in AIRLINE_FLEET:
-            return random.choice(AIRLINE_FLEET[airline_code])
-    # Default to common narrow-body types
+            fleet = AIRLINE_FLEET[airline_code]
+            if is_international:
+                # Prefer wide-body for international routes
+                wide_body = [a for a in fleet if a in ("B777", "B787", "A330", "A350", "A380", "A345")]
+                if wide_body:
+                    return random.choice(wide_body)
+            return random.choice(fleet)
+    if is_international:
+        return random.choice(["B777", "B787", "A350", "A330"])
     return random.choice(["A320", "B738", "A321", "B737"])
 
 
-def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> FlightState:
+def _get_airport_coordinates() -> dict:
+    """Get the airport coordinates lookup table."""
+    from src.ingestion.schedule_generator import AIRPORT_COORDINATES
+    return AIRPORT_COORDINATES
+
+
+def _bearing_from_airport(origin_iata: str) -> float:
+    """Compute initial bearing FROM origin airport TO SFO (degrees, 0=N, 90=E).
+
+    This gives the direction from which an arriving flight should appear.
+    """
+    coords = _get_airport_coordinates()
+    if origin_iata not in coords:
+        return random.uniform(0, 360)
+
+    lat1, lon1 = math.radians(coords[origin_iata][0]), math.radians(coords[origin_iata][1])
+    lat2, lon2 = math.radians(AIRPORT_CENTER[0]), math.radians(AIRPORT_CENTER[1])
+
+    dlon = lon2 - lon1
+    x = math.sin(dlon) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    bearing = math.degrees(math.atan2(x, y))
+    return (bearing + 360) % 360
+
+
+def _bearing_to_airport(dest_iata: str) -> float:
+    """Compute initial bearing FROM SFO TO destination airport (degrees, 0=N, 90=E).
+
+    This gives the direction a departing flight should head toward.
+    """
+    coords = _get_airport_coordinates()
+    if dest_iata not in coords:
+        return random.uniform(0, 360)
+
+    lat1, lon1 = math.radians(AIRPORT_CENTER[0]), math.radians(AIRPORT_CENTER[1])
+    lat2, lon2 = math.radians(coords[dest_iata][0]), math.radians(coords[dest_iata][1])
+
+    dlon = lon2 - lon1
+    x = math.sin(dlon) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    bearing = math.degrees(math.atan2(x, y))
+    return (bearing + 360) % 360
+
+
+def _point_on_circle(center_lat: float, center_lon: float, bearing_deg: float, radius_deg: float) -> tuple:
+    """Calculate a point at a given bearing and distance from center.
+
+    Args:
+        center_lat, center_lon: Center point in degrees
+        bearing_deg: Bearing in degrees (0=N, 90=E)
+        radius_deg: Distance in degrees
+
+    Returns:
+        (latitude, longitude) tuple
+    """
+    bearing_rad = math.radians(bearing_deg)
+    lat = center_lat + radius_deg * math.cos(bearing_rad)
+    # Adjust longitude for latitude (1 degree longitude is shorter at higher latitudes)
+    lon = center_lon + radius_deg * math.sin(bearing_rad) / math.cos(math.radians(center_lat))
+    return (lat, lon)
+
+
+def _is_international_airport(iata: str) -> bool:
+    """Check if an airport code is in the international list."""
+    from src.ingestion.schedule_generator import INTERNATIONAL_AIRPORTS
+    return iata in INTERNATIONAL_AIRPORTS
+
+
+def _pick_random_origin() -> str:
+    """Pick a random origin airport for arriving flights."""
+    from src.ingestion.schedule_generator import DOMESTIC_AIRPORTS, INTERNATIONAL_AIRPORTS
+    if random.random() < 0.7:
+        return random.choice(DOMESTIC_AIRPORTS)
+    return random.choice(INTERNATIONAL_AIRPORTS)
+
+
+def _pick_random_destination() -> str:
+    """Pick a random destination airport for departing flights."""
+    from src.ingestion.schedule_generator import DOMESTIC_AIRPORTS, INTERNATIONAL_AIRPORTS
+    if random.random() < 0.7:
+        return random.choice(DOMESTIC_AIRPORTS)
+    return random.choice(INTERNATIONAL_AIRPORTS)
+
+
+def _create_new_flight(
+    icao24: str, callsign: str, phase: FlightPhase,
+    origin: Optional[str] = None, destination: Optional[str] = None,
+) -> FlightState:
     """Create a new flight in the specified phase with proper separation."""
-    aircraft_type = _get_aircraft_type_for_airline(callsign)
+    is_intl = _is_international_airport(origin or "") or _is_international_airport(destination or "")
+    aircraft_type = _get_aircraft_type_for_airline(callsign, is_international=is_intl)
 
     if phase == FlightPhase.APPROACHING:
         # Start on approach from the east WITH PROPER WAKE TURBULENCE SEPARATION
@@ -616,7 +713,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
         # Limit simultaneous approaches (realistic: max 4-5 in sequence)
         if approaching_count + landing_count >= 4:
             # Too many on approach - start as enroute instead
-            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE)
+            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
 
         # Calculate position based on actual aircraft positions (not just count)
         last_aircraft = _find_last_aircraft_on_approach()
@@ -628,19 +725,15 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             alt = base_wp[2]
         else:
             # Calculate required separation based on wake turbulence categories
-            # New aircraft is FOLLOWING the last aircraft, so we need separation
-            # based on last_aircraft (lead) -> new_aircraft (follow)
             required_sep_deg = _get_required_separation(
                 last_aircraft.aircraft_type,
                 aircraft_type
             )
-            # Add 20% buffer for safety margin
             required_sep_deg *= 1.2
 
             # Position new aircraft behind the last one (higher longitude = further east)
             lat = last_aircraft.latitude + random.uniform(-0.005, 0.005)
             lon = last_aircraft.longitude + required_sep_deg
-            # Each aircraft further back is at higher altitude
             alt = last_aircraft.altitude + 500
 
         return FlightState(
@@ -656,6 +749,8 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             phase=phase,
             aircraft_type=aircraft_type,
             waypoint_index=0,
+            origin_airport=origin,
+            destination_airport=destination,
         )
 
     elif phase == FlightPhase.PARKED:
@@ -666,7 +761,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
         gate = _find_available_gate()
         if gate is None:
             # All gates occupied - switch to approaching or enroute
-            return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING)
+            return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination)
 
         lat, lon = get_gates()[gate]
         _occupy_gate(icao24, gate)
@@ -685,25 +780,66 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             aircraft_type=aircraft_type,
             assigned_gate=gate,
             time_at_gate=random.uniform(0, 300),  # Random time already parked
+            origin_airport=origin,
+            destination_airport=destination,
         )
 
     elif phase == FlightPhase.ENROUTE:
-        # Cruising flight visible in 3D scene area
-        lat = AIRPORT_CENTER[0] + random.uniform(-0.05, 0.05)
-        lon = AIRPORT_CENTER[1] + random.uniform(-0.05, 0.05)
-        heading = random.uniform(0, 360)
+        # Spawn on edge of visibility circle at bearing from origin airport
+        VISIBILITY_RADIUS_DEG = 0.4  # ~25 NM
+
+        if origin:
+            # Arriving flight: spawn at correct inbound bearing
+            bearing_to_sfo = _bearing_from_airport(origin)
+            # The aircraft appears FROM that bearing, so spawn on the circle at the reciprocal
+            spawn_bearing = (bearing_to_sfo + 180) % 360
+            spawn_point = _point_on_circle(
+                AIRPORT_CENTER[0], AIRPORT_CENTER[1],
+                spawn_bearing,
+                VISIBILITY_RADIUS_DEG + random.uniform(-0.05, 0.05),
+            )
+            lat, lon = spawn_point
+            # Heading toward SFO
+            heading = _calculate_heading((lat, lon), AIRPORT_CENTER)
+            # International = higher altitude
+            alt = random.uniform(15000, 25000) if is_intl else random.uniform(8000, 15000)
+        elif destination:
+            # Departing flight that's already enroute: heading toward destination
+            bearing = _bearing_to_airport(destination)
+            # Spawn somewhere between airport and edge of circle
+            dist = random.uniform(0.1, 0.3)
+            spawn_point = _point_on_circle(
+                AIRPORT_CENTER[0], AIRPORT_CENTER[1], bearing, dist,
+            )
+            lat, lon = spawn_point
+            heading = bearing + random.uniform(-5, 5)
+            alt = random.uniform(8000, 15000)
+        else:
+            # No origin/destination — random position on the circle edge
+            bearing = random.uniform(0, 360)
+            spawn_point = _point_on_circle(
+                AIRPORT_CENTER[0], AIRPORT_CENTER[1],
+                bearing,
+                VISIBILITY_RADIUS_DEG + random.uniform(-0.1, 0.0),
+            )
+            lat, lon = spawn_point
+            heading = _calculate_heading((lat, lon), AIRPORT_CENTER)
+            alt = random.uniform(8000, 15000)
+
         return FlightState(
             icao24=icao24,
             callsign=callsign,
             latitude=lat,
             longitude=lon,
-            altitude=random.uniform(8000, 15000),  # Lower for visibility
+            altitude=alt,
             velocity=random.uniform(400, 500),
             heading=heading,
             vertical_rate=random.uniform(-200, 200),
             on_ground=False,
             phase=phase,
             aircraft_type=aircraft_type,
+            origin_airport=origin,
+            destination_airport=destination,
         )
 
     elif phase == FlightPhase.TAXI_TO_GATE:
@@ -712,7 +848,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
 
         # Check if runway is occupied - if so, can't spawn here
         if not _is_runway_clear("28R"):
-            return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING)
+            return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination)
 
         # Check if taxiway start position is clear (no other taxiing aircraft)
         wp = TAXI_WAYPOINTS_ARRIVAL[0]
@@ -723,12 +859,12 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
                 dist = _distance_between(spawn_pos, (other.latitude, other.longitude))
                 if dist < MIN_TAXI_SEPARATION_DEG * 2:  # Buffer for spawn position
                     # Taxiway congested - spawn as approaching instead
-                    return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING)
+                    return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination)
 
         gate = _find_available_gate()
         if gate is None:
             # No gates available
-            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE)
+            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
 
         _occupy_gate(icao24, gate)
 
@@ -746,6 +882,8 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             aircraft_type=aircraft_type,
             assigned_gate=gate,
             waypoint_index=0,
+            origin_airport=origin,
+            destination_airport=destination,
         )
 
     elif phase == FlightPhase.TAXI_TO_RUNWAY:
@@ -756,8 +894,7 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
         gate = _find_available_gate()
         if gate is None:
             # All gates occupied - can't spawn departing aircraft
-            # Create as enroute instead to avoid gate collision
-            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE)
+            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
 
         lat, lon = get_gates()[gate]
         _occupy_gate(icao24, gate)
@@ -776,10 +913,12 @@ def _create_new_flight(icao24: str, callsign: str, phase: FlightPhase) -> Flight
             aircraft_type=aircraft_type,
             assigned_gate=gate,
             waypoint_index=0,
+            origin_airport=origin,
+            destination_airport=destination,
         )
 
     # Default: random enroute
-    return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE)
+    return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
 
 
 def _update_flight_state(state: FlightState, dt: float) -> FlightState:
@@ -1028,37 +1167,72 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if _distance_between(new_pos, target) < 0.005:
                 state.waypoint_index += 1
         else:
-            # Switch to enroute
+            # Switch to enroute — heading toward destination
             state.phase = FlightPhase.ENROUTE
+            if state.destination_airport:
+                state.heading = _bearing_to_airport(state.destination_airport)
 
     elif state.phase == FlightPhase.ENROUTE:
-        # Cruise within a bounded area around the airport (~30 NM radius)
-        MAX_ENROUTE_RADIUS_DEG = 0.5  # ~30 NM
+        EXIT_RADIUS_DEG = 0.5  # ~30 NM — remove when exiting this circle
+        APPROACH_RADIUS_DEG = 0.25  # ~15 NM — transition to approach
 
         dist_from_airport = _distance_between(
             (state.latitude, state.longitude),
             AIRPORT_CENTER,
         )
 
-        if dist_from_airport > MAX_ENROUTE_RADIUS_DEG:
-            # Turn back toward the airport
-            state.heading = _calculate_heading(
+        if state.origin_airport and not state.destination_airport:
+            # ARRIVING enroute: heading toward SFO, transition to approach when close
+            target_heading = _calculate_heading(
                 (state.latitude, state.longitude), AIRPORT_CENTER
             )
-            # Increase chance of transitioning to approach when far out
-            if random.random() < 0.05 * dt:
-                state.phase = FlightPhase.APPROACHING
-                state.waypoint_index = 0
-        else:
-            # Normal cruise with minor heading variations
-            state.heading += random.uniform(-1, 1) * dt
+            # Gently steer toward target (smooth turns)
+            heading_diff = (target_heading - state.heading + 540) % 360 - 180
+            state.heading += max(-3, min(3, heading_diff)) * dt
             state.heading = state.heading % 360
 
-            # Random chance to start approach (higher than before)
+            if dist_from_airport < APPROACH_RADIUS_DEG:
+                # Close enough — transition to approach
+                state.phase = FlightPhase.APPROACHING
+                state.waypoint_index = 0
+            elif random.random() < 0.01 * dt and dist_from_airport < 0.35:
+                state.phase = FlightPhase.APPROACHING
+                state.waypoint_index = 0
+
+        elif state.destination_airport:
+            # DEPARTING enroute: heading away from SFO toward destination
+            target_heading = _bearing_to_airport(state.destination_airport)
+            heading_diff = (target_heading - state.heading + 540) % 360 - 180
+            state.heading += max(-3, min(3, heading_diff)) * dt
+            state.heading = state.heading % 360
+
+            # Climb toward cruise altitude
+            if state.altitude < 20000:
+                state.altitude += 500 * dt
+                state.vertical_rate = 1500
+
+            # Remove when exiting visibility circle
+            if dist_from_airport > EXIT_RADIUS_DEG:
+                # Mark for removal by returning None-like signal
+                # We set a special flag — the main loop will handle cleanup
+                state.phase_progress = -1.0  # Signal: remove this flight
+                return state
+
+        else:
+            # No origin/destination — legacy random behavior, head toward airport
+            if dist_from_airport > EXIT_RADIUS_DEG:
+                state.heading = _calculate_heading(
+                    (state.latitude, state.longitude), AIRPORT_CENTER
+                )
+            else:
+                state.heading += random.uniform(-1, 1) * dt
+                state.heading = state.heading % 360
+
             if random.random() < 0.005 * dt:
                 state.phase = FlightPhase.APPROACHING
                 state.waypoint_index = 0
 
+        # Move in current heading direction
         state.latitude += math.cos(math.radians(state.heading)) * 0.001 * dt
         state.longitude += math.sin(math.radians(state.heading)) * 0.001 * dt
 
@@ -1109,21 +1283,29 @@ def generate_synthetic_flights(
     # Initialize gate states on first run
     _init_gate_states()
 
-    # Initialize flights if needed
+    # Remove flights that have exited the visibility circle (departures)
+    for icao24 in list(_flight_states.keys()):
+        state = _flight_states[icao24]
+        if state.phase == FlightPhase.ENROUTE and state.phase_progress == -1.0:
+            # Release any gate still held
+            if state.assigned_gate:
+                _release_gate(icao24, state.assigned_gate)
+            del _flight_states[icao24]
+
+    # Initialize flights if needed (fill up to target count)
     if len(_flight_states) < count:
         # Predefined test flights - diversified phases to avoid conflicts
-        # Only 5 gates available, so limit ground operations
         test_flights = [
-            ("a12345", "UAL123", FlightPhase.APPROACHING),   # Arriving
-            ("b67890", "DAL456", FlightPhase.ENROUTE),       # Cruising
-            ("c11111", "SWA789", FlightPhase.ENROUTE),       # Cruising
-            ("d22222", "AAL100", FlightPhase.PARKED),        # At gate
-            ("e33333", "JBU555", FlightPhase.DEPARTING),     # Climbing out
+            ("a12345", "UAL123", FlightPhase.APPROACHING, "ORD", None),
+            ("b67890", "DAL456", FlightPhase.ENROUTE, "NRT", None),
+            ("c11111", "SWA789", FlightPhase.ENROUTE, "LAX", None),
+            ("d22222", "AAL100", FlightPhase.PARKED, "JFK", "DEN"),
+            ("e33333", "JBU555", FlightPhase.DEPARTING, None, "BOS"),
         ]
 
-        for icao24, callsign, phase in test_flights:
+        for icao24, callsign, phase, origin, dest in test_flights:
             if icao24 not in _flight_states:
-                _flight_states[icao24] = _create_new_flight(icao24, callsign, phase)
+                _flight_states[icao24] = _create_new_flight(icao24, callsign, phase, origin=origin, destination=dest)
 
         # Generate additional random flights
         while len(_flight_states) < count:
@@ -1141,20 +1323,14 @@ def generate_synthetic_flights(
             taxi_count = (_count_aircraft_in_phase(FlightPhase.TAXI_TO_GATE) +
                          _count_aircraft_in_phase(FlightPhase.TAXI_TO_RUNWAY))
 
-            # Distribute phases realistically WITH CAPACITY LIMITS
-            # - Max parked = number of gates (dynamically)
-            # - Max 4 on approach (separation)
-            # - Max 3 taxiing at once (more realistic with larger airport)
-            # Adjust weights based on current counts to prevent overcrowding
-            max_parked = len(get_gates())  # Dynamic based on loaded gates
+            max_parked = len(get_gates())
             approach_weight = 0.15 if approach_count < 4 else 0.0
             parked_weight = 0.20 if parked_count < max_parked else 0.0
             taxi_in_weight = 0.05 if taxi_count < 3 else 0.0
             taxi_out_weight = 0.05 if taxi_count < 3 else 0.0
 
-            # Redistribute unused weight to enroute
             total_ground = approach_weight + parked_weight + taxi_in_weight + taxi_out_weight
-            enroute_weight = 1.0 - total_ground - 0.05  # 0.05 for departing
+            enroute_weight = 1.0 - total_ground - 0.05
 
             phase_weights = [
                 (FlightPhase.ENROUTE, enroute_weight),
@@ -1174,7 +1350,27 @@ def generate_synthetic_flights(
                     selected_phase = phase
                     break
 
-            _flight_states[icao24] = _create_new_flight(icao24, callsign, selected_phase)
+            # Assign origin/destination based on phase
+            origin = None
+            dest = None
+            is_arriving = selected_phase in (
+                FlightPhase.ENROUTE, FlightPhase.APPROACHING,
+                FlightPhase.LANDING, FlightPhase.TAXI_TO_GATE,
+            )
+            is_departing = selected_phase in (
+                FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY,
+                FlightPhase.TAKEOFF, FlightPhase.DEPARTING,
+            )
+
+            if is_arriving:
+                origin = _pick_random_origin()
+            elif is_departing:
+                dest = _pick_random_destination()
+            elif selected_phase == FlightPhase.PARKED:
+                origin = _pick_random_origin()
+                dest = _pick_random_destination()
+
+            _flight_states[icao24] = _create_new_flight(icao24, callsign, selected_phase, origin=origin, destination=dest)
 
     # Update all flight states
     for icao24, state in list(_flight_states.items()):
@@ -1390,13 +1586,16 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
             })
 
     elif current_phase in ["climbing", "cruising", "departing", "takeoff", "enroute"]:
-        # DEPARTURE trajectory - show takeoff and climb
+        # DEPARTURE trajectory - show takeoff, climb, then turn toward destination
+        dest_airport = current_state.destination_airport if current_state else None
+        dest_bearing = _bearing_to_airport(dest_airport) if dest_airport else 284
+
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
-            if progress < 0.20:
+            if progress < 0.15:
                 # Takeoff roll and initial climb
-                takeoff_progress = progress / 0.20
+                takeoff_progress = progress / 0.15
                 wp = DEPARTURE_WAYPOINTS[0]
                 lat = _RWY_28R_LAT + takeoff_progress * (wp[1] - _RWY_28R_LAT)
                 lon = _RWY_28R_LON + takeoff_progress * (wp[0] - _RWY_28R_LON)
@@ -1405,9 +1604,9 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 velocity = 100 + takeoff_progress * 100
                 vertical_rate = 2000 if takeoff_progress > 0.3 else 0
                 phase = "takeoff" if takeoff_progress < 0.5 else "climbing"
-            else:
-                # Climb out following departure path
-                climb_progress = (progress - 0.20) / 0.80
+            elif progress < 0.50:
+                # Climb out following departure waypoints
+                climb_progress = (progress - 0.15) / 0.35
 
                 wp_count = len(DEPARTURE_WAYPOINTS)
                 wp_progress = climb_progress * (wp_count - 1)
@@ -1426,8 +1625,26 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 alt = wp1[2] + (wp2[2] - wp1[2]) * wp_frac
 
                 heading = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
-                velocity = 200 + climb_progress * 150
-                vertical_rate = 1500 if climb_progress < 0.7 else 500
+                velocity = 200 + climb_progress * 100
+                vertical_rate = 1500
+                phase = "departing"
+            else:
+                # Turn toward destination and continue climbing
+                enroute_progress = (progress - 0.50) / 0.50
+                last_wp = DEPARTURE_WAYPOINTS[-1]
+                start_lat_dep = last_wp[1]
+                start_lon_dep = last_wp[0]
+                start_alt_dep = last_wp[2]
+
+                # Project toward destination bearing
+                dist = enroute_progress * 0.15  # ~10 NM extension
+                lat = start_lat_dep + dist * math.cos(math.radians(dest_bearing))
+                lon = start_lon_dep + dist * math.sin(math.radians(dest_bearing)) / math.cos(math.radians(start_lat_dep))
+                alt = start_alt_dep + enroute_progress * 7000  # Climb to ~15000
+
+                heading = dest_bearing + random.uniform(-2, 2)
+                velocity = 300 + enroute_progress * 100
+                vertical_rate = 1000 if enroute_progress < 0.7 else 200
                 phase = "departing"
 
             timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
@@ -1449,32 +1666,60 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
     else:
         # APPROACH trajectory (aircraft still descending)
-        # Use the ILS approach waypoints toward SFO, ending at the aircraft's
-        # current position (clamped near the airport so trajectories stay local).
+        # Start from the direction of origin airport, then curve onto ILS approach
+        origin_airport = current_state.origin_airport if current_state else None
 
         # Clamp end position to reasonable airport vicinity
         clamped_lat = max(AIRPORT_CENTER[0] - 0.5, min(AIRPORT_CENTER[0] + 0.5, end_lat))
         clamped_lon = max(AIRPORT_CENTER[1] - 0.5, min(AIRPORT_CENTER[1] + 0.5, end_lon))
 
-        # Start from the first approach waypoint (east of airport)
-        start_wp = APPROACH_WAYPOINTS[0]
-        start_lat = start_wp[1]
-        start_lon = start_wp[0]
-        start_alt = start_wp[2]
+        if origin_airport:
+            # Calculate where the flight entered from (edge of visibility circle)
+            bearing_to_sfo = _bearing_from_airport(origin_airport)
+            spawn_bearing = (bearing_to_sfo + 180) % 360
+            entry_point = _point_on_circle(AIRPORT_CENTER[0], AIRPORT_CENTER[1], spawn_bearing, 0.4)
+            start_lat, start_lon = entry_point
+            start_alt = 15000 if _is_international_airport(origin_airport) else 10000
+        else:
+            # Fallback to first approach waypoint
+            start_wp = APPROACH_WAYPOINTS[0]
+            start_lat = start_wp[1]
+            start_lon = start_wp[0]
+            start_alt = start_wp[2]
+
         final_alt = end_alt if abs(end_lat - AIRPORT_CENTER[0]) < 0.5 else 3000
+
+        # Build trajectory: entry point → first approach waypoint → current position
+        first_wp = APPROACH_WAYPOINTS[0]
+        mid_lat, mid_lon = first_wp[1], first_wp[0]
+        mid_alt = first_wp[2]
 
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
-            # Interpolate from approach waypoint toward clamped position
-            lat = start_lat + progress * (clamped_lat - start_lat)
-            lon = start_lon + progress * (clamped_lon - start_lon)
-            alt = start_alt + progress * (final_alt - start_alt)
-
-            heading = _calculate_heading((lat, lon), (end_lat, end_lon))
-            velocity = 200 - progress * 60  # Slow from 200 to 140
-            vertical_rate = -800 if alt > 500 else -400
-            phase = "approaching" if alt > 500 else "landing"
+            if origin_airport and progress < 0.4:
+                # Enroute segment: from entry point toward first approach waypoint
+                seg_progress = progress / 0.4
+                lat = start_lat + seg_progress * (mid_lat - start_lat)
+                lon = start_lon + seg_progress * (mid_lon - start_lon)
+                alt = start_alt + seg_progress * (mid_alt - start_alt)
+                heading = _calculate_heading((lat, lon), (mid_lat, mid_lon))
+                velocity = 350 - seg_progress * 150
+                vertical_rate = -1000
+                phase = "approaching"
+            else:
+                # Approach segment: from first waypoint toward current position
+                if origin_airport:
+                    seg_progress = (progress - 0.4) / 0.6
+                else:
+                    seg_progress = progress
+                lat = mid_lat + seg_progress * (clamped_lat - mid_lat)
+                lon = mid_lon + seg_progress * (clamped_lon - mid_lon)
+                alt = mid_alt + seg_progress * (final_alt - mid_alt)
+                heading = _calculate_heading((lat, lon), (clamped_lat, clamped_lon))
+                velocity = 200 - seg_progress * 60
+                vertical_rate = -800 if alt > 500 else -400
+                phase = "approaching" if alt > 500 else "landing"
 
             timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
 
