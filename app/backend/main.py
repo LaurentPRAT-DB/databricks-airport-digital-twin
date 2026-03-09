@@ -51,7 +51,7 @@ async def _background_init(app: FastAPI):
                 f"{len(config.get('osmAprons', []))} aprons"
             )
             # Ensure airport center is set to SFO default on startup
-            set_airport_center(AIRPORT_CENTER[0], AIRPORT_CENTER[1])
+            set_airport_center(AIRPORT_CENTER[0], AIRPORT_CENTER[1], "SFO")
             gates = reload_gates()
             logger.info(f"Reloaded {len(gates)} gates for synthetic data generation")
 

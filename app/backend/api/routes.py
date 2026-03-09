@@ -777,7 +777,7 @@ async def activate_airport(icao_code: str) -> dict:
     iata_code = _icao_to_iata(icao_code)
     if iata_code in AIRPORT_COORDINATES:
         lat, lon = AIRPORT_COORDINATES[iata_code]
-        set_airport_center(lat, lon)
+        set_airport_center(lat, lon, iata_code)
     reset_result = reset_synthetic_state()
 
     # Check if data generation is needed

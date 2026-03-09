@@ -95,6 +95,7 @@ CALLSIGN_PREFIXES = list(AIRLINE_FLEET.keys())
 # Airport center — dynamic, updated when airport switches
 # Default is SFO (matches frontend DEFAULT_CENTER_LAT/LON)
 _airport_center = (37.6213, -122.379)
+_current_airport_iata = "SFO"
 
 # Keep the constant for backward compatibility in tests
 AIRPORT_CENTER = (37.6213, -122.379)
@@ -105,14 +106,20 @@ def get_airport_center() -> tuple:
     return _airport_center
 
 
-def set_airport_center(lat: float, lon: float) -> None:
+def get_current_airport_iata() -> str:
+    """Get the IATA code of the current airport."""
+    return _current_airport_iata
+
+
+def set_airport_center(lat: float, lon: float, iata: str = "SFO") -> None:
     """Set the current airport center for synthetic flight generation.
 
     Called when the user switches airports. Updates the center used for
     spawning flights, generating trajectories, and computing bearings.
     """
-    global _airport_center
+    global _airport_center, _current_airport_iata
     _airport_center = (lat, lon)
+    _current_airport_iata = iata
 
 # Real SFO runway endpoints from FAA Airport/Facility Directory
 # These match the frontend airportLayout.ts polygon coordinates
@@ -1466,9 +1473,12 @@ def generate_synthetic_flights(
                 FlightPhase.TAKEOFF, FlightPhase.DEPARTING,
             )
 
+            local_iata = get_current_airport_iata()
             if is_arriving:
                 origin = _pick_random_origin()
+                dest = local_iata
             elif is_departing:
+                origin = local_iata
                 dest = _pick_random_destination()
             elif selected_phase == FlightPhase.PARKED:
                 origin = _pick_random_origin()
