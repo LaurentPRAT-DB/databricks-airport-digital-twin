@@ -1032,18 +1032,35 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.phase = FlightPhase.ENROUTE
 
     elif state.phase == FlightPhase.ENROUTE:
-        # Cruise with minor variations
+        # Cruise within a bounded area around the airport (~30 NM radius)
+        MAX_ENROUTE_RADIUS_DEG = 0.5  # ~30 NM
+
+        dist_from_airport = _distance_between(
+            (state.latitude, state.longitude),
+            AIRPORT_CENTER,
+        )
+
+        if dist_from_airport > MAX_ENROUTE_RADIUS_DEG:
+            # Turn back toward the airport
+            state.heading = _calculate_heading(
+                (state.latitude, state.longitude), AIRPORT_CENTER
+            )
+            # Increase chance of transitioning to approach when far out
+            if random.random() < 0.05 * dt:
+                state.phase = FlightPhase.APPROACHING
+                state.waypoint_index = 0
+        else:
+            # Normal cruise with minor heading variations
+            state.heading += random.uniform(-1, 1) * dt
+            state.heading = state.heading % 360
+
+            # Random chance to start approach (higher than before)
+            if random.random() < 0.005 * dt:
+                state.phase = FlightPhase.APPROACHING
+                state.waypoint_index = 0
+
         state.latitude += math.cos(math.radians(state.heading)) * 0.001 * dt
         state.longitude += math.sin(math.radians(state.heading)) * 0.001 * dt
-
-        # Slight random heading changes
-        state.heading += random.uniform(-1, 1) * dt
-        state.heading = state.heading % 360
-
-        # Random chance to start approach
-        if random.random() < 0.001 * dt:
-            state.phase = FlightPhase.APPROACHING
-            state.waypoint_index = 0
 
     return state
 
@@ -1432,21 +1449,27 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
     else:
         # APPROACH trajectory (aircraft still descending)
-        # Trajectory ends at the aircraft's current position
-        # Start point is calculated based on how far back on the approach the aircraft was
+        # Use the ILS approach waypoints toward SFO, ending at the aircraft's
+        # current position (clamped near the airport so trajectories stay local).
 
-        # Calculate a start position further back on approach (higher altitude, east of current)
-        start_alt = min(end_alt + 3000, 6000)  # Start 3000ft higher or max 6000ft
-        start_lon = end_lon + 0.15  # Start ~9NM further east
-        start_lat = end_lat - 0.02  # Slightly south (approach path angle)
+        # Clamp end position to reasonable airport vicinity
+        clamped_lat = max(AIRPORT_CENTER[0] - 0.5, min(AIRPORT_CENTER[0] + 0.5, end_lat))
+        clamped_lon = max(AIRPORT_CENTER[1] - 0.5, min(AIRPORT_CENTER[1] + 0.5, end_lon))
+
+        # Start from the first approach waypoint (east of airport)
+        start_wp = APPROACH_WAYPOINTS[0]
+        start_lat = start_wp[1]
+        start_lon = start_wp[0]
+        start_alt = start_wp[2]
+        final_alt = end_alt if abs(end_lat - AIRPORT_CENTER[0]) < 0.5 else 3000
 
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
-            # Interpolate from start position to current (end) position
-            lat = start_lat + progress * (end_lat - start_lat)
-            lon = start_lon + progress * (end_lon - start_lon)
-            alt = start_alt + progress * (end_alt - start_alt)
+            # Interpolate from approach waypoint toward clamped position
+            lat = start_lat + progress * (clamped_lat - start_lat)
+            lon = start_lon + progress * (clamped_lon - start_lon)
+            alt = start_alt + progress * (final_alt - start_alt)
 
             heading = _calculate_heading((lat, lon), (end_lat, end_lon))
             velocity = 200 - progress * 60  # Slow from 200 to 140
