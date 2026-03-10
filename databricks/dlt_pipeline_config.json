@@ -33,6 +33,21 @@
       "notebook": {
         "path": "/Workspace/airport_digital_twin/src/pipelines/gold"
       }
+    },
+    {
+      "notebook": {
+        "path": "/Workspace/airport_digital_twin/src/pipelines/baggage_bronze"
+      }
+    },
+    {
+      "notebook": {
+        "path": "/Workspace/airport_digital_twin/src/pipelines/baggage_silver"
+      }
+    },
+    {
+      "notebook": {
+        "path": "/Workspace/airport_digital_twin/src/pipelines/baggage_gold"
+      }
     }
   ],
   "configuration": {

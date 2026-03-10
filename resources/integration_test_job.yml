@@ -1,0 +1,28 @@
+resources:
+  jobs:
+    baggage_pipeline_integration_test:
+      name: "[${bundle.target}] Airport DT - Baggage Pipeline Integration Test"
+      description: "Integration tests for baggage DLT pipeline Spark transformations"
+
+      # Serverless environment
+      environments:
+        - environment_key: test_env
+          spec:
+            client: "1"
+
+      tasks:
+        - task_key: test_baggage_pipeline
+          notebook_task:
+            notebook_path: ../databricks/notebooks/test_baggage_pipeline.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          environment_key: test_env
+
+      tags:
+        project: airport-digital-twin
+        component: integration-test
+        target: ${bundle.target}
+
+      # Timeout after 10 minutes
+      timeout_seconds: 600
