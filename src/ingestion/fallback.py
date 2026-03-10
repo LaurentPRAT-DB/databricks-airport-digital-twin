@@ -2022,6 +2022,10 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 # TAXI PHASE: Follow taxiway route from runway to current position
                 taxi_progress = (progress - 0.70) / 0.30
 
+                # Landing roll endpoint (must match the roll phase above)
+                roll_end_lat = runway_28l_lat + 0.004
+                roll_end_lon = runway_28l_lon - 0.012
+
                 # Build taxi path: use the flight's taxi route if available,
                 # otherwise fall back to the gate-based route or straight line.
                 taxi_path = []
@@ -2032,8 +2036,10 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                     taxi_path = _get_taxi_waypoints_arrival(current_state.assigned_gate)
 
                 if len(taxi_path) >= 2:
-                    # Append current position as final point
                     taxi_path_latlons = [(lat_wp, lon_wp) for lon_wp, lat_wp in taxi_path]
+                    # Prepend landing roll endpoint so trajectory connects smoothly
+                    taxi_path_latlons.insert(0, (roll_end_lat, roll_end_lon))
+                    # Append current position as final point
                     taxi_path_latlons.append((end_lat, end_lon))
 
                     # Compute cumulative distances along the path
@@ -2064,10 +2070,8 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                     heading = _calculate_heading((lat, lon), p2)
                 else:
                     # Fallback: straight line from runway exit to current position
-                    exit_lat = runway_28l_lat + 0.004
-                    exit_lon = runway_28l_lon - 0.012
-                    lat = exit_lat + taxi_progress * (end_lat - exit_lat)
-                    lon = exit_lon + taxi_progress * (end_lon - exit_lon)
+                    lat = roll_end_lat + taxi_progress * (end_lat - roll_end_lat)
+                    lon = roll_end_lon + taxi_progress * (end_lon - roll_end_lon)
                     heading = _calculate_heading((lat, lon), (end_lat, end_lon))
 
                 alt = 0
