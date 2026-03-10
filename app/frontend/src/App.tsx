@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { FlightProvider, useFlightContext } from './context/FlightContext';
 import { AirportConfigProvider, useAirportConfigContext } from './context/AirportConfigContext';
 import Header from './components/Header/Header';
@@ -7,6 +7,7 @@ import AirportMap from './components/Map/AirportMap';
 import FlightDetail from './components/FlightDetail/FlightDetail';
 import GateStatus from './components/GateStatus/GateStatus';
 import FIDS from './components/FIDS/FIDS';
+import { useViewportState, SharedViewport } from './hooks/useViewportState';
 
 // Lazy load 3D map to reduce initial bundle size
 const Map3D = lazy(() => import('./components/Map3D').then(m => ({ default: m.Map3D })));
@@ -139,6 +140,18 @@ function AppContent() {
   const [statusMessage, setStatusMessage] = useState('Initializing');
   const { flights, selectedFlight, setSelectedFlight } = useFlightContext();
   const { currentAirport, refresh: refreshConfig } = useAirportConfigContext();
+  const { viewport, setViewport, setLastSource } = useViewportState();
+
+  // Viewport callbacks for 2D and 3D views
+  const handle2DViewportChange = useCallback((vp: SharedViewport) => {
+    setViewport(vp);
+    setLastSource('2d');
+  }, [setViewport, setLastSource]);
+
+  const handle3DViewportChange = useCallback((vp: SharedViewport) => {
+    setViewport(vp);
+    setLastSource('3d');
+  }, [setViewport, setLastSource]);
 
   // Poll /api/ready until backend signals readiness
   useEffect(() => {
@@ -207,13 +220,18 @@ function AppContent() {
         <div className="flex-1 overflow-hidden relative">
           <ViewToggle viewMode={viewMode} onToggle={setViewMode} />
           {viewMode === '2d' ? (
-            <AirportMap />
+            <AirportMap
+              sharedViewport={viewport}
+              onViewportChange={handle2DViewportChange}
+            />
           ) : (
             <Suspense fallback={<Map3DLoadingFallback />}>
               <Map3D
                 flights={flights}
                 selectedFlight={selectedFlight?.icao24 || null}
                 onSelectFlight={handleFlightSelect}
+                sharedViewport={viewport}
+                onViewportChange={handle3DViewportChange}
               />
             </Suspense>
           )}

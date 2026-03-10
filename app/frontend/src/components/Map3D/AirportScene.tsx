@@ -7,7 +7,13 @@ import { Aircraft3D } from './Aircraft3D';
 import { Trajectory3D } from './Trajectory3D';
 import { Building3D } from './Building3D';
 import { TerminalGroup } from './Terminal3D';
-import { latLonTo3D } from '../../utils/map3d-calculations';
+import { latLonTo3D, METERS_TO_SCENE_UNITS } from '../../utils/map3d-calculations';
+
+const SCENE_COLORS = {
+  runway: 0x555555,   // Dark asphalt
+  taxiway: 0x777777,  // Medium asphalt
+  apron: 0x999999,    // Light concrete
+};
 
 interface AirportSceneProps {
   flights?: Flight[];
@@ -305,8 +311,8 @@ function OSMRunway3D({ runway, airportCenter }: { runway: OSMRunway; airportCent
           rotation={[-Math.PI / 2, 0, -angle]}
           receiveShadow
         >
-          <planeGeometry args={[length, runway.width]} />
-          <meshStandardMaterial color={runway.color} />
+          <planeGeometry args={[length, runway.width * METERS_TO_SCENE_UNITS]} />
+          <meshStandardMaterial color={SCENE_COLORS.runway} />
         </mesh>
       );
     }
@@ -355,8 +361,8 @@ function OSMTaxiway3D({ taxiway, airportCenter }: { taxiway: OSMTaxiway; airport
           rotation={[-Math.PI / 2, 0, -angle]}
           receiveShadow
         >
-          <planeGeometry args={[length, taxiway.width]} />
-          <meshStandardMaterial color={taxiway.color} />
+          <planeGeometry args={[length, taxiway.width * METERS_TO_SCENE_UNITS]} />
+          <meshStandardMaterial color={SCENE_COLORS.taxiway} />
         </mesh>
       );
     }
@@ -412,7 +418,7 @@ function OSMApron3D({ apron, airportCenter }: { apron: OSMApron; airportCenter?:
       receiveShadow
     >
       <primitive object={geometry.geo} />
-      <meshStandardMaterial color={apron.color} side={THREE.DoubleSide} />
+      <meshStandardMaterial color={SCENE_COLORS.apron} side={THREE.DoubleSide} />
     </mesh>
   );
 }

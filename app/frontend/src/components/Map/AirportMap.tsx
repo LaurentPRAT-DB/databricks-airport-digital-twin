@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import { AIRPORT_CENTER, DEFAULT_ZOOM } from '../../constants/airportLayout';
 import AirportOverlay from './AirportOverlay';
@@ -6,11 +6,20 @@ import FlightMarker from './FlightMarker';
 import TrajectoryLine from './TrajectoryLine';
 import { useFlightContext } from '../../context/FlightContext';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
+import { SharedViewport } from '../../hooks/useViewportState';
+
+interface AirportMapProps {
+  /** Shared viewport from 3D view (if any) */
+  sharedViewport?: SharedViewport | null;
+  /** Callback to save viewport on unmount */
+  onViewportChange?: (vp: SharedViewport) => void;
+}
 
 /**
- * Recenters the map when the airport config changes (e.g., gate positions move).
+ * Recenters the map when the airport config changes (e.g., gate positions move),
+ * OR restores a shared viewport from the 3D view.
  */
-function MapRecenter() {
+function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | null }) {
   const map = useMap();
   const { getGates, getTerminals, currentAirport } = useAirportConfigContext();
 
@@ -38,29 +47,79 @@ function MapRecenter() {
   }, [getGates, getTerminals]);
 
   useEffect(() => {
+    // If we have a shared viewport from 3D, restore it immediately
+    if (sharedViewport) {
+      map.setView(
+        [sharedViewport.center.lat, sharedViewport.center.lon],
+        sharedViewport.zoom,
+        { animate: false }
+      );
+      return;
+    }
+    // Otherwise, recenter based on airport data
     if (center) {
       map.flyTo(center, DEFAULT_ZOOM, { duration: 1.5 });
     }
+  // Only run on mount or airport change — sharedViewport is initial-only
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center, map, currentAirport]);
 
   return null;
 }
 
-export default function AirportMap() {
+/**
+ * Saves the current Leaflet viewport to shared state on unmount.
+ */
+function MapViewportSaver({ onViewportChange }: { onViewportChange?: (vp: SharedViewport) => void }) {
+  const map = useMap();
+
+  const saveViewport = useCallback(() => {
+    if (!onViewportChange) return;
+    try {
+      const center = map.getCenter();
+      const zoom = map.getZoom();
+      onViewportChange({
+        center: { lat: center.lat, lon: center.lng },
+        zoom,
+        bearing: 0, // 2D map has no rotation
+      });
+    } catch {
+      // Map may be partially destroyed during unmount (e.g. in test environments)
+    }
+  }, [map, onViewportChange]);
+
+  useEffect(() => {
+    // Save on unmount
+    return () => {
+      saveViewport();
+    };
+  }, [saveViewport]);
+
+  return null;
+}
+
+export default function AirportMap({ sharedViewport, onViewportChange }: AirportMapProps) {
   const { flights, isLoading, error, lastUpdated } = useFlightContext();
+
+  // Use shared viewport center/zoom if available, otherwise defaults
+  const initialCenter: [number, number] = sharedViewport
+    ? [sharedViewport.center.lat, sharedViewport.center.lon]
+    : AIRPORT_CENTER;
+  const initialZoom = sharedViewport?.zoom ?? DEFAULT_ZOOM;
 
   return (
     <div className="relative h-full w-full">
       <MapContainer
-        center={AIRPORT_CENTER}
-        zoom={DEFAULT_ZOOM}
+        center={initialCenter}
+        zoom={initialZoom}
         className="h-full w-full"
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapRecenter />
+        <MapRecenter sharedViewport={sharedViewport} />
+        <MapViewportSaver onViewportChange={onViewportChange} />
         <AirportOverlay />
         <TrajectoryLine />
         {flights.map((flight) => (

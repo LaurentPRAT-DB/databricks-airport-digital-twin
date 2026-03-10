@@ -8,7 +8,9 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { OSMTerminal } from '../../types/airportFormats';
-import { latLonTo3D } from '../../utils/map3d-calculations';
+import { latLonTo3D, METERS_TO_SCENE_UNITS } from '../../utils/map3d-calculations';
+
+const TERMINAL_COLOR = 0xC8BEB0; // Warm concrete beige
 
 interface Terminal3DProps {
   terminal: OSMTerminal;
@@ -23,7 +25,7 @@ interface Terminal3DProps {
  * Falls back to backend-computed polygon if geoPolygon is unavailable.
  */
 export function Terminal3D({ terminal, airportCenter }: Terminal3DProps) {
-  const { dimensions, color } = terminal;
+  const { dimensions } = terminal;
 
   // Convert geo coordinates to 3D scene coordinates
   const { geometry, centerPos } = useMemo(() => {
@@ -46,7 +48,7 @@ export function Terminal3D({ terminal, airportCenter }: Terminal3DProps) {
 
       const extrudeSettings = {
         steps: 1,
-        depth: dimensions.height,
+        depth: dimensions.height * METERS_TO_SCENE_UNITS,
         bevelEnabled: false,
       };
 
@@ -68,7 +70,7 @@ export function Terminal3D({ terminal, airportCenter }: Terminal3DProps) {
 
       const extrudeSettings = {
         steps: 1,
-        depth: dimensions.height,
+        depth: dimensions.height * METERS_TO_SCENE_UNITS,
         bevelEnabled: false,
       };
 
@@ -80,7 +82,11 @@ export function Terminal3D({ terminal, airportCenter }: Terminal3DProps) {
 
     // Last fallback: simple box
     return {
-      geometry: new THREE.BoxGeometry(dimensions.width, dimensions.height, dimensions.depth),
+      geometry: new THREE.BoxGeometry(
+        dimensions.width * METERS_TO_SCENE_UNITS,
+        dimensions.height * METERS_TO_SCENE_UNITS,
+        dimensions.depth * METERS_TO_SCENE_UNITS
+      ),
       centerPos: [terminal.position.x, dimensions.height / 2, terminal.position.z] as [number, number, number],
     };
   }, [terminal, dimensions, airportCenter?.lat, airportCenter?.lon]);
@@ -102,7 +108,7 @@ export function Terminal3D({ terminal, airportCenter }: Terminal3DProps) {
     >
       <primitive object={geometry} />
       <meshStandardMaterial
-        color={color}
+        color={TERMINAL_COLOR}
         side={THREE.DoubleSide}
         flatShading
       />

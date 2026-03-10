@@ -3,7 +3,7 @@ import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useFlightContext } from '../../context/FlightContext';
 import { useTrajectory, TrajectoryPoint } from '../../hooks/useTrajectory';
-import { latLonTo3D } from '../../utils/map3d-calculations';
+import { latLonTo3D, METERS_TO_SCENE_UNITS } from '../../utils/map3d-calculations';
 
 interface Trajectory3DProps {
   airportCenter?: { lat: number; lon: number };
@@ -90,8 +90,8 @@ export function Trajectory3D({ airportCenter }: Trajectory3DProps) {
         color="#3b82f6"
         lineWidth={3}
         dashed={true}
-        dashSize={5}
-        gapSize={3}
+        dashSize={5 * METERS_TO_SCENE_UNITS}
+        gapSize={3 * METERS_TO_SCENE_UNITS}
         vertexColors={colors || undefined}
       />
 
@@ -100,7 +100,7 @@ export function Trajectory3D({ airportCenter }: Trajectory3DProps) {
         .filter((_, i) => i % Math.max(1, Math.floor(linePoints.length / 15)) === 0)
         .map((point, index) => (
           <mesh key={`traj-point-${index}`} position={point}>
-            <sphereGeometry args={[2, 8, 8]} />
+            <sphereGeometry args={[2 * METERS_TO_SCENE_UNITS, 8, 8]} />
             <meshStandardMaterial
               color={index === 0 ? '#10b981' : '#3b82f6'}
               emissive={index === 0 ? '#059669' : '#1e40af'}
@@ -111,7 +111,7 @@ export function Trajectory3D({ airportCenter }: Trajectory3DProps) {
 
       {/* Start point (larger, green) */}
       <mesh position={linePoints[0]}>
-        <sphereGeometry args={[4, 12, 12]} />
+        <sphereGeometry args={[4 * METERS_TO_SCENE_UNITS, 12, 12]} />
         <meshStandardMaterial
           color="#10b981"
           emissive="#059669"
