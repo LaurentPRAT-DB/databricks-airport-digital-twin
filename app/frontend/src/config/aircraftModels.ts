@@ -14,6 +14,8 @@
  * - NASA 3D: https://nasa3d.arc.nasa.gov/
  */
 
+import { METERS_TO_SCENE_UNITS } from '../utils/map3d-calculations';
+
 export interface AircraftModelConfig {
   url: string;
   scale: number;
@@ -31,48 +33,43 @@ export interface AirlineConfig {
  * Aircraft type to model mapping
  * Keys are ICAO aircraft type codes (e.g., B738, A320)
  *
- * Scale reference (scene units = meters):
- * - Terminal: 200 units wide (~200m)
- * - Runway width: 45 units (~45m)
- * - B737 wingspan: ~35.8m → target ~36 units
- * - A320 wingspan: ~35.8m → target ~36 units
- * - A380 wingspan: ~79.8m → target ~80 units
+ * Scale includes METERS_TO_SCENE_UNITS correction (≈0.0898) so that GLTF models
+ * (sized in real meters) match the latLonTo3D landscape coordinate system
+ * where 1 scene unit ≈ 11.13 meters.
  *
  * Native model sizes (measured from GLB accessor bounds):
- * - generic-jet.glb: 2.0 units → scale 17.5 for 35m wingspan
- * - boeing-737.glb: 12.1 units (X) → scale 2.96 for 35.8m wingspan
- * - airbus-a320.glb: 28.0 units (X) → scale 1.28 for 35.8m wingspan
- * - air_france_airbus_a318-100.glb: 34.0 units → scale 1.0 for 34m
- * - airbus_a380.glb: 79.7 units → scale 1.0 for 80m wingspan
+ * - generic-jet.glb: 2.0 units → base scale 17.5 × 0.0898 = 1.572
+ * - boeing-737.glb: 12.1 units (X) → base scale 2.96 × 0.0898 = 0.266
+ * - airbus-a320.glb: 28.0 units (X) → base scale 1.28 × 0.0898 = 0.115
+ * - air_france_airbus_a318-100.glb: 34.0 units → base scale 1.0 × 0.0898
+ * - airbus_a380.glb: 79.7 units → base scale 1.0 × 0.0898
  */
 export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   // Boeing narrow body (wingspan ~35.8m)
-  // boeing-737.glb: measured native wingspan 12.1 units, target 35.8m → scale 2.96
-  'B737': { url: '/models/aircraft/boeing-737.glb', scale: 2.96, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'B738': { url: '/models/aircraft/boeing-737.glb', scale: 2.96, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'B739': { url: '/models/aircraft/boeing-737.glb', scale: 3.1, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'B737': { url: '/models/aircraft/boeing-737.glb', scale: 2.96 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'B738': { url: '/models/aircraft/boeing-737.glb', scale: 2.96 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'B739': { url: '/models/aircraft/boeing-737.glb', scale: 3.1 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
 
   // Airbus narrow body (wingspan ~34-36m)
-  // airbus-a320.glb: measured native wingspan 28 units, target 35.8m → scale 1.28
-  'A318': { url: '/models/aircraft/airbus-a320.glb', scale: 1.22, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'A319': { url: '/models/aircraft/airbus-a320.glb', scale: 1.25, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'A320': { url: '/models/aircraft/airbus-a320.glb', scale: 1.28, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'A321': { url: '/models/aircraft/airbus-a320.glb', scale: 1.28, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A318': { url: '/models/aircraft/airbus-a320.glb', scale: 1.22 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A319': { url: '/models/aircraft/airbus-a320.glb', scale: 1.25 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A320': { url: '/models/aircraft/airbus-a320.glb', scale: 1.28 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A321': { url: '/models/aircraft/airbus-a320.glb', scale: 1.28 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
 
   // Airbus wide body (wingspan ~60-80m)
-  // airbus_a380.glb: measured 79.7 units, target 79.8m → scale 1.0
-  'A310': { url: '/models/aircraft/airbus_a320.glb', scale: 1.55, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'A330': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'A340': { url: '/models/aircraft/airbus_a345.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'A345': { url: '/models/aircraft/airbus_a345.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'A380': { url: '/models/aircraft/airbus_a380.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A310': { url: '/models/aircraft/airbus_a320.glb', scale: 1.55 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A330': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A340': { url: '/models/aircraft/airbus_a345.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A345': { url: '/models/aircraft/airbus_a345.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'A350': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.06 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } }, // A350 wingspan 64.8m, A330 model native 60.9 units
+  'A380': { url: '/models/aircraft/airbus_a380.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
 
   // Boeing wide body (wingspan ~60-65m)
-  'B777': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.03, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'B787': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'B777': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.03 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'B787': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
 
   // Generic fallback - generic-jet.glb native 2.0 units, target 35m wingspan
-  'DEFAULT': { url: '/models/aircraft/generic-jet.glb', scale: 17.5, rotationOffset: { x: 0, y: Math.PI, z: 0 } },
+  'DEFAULT': { url: '/models/aircraft/generic-jet.glb', scale: 17.5 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: Math.PI, z: 0 } },
 };
 
 /**
@@ -87,20 +84,18 @@ export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
  */
 export const AIRLINE_SPECIFIC_MODELS: Record<string, AircraftModelConfig> = {
   // Emirates (wide body ~63.5m wingspan for A340-500/600)
-  // emirates_airbus_a345.glb: measured 63.5 units, target 63.5m → scale 1.0
-  'UAE_A345': { url: '/models/aircraft/emirates_airbus_a345.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'UAE_A340': { url: '/models/aircraft/emirates_airbus_a345.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'UAE_A380': { url: '/models/aircraft/airbus_a380.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'UAE_A345': { url: '/models/aircraft/emirates_airbus_a345.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'UAE_A340': { url: '/models/aircraft/emirates_airbus_a345.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'UAE_A380': { url: '/models/aircraft/airbus_a380.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
 
-  // Air France (narrow body ~34m wingspan) - native 34 units, target 34.1m → scale 1.0
-  'AFR_A318': { url: '/models/aircraft/air_france_airbus_a318-100.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'AFR_A319': { url: '/models/aircraft/air_france_airbus_a318-100.glb', scale: 1.03, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'AFR_A320': { url: '/models/aircraft/air_france_airbus_a318-100.glb', scale: 1.05, rotationOffset: { x: 0, y: 0, z: 0 } },
+  // Air France (narrow body ~34m wingspan)
+  'AFR_A318': { url: '/models/aircraft/air_france_airbus_a318-100.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'AFR_A319': { url: '/models/aircraft/air_france_airbus_a318-100.glb', scale: 1.03 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'AFR_A320': { url: '/models/aircraft/air_france_airbus_a318-100.glb', scale: 1.05 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
 
   // Cathay Pacific (wide body ~60.3m wingspan for A330-300)
-  // cathay_pacific_airbus_a330-300.glb: measured 60.9 units, target 60.3m → scale ~1.0
-  'CPA_A330': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'CPA_A333': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'CPA_A330': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'CPA_A333': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
 };
 
 /**

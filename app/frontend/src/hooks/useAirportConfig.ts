@@ -585,18 +585,19 @@ export function useAirportConfig(): UseAirportConfigReturn {
    */
   const getAirportCenter = useCallback((): { lat: number; lon: number } => {
     // Try gates first (most numerous, good centroid)
+    // Note: Number() coercion required because backend may serialize coords as strings
     const gates = config.gates || [];
     if (gates.length > 0) {
-      const sumLat = gates.reduce((s, g) => s + g.geo.latitude, 0);
-      const sumLon = gates.reduce((s, g) => s + g.geo.longitude, 0);
+      const sumLat = gates.reduce((s, g) => s + Number(g.geo.latitude), 0);
+      const sumLon = gates.reduce((s, g) => s + Number(g.geo.longitude), 0);
       return { lat: sumLat / gates.length, lon: sumLon / gates.length };
     }
 
     // Try terminals
     const terminals = config.terminals || [];
     if (terminals.length > 0) {
-      const sumLat = terminals.reduce((s, t) => s + t.geo.latitude, 0);
-      const sumLon = terminals.reduce((s, t) => s + t.geo.longitude, 0);
+      const sumLat = terminals.reduce((s, t) => s + Number(t.geo.latitude), 0);
+      const sumLon = terminals.reduce((s, t) => s + Number(t.geo.longitude), 0);
       return { lat: sumLat / terminals.length, lon: sumLon / terminals.length };
     }
 

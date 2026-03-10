@@ -15,6 +15,14 @@ export const DEFAULT_CENTER_LON = -122.379;
 export const DEFAULT_COORDINATE_SCALE = 10000;
 
 /**
+ * Conversion factor from real meters to scene units.
+ * latLonTo3D uses scale=10000 where 1° ≈ 111,320m, so 1 scene unit ≈ 11.13m.
+ * GLTF aircraft models are sized in real meters (1 unit = 1m).
+ * Multiply model scales by this factor to match the landscape coordinate system.
+ */
+export const METERS_TO_SCENE_UNITS = DEFAULT_COORDINATE_SCALE / 111320;  // ≈ 0.0898
+
+/**
  * Altitude scale factor for 3D visualization
  * Converts feet to scene units with exaggeration for visual clarity
  *
@@ -51,10 +59,16 @@ export function latLonTo3D(
   centerLon: number = DEFAULT_CENTER_LON,
   scale: number = DEFAULT_COORDINATE_SCALE
 ): Position3D {
+  // Coerce to numbers — backend may serialize coordinates as strings
+  const numLat = Number(lat);
+  const numLon = Number(lon);
+  const numCenterLat = Number(centerLat);
+  const numCenterLon = Number(centerLon);
+
   // Longitude → X axis (scaled by cos(lat) for Mercator projection)
-  const x = (lon - centerLon) * scale * Math.cos(centerLat * Math.PI / 180);
+  const x = (numLon - numCenterLon) * scale * Math.cos(numCenterLat * Math.PI / 180);
   // Latitude → Z axis (negative because Z points south in scene)
-  const z = -(lat - centerLat) * scale;
+  const z = -(numLat - numCenterLat) * scale;
   // Altitude from feet to scene units (exaggerated for visibility)
   const altFeet = altitude || 0;
   let y: number;

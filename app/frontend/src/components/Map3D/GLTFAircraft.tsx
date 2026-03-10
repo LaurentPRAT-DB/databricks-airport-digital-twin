@@ -130,7 +130,7 @@ function FallbackAircraft({ airline, selected = false }: Omit<GLTFAircraftProps,
 function LoadingPlaceholder() {
   return (
     <mesh>
-      <boxGeometry args={[10, 3, 15]} />
+      <boxGeometry args={[0.9, 0.3, 1.35]} />
       <meshBasicMaterial color={0x666666} transparent opacity={0.3} />
     </mesh>
   );

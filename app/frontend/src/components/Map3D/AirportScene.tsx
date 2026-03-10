@@ -50,10 +50,9 @@ export function AirportScene({
 }: AirportSceneProps) {
   const { runways, taxiways, buildings, ground } = AIRPORT_3D_CONFIG;
 
-  // Only show default buildings/infrastructure if no OSM data is loaded
-  const hasOSMData = terminals && terminals.length > 0;
-  const hasOSMRunways = osmRunways && osmRunways.length > 0;
-  const hasOSMTaxiways = osmTaxiways && osmTaxiways.length > 0;
+  // Hide all hardcoded elements when ANY OSM data is present for this airport
+  const hasOSMData = (terminals?.length ?? 0) > 0 || (osmRunways?.length ?? 0) > 0 ||
+                     (osmTaxiways?.length ?? 0) > 0 || (osmAprons?.length ?? 0) > 0;
 
   return (
     <group>
@@ -69,18 +68,18 @@ export function AirportScene({
       <TerminalGroup terminals={terminals} airportCenter={airportCenter} />
 
       {/* Runways: OSM if available, otherwise hardcoded */}
-      {hasOSMRunways ? (
+      {hasOSMData && osmRunways.length > 0 ? (
         <OSMRunwayGroup runways={osmRunways} airportCenter={airportCenter} />
-      ) : (
+      ) : !hasOSMData && (
         runways.map((runway) => (
           <Runway key={runway.id} config={runway} />
         ))
       )}
 
       {/* Taxiways: OSM if available, otherwise hardcoded */}
-      {hasOSMTaxiways ? (
+      {hasOSMData && osmTaxiways.length > 0 ? (
         <OSMTaxiwayGroup taxiways={osmTaxiways} airportCenter={airportCenter} />
-      ) : (
+      ) : !hasOSMData && (
         taxiways.map((taxiway) => (
           <Taxiway key={taxiway.id} config={taxiway} />
         ))

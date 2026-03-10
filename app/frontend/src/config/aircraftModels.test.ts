@@ -7,6 +7,7 @@ import {
   AIRCRAFT_MODELS,
   AIRLINE_SPECIFIC_MODELS,
 } from './aircraftModels';
+import { METERS_TO_SCENE_UNITS } from '../utils/map3d-calculations';
 
 describe('aircraftModels', () => {
   describe('getAirlineFromCallsign', () => {
@@ -95,7 +96,7 @@ describe('aircraftModels', () => {
       it('returns B737 model', () => {
         const model = getModelForAircraftType('B737');
         expect(model.url).toBe('/models/aircraft/boeing-737.glb');
-        expect(model.scale).toBe(2.96); // native 12.1 units, target 35.8m wingspan
+        expect(model.scale).toBe(2.96 * METERS_TO_SCENE_UNITS);
       });
 
       it('returns B738 model', () => {
@@ -106,13 +107,13 @@ describe('aircraftModels', () => {
       it('returns A320 model', () => {
         const model = getModelForAircraftType('A320');
         expect(model.url).toBe('/models/aircraft/airbus-a320.glb');
-        expect(model.scale).toBe(1.28); // native 28 units, target 35.8m wingspan
+        expect(model.scale).toBe(1.28 * METERS_TO_SCENE_UNITS);
       });
 
       it('returns A380 model', () => {
         const model = getModelForAircraftType('A380');
         expect(model.url).toBe('/models/aircraft/airbus_a380.glb');
-        expect(model.scale).toBe(1.0); // native 79.7 units, target 79.8m wingspan
+        expect(model.scale).toBe(1.0 * METERS_TO_SCENE_UNITS);
       });
 
       it('handles lowercase aircraft type', () => {
@@ -130,7 +131,7 @@ describe('aircraftModels', () => {
       it('returns default model for unknown aircraft type', () => {
         const model = getModelForAircraftType('UNKNOWN');
         expect(model.url).toBe('/models/aircraft/generic-jet.glb');
-        expect(model.scale).toBe(17.5); // native 2.0 units, target 35m wingspan
+        expect(model.scale).toBe(17.5 * METERS_TO_SCENE_UNITS);
       });
 
       it('returns default model when type is undefined', () => {
