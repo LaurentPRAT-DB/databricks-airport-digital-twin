@@ -2019,31 +2019,73 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 vertical_rate = 0
 
             else:
-                # TAXI PHASE: From runway to current position
+                # TAXI PHASE: Follow taxiway route from runway to current position
                 taxi_progress = (progress - 0.70) / 0.30
 
-                # Interpolate from runway exit toward current position
-                exit_lat = runway_28l_lat + 0.004
-                exit_lon = runway_28l_lon - 0.012
+                # Build taxi path: use the flight's taxi route if available,
+                # otherwise fall back to the gate-based route or straight line.
+                taxi_path = []
+                if current_state and current_state.taxi_route:
+                    # Use the actual route the aircraft is following
+                    taxi_path = [(lon_wp, lat_wp) for lon_wp, lat_wp in current_state.taxi_route]
+                elif current_state and current_state.assigned_gate:
+                    taxi_path = _get_taxi_waypoints_arrival(current_state.assigned_gate)
 
-                lat = exit_lat + taxi_progress * (end_lat - exit_lat)
-                lon = exit_lon + taxi_progress * (end_lon - exit_lon)
+                if len(taxi_path) >= 2:
+                    # Append current position as final point
+                    taxi_path_latlons = [(lat_wp, lon_wp) for lon_wp, lat_wp in taxi_path]
+                    taxi_path_latlons.append((end_lat, end_lon))
+
+                    # Compute cumulative distances along the path
+                    cum_dist = [0.0]
+                    for j in range(1, len(taxi_path_latlons)):
+                        d = _distance_between(taxi_path_latlons[j - 1], taxi_path_latlons[j])
+                        cum_dist.append(cum_dist[-1] + d)
+                    total_dist = cum_dist[-1] if cum_dist[-1] > 0 else 1e-9
+
+                    # Find the interpolated position along the path
+                    target_dist = taxi_progress * total_dist
+                    seg_idx = 0
+                    for j in range(1, len(cum_dist)):
+                        if cum_dist[j] >= target_dist:
+                            seg_idx = j - 1
+                            break
+                    else:
+                        seg_idx = len(cum_dist) - 2
+
+                    seg_len = cum_dist[seg_idx + 1] - cum_dist[seg_idx]
+                    seg_frac = (target_dist - cum_dist[seg_idx]) / seg_len if seg_len > 0 else 0.0
+                    seg_frac = max(0.0, min(1.0, seg_frac))
+
+                    p1 = taxi_path_latlons[seg_idx]
+                    p2 = taxi_path_latlons[seg_idx + 1]
+                    lat = p1[0] + seg_frac * (p2[0] - p1[0])
+                    lon = p1[1] + seg_frac * (p2[1] - p1[1])
+                    heading = _calculate_heading((lat, lon), p2)
+                else:
+                    # Fallback: straight line from runway exit to current position
+                    exit_lat = runway_28l_lat + 0.004
+                    exit_lon = runway_28l_lon - 0.012
+                    lat = exit_lat + taxi_progress * (end_lat - exit_lat)
+                    lon = exit_lon + taxi_progress * (end_lon - exit_lon)
+                    heading = _calculate_heading((lat, lon), (end_lat, end_lon))
+
                 alt = 0
-
-                heading = _calculate_heading((lat, lon), (end_lat, end_lon))
                 phase = "ground"
-                velocity = 15
+                velocity = TAXI_SPEED_STRAIGHT_KTS
                 vertical_rate = 0
 
             # Append point for this iteration (inside the for loop)
             timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
 
+            # Reduce noise for ground taxi to keep trajectory on taxiways
+            pos_noise = 0.00005 if phase == "ground" else 0.0005
             points.append({
                 "timestamp": timestamp.isoformat(),
                 "icao24": icao24,
                 "callsign": callsign,
-                "latitude": lat + random.uniform(-0.0005, 0.0005),
-                "longitude": lon + random.uniform(-0.0005, 0.0005),
+                "latitude": lat + random.uniform(-pos_noise, pos_noise),
+                "longitude": lon + random.uniform(-pos_noise, pos_noise),
                 "altitude": max(0, alt + random.uniform(-20, 20)),
                 "velocity": max(10, velocity + random.uniform(-3, 3)),
                 "heading": heading + random.uniform(-1, 1),
