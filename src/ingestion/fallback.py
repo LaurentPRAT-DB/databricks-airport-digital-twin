@@ -192,6 +192,15 @@ WAKE_SEPARATION_NM = {
 }
 DEFAULT_SEPARATION_NM = 3.0
 
+# Taxi speed standards (ICAO Doc 9157 / Annex 14 design speeds)
+# 1 knot ≈ 0.5144 m/s; 1° latitude ≈ 111,000 m
+_KTS_TO_DEG_PER_SEC = 0.5144 / 111_000  # ~4.63e-6 °/s per knot
+
+TAXI_SPEED_STRAIGHT_KTS = 25    # ICAO standard taxiway design speed
+TAXI_SPEED_TURN_KTS = 15        # Reduced speed through turns
+TAXI_SPEED_RAMP_KTS = 8         # Near-gate / ramp area
+TAXI_SPEED_PUSHBACK_KTS = 3     # Tug-assisted pushback
+
 # Convert NM to degrees (approximate at this latitude)
 # 1 NM ≈ 1/60 degree ≈ 0.0167 degrees
 NM_TO_DEG = 1.0 / 60.0
@@ -1413,16 +1422,18 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
             # Check taxi separation before moving
             if _check_taxi_separation(state):
-                new_pos = _move_toward((state.latitude, state.longitude), target, 0.0003)
+                speed_deg = TAXI_SPEED_STRAIGHT_KTS * _KTS_TO_DEG_PER_SEC * dt
+                new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
                 state.latitude, state.longitude = new_pos
-                state.velocity = 15  # Taxi speed ~15 knots
+                state.velocity = TAXI_SPEED_STRAIGHT_KTS
             else:
                 # Hold position - too close to another aircraft
                 state.velocity = 0
+                speed_deg = 0
 
             state.heading = _calculate_heading((state.latitude, state.longitude), target)
 
-            if _distance_between((state.latitude, state.longitude), target) < 0.0005:
+            if _distance_between((state.latitude, state.longitude), target) < max(speed_deg, 0.0005):
                 state.waypoint_index += 1
         else:
             # Head to gate
@@ -1444,15 +1455,17 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     return state
 
             if _check_taxi_separation(state):
-                new_pos = _move_toward((state.latitude, state.longitude), target, 0.0002)
+                speed_deg = TAXI_SPEED_RAMP_KTS * _KTS_TO_DEG_PER_SEC * dt
+                new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
                 state.latitude, state.longitude = new_pos
-                state.velocity = 8  # Slower near gate
+                state.velocity = TAXI_SPEED_RAMP_KTS
             else:
                 state.velocity = 0
+                speed_deg = 0
 
             state.heading = _calculate_heading((state.latitude, state.longitude), target)
 
-            if _distance_between((state.latitude, state.longitude), target) < 0.0003:
+            if _distance_between((state.latitude, state.longitude), target) < max(speed_deg, 0.0003):
                 emit_phase_transition(
                     state.icao24, state.callsign,
                     FlightPhase.TAXI_TO_GATE.value, FlightPhase.PARKED.value,
@@ -1486,12 +1499,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         # Determine pushback heading from taxiway graph or fallback to south
         pb_heading = _get_pushback_heading(state.assigned_gate) if state.assigned_gate else 180.0
         if _check_taxi_separation(state):
-            state.velocity = 3  # Very slow
+            state.velocity = TAXI_SPEED_PUSHBACK_KTS
             state.phase_progress += dt * 0.1
             # Move in pushback direction (away from terminal toward taxiway)
             pb_rad = math.radians(pb_heading)
-            state.latitude += 0.00002 * dt * math.cos(pb_rad)
-            state.longitude += 0.00002 * dt * math.sin(pb_rad)
+            pb_speed_deg = TAXI_SPEED_PUSHBACK_KTS * _KTS_TO_DEG_PER_SEC * dt
+            state.latitude += pb_speed_deg * math.cos(pb_rad)
+            state.longitude += pb_speed_deg * math.sin(pb_rad)
         else:
             state.velocity = 0  # Hold if blocked
 
@@ -1520,15 +1534,17 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             target = (wp[1], wp[0])
 
             if _check_taxi_separation(state):
-                new_pos = _move_toward((state.latitude, state.longitude), target, 0.0003)
+                speed_deg = TAXI_SPEED_STRAIGHT_KTS * _KTS_TO_DEG_PER_SEC * dt
+                new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
                 state.latitude, state.longitude = new_pos
-                state.velocity = 15
+                state.velocity = TAXI_SPEED_STRAIGHT_KTS
             else:
                 state.velocity = 0  # Hold
+                speed_deg = 0
 
             state.heading = _calculate_heading((state.latitude, state.longitude), target)
 
-            if _distance_between((state.latitude, state.longitude), target) < 0.0005:
+            if _distance_between((state.latitude, state.longitude), target) < max(speed_deg, 0.0005):
                 state.waypoint_index += 1
         else:
             # At runway hold line - check if runway is clear before takeoff

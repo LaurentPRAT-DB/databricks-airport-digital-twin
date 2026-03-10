@@ -603,8 +603,8 @@ class TestGroundMovementLifecycle:
         for _ in range(100):
             state = _update_flight_state(state, 1.0)
             if state.phase == FlightPhase.TAXI_TO_GATE:
-                # Taxi speed should be 0 (holding) or ~8-15 knots
-                assert state.velocity <= 20, f"Taxi speed {state.velocity} too high"
+                # Taxi speed: 0 (holding), 8 kts (ramp/near gate), or 25 kts (straight taxiway)
+                assert state.velocity <= 30, f"Taxi speed {state.velocity} too high"
                 assert state.altitude == 0, "Should be on ground during taxi"
                 assert state.on_ground is True
             else:

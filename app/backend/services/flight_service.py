@@ -131,8 +131,14 @@ class FlightService:
 
         flights = []
         for state in raw_data.get("states", []):
-            altitude = state[7] if state[7] is not None else 0.0
-            vertical_rate = state[11] if state[11] is not None else 0.0
+            # State vector uses OpenSky metric units (m, m/s, m/s).
+            # Convert back to aviation units (ft, kts, ft/min) for the API.
+            altitude_m = state[7] if state[7] is not None else 0.0
+            altitude = altitude_m / 0.3048  # meters -> feet
+            velocity_ms = state[9] if state[9] is not None else 0.0
+            velocity = velocity_ms / 0.514444  # m/s -> knots
+            vrate_ms = state[11] if state[11] is not None else 0.0
+            vertical_rate = vrate_ms / 0.00508  # m/s -> ft/min
             on_ground = state[8] if state[8] is not None else False
 
             # Use embedded flight phase if available (index 18), otherwise calculate
@@ -152,7 +158,7 @@ class FlightService:
                 latitude=state[6],
                 longitude=state[5],
                 altitude=altitude,
-                velocity=state[9],
+                velocity=velocity,
                 heading=state[10],
                 on_ground=on_ground,
                 vertical_rate=vertical_rate,
