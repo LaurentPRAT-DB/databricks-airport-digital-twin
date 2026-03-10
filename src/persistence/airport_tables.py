@@ -321,6 +321,101 @@ TBLPROPERTIES (
 COMMENT 'Runway geometry from OSM (polylines)'
 """
 
+FLIGHT_POSITION_HISTORY_DDL = """
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.flight_position_history (
+  session_id STRING NOT NULL COMMENT 'UUID of the app session that generated this data',
+  airport_icao STRING NOT NULL COMMENT 'ICAO code of the airport',
+  icao24 STRING NOT NULL,
+  callsign STRING,
+  latitude DOUBLE,
+  longitude DOUBLE,
+  altitude DOUBLE COMMENT 'Altitude in feet',
+  velocity DOUBLE COMMENT 'Speed in knots',
+  heading DOUBLE COMMENT 'Heading in degrees',
+  vertical_rate DOUBLE COMMENT 'Vertical rate in ft/min',
+  on_ground BOOLEAN,
+  flight_phase STRING COMMENT 'Current flight phase',
+  aircraft_type STRING,
+  assigned_gate STRING,
+  origin_airport STRING,
+  destination_airport STRING,
+  snapshot_time TIMESTAMP NOT NULL,
+  recorded_date DATE NOT NULL COMMENT 'Partition key'
+) USING DELTA
+PARTITIONED BY (recorded_date, airport_icao)
+TBLPROPERTIES (
+  'delta.enableChangeDataFeed' = 'true',
+  'delta.columnMapping.mode' = 'name',
+  'delta.autoOptimize.optimizeWrite' = 'true'
+)
+COMMENT 'Flight position snapshots for trajectory training and phase classification'
+"""
+
+FLIGHT_PHASE_TRANSITION_HISTORY_DDL = """
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.flight_phase_transition_history (
+  session_id STRING NOT NULL,
+  airport_icao STRING NOT NULL,
+  icao24 STRING NOT NULL,
+  callsign STRING,
+  from_phase STRING NOT NULL,
+  to_phase STRING NOT NULL,
+  latitude DOUBLE,
+  longitude DOUBLE,
+  altitude DOUBLE,
+  aircraft_type STRING,
+  assigned_gate STRING,
+  event_time TIMESTAMP NOT NULL,
+  recorded_date DATE NOT NULL COMMENT 'Partition key'
+) USING DELTA
+PARTITIONED BY (recorded_date, airport_icao)
+TBLPROPERTIES (
+  'delta.enableChangeDataFeed' = 'true',
+  'delta.columnMapping.mode' = 'name',
+  'delta.autoOptimize.optimizeWrite' = 'true'
+)
+COMMENT 'Flight phase transition events for turnaround prediction and delay root cause'
+"""
+
+GATE_ASSIGNMENT_HISTORY_DDL = """
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.gate_assignment_history (
+  session_id STRING NOT NULL,
+  airport_icao STRING NOT NULL,
+  icao24 STRING NOT NULL,
+  callsign STRING,
+  gate STRING NOT NULL,
+  event_type STRING NOT NULL COMMENT 'assign, occupy, or release',
+  aircraft_type STRING,
+  event_time TIMESTAMP NOT NULL,
+  recorded_date DATE NOT NULL COMMENT 'Partition key'
+) USING DELTA
+PARTITIONED BY (recorded_date, airport_icao)
+TBLPROPERTIES (
+  'delta.enableChangeDataFeed' = 'true',
+  'delta.columnMapping.mode' = 'name',
+  'delta.autoOptimize.optimizeWrite' = 'true'
+)
+COMMENT 'Gate assignment events for gate optimization and utilization KPIs'
+"""
+
+ML_PREDICTION_HISTORY_DDL = """
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.ml_prediction_history (
+  session_id STRING NOT NULL,
+  airport_icao STRING NOT NULL,
+  prediction_type STRING NOT NULL COMMENT 'delay, congestion, or gate_recommendation',
+  icao24 STRING,
+  result_json STRING COMMENT 'JSON prediction result',
+  event_time TIMESTAMP NOT NULL,
+  recorded_date DATE NOT NULL COMMENT 'Partition key'
+) USING DELTA
+PARTITIONED BY (recorded_date, airport_icao)
+TBLPROPERTIES (
+  'delta.enableChangeDataFeed' = 'true',
+  'delta.columnMapping.mode' = 'name',
+  'delta.autoOptimize.optimizeWrite' = 'true'
+)
+COMMENT 'ML prediction results for model evaluation and retraining feedback'
+"""
+
 ALL_TABLES = [
     ("airport_metadata", AIRPORT_METADATA_DDL),
     ("gates", GATES_DDL),
@@ -333,6 +428,10 @@ ALL_TABLES = [
     ("helipads", HELIPADS_DDL),
     ("parking_positions", PARKING_POSITIONS_DDL),
     ("osm_runways", OSM_RUNWAYS_DDL),
+    ("flight_position_history", FLIGHT_POSITION_HISTORY_DDL),
+    ("flight_phase_transition_history", FLIGHT_PHASE_TRANSITION_HISTORY_DDL),
+    ("gate_assignment_history", GATE_ASSIGNMENT_HISTORY_DDL),
+    ("ml_prediction_history", ML_PREDICTION_HISTORY_DDL),
 ]
 
 

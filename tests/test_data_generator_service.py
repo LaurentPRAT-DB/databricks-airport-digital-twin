@@ -215,7 +215,7 @@ class TestDataGeneratorServicePeriodicRefresh:
         await service.start_periodic_refresh()
 
         assert service._running is True
-        assert len(service._tasks) == 4
+        assert len(service._tasks) == 5
 
         # Clean up
         await service.stop_periodic_refresh()

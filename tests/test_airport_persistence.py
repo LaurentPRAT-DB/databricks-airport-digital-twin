@@ -44,7 +44,7 @@ class TestAirportTables:
         assert "helipads" in table_names
         assert "parking_positions" in table_names
         assert "osm_runways" in table_names
-        assert len(ALL_TABLES) == 11
+        assert len(ALL_TABLES) == 15
 
     def test_metadata_ddl_has_required_columns(self):
         """Verify airport_metadata DDL has required columns."""

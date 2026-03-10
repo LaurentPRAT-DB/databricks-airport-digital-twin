@@ -13,6 +13,7 @@ from app.backend.services.prediction_service import (
     get_prediction_service,
 )
 from app.backend.services.flight_service import FlightService, get_flight_service
+from src.ingestion.fallback import emit_prediction
 
 
 # Response models
@@ -105,6 +106,11 @@ async def get_delays(
                 category=pred.delay_category,
             )
         )
+        emit_prediction("delay", flight_icao24, {
+            "delay_minutes": pred.delay_minutes,
+            "confidence": pred.confidence,
+            "category": pred.delay_category,
+        })
 
     return DelaysListResponse(delays=delays, count=len(delays))
 
@@ -138,7 +144,7 @@ async def get_gate_recommendations(
         flight_data, top_k=top_k
     )
 
-    return [
+    results = [
         GateRecommendationResponse(
             gate_id=rec.gate_id,
             score=rec.score,
@@ -147,6 +153,14 @@ async def get_gate_recommendations(
         )
         for rec in recommendations
     ]
+    for rec in recommendations:
+        emit_prediction("gate_recommendation", icao24, {
+            "gate_id": rec.gate_id,
+            "score": rec.score,
+            "reasons": rec.reasons,
+            "taxi_time": rec.estimated_taxi_time,
+        })
+    return results
 
 
 @prediction_router.get("/congestion", response_model=CongestionListResponse)
@@ -175,6 +189,14 @@ async def get_congestion(
         )
         for c in congestion
     ]
+    for c in congestion:
+        emit_prediction("congestion", None, {
+            "area_id": c.area_id,
+            "area_type": c.area_type,
+            "level": c.level.value,
+            "flight_count": c.flight_count,
+            "wait_minutes": c.predicted_wait_minutes,
+        })
 
     return CongestionListResponse(areas=areas, count=len(areas))
 

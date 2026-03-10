@@ -523,11 +523,19 @@ class TestMainFunction:
              patch("scripts.sync_all_to_unity_catalog.fetch_baggage_from_lakebase", return_value=[]), \
              patch("scripts.sync_all_to_unity_catalog.fetch_gse_fleet_from_lakebase", return_value=[]), \
              patch("scripts.sync_all_to_unity_catalog.fetch_turnaround_from_lakebase", return_value=[]), \
+             patch("scripts.sync_all_to_unity_catalog.fetch_flight_snapshots_from_lakebase", return_value=[]), \
+             patch("scripts.sync_all_to_unity_catalog.fetch_phase_transitions_from_lakebase", return_value=[]), \
+             patch("scripts.sync_all_to_unity_catalog.fetch_gate_events_from_lakebase", return_value=[]), \
+             patch("scripts.sync_all_to_unity_catalog.fetch_ml_predictions_from_lakebase", return_value=[]), \
              patch("scripts.sync_all_to_unity_catalog.sync_weather_to_delta", return_value=1), \
              patch("scripts.sync_all_to_unity_catalog.sync_schedule_to_delta", return_value=0), \
              patch("scripts.sync_all_to_unity_catalog.append_baggage_history", return_value=0), \
              patch("scripts.sync_all_to_unity_catalog.sync_gse_fleet_to_delta", return_value=0), \
-             patch("scripts.sync_all_to_unity_catalog.append_turnaround_history", return_value=0):
+             patch("scripts.sync_all_to_unity_catalog.append_turnaround_history", return_value=0), \
+             patch("scripts.sync_all_to_unity_catalog.append_flight_snapshots_history", return_value=0), \
+             patch("scripts.sync_all_to_unity_catalog.append_phase_transitions_history", return_value=0), \
+             patch("scripts.sync_all_to_unity_catalog.append_gate_events_history", return_value=0), \
+             patch("scripts.sync_all_to_unity_catalog.append_ml_predictions_history", return_value=0):
 
             from scripts.sync_all_to_unity_catalog import main
             result = main()

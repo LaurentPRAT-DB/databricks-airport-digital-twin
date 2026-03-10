@@ -434,6 +434,288 @@ def append_turnaround_history(turnarounds: list[dict], catalog: str, schema: str
     return len(turnarounds)
 
 
+def fetch_flight_snapshots_from_lakebase() -> list[dict]:
+    """Fetch un-synced flight position snapshots from Lakebase."""
+    from psycopg2.extras import RealDictCursor
+
+    logger.info("Fetching flight position snapshots from Lakebase")
+
+    with get_lakebase_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    session_id, airport_icao, icao24, callsign,
+                    latitude, longitude, altitude, velocity,
+                    heading, vertical_rate, on_ground, flight_phase,
+                    aircraft_type, assigned_gate, origin_airport,
+                    destination_airport, snapshot_time
+                FROM flight_position_snapshots
+                ORDER BY snapshot_time
+                """
+            )
+            rows = cursor.fetchall()
+
+    snapshots = [dict(row) for row in rows]
+    logger.info(f"Fetched {len(snapshots)} flight snapshots from Lakebase")
+    return snapshots
+
+
+def fetch_phase_transitions_from_lakebase() -> list[dict]:
+    """Fetch flight phase transitions from Lakebase."""
+    from psycopg2.extras import RealDictCursor
+
+    logger.info("Fetching phase transitions from Lakebase")
+
+    with get_lakebase_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    session_id, airport_icao, icao24, callsign,
+                    from_phase, to_phase, latitude, longitude,
+                    altitude, aircraft_type, assigned_gate, event_time
+                FROM flight_phase_transitions
+                ORDER BY event_time
+                """
+            )
+            rows = cursor.fetchall()
+
+    events = [dict(row) for row in rows]
+    logger.info(f"Fetched {len(events)} phase transitions from Lakebase")
+    return events
+
+
+def fetch_gate_events_from_lakebase() -> list[dict]:
+    """Fetch gate assignment events from Lakebase."""
+    from psycopg2.extras import RealDictCursor
+
+    logger.info("Fetching gate events from Lakebase")
+
+    with get_lakebase_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    session_id, airport_icao, icao24, callsign,
+                    gate, event_type, aircraft_type, event_time
+                FROM gate_assignment_events
+                ORDER BY event_time
+                """
+            )
+            rows = cursor.fetchall()
+
+    events = [dict(row) for row in rows]
+    logger.info(f"Fetched {len(events)} gate events from Lakebase")
+    return events
+
+
+def fetch_ml_predictions_from_lakebase() -> list[dict]:
+    """Fetch ML prediction results from Lakebase."""
+    import json
+    from psycopg2.extras import RealDictCursor
+
+    logger.info("Fetching ML predictions from Lakebase")
+
+    with get_lakebase_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    session_id, airport_icao, prediction_type,
+                    icao24, result_json, event_time
+                FROM ml_predictions
+                ORDER BY event_time
+                """
+            )
+            rows = cursor.fetchall()
+
+    predictions = []
+    for row in rows:
+        p = dict(row)
+        if p.get("result_json") and not isinstance(p["result_json"], str):
+            p["result_json"] = json.dumps(p["result_json"])
+        predictions.append(p)
+
+    logger.info(f"Fetched {len(predictions)} ML predictions from Lakebase")
+    return predictions
+
+
+def append_flight_snapshots_history(snapshots: list[dict], catalog: str, schema: str) -> int:
+    """Append flight position snapshots to Delta history table."""
+    if not snapshots:
+        return 0
+
+    table_name = f"{catalog}.{schema}.flight_position_history"
+    logger.info(f"Appending {len(snapshots)} flight snapshots to {table_name}")
+
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+
+    with get_delta_connection() as conn:
+        with conn.cursor() as cursor:
+            values_list = []
+            for s in snapshots:
+                recorded_date = s.get("snapshot_time", now)
+                if isinstance(recorded_date, datetime):
+                    recorded_date = recorded_date.strftime("%Y-%m-%d")
+                else:
+                    recorded_date = today
+
+                values_list.append(f"""(
+                    {_quote_value(s.get('session_id'))}, {_quote_value(s.get('airport_icao'))},
+                    {_quote_value(s.get('icao24'))}, {_quote_value(s.get('callsign'))},
+                    {_quote_value(s.get('latitude'))}, {_quote_value(s.get('longitude'))},
+                    {_quote_value(s.get('altitude'))}, {_quote_value(s.get('velocity'))},
+                    {_quote_value(s.get('heading'))}, {_quote_value(s.get('vertical_rate'))},
+                    {_quote_value(s.get('on_ground'))}, {_quote_value(s.get('flight_phase'))},
+                    {_quote_value(s.get('aircraft_type'))}, {_quote_value(s.get('assigned_gate'))},
+                    {_quote_value(s.get('origin_airport'))}, {_quote_value(s.get('destination_airport'))},
+                    {_quote_value(s.get('snapshot_time'))}, '{recorded_date}'
+                )""")
+
+            if values_list:
+                cursor.execute(f"""
+                    INSERT INTO {table_name} (
+                        session_id, airport_icao, icao24, callsign,
+                        latitude, longitude, altitude, velocity,
+                        heading, vertical_rate, on_ground, flight_phase,
+                        aircraft_type, assigned_gate, origin_airport,
+                        destination_airport, snapshot_time, recorded_date
+                    ) VALUES {", ".join(values_list)}
+                """)
+
+    logger.info(f"Appended {len(snapshots)} flight snapshots to Delta history")
+    return len(snapshots)
+
+
+def append_phase_transitions_history(events: list[dict], catalog: str, schema: str) -> int:
+    """Append phase transition events to Delta history table."""
+    if not events:
+        return 0
+
+    table_name = f"{catalog}.{schema}.flight_phase_transition_history"
+    logger.info(f"Appending {len(events)} phase transitions to {table_name}")
+
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+
+    with get_delta_connection() as conn:
+        with conn.cursor() as cursor:
+            values_list = []
+            for e in events:
+                recorded_date = e.get("event_time", now)
+                if isinstance(recorded_date, datetime):
+                    recorded_date = recorded_date.strftime("%Y-%m-%d")
+                else:
+                    recorded_date = today
+
+                values_list.append(f"""(
+                    {_quote_value(e.get('session_id'))}, {_quote_value(e.get('airport_icao'))},
+                    {_quote_value(e.get('icao24'))}, {_quote_value(e.get('callsign'))},
+                    {_quote_value(e.get('from_phase'))}, {_quote_value(e.get('to_phase'))},
+                    {_quote_value(e.get('latitude'))}, {_quote_value(e.get('longitude'))},
+                    {_quote_value(e.get('altitude'))}, {_quote_value(e.get('aircraft_type'))},
+                    {_quote_value(e.get('assigned_gate'))}, {_quote_value(e.get('event_time'))},
+                    '{recorded_date}'
+                )""")
+
+            if values_list:
+                cursor.execute(f"""
+                    INSERT INTO {table_name} (
+                        session_id, airport_icao, icao24, callsign,
+                        from_phase, to_phase, latitude, longitude,
+                        altitude, aircraft_type, assigned_gate, event_time,
+                        recorded_date
+                    ) VALUES {", ".join(values_list)}
+                """)
+
+    logger.info(f"Appended {len(events)} phase transitions to Delta history")
+    return len(events)
+
+
+def append_gate_events_history(events: list[dict], catalog: str, schema: str) -> int:
+    """Append gate assignment events to Delta history table."""
+    if not events:
+        return 0
+
+    table_name = f"{catalog}.{schema}.gate_assignment_history"
+    logger.info(f"Appending {len(events)} gate events to {table_name}")
+
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+
+    with get_delta_connection() as conn:
+        with conn.cursor() as cursor:
+            values_list = []
+            for e in events:
+                recorded_date = e.get("event_time", now)
+                if isinstance(recorded_date, datetime):
+                    recorded_date = recorded_date.strftime("%Y-%m-%d")
+                else:
+                    recorded_date = today
+
+                values_list.append(f"""(
+                    {_quote_value(e.get('session_id'))}, {_quote_value(e.get('airport_icao'))},
+                    {_quote_value(e.get('icao24'))}, {_quote_value(e.get('callsign'))},
+                    {_quote_value(e.get('gate'))}, {_quote_value(e.get('event_type'))},
+                    {_quote_value(e.get('aircraft_type'))}, {_quote_value(e.get('event_time'))},
+                    '{recorded_date}'
+                )""")
+
+            if values_list:
+                cursor.execute(f"""
+                    INSERT INTO {table_name} (
+                        session_id, airport_icao, icao24, callsign,
+                        gate, event_type, aircraft_type, event_time,
+                        recorded_date
+                    ) VALUES {", ".join(values_list)}
+                """)
+
+    logger.info(f"Appended {len(events)} gate events to Delta history")
+    return len(events)
+
+
+def append_ml_predictions_history(predictions: list[dict], catalog: str, schema: str) -> int:
+    """Append ML prediction results to Delta history table."""
+    if not predictions:
+        return 0
+
+    table_name = f"{catalog}.{schema}.ml_prediction_history"
+    logger.info(f"Appending {len(predictions)} ML predictions to {table_name}")
+
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+
+    with get_delta_connection() as conn:
+        with conn.cursor() as cursor:
+            values_list = []
+            for p in predictions:
+                recorded_date = p.get("event_time", now)
+                if isinstance(recorded_date, datetime):
+                    recorded_date = recorded_date.strftime("%Y-%m-%d")
+                else:
+                    recorded_date = today
+
+                values_list.append(f"""(
+                    {_quote_value(p.get('session_id'))}, {_quote_value(p.get('airport_icao'))},
+                    {_quote_value(p.get('prediction_type'))}, {_quote_value(p.get('icao24'))},
+                    {_quote_value(p.get('result_json'))}, {_quote_value(p.get('event_time'))},
+                    '{recorded_date}'
+                )""")
+
+            if values_list:
+                cursor.execute(f"""
+                    INSERT INTO {table_name} (
+                        session_id, airport_icao, prediction_type, icao24,
+                        result_json, event_time, recorded_date
+                    ) VALUES {", ".join(values_list)}
+                """)
+
+    logger.info(f"Appended {len(predictions)} ML predictions to Delta history")
+    return len(predictions)
+
+
 def main():
     """Main sync function."""
     catalog = os.getenv("DATABRICKS_CATALOG", "main")
@@ -451,6 +733,10 @@ def main():
         "baggage_history": 0,
         "gse_fleet": 0,
         "turnaround_history": 0,
+        "flight_snapshots_history": 0,
+        "phase_transitions_history": 0,
+        "gate_events_history": 0,
+        "ml_predictions_history": 0,
     }
 
     try:
@@ -473,6 +759,22 @@ def main():
         # Append turnaround history (append-only)
         turnarounds = fetch_turnaround_from_lakebase()
         results["turnaround_history"] = append_turnaround_history(turnarounds, catalog, schema)
+
+        # Append flight position snapshots (append-only, ML training)
+        snapshots = fetch_flight_snapshots_from_lakebase()
+        results["flight_snapshots_history"] = append_flight_snapshots_history(snapshots, catalog, schema)
+
+        # Append phase transitions (append-only, ML training)
+        transitions = fetch_phase_transitions_from_lakebase()
+        results["phase_transitions_history"] = append_phase_transitions_history(transitions, catalog, schema)
+
+        # Append gate events (append-only, ML training)
+        gate_events = fetch_gate_events_from_lakebase()
+        results["gate_events_history"] = append_gate_events_history(gate_events, catalog, schema)
+
+        # Append ML predictions (append-only, model evaluation)
+        ml_predictions = fetch_ml_predictions_from_lakebase()
+        results["ml_predictions_history"] = append_ml_predictions_history(ml_predictions, catalog, schema)
 
         logger.info("=" * 60)
         logger.info("Sync complete")

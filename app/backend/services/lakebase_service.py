@@ -15,7 +15,7 @@ from contextlib import contextmanager
 
 try:
     import psycopg2
-    from psycopg2.extras import RealDictCursor
+    from psycopg2.extras import RealDictCursor, execute_values
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -70,6 +70,7 @@ class LakebaseService:
         self._use_oauth = os.getenv("LAKEBASE_USE_OAUTH", "false").lower() == "true"
         self._cached_credentials: Optional[tuple[str, str]] = None
         self._airport_columns_ensured = False
+        self._ml_tables_ensured = False
 
     @property
     def is_available(self) -> bool:
@@ -932,6 +933,274 @@ class LakebaseService:
             logger.warning(f"Lakebase turnaround delete failed for {icao24}: {e}")
             self._cached_credentials = None
             return False
+
+
+    # =========================================================================
+    # ML Training Data Tables (append-only)
+    # =========================================================================
+
+    def _ensure_ml_tables(self) -> None:
+        """Create ML training data tables if they don't exist.
+
+        Safe to call multiple times — only runs once per service lifetime.
+        """
+        if self._ml_tables_ensured or not self.is_available:
+            return
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS flight_position_snapshots (
+                            id BIGSERIAL,
+                            session_id VARCHAR(36) NOT NULL,
+                            airport_icao VARCHAR(4) NOT NULL,
+                            icao24 VARCHAR(10) NOT NULL,
+                            callsign VARCHAR(10),
+                            latitude DOUBLE PRECISION,
+                            longitude DOUBLE PRECISION,
+                            altitude DOUBLE PRECISION,
+                            velocity DOUBLE PRECISION,
+                            heading DOUBLE PRECISION,
+                            vertical_rate DOUBLE PRECISION,
+                            on_ground BOOLEAN,
+                            flight_phase VARCHAR(20),
+                            aircraft_type VARCHAR(10),
+                            assigned_gate VARCHAR(10),
+                            origin_airport VARCHAR(10),
+                            destination_airport VARCHAR(10),
+                            snapshot_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        )
+                    """)
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS flight_phase_transitions (
+                            id BIGSERIAL,
+                            session_id VARCHAR(36) NOT NULL,
+                            airport_icao VARCHAR(4) NOT NULL,
+                            icao24 VARCHAR(10) NOT NULL,
+                            callsign VARCHAR(10),
+                            from_phase VARCHAR(20) NOT NULL,
+                            to_phase VARCHAR(20) NOT NULL,
+                            latitude DOUBLE PRECISION,
+                            longitude DOUBLE PRECISION,
+                            altitude DOUBLE PRECISION,
+                            aircraft_type VARCHAR(10),
+                            assigned_gate VARCHAR(10),
+                            event_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        )
+                    """)
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS gate_assignment_events (
+                            id BIGSERIAL,
+                            session_id VARCHAR(36) NOT NULL,
+                            airport_icao VARCHAR(4) NOT NULL,
+                            icao24 VARCHAR(10) NOT NULL,
+                            callsign VARCHAR(10),
+                            gate VARCHAR(10) NOT NULL,
+                            event_type VARCHAR(10) NOT NULL,
+                            aircraft_type VARCHAR(10),
+                            event_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        )
+                    """)
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS ml_predictions (
+                            id BIGSERIAL,
+                            session_id VARCHAR(36) NOT NULL,
+                            airport_icao VARCHAR(4) NOT NULL,
+                            prediction_type VARCHAR(30) NOT NULL,
+                            icao24 VARCHAR(10),
+                            result_json JSONB,
+                            event_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        )
+                    """)
+                    # Indexes for efficient querying
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_fps_session_airport
+                        ON flight_position_snapshots (session_id, airport_icao, snapshot_time)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_fpt_session_airport
+                        ON flight_phase_transitions (session_id, airport_icao, event_time)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_gae_session_airport
+                        ON gate_assignment_events (session_id, airport_icao, event_time)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_mlp_session_airport
+                        ON ml_predictions (session_id, airport_icao, event_time)
+                    """)
+                    conn.commit()
+            self._ml_tables_ensured = True
+            logger.debug("Ensured ML training data tables exist")
+        except Exception as e:
+            logger.debug(f"ML tables creation check: {e}")
+
+    def insert_flight_snapshots(
+        self, snapshots: list[dict], session_id: str, airport_icao: str
+    ) -> int:
+        """Batch-insert flight position snapshots."""
+        if not self.is_available or not snapshots:
+            return 0
+
+        self._ensure_ml_tables()
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    values = [
+                        (
+                            session_id, airport_icao,
+                            s["icao24"], s.get("callsign"),
+                            s.get("latitude"), s.get("longitude"),
+                            s.get("altitude"), s.get("velocity"),
+                            s.get("heading"), s.get("vertical_rate"),
+                            s.get("on_ground"), s.get("flight_phase"),
+                            s.get("aircraft_type"), s.get("assigned_gate"),
+                            s.get("origin_airport"), s.get("destination_airport"),
+                            s.get("snapshot_time"),
+                        )
+                        for s in snapshots
+                    ]
+                    execute_values(
+                        cur,
+                        """INSERT INTO flight_position_snapshots (
+                            session_id, airport_icao,
+                            icao24, callsign,
+                            latitude, longitude,
+                            altitude, velocity,
+                            heading, vertical_rate,
+                            on_ground, flight_phase,
+                            aircraft_type, assigned_gate,
+                            origin_airport, destination_airport,
+                            snapshot_time
+                        ) VALUES %s""",
+                        values,
+                    )
+                    conn.commit()
+                    return len(values)
+        except Exception as e:
+            logger.warning(f"Failed to insert flight snapshots: {e}")
+            self._cached_credentials = None
+            return 0
+
+    def insert_phase_transitions(
+        self, events: list[dict], session_id: str, airport_icao: str
+    ) -> int:
+        """Batch-insert phase transition events."""
+        if not self.is_available or not events:
+            return 0
+
+        self._ensure_ml_tables()
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    values = [
+                        (
+                            session_id, airport_icao,
+                            e["icao24"], e.get("callsign"),
+                            e["from_phase"], e["to_phase"],
+                            e.get("latitude"), e.get("longitude"),
+                            e.get("altitude"), e.get("aircraft_type"),
+                            e.get("assigned_gate"), e.get("event_time"),
+                        )
+                        for e in events
+                    ]
+                    execute_values(
+                        cur,
+                        """INSERT INTO flight_phase_transitions (
+                            session_id, airport_icao,
+                            icao24, callsign,
+                            from_phase, to_phase,
+                            latitude, longitude,
+                            altitude, aircraft_type,
+                            assigned_gate, event_time
+                        ) VALUES %s""",
+                        values,
+                    )
+                    conn.commit()
+                    return len(values)
+        except Exception as e:
+            logger.warning(f"Failed to insert phase transitions: {e}")
+            self._cached_credentials = None
+            return 0
+
+    def insert_gate_events(
+        self, events: list[dict], session_id: str, airport_icao: str
+    ) -> int:
+        """Batch-insert gate assignment events."""
+        if not self.is_available or not events:
+            return 0
+
+        self._ensure_ml_tables()
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    values = [
+                        (
+                            session_id, airport_icao,
+                            e["icao24"], e.get("callsign"),
+                            e["gate"], e["event_type"],
+                            e.get("aircraft_type"), e.get("event_time"),
+                        )
+                        for e in events
+                    ]
+                    execute_values(
+                        cur,
+                        """INSERT INTO gate_assignment_events (
+                            session_id, airport_icao,
+                            icao24, callsign,
+                            gate, event_type,
+                            aircraft_type, event_time
+                        ) VALUES %s""",
+                        values,
+                    )
+                    conn.commit()
+                    return len(values)
+        except Exception as e:
+            logger.warning(f"Failed to insert gate events: {e}")
+            self._cached_credentials = None
+            return 0
+
+    def insert_ml_predictions(
+        self, predictions: list[dict], session_id: str, airport_icao: str
+    ) -> int:
+        """Batch-insert ML prediction results."""
+        if not self.is_available or not predictions:
+            return 0
+
+        self._ensure_ml_tables()
+
+        try:
+            import json
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    values = [
+                        (
+                            session_id, airport_icao,
+                            p["prediction_type"], p.get("icao24"),
+                            json.dumps(p.get("result_json", {})),
+                            p.get("event_time"),
+                        )
+                        for p in predictions
+                    ]
+                    execute_values(
+                        cur,
+                        """INSERT INTO ml_predictions (
+                            session_id, airport_icao,
+                            prediction_type, icao24,
+                            result_json, event_time
+                        ) VALUES %s""",
+                        values,
+                    )
+                    conn.commit()
+                    return len(values)
+        except Exception as e:
+            logger.warning(f"Failed to insert ML predictions: {e}")
+            self._cached_credentials = None
+            return 0
 
 
 # Singleton instance

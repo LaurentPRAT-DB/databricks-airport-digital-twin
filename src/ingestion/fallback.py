@@ -16,6 +16,7 @@ Aircraft Separation Standards (FAA/ICAO):
 
 import math
 import random
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Set
@@ -26,6 +27,141 @@ from faker import Faker
 
 
 fake = Faker()
+
+# ============================================================================
+# EVENT BUFFERS for ML training data persistence
+# ============================================================================
+# Thread-safe buffers that collect events during state machine updates.
+# Drained periodically by DataGeneratorService for Lakebase persistence.
+
+_MAX_BUFFER_SIZE = 10000  # Cap to prevent unbounded memory growth
+
+_phase_transition_buffer: List[Dict[str, Any]] = []
+_phase_transition_lock = threading.Lock()
+
+_gate_event_buffer: List[Dict[str, Any]] = []
+_gate_event_lock = threading.Lock()
+
+_prediction_buffer: List[Dict[str, Any]] = []
+_prediction_lock = threading.Lock()
+
+
+def emit_phase_transition(
+    icao24: str,
+    callsign: str,
+    from_phase: str,
+    to_phase: str,
+    latitude: float,
+    longitude: float,
+    altitude: float,
+    aircraft_type: str = "A320",
+    assigned_gate: Optional[str] = None,
+) -> None:
+    """Record a flight phase transition event."""
+    event = {
+        "icao24": icao24,
+        "callsign": callsign,
+        "from_phase": from_phase,
+        "to_phase": to_phase,
+        "latitude": latitude,
+        "longitude": longitude,
+        "altitude": altitude,
+        "aircraft_type": aircraft_type,
+        "assigned_gate": assigned_gate,
+        "event_time": datetime.now(timezone.utc).isoformat(),
+    }
+    with _phase_transition_lock:
+        _phase_transition_buffer.append(event)
+        if len(_phase_transition_buffer) > _MAX_BUFFER_SIZE:
+            del _phase_transition_buffer[: _MAX_BUFFER_SIZE // 2]
+
+
+def emit_gate_event(
+    icao24: str,
+    callsign: str,
+    gate: str,
+    event_type: str,  # "assign", "occupy", "release"
+    aircraft_type: str = "A320",
+) -> None:
+    """Record a gate assignment/release event."""
+    event = {
+        "icao24": icao24,
+        "callsign": callsign,
+        "gate": gate,
+        "event_type": event_type,
+        "aircraft_type": aircraft_type,
+        "event_time": datetime.now(timezone.utc).isoformat(),
+    }
+    with _gate_event_lock:
+        _gate_event_buffer.append(event)
+        if len(_gate_event_buffer) > _MAX_BUFFER_SIZE:
+            del _gate_event_buffer[: _MAX_BUFFER_SIZE // 2]
+
+
+def emit_prediction(
+    prediction_type: str,  # "delay", "congestion", "gate_recommendation"
+    icao24: Optional[str],
+    result: Dict[str, Any],
+) -> None:
+    """Record an ML prediction result for feedback/evaluation."""
+    event = {
+        "prediction_type": prediction_type,
+        "icao24": icao24,
+        "result_json": result,
+        "event_time": datetime.now(timezone.utc).isoformat(),
+    }
+    with _prediction_lock:
+        _prediction_buffer.append(event)
+        if len(_prediction_buffer) > _MAX_BUFFER_SIZE:
+            del _prediction_buffer[: _MAX_BUFFER_SIZE // 2]
+
+
+def drain_phase_transitions() -> List[Dict[str, Any]]:
+    """Drain and return all buffered phase transition events."""
+    with _phase_transition_lock:
+        events = list(_phase_transition_buffer)
+        _phase_transition_buffer.clear()
+    return events
+
+
+def drain_gate_events() -> List[Dict[str, Any]]:
+    """Drain and return all buffered gate events."""
+    with _gate_event_lock:
+        events = list(_gate_event_buffer)
+        _gate_event_buffer.clear()
+    return events
+
+
+def drain_predictions() -> List[Dict[str, Any]]:
+    """Drain and return all buffered prediction events."""
+    with _prediction_lock:
+        events = list(_prediction_buffer)
+        _prediction_buffer.clear()
+    return events
+
+
+def get_current_flight_states() -> List[Dict[str, Any]]:
+    """Snapshot current flight states for persistence."""
+    snapshots = []
+    for icao24, state in _flight_states.items():
+        snapshots.append({
+            "icao24": icao24,
+            "callsign": state.callsign,
+            "latitude": state.latitude,
+            "longitude": state.longitude,
+            "altitude": state.altitude,
+            "velocity": state.velocity,
+            "heading": state.heading,
+            "vertical_rate": state.vertical_rate,
+            "on_ground": state.on_ground,
+            "flight_phase": state.phase.value,
+            "aircraft_type": state.aircraft_type,
+            "assigned_gate": state.assigned_gate,
+            "origin_airport": state.origin_airport,
+            "destination_airport": state.destination_airport,
+            "snapshot_time": datetime.now(timezone.utc).isoformat(),
+        })
+    return snapshots
 
 # ============================================================================
 # SEPARATION CONSTANTS (FAA/ICAO Standards)
@@ -1087,6 +1223,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         else:
             # Transition to landing only if runway is clear
             if _is_runway_clear("28R"):
+                emit_phase_transition(
+                    state.icao24, state.callsign,
+                    FlightPhase.APPROACHING.value, FlightPhase.LANDING.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
                 state.phase = FlightPhase.LANDING
                 state.waypoint_index = 0
                 _occupy_runway(state.icao24, "28R")
@@ -1110,6 +1252,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.altitude = 0
             state.on_ground = True
             state.vertical_rate = 0
+            emit_phase_transition(
+                state.icao24, state.callsign,
+                FlightPhase.LANDING.value, FlightPhase.TAXI_TO_GATE.value,
+                state.latitude, state.longitude, state.altitude,
+                state.aircraft_type, state.assigned_gate,
+            )
             state.phase = FlightPhase.TAXI_TO_GATE
             state.waypoint_index = 0
             # Release runway when exiting to taxiway
@@ -1119,6 +1267,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if available_gate:
                 state.assigned_gate = available_gate
                 _occupy_gate(state.icao24, available_gate)
+                emit_gate_event(state.icao24, state.callsign, available_gate, "assign", state.aircraft_type)
             else:
                 # All gates occupied - hold position until gate available
                 state.assigned_gate = None
@@ -1185,6 +1334,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.heading = _calculate_heading((state.latitude, state.longitude), target)
 
             if _distance_between((state.latitude, state.longitude), target) < 0.0003:
+                emit_phase_transition(
+                    state.icao24, state.callsign,
+                    FlightPhase.TAXI_TO_GATE.value, FlightPhase.PARKED.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
+                emit_gate_event(state.icao24, state.callsign, state.assigned_gate, "occupy", state.aircraft_type)
                 state.phase = FlightPhase.PARKED
                 state.velocity = 0
                 state.time_at_gate = 0
@@ -1197,6 +1353,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
         # After 5-10 minutes, start pushback
         if state.time_at_gate > random.uniform(300, 600):
+            emit_phase_transition(
+                state.icao24, state.callsign,
+                FlightPhase.PARKED.value, FlightPhase.PUSHBACK.value,
+                state.latitude, state.longitude, state.altitude,
+                state.aircraft_type, state.assigned_gate,
+            )
             state.phase = FlightPhase.PUSHBACK
             state.phase_progress = 0
 
@@ -1216,6 +1378,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # Release gate when clear of it
             if state.assigned_gate:
                 _release_gate(state.icao24, state.assigned_gate)
+                emit_gate_event(state.icao24, state.callsign, state.assigned_gate, "release", state.aircraft_type)
+            emit_phase_transition(
+                state.icao24, state.callsign,
+                FlightPhase.PUSHBACK.value, FlightPhase.TAXI_TO_RUNWAY.value,
+                state.latitude, state.longitude, state.altitude,
+                state.aircraft_type, state.assigned_gate,
+            )
             state.phase = FlightPhase.TAXI_TO_RUNWAY
             state.waypoint_index = 0
 
@@ -1239,6 +1408,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         else:
             # At runway hold line - check if runway is clear before takeoff
             if _is_runway_clear("28R"):
+                emit_phase_transition(
+                    state.icao24, state.callsign,
+                    FlightPhase.TAXI_TO_RUNWAY.value, FlightPhase.TAKEOFF.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
                 state.phase = FlightPhase.TAKEOFF
                 state.heading = 280  # Runway heading
                 _occupy_runway(state.icao24, "28R")
@@ -1260,6 +1435,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if state.altitude > 500:
                 # Release runway when airborne and clear
                 _release_runway(state.icao24, "28R")
+                emit_phase_transition(
+                    state.icao24, state.callsign,
+                    FlightPhase.TAKEOFF.value, FlightPhase.DEPARTING.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
                 state.phase = FlightPhase.DEPARTING
                 state.waypoint_index = 0
 
@@ -1282,6 +1463,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.waypoint_index += 1
         else:
             # Switch to enroute — heading toward destination
+            emit_phase_transition(
+                state.icao24, state.callsign,
+                FlightPhase.DEPARTING.value, FlightPhase.ENROUTE.value,
+                state.latitude, state.longitude, state.altitude,
+                state.aircraft_type, state.assigned_gate,
+            )
             state.phase = FlightPhase.ENROUTE
             if state.destination_airport:
                 state.heading = _bearing_to_airport(state.destination_airport)
@@ -1308,9 +1495,21 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
             if dist_from_airport < APPROACH_RADIUS_DEG:
                 # Close enough — transition to approach
+                emit_phase_transition(
+                    state.icao24, state.callsign,
+                    FlightPhase.ENROUTE.value, FlightPhase.APPROACHING.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
                 state.phase = FlightPhase.APPROACHING
                 state.waypoint_index = 0
             elif random.random() < 0.01 * dt and dist_from_airport < 0.35:
+                emit_phase_transition(
+                    state.icao24, state.callsign,
+                    FlightPhase.ENROUTE.value, FlightPhase.APPROACHING.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
                 state.phase = FlightPhase.APPROACHING
                 state.waypoint_index = 0
 
@@ -1892,6 +2091,14 @@ def reset_synthetic_state() -> dict:
     _runway_28L = RunwayState()
     _runway_28R = RunwayState()
     _gate_states.clear()
+
+    # Clear event buffers
+    with _phase_transition_lock:
+        _phase_transition_buffer.clear()
+    with _gate_event_lock:
+        _gate_event_buffer.clear()
+    with _prediction_lock:
+        _prediction_buffer.clear()
 
     return {
         "cleared_flights": cleared_flights,

@@ -10,6 +10,7 @@ and refreshes it periodically:
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Callable, Coroutine, Optional
 
@@ -55,6 +56,7 @@ class DataGeneratorService:
         schedule_interval_seconds: int = 60,    # 1 minute
         baggage_interval_seconds: int = 30,     # 30 seconds
         gse_interval_seconds: int = 30,         # 30 seconds
+        snapshot_interval_seconds: int = 15,    # 15 seconds
     ):
         self._airport = airport
         self._weather_station = weather_station
@@ -63,11 +65,20 @@ class DataGeneratorService:
         self._schedule_interval = schedule_interval_seconds
         self._baggage_interval = baggage_interval_seconds
         self._gse_interval = gse_interval_seconds
+        self._snapshot_interval = snapshot_interval_seconds
 
         self._running = False
         self._tasks: list[asyncio.Task] = []
         self._initialized = False
         self._initialized_airports: set[str] = set()
+
+        # Session tracking for ML data persistence
+        self._session_id = str(uuid.uuid4())
+
+    @property
+    def session_id(self) -> str:
+        """Unique ID for this app run, used to group ML training data."""
+        return self._session_id
 
     async def initialize_all_data(
         self,
@@ -199,6 +210,7 @@ class DataGeneratorService:
             asyncio.create_task(self._schedule_refresh_loop()),
             asyncio.create_task(self._baggage_refresh_loop()),
             asyncio.create_task(self._gse_refresh_loop()),
+            asyncio.create_task(self._flight_snapshot_refresh_loop()),
         ]
 
     async def stop_periodic_refresh(self) -> None:
@@ -308,6 +320,7 @@ class DataGeneratorService:
             return 0
 
         count = 0
+        all_stats = []
         for flight in schedule:
             flight_number = flight.get("flight_number")
             if not flight_number:
@@ -328,6 +341,19 @@ class DataGeneratorService:
 
             if lakebase.upsert_baggage_stats(stats, airport_icao=self._current_airport_icao):
                 count += 1
+            all_stats.append({"airport_icao": self._current_airport_icao, **stats})
+
+        # Write events to landing zone for DLT pipeline pickup
+        if all_stats:
+            try:
+                from src.ingestion.baggage_writer import write_baggage_events
+                write_baggage_events(
+                    all_stats,
+                    catalog="serverless_stable_3n0ihb_catalog",
+                    schema="airport_digital_twin",
+                )
+            except Exception as e:
+                logger.warning(f"Failed to write baggage events to landing zone: {e}")
 
         return count
 
@@ -395,6 +421,68 @@ class DataGeneratorService:
                 break
             except Exception as e:
                 logger.error(f"GSE fleet refresh error: {e}")
+
+    # =========================================================================
+    # Flight Data Snapshot & ML Event Persistence
+    # =========================================================================
+
+    async def _persist_flight_data(self) -> dict:
+        """Persist flight snapshots, phase transitions, gate events, and predictions.
+
+        Drains all event buffers and batch-inserts to Lakebase in one pass.
+        Returns counts of persisted records.
+        """
+        from src.ingestion.fallback import (
+            get_current_flight_states,
+            drain_phase_transitions,
+            drain_gate_events,
+            drain_predictions,
+        )
+
+        lakebase = get_lakebase_service()
+        if not lakebase.is_available:
+            return {"snapshots": 0, "transitions": 0, "gate_events": 0, "predictions": 0}
+
+        session_id = self._session_id
+        airport_icao = self._current_airport_icao
+
+        # Collect all data
+        snapshots = get_current_flight_states()
+        transitions = drain_phase_transitions()
+        gate_events = drain_gate_events()
+        predictions = drain_predictions()
+
+        # Batch insert
+        snap_count = lakebase.insert_flight_snapshots(snapshots, session_id, airport_icao)
+        trans_count = lakebase.insert_phase_transitions(transitions, session_id, airport_icao)
+        gate_count = lakebase.insert_gate_events(gate_events, session_id, airport_icao)
+        pred_count = lakebase.insert_ml_predictions(predictions, session_id, airport_icao)
+
+        return {
+            "snapshots": snap_count,
+            "transitions": trans_count,
+            "gate_events": gate_count,
+            "predictions": pred_count,
+        }
+
+    async def _flight_snapshot_refresh_loop(self) -> None:
+        """Background loop for persisting flight data every 15s."""
+        while self._running:
+            try:
+                await asyncio.sleep(self._snapshot_interval)
+                counts = await self._persist_flight_data()
+                total = sum(counts.values())
+                if total > 0:
+                    logger.debug(
+                        f"Persisted {counts['snapshots']} snapshots, "
+                        f"{counts['transitions']} transitions, "
+                        f"{counts['gate_events']} gate events, "
+                        f"{counts['predictions']} predictions"
+                    )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Flight snapshot refresh error: {e}")
 
 
 # Singleton instance
