@@ -32,6 +32,7 @@ class AirportConfigService:
         self._current_config: dict[str, Any] = {}
         self._last_updated: Optional[datetime] = None
         self._config_ready: bool = False
+        self._taxiway_graph: Optional[Any] = None
         self._converter = CoordinateConverter(
             reference_lat=37.6213,  # SFO
             reference_lon=-122.379,
@@ -55,6 +56,26 @@ class AirportConfigService:
     def config_ready(self) -> bool:
         """Whether airport config has been successfully loaded."""
         return self._config_ready
+
+    @property
+    def taxiway_graph(self):
+        """TaxiwayGraph instance, or None if not built yet."""
+        return self._taxiway_graph
+
+    def _build_taxiway_graph(self) -> None:
+        """Build taxiway routing graph from current config."""
+        try:
+            from src.routing.taxiway_graph import TaxiwayGraph
+            graph = TaxiwayGraph()
+            graph.build_from_config(self._current_config)
+            if graph.nodes:
+                self._taxiway_graph = graph
+                logger.info("Taxiway graph built: %d nodes", len(graph.nodes))
+            else:
+                self._taxiway_graph = None
+        except Exception as e:
+            logger.warning("Failed to build taxiway graph: %s", e)
+            self._taxiway_graph = None
 
     def set_reference_point(self, lat: float, lon: float, alt: float = 0.0) -> None:
         """
@@ -262,6 +283,7 @@ class AirportConfigService:
         self._current_config = config
         self._last_updated = datetime.now(timezone.utc)
         self._config_ready = True
+        self._build_taxiway_graph()
 
         # Auto-persist to lakehouse
         self.persist_config(icao_code)
@@ -310,6 +332,7 @@ class AirportConfigService:
         self._current_config = {}
         self._last_updated = None
         self._config_ready = False
+        self._taxiway_graph = None
 
     def get_element_counts(self) -> dict[str, int]:
         """
@@ -391,6 +414,7 @@ class AirportConfigService:
                 self._current_config = config
                 self._last_updated = datetime.now(timezone.utc)
                 self._config_ready = True
+                self._build_taxiway_graph()
                 logger.info(f"Loaded airport config for {icao_code} from lakehouse")
                 return True
             else:
@@ -479,6 +503,7 @@ class AirportConfigService:
                 self._current_config = config
                 self._last_updated = datetime.now(timezone.utc)
                 self._config_ready = True
+                self._build_taxiway_graph()
                 logger.info(f"Loaded airport config for {icao_code} from Lakebase cache")
                 return True
             return False

@@ -519,6 +519,100 @@ def _get_departure_runway() -> tuple:
     return (center[1], center[0])  # (lon, lat)
 
 
+def _get_taxi_waypoints_arrival(gate_ref: str) -> List[tuple]:
+    """Get taxi route from landing runway exit to assigned gate.
+
+    Uses OSM taxiway graph when available, falls back to hardcoded SFO
+    waypoints or generic straight-line path.
+
+    Returns list of (lon, lat) tuples matching existing waypoint format.
+    """
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        graph = service.taxiway_graph
+        if graph:
+            runway_exit = _get_runway_threshold()  # (lon, lat)
+            gate_pos = get_gates().get(gate_ref)
+            if gate_pos:
+                route = graph.find_route(
+                    (runway_exit[1], runway_exit[0]),  # (lat, lon) for graph
+                    gate_pos,  # (lat, lon)
+                )
+                if route and len(route) >= 2:
+                    return [(lon, lat) for lat, lon in route]
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # Fallback: existing behavior
+    center = get_airport_center()
+    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01:
+        return TAXI_WAYPOINTS_ARRIVAL
+    # Generic: straight line from center to gate
+    gate_pos = get_gates().get(gate_ref, center)
+    return [(center[1], center[0]), (gate_pos[1], gate_pos[0])]
+
+
+def _get_taxi_waypoints_departure(gate_ref: str) -> List[tuple]:
+    """Get taxi route from gate to departure runway.
+
+    Uses OSM taxiway graph when available, falls back to hardcoded SFO
+    waypoints or generic straight-line path.
+
+    Returns list of (lon, lat) tuples matching existing waypoint format.
+    """
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        graph = service.taxiway_graph
+        if graph:
+            runway_threshold = _get_departure_runway()  # (lon, lat)
+            gate_pos = get_gates().get(gate_ref)
+            if gate_pos:
+                route = graph.find_route(
+                    gate_pos,  # (lat, lon)
+                    (runway_threshold[1], runway_threshold[0]),  # (lat, lon) for graph
+                )
+                if route and len(route) >= 2:
+                    return [(lon, lat) for lat, lon in route]
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # Fallback: existing behavior
+    center = get_airport_center()
+    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01:
+        return TAXI_WAYPOINTS_DEPARTURE
+    gate_pos = get_gates().get(gate_ref, center)
+    return [(gate_pos[1], gate_pos[0]), (center[1], center[0])]
+
+
+def _get_pushback_heading(gate_ref: str) -> float:
+    """Determine pushback heading from departure route.
+
+    Uses first segment of departure route to compute direction away from gate.
+    Falls back to 180° (south) if no route available.
+    """
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        graph = service.taxiway_graph
+        if graph:
+            gate_pos = get_gates().get(gate_ref)
+            if gate_pos:
+                nearest_id = graph.snap_to_nearest_node(gate_pos[0], gate_pos[1])
+                if nearest_id is not None:
+                    nearest_pos = graph.nodes[nearest_id]
+                    # Heading from gate toward nearest taxiway node
+                    return _calculate_heading(gate_pos, nearest_pos)
+    except (ImportError, Exception):
+        pass
+    return 180.0  # Default: south
+
+
 class FlightPhase(Enum):
     """Flight operational phases."""
     APPROACHING = "approaching"    # Descending toward airport
@@ -552,6 +646,7 @@ class FlightState:
     time_at_gate: float = 0.0    # seconds parked
     origin_airport: Optional[str] = None      # IATA code of origin
     destination_airport: Optional[str] = None  # IATA code of destination
+    taxi_route: Optional[List] = None          # Cached taxi waypoints [(lon, lat), ...]
 
 
 # Global state storage
@@ -1098,10 +1193,17 @@ def _create_new_flight(
         if not _is_runway_clear("28R"):
             return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination)
 
-        # Check if taxiway start position is clear (no other taxiing aircraft)
-        wp = TAXI_WAYPOINTS_ARRIVAL[0]
+        gate = _find_available_gate()
+        if gate is None:
+            # No gates available
+            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
+
+        # Compute taxi route from runway to gate (uses OSM graph when available)
+        taxi_route = _get_taxi_waypoints_arrival(gate)
+        wp = taxi_route[0]
         spawn_pos = (wp[1], wp[0])  # lat, lon
 
+        # Check if taxiway start position is clear (no other taxiing aircraft)
         for other_icao24, other in _flight_states.items():
             if other.on_ground and other.phase in [FlightPhase.TAXI_TO_GATE, FlightPhase.TAXI_TO_RUNWAY]:
                 dist = _distance_between(spawn_pos, (other.latitude, other.longitude))
@@ -1109,12 +1211,13 @@ def _create_new_flight(
                     # Taxiway congested - spawn as approaching instead
                     return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination)
 
-        gate = _find_available_gate()
-        if gate is None:
-            # No gates available
-            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
-
         _occupy_gate(icao24, gate)
+
+        # Heading toward second waypoint (or gate if only one wp)
+        if len(taxi_route) >= 2:
+            heading = _calculate_heading(spawn_pos, (taxi_route[1][1], taxi_route[1][0]))
+        else:
+            heading = _calculate_heading(spawn_pos, get_gates()[gate])
 
         return FlightState(
             icao24=icao24,
@@ -1123,7 +1226,7 @@ def _create_new_flight(
             longitude=wp[0],
             altitude=0,
             velocity=15,
-            heading=0,  # Heading north toward terminal
+            heading=heading,
             vertical_rate=0,
             on_ground=True,
             phase=phase,
@@ -1132,6 +1235,7 @@ def _create_new_flight(
             waypoint_index=0,
             origin_airport=origin,
             destination_airport=destination,
+            taxi_route=taxi_route,
         )
 
     elif phase == FlightPhase.TAXI_TO_RUNWAY:
@@ -1147,6 +1251,15 @@ def _create_new_flight(
         lat, lon = get_gates()[gate]
         _occupy_gate(icao24, gate)
 
+        # Compute departure taxi route from gate to runway (uses OSM graph when available)
+        taxi_route = _get_taxi_waypoints_departure(gate)
+
+        # Heading toward first departure waypoint
+        if taxi_route:
+            heading = _calculate_heading((lat, lon), (taxi_route[0][1], taxi_route[0][0]))
+        else:
+            heading = 180  # Fallback: south
+
         return FlightState(
             icao24=icao24,
             callsign=callsign,
@@ -1154,7 +1267,7 @@ def _create_new_flight(
             longitude=lon,
             altitude=0,
             velocity=10,
-            heading=180,  # Heading south toward runway
+            heading=heading,
             vertical_rate=0,
             on_ground=True,
             phase=phase,
@@ -1163,6 +1276,7 @@ def _create_new_flight(
             waypoint_index=0,
             origin_airport=origin,
             destination_airport=destination,
+            taxi_route=taxi_route,
         )
 
     # Default: random enroute
@@ -1260,6 +1374,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             )
             state.phase = FlightPhase.TAXI_TO_GATE
             state.waypoint_index = 0
+            state.taxi_route = None  # Will be computed below
             # Release runway when exiting to taxiway
             _release_runway(state.icao24, "28R")
             # Find an available gate (don't just pick random)
@@ -1268,6 +1383,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.assigned_gate = available_gate
                 _occupy_gate(state.icao24, available_gate)
                 emit_gate_event(state.icao24, state.callsign, available_gate, "assign", state.aircraft_type)
+                state.taxi_route = _get_taxi_waypoints_arrival(available_gate)
             else:
                 # All gates occupied - hold position until gate available
                 state.assigned_gate = None
@@ -1283,13 +1399,16 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if available_gate:
                 state.assigned_gate = available_gate
                 _occupy_gate(state.icao24, available_gate)
+                state.taxi_route = _get_taxi_waypoints_arrival(available_gate)
             else:
                 # No gates available - hold position on taxiway
                 state.velocity = 0
                 return state
 
-        if state.waypoint_index < len(TAXI_WAYPOINTS_ARRIVAL):
-            wp = TAXI_WAYPOINTS_ARRIVAL[state.waypoint_index]
+        # Use cached taxi route (dynamic from OSM graph or fallback)
+        taxi_wps = state.taxi_route or TAXI_WAYPOINTS_ARRIVAL
+        if state.waypoint_index < len(taxi_wps):
+            wp = taxi_wps[state.waypoint_index]
             target = (wp[1], wp[0])
 
             # Check taxi separation before moving
@@ -1364,15 +1483,19 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
     elif state.phase == FlightPhase.PUSHBACK:
         # Slow pushback from gate WITH separation check
+        # Determine pushback heading from taxiway graph or fallback to south
+        pb_heading = _get_pushback_heading(state.assigned_gate) if state.assigned_gate else 180.0
         if _check_taxi_separation(state):
             state.velocity = 3  # Very slow
             state.phase_progress += dt * 0.1
-            # Move slightly south (away from terminal)
-            state.latitude -= 0.00002 * dt
+            # Move in pushback direction (away from terminal toward taxiway)
+            pb_rad = math.radians(pb_heading)
+            state.latitude += 0.00002 * dt * math.cos(pb_rad)
+            state.longitude += 0.00002 * dt * math.sin(pb_rad)
         else:
             state.velocity = 0  # Hold if blocked
 
-        state.heading = 180  # Facing south during pushback
+        state.heading = (pb_heading + 180) % 360  # Nose faces opposite of movement
 
         if state.phase_progress >= 1.0:
             # Release gate when clear of it
@@ -1387,11 +1510,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             )
             state.phase = FlightPhase.TAXI_TO_RUNWAY
             state.waypoint_index = 0
+            state.taxi_route = _get_taxi_waypoints_departure(state.assigned_gate) if state.assigned_gate else None
 
     elif state.phase == FlightPhase.TAXI_TO_RUNWAY:
         # Taxi to runway WITH separation
-        if state.waypoint_index < len(TAXI_WAYPOINTS_DEPARTURE):
-            wp = TAXI_WAYPOINTS_DEPARTURE[state.waypoint_index]
+        taxi_wps = state.taxi_route or TAXI_WAYPOINTS_DEPARTURE
+        if state.waypoint_index < len(taxi_wps):
+            wp = taxi_wps[state.waypoint_index]
             target = (wp[1], wp[0])
 
             if _check_taxi_separation(state):
