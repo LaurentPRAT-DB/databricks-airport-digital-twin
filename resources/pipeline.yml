@@ -15,5 +15,11 @@ resources:
             path: ../src/pipelines/silver.py
         - file:
             path: ../src/pipelines/gold.py
+        - file:
+            path: ../src/pipelines/baggage_bronze.py
+        - file:
+            path: ../src/pipelines/baggage_silver.py
+        - file:
+            path: ../src/pipelines/baggage_gold.py
       configuration:
         pipelines.trigger.interval: "5 minutes"
