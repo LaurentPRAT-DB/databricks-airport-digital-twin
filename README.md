@@ -105,6 +105,7 @@ cd app/frontend && npm test -- --run  # Frontend tests
 | [Development Philosophy](docs/DEVELOPMENT_PHILOSOPHY.md) | Design principles and architecture decisions |
 | [V2 Roadmap](docs/ROADMAP_V2.md) | Feature roadmap for V2 |
 | [V2 Implementation Report](docs/V2_IMPLEMENTATION_REPORT.md) | V2 implementation summary |
+| [Data Sources & KPIs](docs/AIRPORT_DATA_SOURCES_AND_KPIS.md) | Open aviation data catalog and operational KPI reference |
 
 ## Tech Stack
 
