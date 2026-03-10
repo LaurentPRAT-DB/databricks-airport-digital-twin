@@ -70,7 +70,13 @@ const sfoCenter = { lat: 37.6213, lon: -122.379 };
 
 const createTerminal = (id: string, lat: number, lon: number): OSMTerminal => ({
   id,
+  osmId: 1000,
   name: `Terminal ${id}`,
+  type: 'terminal',
+  position: { x: 0, y: 0, z: 0 },
+  dimensions: { width: 100, height: 10, depth: 50 },
+  polygon: [],
+  color: 0xcccccc,
   geo: { latitude: lat, longitude: lon },
   geoPolygon: [
     { latitude: lat - 0.001, longitude: lon - 0.001 },
@@ -82,7 +88,9 @@ const createTerminal = (id: string, lat: number, lon: number): OSMTerminal => ({
 
 const createRunway = (id: string): OSMRunway => ({
   id,
+  osmId: 2000,
   name: id,
+  points: [],
   width: 60,
   color: 0x333333,
   geoPoints: [
@@ -93,7 +101,9 @@ const createRunway = (id: string): OSMRunway => ({
 
 const createTaxiway = (id: string): OSMTaxiway => ({
   id,
+  osmId: 3000,
   name: id,
+  points: [],
   width: 15,
   color: 0x888888,
   geoPoints: [
@@ -104,7 +114,11 @@ const createTaxiway = (id: string): OSMTaxiway => ({
 
 const createApron = (id: string): OSMApron => ({
   id,
+  osmId: 4000,
   name: id,
+  position: { x: 0, y: 0, z: 0 },
+  dimensions: { width: 50, height: 1, depth: 50 },
+  polygon: [],
   color: 0xaaaaaa,
   geo: { latitude: 37.621, longitude: -122.379 },
   geoPolygon: [
@@ -115,26 +129,6 @@ const createApron = (id: string): OSMApron => ({
   ],
 });
 
-// Count named meshes in scene tree
-function findNamedMeshes(node: ReturnType<typeof getChildren>, prefix: string): number {
-  let count = 0;
-  if (node.props?.name?.startsWith(prefix)) count++;
-  for (const child of node.children || []) {
-    count += findNamedMeshes(child, prefix);
-  }
-  return count;
-}
-
-type SceneNode = {
-  type: string;
-  props?: Record<string, unknown>;
-  children: SceneNode[];
-};
-
-function getChildren(node: unknown): SceneNode {
-  const n = node as SceneNode;
-  return { type: n.type || '', props: n.props, children: n.children || [] };
-}
 
 // ============================================================================
 // Tests
@@ -261,11 +255,6 @@ describe('AirportScene — OSM data behavior', () => {
       );
       const group = renderer.scene.children[0];
       // No hardcoded runway groups (hasOSMData = true)
-      const hardcodedRunwayGroups = group.children.filter(
-        (c: { type: string; props?: Record<string, unknown> }) =>
-          c.type === 'Group' && !c.props?.name
-      );
-      // Only groups remaining should be named OSM groups or taxiway fallback
       // The key check: osm-runways IS present
       const osmRunwayGroup = group.children.find(
         (c: { props?: Record<string, unknown> }) => c.props?.name === 'osm-runways'
@@ -412,7 +401,9 @@ describe('AirportScene — OSM data behavior', () => {
     it('handles runway with less than 2 geoPoints', async () => {
       const badRunway: OSMRunway = {
         id: 'bad',
+        osmId: 9000,
         name: 'bad',
+        points: [],
         width: 60,
         color: 0x333333,
         geoPoints: [{ latitude: 37.62, longitude: -122.38 }], // Only 1 point
@@ -427,7 +418,9 @@ describe('AirportScene — OSM data behavior', () => {
     it('handles taxiway with less than 2 geoPoints', async () => {
       const badTaxiway: OSMTaxiway = {
         id: 'bad',
+        osmId: 9001,
         name: 'bad',
+        points: [],
         width: 15,
         color: 0x888888,
         geoPoints: [], // Empty
@@ -441,7 +434,11 @@ describe('AirportScene — OSM data behavior', () => {
     it('handles apron with less than 3 polygon points', async () => {
       const badApron: OSMApron = {
         id: 'bad',
+        osmId: 9002,
         name: 'bad',
+        position: { x: 0, y: 0, z: 0 },
+        dimensions: { width: 50, height: 1, depth: 50 },
+        polygon: [],
         color: 0xaaaaaa,
         geo: { latitude: 37.62, longitude: -122.38 },
         geoPolygon: [

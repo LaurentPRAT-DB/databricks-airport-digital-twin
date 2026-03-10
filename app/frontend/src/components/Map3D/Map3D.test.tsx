@@ -2,24 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Flight } from '../../types/flight';
 import { SharedViewport } from '../../hooks/useViewportState';
+import { OSMTerminal, OSMTaxiway, OSMApron, OSMRunway } from '../../types/airportFormats';
 
 // ============================================================================
 // Mocks
 // ============================================================================
 
 // Track what props Map3D passes to child components
-let lastCanvasProps: Record<string, unknown> = {};
 let lastAirportSceneProps: Record<string, unknown> = {};
 let lastOrbitControlsProps: Record<string, unknown> = {};
 let lastCameraProps: Record<string, unknown> = {};
-let cameraSyncCleanup: (() => void) | null = null;
 
 // Mock useAirportConfig
-const mockGetTerminals = vi.fn(() => []);
+const mockGetTerminals = vi.fn((): OSMTerminal[] => []);
 const mockGetAirportCenter = vi.fn(() => ({ lat: 37.6213, lon: -122.379 }));
-const mockGetTaxiways = vi.fn(() => []);
-const mockGetAprons = vi.fn(() => []);
-const mockGetOSMRunways = vi.fn(() => []);
+const mockGetTaxiways = vi.fn((): OSMTaxiway[] => []);
+const mockGetAprons = vi.fn((): OSMApron[] => []);
+const mockGetOSMRunways = vi.fn((): OSMRunway[] => []);
 
 vi.mock('../../hooks/useAirportConfig', () => ({
   useAirportConfig: () => ({
@@ -33,8 +32,7 @@ vi.mock('../../hooks/useAirportConfig', () => ({
 
 // Mock React Three Fiber to avoid WebGL requirement
 vi.mock('@react-three/fiber', () => ({
-  Canvas: ({ children, ...props }: { children: React.ReactNode }) => {
-    lastCanvasProps = props;
+  Canvas: ({ children }: { children: React.ReactNode }) => {
     return <div data-testid="r3f-canvas">{children}</div>;
   },
   useThree: () => ({
@@ -132,11 +130,9 @@ const sfoViewport: SharedViewport = {
 describe('Map3D', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    lastCanvasProps = {};
     lastAirportSceneProps = {};
     lastOrbitControlsProps = {};
     lastCameraProps = {};
-    cameraSyncCleanup = null;
     mockGetTerminals.mockReturnValue([]);
     mockGetAirportCenter.mockReturnValue({ lat: 37.6213, lon: -122.379 });
     mockGetTaxiways.mockReturnValue([]);
@@ -209,7 +205,7 @@ describe('Map3D', () => {
 
   describe('Airport config forwarding', () => {
     it('passes terminals from hook to AirportScene', () => {
-      const terminals = [{ id: 't1', name: 'T1', geo: { latitude: 37.62, longitude: -122.38 }, geoPolygon: [] }];
+      const terminals: OSMTerminal[] = [{ id: 't1', osmId: 1000, name: 'T1', type: 'terminal', position: { x: 0, y: 0, z: 0 }, dimensions: { width: 100, height: 10, depth: 50 }, polygon: [], color: 0xcccccc, geo: { latitude: 37.62, longitude: -122.38 }, geoPolygon: [] }];
       mockGetTerminals.mockReturnValue(terminals);
       render(<Map3D />);
       expect(lastAirportSceneProps.terminals).toEqual(terminals);
@@ -227,21 +223,21 @@ describe('Map3D', () => {
     });
 
     it('passes osmTaxiways to AirportScene', () => {
-      const taxiways = [{ id: 'tw1', name: 'A', width: 15, color: 0x888888, geoPoints: [] }];
+      const taxiways: OSMTaxiway[] = [{ id: 'tw1', osmId: 3000, name: 'A', points: [], width: 15, color: 0x888888, geoPoints: [] }];
       mockGetTaxiways.mockReturnValue(taxiways);
       render(<Map3D />);
       expect(lastAirportSceneProps.osmTaxiways).toEqual(taxiways);
     });
 
     it('passes osmAprons to AirportScene', () => {
-      const aprons = [{ id: 'ap1', name: 'A1', color: 0xaaaaaa, geo: { latitude: 37.62, longitude: -122.38 }, geoPolygon: [] }];
+      const aprons: OSMApron[] = [{ id: 'ap1', osmId: 4000, name: 'A1', position: { x: 0, y: 0, z: 0 }, dimensions: { width: 50, height: 1, depth: 50 }, polygon: [], color: 0xaaaaaa, geo: { latitude: 37.62, longitude: -122.38 }, geoPolygon: [] }];
       mockGetAprons.mockReturnValue(aprons);
       render(<Map3D />);
       expect(lastAirportSceneProps.osmAprons).toEqual(aprons);
     });
 
     it('passes osmRunways to AirportScene', () => {
-      const runways = [{ id: 'rw1', name: '28L', width: 60, color: 0x333333, geoPoints: [] }];
+      const runways: OSMRunway[] = [{ id: 'rw1', osmId: 2000, name: '28L', points: [], width: 60, color: 0x333333, geoPoints: [] }];
       mockGetOSMRunways.mockReturnValue(runways);
       render(<Map3D />);
       expect(lastAirportSceneProps.osmRunways).toEqual(runways);
@@ -280,8 +276,8 @@ describe('Map3D', () => {
   describe('Camera with OSM data', () => {
     it('computes camera from bounding box of OSM terminals', () => {
       mockGetTerminals.mockReturnValue([
-        { id: 't1', name: 'T1', geo: { latitude: 37.615, longitude: -122.385 }, geoPolygon: [] },
-        { id: 't2', name: 'T2', geo: { latitude: 37.625, longitude: -122.375 }, geoPolygon: [] },
+        { id: 't1', osmId: 1001, name: 'T1', type: 'terminal' as const, position: { x: 0, y: 0, z: 0 }, dimensions: { width: 100, height: 10, depth: 50 }, polygon: [], color: 0xcccccc, geo: { latitude: 37.615, longitude: -122.385 }, geoPolygon: [] },
+        { id: 't2', osmId: 1002, name: 'T2', type: 'terminal' as const, position: { x: 0, y: 0, z: 0 }, dimensions: { width: 100, height: 10, depth: 50 }, polygon: [], color: 0xcccccc, geo: { latitude: 37.625, longitude: -122.375 }, geoPolygon: [] },
       ]);
       render(<Map3D />);
 
@@ -293,7 +289,7 @@ describe('Map3D', () => {
     it('computes camera from runways when no terminals', () => {
       mockGetOSMRunways.mockReturnValue([
         {
-          id: 'rw1', name: '28L', width: 60, color: 0x333333,
+          id: 'rw1', osmId: 2001, name: '28L', points: [], width: 60, color: 0x333333,
           geoPoints: [
             { latitude: 37.610, longitude: -122.390 },
             { latitude: 37.630, longitude: -122.370 },
@@ -309,7 +305,7 @@ describe('Map3D', () => {
     it('increases far plane for large airports', () => {
       mockGetOSMRunways.mockReturnValue([
         {
-          id: 'rw1', name: '28L', width: 60, color: 0x333333,
+          id: 'rw1', osmId: 2002, name: '28L', points: [], width: 60, color: 0x333333,
           geoPoints: [
             { latitude: 37.5, longitude: -122.5 },
             { latitude: 37.7, longitude: -122.2 },

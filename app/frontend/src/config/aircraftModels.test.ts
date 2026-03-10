@@ -106,8 +106,8 @@ describe('aircraftModels', () => {
 
       it('returns A320 model', () => {
         const model = getModelForAircraftType('A320');
-        expect(model.url).toBe('/models/aircraft/airbus-a320.glb');
-        expect(model.scale).toBe(1.28 * METERS_TO_SCENE_UNITS);
+        expect(model.url).toBe('/models/aircraft/airbus_a320.glb');
+        expect(model.scale).toBe(1.05 * METERS_TO_SCENE_UNITS);
       });
 
       it('returns A380 model', () => {
@@ -146,7 +146,7 @@ describe('aircraftModels', () => {
 
       it('uses generic model for airline without specific model', () => {
         const model = getModelForAircraftType('A320', 'SWA'); // Southwest doesn't have specific A320
-        expect(model.url).toBe('/models/aircraft/airbus-a320.glb');
+        expect(model.url).toBe('/models/aircraft/airbus_a320.glb');
       });
     });
 

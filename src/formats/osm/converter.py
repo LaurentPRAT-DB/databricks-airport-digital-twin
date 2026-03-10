@@ -238,7 +238,7 @@ class OSMConverter:
             geo_points.append({"latitude": pt.lat, "longitude": pt.lon})
 
         return {
-            "id": taxiway.tags.ref or f"TWY_{taxiway.id}",
+            "id": f"{taxiway.tags.ref or 'TWY'}_{taxiway.id}",
             "osmId": taxiway.id,
             "name": taxiway.tags.name or taxiway.tags.ref,
             "points": points,
@@ -273,7 +273,7 @@ class OSMConverter:
         depth = max(zs) - min(zs) if zs else 100
 
         return {
-            "id": apron.tags.ref or f"APRON_{apron.id}",
+            "id": f"{apron.tags.ref or 'APRON'}_{apron.id}",
             "osmId": apron.id,
             "name": apron.tags.name,
             "surface": apron.tags.surface,  # Paving material (asphalt, concrete, etc.)
@@ -300,7 +300,7 @@ class OSMConverter:
             geo_points.append({"latitude": pt.lat, "longitude": pt.lon})
 
         return {
-            "id": runway.tags.ref or f"RWY_{runway.id}",
+            "id": f"{runway.tags.ref or 'RWY'}_{runway.id}",
             "osmId": runway.id,
             "name": runway.tags.name or runway.tags.ref,
             "ref": runway.tags.ref,
@@ -357,7 +357,7 @@ class OSMConverter:
         )
 
         return {
-            "id": helipad.tags.ref or f"HELI_{helipad.id}",
+            "id": f"{helipad.tags.ref or 'HELI'}_{helipad.id}",
             "osmId": helipad.id,
             "name": helipad.tags.name,
             "ref": helipad.tags.ref,
@@ -372,7 +372,7 @@ class OSMConverter:
         )
 
         return {
-            "id": pp.tags.ref or f"PP_{pp.id}",
+            "id": f"{pp.tags.ref or 'PP'}_{pp.id}",
             "osmId": pp.id,
             "ref": pp.tags.ref,
             "name": pp.tags.name,

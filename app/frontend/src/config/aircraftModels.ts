@@ -51,10 +51,11 @@ export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   'B739': { url: '/models/aircraft/boeing-737.glb', scale: 3.1 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
 
   // Airbus narrow body (wingspan ~34-36m)
-  'A318': { url: '/models/aircraft/airbus-a320.glb', scale: 1.22 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'A319': { url: '/models/aircraft/airbus-a320.glb', scale: 1.25 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'A320': { url: '/models/aircraft/airbus-a320.glb', scale: 1.28 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'A321': { url: '/models/aircraft/airbus-a320.glb', scale: 1.28 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  // airbus_a320.glb native wingspan 34.2 units (1:1 meters)
+  'A318': { url: '/models/aircraft/airbus_a320.glb', scale: 0.97 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },  // A318 wingspan 34.1m
+  'A319': { url: '/models/aircraft/airbus_a320.glb', scale: 1.0 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },   // A319 wingspan 35.8m
+  'A320': { url: '/models/aircraft/airbus_a320.glb', scale: 1.05 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },  // A320 wingspan 35.8m
+  'A321': { url: '/models/aircraft/airbus_a320.glb', scale: 1.05 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },  // A321 wingspan 35.8m
 
   // Airbus wide body (wingspan ~60-80m)
   'A310': { url: '/models/aircraft/airbus_a320.glb', scale: 1.55 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },

@@ -67,11 +67,12 @@ function geoToLatLng(geoPoints: GeoPosition[] | undefined): LatLngExpression[] {
 }
 
 export default function AirportOverlay() {
-  const { getGates, getTerminals, getTaxiways, getAprons } = useAirportConfigContext();
+  const { getGates, getTerminals, getTaxiways, getAprons, getOSMRunways } = useAirportConfigContext();
   const osmGates = getGates();
   const osmTerminals = getTerminals();
   const osmTaxiways = getTaxiways();
   const osmAprons = getAprons();
+  const osmRunways = getOSMRunways();
 
   // Fall back to hardcoded gates only if no OSM gates available
   const hardcodedGates = getFeaturesByType('gate');
@@ -79,15 +80,44 @@ export default function AirportOverlay() {
   const useOsmTerminals = osmTerminals.length > 0;
   const useOsmTaxiways = osmTaxiways.length > 0;
   const useOsmAprons = osmAprons.length > 0;
+  const useOsmRunways = osmRunways.length > 0;
+
+  // Hide all hardcoded elements when ANY OSM data is present (matches 3D behavior)
+  const hasOSMData = useOsmTerminals || useOsmRunways || useOsmTaxiways || useOsmAprons;
 
   return (
     <>
-      {/* Render polygons and lines */}
-      <GeoJSON
-        data={nonGateFeatures}
-        style={getFeatureStyle}
-        onEachFeature={onEachFeature}
-      />
+      {/* Render hardcoded GeoJSON features only when no OSM data (fallback for SFO) */}
+      {!hasOSMData && (
+        <GeoJSON
+          data={nonGateFeatures}
+          style={getFeatureStyle}
+          onEachFeature={onEachFeature}
+        />
+      )}
+
+      {/* Render OSM runways as polylines */}
+      {useOsmRunways && osmRunways.map((runway) => {
+        const positions = geoToLatLng(runway.geoPoints);
+        if (positions.length < 2) return null;
+        return (
+          <Polyline
+            key={runway.id}
+            positions={positions}
+            pathOptions={{
+              color: '#4b5563', // gray-600
+              weight: 8,
+              opacity: 0.9,
+            }}
+          >
+            {runway.name && (
+              <Tooltip direction="center">
+                RWY {runway.name}
+              </Tooltip>
+            )}
+          </Polyline>
+        );
+      })}
 
       {/* Render OSM gates as circle markers (preferred) */}
       {useOsmGates && osmGates.map((gate) => (
