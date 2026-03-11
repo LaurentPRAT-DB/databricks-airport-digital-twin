@@ -220,7 +220,7 @@ export default function AirportOverlay() {
         const label = gate.ref || gate.name || gate.id;
         return (
           <CircleMarker
-            key={gate.id}
+            key={`${gate.id}-${showGateLabels}`}
             center={[Number(gate.geo.latitude), Number(gate.geo.longitude)]}
             radius={gateDotRadius}
             pathOptions={{
@@ -251,7 +251,7 @@ export default function AirportOverlay() {
         const label = gate.properties?.name;
         return (
           <CircleMarker
-            key={label}
+            key={`${label}-${showGateLabels}`}
             center={[coords[1], coords[0]]}
             radius={gateDotRadius}
             pathOptions={{

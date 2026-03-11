@@ -92,19 +92,19 @@ class FlightBroadcaster:
         service = get_flight_service()
 
         while self._running:
-            try:
-                flight_data = await service.get_flights()
-                await self.broadcast({
-                    "type": "flight_update",
-                    "data": {
-                        "flights": [f.model_dump() for f in flight_data.flights],
-                        "count": flight_data.count,
-                        "timestamp": flight_data.timestamp.isoformat(),
-                    },
-                })
-            except Exception:
-                # Log error but continue broadcasting
-                pass
+            if self._connections:
+                try:
+                    flight_data = await service.get_flights()
+                    await self.broadcast({
+                        "type": "flight_update",
+                        "data": {
+                            "flights": [f.model_dump() for f in flight_data.flights],
+                            "count": flight_data.count,
+                            "timestamp": flight_data.timestamp.isoformat(),
+                        },
+                    })
+                except Exception:
+                    pass
 
             await asyncio.sleep(interval)
 

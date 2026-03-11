@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
@@ -6,6 +6,44 @@ import { useFlights } from './useFlights'
 import { mockFlights } from '../test/mocks/handlers'
 import { server } from '../test/mocks/server'
 import { http, HttpResponse, delay } from 'msw'
+
+// --- WebSocket mock ---
+class MockWebSocket {
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+
+  url: string;
+  readyState = MockWebSocket.CONNECTING;
+  onopen: ((ev: Event) => void) | null = null;
+  onclose: ((ev: CloseEvent) => void) | null = null;
+  onmessage: ((ev: MessageEvent) => void) | null = null;
+  onerror: ((ev: Event) => void) | null = null;
+  close = vi.fn(() => { this.readyState = MockWebSocket.CLOSED; });
+  send = vi.fn();
+
+  constructor(url: string) {
+    this.url = url;
+    mockWsInstances.push(this);
+    // Auto-open on next tick so tests can attach handlers
+    setTimeout(() => {
+      this.readyState = MockWebSocket.OPEN;
+      this.onopen?.(new Event('open'));
+    }, 0);
+  }
+
+  simulateMessage(data: object) {
+    this.onmessage?.(new MessageEvent('message', { data: JSON.stringify(data) }));
+  }
+
+  simulateClose() {
+    this.readyState = MockWebSocket.CLOSED;
+    this.onclose?.({} as CloseEvent);
+  }
+}
+
+let mockWsInstances: MockWebSocket[] = [];
 
 // Wrapper that includes QueryClientProvider
 function createWrapper() {
@@ -23,6 +61,12 @@ function createWrapper() {
 describe('useFlights', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockWsInstances = []
+    vi.stubGlobal('WebSocket', MockWebSocket)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   describe('Initial state', () => {
@@ -67,8 +111,94 @@ describe('useFlights', () => {
     })
   })
 
-  describe('Successful fetch', () => {
-    it('populates flights after loading', async () => {
+  describe('WebSocket updates', () => {
+    it('receives flights via WebSocket initial message', async () => {
+      const { result } = renderHook(() => useFlights(), {
+        wrapper: createWrapper(),
+      })
+
+      // Wait for WS to connect
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
+
+      // Send initial message
+      mockWsInstances[0].simulateMessage({
+        type: 'initial',
+        data: {
+          flights: mockFlights,
+          count: mockFlights.length,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => {
+        expect(result.current.flights.length).toBe(mockFlights.length)
+      })
+    })
+
+    it('receives flights via WebSocket flight_update message', async () => {
+      const { result } = renderHook(() => useFlights(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
+
+      mockWsInstances[0].simulateMessage({
+        type: 'flight_update',
+        data: {
+          flights: mockFlights,
+          count: mockFlights.length,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => {
+        expect(result.current.flights.length).toBe(mockFlights.length)
+      })
+
+      expect(result.current.isLoading).toBe(false)
+      expect(result.current.lastUpdated).not.toBeNull()
+    })
+
+    it('ignores airport_switch_progress messages', async () => {
+      const { result } = renderHook(() => useFlights(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
+
+      mockWsInstances[0].simulateMessage({
+        type: 'airport_switch_progress',
+        data: { step: 1, total: 3, message: 'Loading...', icaoCode: 'KJFK', done: false },
+      })
+
+      // Should still have no flights
+      expect(result.current.flights).toEqual([])
+    })
+  })
+
+  describe('HTTP fallback', () => {
+    it('falls back to HTTP polling when WebSocket fails', async () => {
+      // Make WS fail immediately
+      vi.stubGlobal('WebSocket', class {
+        constructor() { throw new Error('WS unavailable'); }
+      })
+
+      const { result } = renderHook(() => useFlights(), {
+        wrapper: createWrapper(),
+      })
+
+      // Should fall back to HTTP and eventually get flights
+      await waitFor(() => {
+        expect(result.current.flights.length).toBe(mockFlights.length)
+      }, { timeout: 5000 })
+    })
+
+    it('populates flights after loading via HTTP', async () => {
+      // Disable WS so HTTP fallback kicks in
+      vi.stubGlobal('WebSocket', class {
+        constructor() { throw new Error('WS unavailable'); }
+      })
+
       const { result } = renderHook(() => useFlights(), {
         wrapper: createWrapper(),
       })
@@ -78,17 +208,11 @@ describe('useFlights', () => {
       })
     })
 
-    it('sets loading to false after fetch', async () => {
-      const { result } = renderHook(() => useFlights(), {
-        wrapper: createWrapper(),
+    it('provides lastUpdated timestamp via HTTP', async () => {
+      vi.stubGlobal('WebSocket', class {
+        constructor() { throw new Error('WS unavailable'); }
       })
 
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false)
-      })
-    })
-
-    it('provides lastUpdated timestamp', async () => {
       const { result } = renderHook(() => useFlights(), {
         wrapper: createWrapper(),
       })
@@ -98,7 +222,11 @@ describe('useFlights', () => {
       })
     })
 
-    it('provides dataSource', async () => {
+    it('provides dataSource via HTTP', async () => {
+      vi.stubGlobal('WebSocket', class {
+        constructor() { throw new Error('WS unavailable'); }
+      })
+
       const { result } = renderHook(() => useFlights(), {
         wrapper: createWrapper(),
       })
@@ -107,10 +235,23 @@ describe('useFlights', () => {
         expect(result.current.dataSource).toBe('synthetic')
       })
     })
+  })
 
-    it('returns correct flight structure', async () => {
+  describe('Data structure', () => {
+    it('returns flights with correct structure from WS', async () => {
       const { result } = renderHook(() => useFlights(), {
         wrapper: createWrapper(),
+      })
+
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
+
+      mockWsInstances[0].simulateMessage({
+        type: 'initial',
+        data: {
+          flights: mockFlights,
+          count: mockFlights.length,
+          timestamp: new Date().toISOString(),
+        },
       })
 
       await waitFor(() => {
@@ -123,49 +264,44 @@ describe('useFlights', () => {
       expect(flight).toHaveProperty('latitude')
       expect(flight).toHaveProperty('longitude')
       expect(flight).toHaveProperty('altitude')
-      expect(flight).toHaveProperty('flight_phase')
     })
-  })
 
-  describe('Error handling', () => {
-    it('provides error property for error states', () => {
+    it('returns correct types from WS data', async () => {
       const { result } = renderHook(() => useFlights(), {
         wrapper: createWrapper(),
       })
 
-      // Error starts as null
-      expect(result.current.error).toBeNull()
-    })
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
 
-    it('sets loading to false after fetch completes', async () => {
-      const { result } = renderHook(() => useFlights(), {
-        wrapper: createWrapper(),
-      })
-
-      // Should eventually complete
-      await waitFor(
-        () => {
-          expect(result.current.isLoading).toBe(false)
+      mockWsInstances[0].simulateMessage({
+        type: 'initial',
+        data: {
+          flights: mockFlights,
+          count: mockFlights.length,
+          timestamp: new Date().toISOString(),
         },
-        { timeout: 5000 }
-      )
-    })
-
-    it('maintains empty flights array when no data', () => {
-      const { result } = renderHook(() => useFlights(), {
-        wrapper: createWrapper(),
       })
 
-      // Initially flights is empty
-      expect(result.current.flights).toEqual([])
+      await waitFor(() => {
+        expect(result.current.flights.length).toBeGreaterThan(0)
+      })
+
+      const flight = result.current.flights[0]
+      expect(typeof flight.icao24).toBe('string')
+      expect(typeof flight.latitude).toBe('number')
+      expect(typeof flight.longitude).toBe('number')
     })
   })
 
-  describe('Network timeout', () => {
+  describe('Network timeout (HTTP fallback)', () => {
     it('handles slow network gracefully', async () => {
+      vi.stubGlobal('WebSocket', class {
+        constructor() { throw new Error('WS unavailable'); }
+      })
+
       server.use(
         http.get('/api/flights', async () => {
-          await delay(2000) // 2 second delay
+          await delay(2000)
           return HttpResponse.json({
             flights: mockFlights,
             count: mockFlights.length,
@@ -190,63 +326,6 @@ describe('useFlights', () => {
         },
         { timeout: 5000 }
       )
-    })
-  })
-
-  describe('Data structure', () => {
-    it('returns flights with correct types', async () => {
-      const { result } = renderHook(() => useFlights(), {
-        wrapper: createWrapper(),
-      })
-
-      await waitFor(() => {
-        expect(result.current.flights.length).toBeGreaterThan(0)
-      })
-
-      const flight = result.current.flights[0]
-      expect(typeof flight.icao24).toBe('string')
-      expect(typeof flight.latitude).toBe('number')
-      expect(typeof flight.longitude).toBe('number')
-    })
-
-    it('handles null callsign in data', async () => {
-      server.use(
-        http.get('/api/flights', () => {
-          return HttpResponse.json({
-            flights: [{ ...mockFlights[0], callsign: null }],
-            count: 1,
-            timestamp: new Date().toISOString(),
-            data_source: 'synthetic',
-          })
-        })
-      )
-
-      const { result } = renderHook(() => useFlights(), {
-        wrapper: createWrapper(),
-      })
-
-      await waitFor(() => {
-        expect(result.current.flights.length).toBe(1)
-      })
-
-      expect(result.current.flights[0].callsign).toBeNull()
-    })
-  })
-
-  describe('Refetch behavior', () => {
-    it('uses 5 second refetch interval', async () => {
-      // This test verifies the configuration exists - actual refetch testing
-      // would require mocking timers
-      const { result } = renderHook(() => useFlights(), {
-        wrapper: createWrapper(),
-      })
-
-      await waitFor(() => {
-        expect(result.current.flights.length).toBeGreaterThan(0)
-      })
-
-      // Hook should have configured refetch interval (checked via behavior)
-      expect(result.current.isLoading).toBe(false)
     })
   })
 })

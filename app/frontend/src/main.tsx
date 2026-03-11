@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { onCLS, onINP, onLCP, onFCP, onTTFB, Metric } from 'web-vitals'
 import App from './App'
+import 'leaflet/dist/leaflet.css'
 import './index.css'
 
 /**
@@ -25,7 +26,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5000,
-      refetchInterval: 5000,
+      // Flight polling is managed per-hook (WS primary, HTTP fallback).
+      // Other queries (config, baggage, etc.) use their own intervals.
     },
   },
 })

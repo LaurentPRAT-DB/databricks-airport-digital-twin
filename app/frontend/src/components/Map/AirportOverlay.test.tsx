@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from '@testing-library/react'
-import { OSMGate } from '../../types/airportFormats'
+import { OSMGate, OSMTerminal, OSMTaxiway, OSMRunway } from '../../types/airportFormats'
 
 // Mock react-leaflet — must be before importing the component
 vi.mock('react-leaflet', () => ({
@@ -53,10 +53,10 @@ const mockGates: OSMGate[] = [
 
 const mockContextValue = {
   getGates: vi.fn(() => mockGates),
-  getTerminals: vi.fn(() => []),
-  getTaxiways: vi.fn(() => []),
+  getTerminals: vi.fn((): OSMTerminal[] => []),
+  getTaxiways: vi.fn((): OSMTaxiway[] => []),
   getAprons: vi.fn(() => []),
-  getOSMRunways: vi.fn(() => []),
+  getOSMRunways: vi.fn((): OSMRunway[] => []),
 }
 
 vi.mock('../../context/AirportConfigContext', () => ({
@@ -128,7 +128,7 @@ describe('AirportOverlay', () => {
           { latitude: 37.616, longitude: -122.391, altitude: 0 },
           { latitude: 37.616, longitude: -122.392, altitude: 0 },
         ],
-      }])
+      }] as Partial<OSMTerminal>[] as OSMTerminal[])
       const { queryByTestId } = render(<AirportOverlay />)
       expect(queryByTestId('geojson')).not.toBeInTheDocument()
     })
@@ -154,7 +154,7 @@ describe('AirportOverlay', () => {
           { latitude: 37.616, longitude: -122.391, altitude: 0 },
           { latitude: 37.616, longitude: -122.392, altitude: 0 },
         ],
-      }])
+      }] as Partial<OSMTerminal>[] as OSMTerminal[])
       const { getAllByTestId } = render(<AirportOverlay />)
       expect(getAllByTestId('polygon')).toHaveLength(1)
     })
@@ -167,13 +167,13 @@ describe('AirportOverlay', () => {
           { latitude: 37.616, longitude: -122.391, altitude: 0 },
           { latitude: 37.616, longitude: -122.392, altitude: 0 },
         ],
-      }])
+      }] as Partial<OSMTerminal>[] as OSMTerminal[])
       mockContextValue.getTaxiways.mockReturnValue([{
         id: 'tw1', name: 'A', geoPoints: [
           { latitude: 37.615, longitude: -122.391, altitude: 0 },
           { latitude: 37.616, longitude: -122.392, altitude: 0 },
         ],
-      }])
+      }] as Partial<OSMTaxiway>[] as OSMTaxiway[])
       const { getAllByTestId } = render(<AirportOverlay />)
       expect(getAllByTestId('polyline').length).toBeGreaterThanOrEqual(1)
     })
@@ -184,7 +184,7 @@ describe('AirportOverlay', () => {
           { latitude: 37.615, longitude: -122.391, altitude: 0 },
           { latitude: 37.620, longitude: -122.380, altitude: 0 },
         ],
-      }])
+      }] as Partial<OSMRunway>[] as OSMRunway[])
       const { getAllByTestId } = render(<AirportOverlay />)
       expect(getAllByTestId('polyline').length).toBeGreaterThanOrEqual(1)
     })

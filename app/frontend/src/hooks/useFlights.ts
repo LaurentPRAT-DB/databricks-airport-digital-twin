@@ -1,9 +1,10 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Flight, FlightsResponse } from '../types/flight';
 
 async function fetchFlights(): Promise<FlightsResponse> {
   const response = await fetch('/api/flights', {
-    credentials: 'include', // Include auth cookies for Databricks Apps
+    credentials: 'include',
   });
   if (!response.ok) {
     throw new Error(`Failed to fetch flights: ${response.statusText}`);
@@ -19,20 +20,109 @@ export interface UseFlightsResult {
   dataSource: 'live' | 'cached' | 'synthetic' | null;
 }
 
+/** Build the WebSocket URL from the current page origin. */
+function getWsUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/flights`;
+}
+
+interface WsFlightMessage {
+  type: 'initial' | 'flight_update' | 'airport_switch_progress';
+  data: {
+    flights: Flight[];
+    count: number;
+    timestamp: string;
+  };
+}
+
 export function useFlights(): UseFlightsResult {
-  const { data, isLoading, error } = useQuery<FlightsResponse, Error>({
+  const [wsData, setWsData] = useState<FlightsResponse | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectCount = useRef(0);
+  const MAX_RECONNECT = 5;
+
+  const connect = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    try {
+      const ws = new WebSocket(getWsUrl());
+
+      ws.onopen = () => {
+        setWsConnected(true);
+        reconnectCount.current = 0;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg: WsFlightMessage = JSON.parse(event.data);
+          if (msg.type === 'initial' || msg.type === 'flight_update') {
+            setWsData({
+              flights: msg.data.flights,
+              count: msg.data.count,
+              timestamp: msg.data.timestamp,
+              data_source: 'synthetic',
+            });
+          }
+        } catch {
+          // Ignore non-JSON or unexpected messages
+        }
+      };
+
+      ws.onclose = () => {
+        setWsConnected(false);
+        wsRef.current = null;
+        // Reconnect with back-off
+        if (reconnectCount.current < MAX_RECONNECT) {
+          reconnectCount.current += 1;
+          const delay = Math.min(1000 * 2 ** reconnectCount.current, 10000);
+          reconnectTimer.current = setTimeout(connect, delay);
+        }
+      };
+
+      ws.onerror = () => {
+        // onclose will fire after onerror — reconnect handled there
+      };
+
+      wsRef.current = ws;
+    } catch {
+      // WebSocket constructor can throw in some environments
+      setWsConnected(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    connect();
+    return () => {
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (wsRef.current) {
+        wsRef.current.onclose = null; // prevent reconnect on unmount
+        wsRef.current.close();
+      }
+    };
+  }, [connect]);
+
+  // HTTP polling fallback — only active when WebSocket is not connected
+  const { data: httpData, isLoading: httpLoading, error: httpError } = useQuery<FlightsResponse, Error>({
     queryKey: ['flights'],
     queryFn: fetchFlights,
-    refetchInterval: 5000, // Refresh every 5 seconds
-    staleTime: 4000, // Consider data stale after 4 seconds
+    refetchInterval: wsConnected ? false : 5000, // Disable polling when WS is active
+    staleTime: 4000,
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+    enabled: !wsConnected, // Don't fetch at all when WS is providing data
   });
+
+  // Prefer WebSocket data when available
+  const data = wsData ?? httpData;
+  const isLoading = !data && httpLoading;
+  const error = wsConnected ? null : (httpError ?? null);
 
   return {
     flights: data?.flights ?? [],
     isLoading,
-    error: error ?? null,
+    error,
     lastUpdated: data?.timestamp ?? null,
     dataSource: data?.data_source ?? null,
   };

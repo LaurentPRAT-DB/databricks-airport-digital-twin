@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/airport.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Real-time airport digital twin visualization with 2D/3D flight tracking, ML-powered delay predictions, and gate recommendations. Built on Databricks." />
     <meta name="keywords" content="airport, digital twin, flight tracking, Databricks, real-time visualization" />
@@ -12,20 +12,22 @@
     <!-- Preconnect to tile servers for faster map rendering -->
     <link rel="preconnect" href="https://a.tile.openstreetmap.org" crossorigin />
     <link rel="preconnect" href="https://b.tile.openstreetmap.org" crossorigin />
-    <!-- Preconnect to external CDNs -->
-    <link rel="preconnect" href="https://unpkg.com" crossorigin />
-    <!-- DNS prefetch for external resources -->
-    <link rel="dns-prefetch" href="https://unpkg.com" />
-    <!-- Leaflet CSS -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
+    <!-- Leaflet CSS is bundled locally via npm (imported in main.tsx) -->
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Inline loading spinner — replaced by React once JS loads -->
+      <div id="initial-loader" style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;flex-direction:column;gap:12px">
+        <div style="width:40px;height:40px;border:3px solid rgba(255,255,255,0.15);border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite"></div>
+        <span style="color:#94a3b8;font-family:system-ui;font-size:14px">Loading Airport Digital Twin...</span>
+      </div>
+      <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+    </div>
+    <noscript>
+      <div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:#94a3b8;font-family:system-ui;font-size:16px">
+        JavaScript is required to run Airport Digital Twin.
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
     <!-- Register Service Worker for caching -->
     <script>
