@@ -48,6 +48,42 @@ from src.formats.base import ParseError, ValidationError
 
 router = APIRouter(prefix="/api", tags=["flights"])
 
+# Well-known airports with metadata — single source of truth for frontend dropdown
+WELL_KNOWN_AIRPORT_INFO: dict[str, dict] = {
+    # Americas
+    "KSFO": {"iata": "SFO", "name": "San Francisco International", "city": "San Francisco, CA", "region": "Americas"},
+    "KJFK": {"iata": "JFK", "name": "John F. Kennedy International", "city": "New York, NY", "region": "Americas"},
+    "KLAX": {"iata": "LAX", "name": "Los Angeles International", "city": "Los Angeles, CA", "region": "Americas"},
+    "KORD": {"iata": "ORD", "name": "O'Hare International", "city": "Chicago, IL", "region": "Americas"},
+    "KATL": {"iata": "ATL", "name": "Hartsfield-Jackson Atlanta", "city": "Atlanta, GA", "region": "Americas"},
+    "KDFW": {"iata": "DFW", "name": "Dallas/Fort Worth International", "city": "Dallas, TX", "region": "Americas"},
+    "KDEN": {"iata": "DEN", "name": "Denver International", "city": "Denver, CO", "region": "Americas"},
+    "KMIA": {"iata": "MIA", "name": "Miami International", "city": "Miami, FL", "region": "Americas"},
+    "KSEA": {"iata": "SEA", "name": "Seattle-Tacoma International", "city": "Seattle, WA", "region": "Americas"},
+    "SBGR": {"iata": "GRU", "name": "Guarulhos International", "city": "Sao Paulo, BR", "region": "Americas"},
+    "MMMX": {"iata": "MEX", "name": "Mexico City International", "city": "Mexico City, MX", "region": "Americas"},
+    # Europe
+    "EGLL": {"iata": "LHR", "name": "London Heathrow", "city": "London, UK", "region": "Europe"},
+    "LFPG": {"iata": "CDG", "name": "Charles de Gaulle", "city": "Paris, FR", "region": "Europe"},
+    "EHAM": {"iata": "AMS", "name": "Amsterdam Schiphol", "city": "Amsterdam, NL", "region": "Europe"},
+    "EDDF": {"iata": "FRA", "name": "Frankfurt Airport", "city": "Frankfurt, DE", "region": "Europe"},
+    "LEMD": {"iata": "MAD", "name": "Adolfo Suarez Madrid-Barajas", "city": "Madrid, ES", "region": "Europe"},
+    "LIRF": {"iata": "FCO", "name": "Leonardo da Vinci (Fiumicino)", "city": "Rome, IT", "region": "Europe"},
+    # Middle East
+    "OMAA": {"iata": "AUH", "name": "Abu Dhabi International", "city": "Abu Dhabi, AE", "region": "Middle East"},
+    "OMDB": {"iata": "DXB", "name": "Dubai International", "city": "Dubai, AE", "region": "Middle East"},
+    # Asia-Pacific
+    "RJTT": {"iata": "HND", "name": "Tokyo Haneda", "city": "Tokyo, JP", "region": "Asia-Pacific"},
+    "VHHH": {"iata": "HKG", "name": "Hong Kong International", "city": "Hong Kong", "region": "Asia-Pacific"},
+    "WSSS": {"iata": "SIN", "name": "Singapore Changi", "city": "Singapore", "region": "Asia-Pacific"},
+    "ZBAA": {"iata": "PEK", "name": "Beijing Capital International", "city": "Beijing, CN", "region": "Asia-Pacific"},
+    "RKSI": {"iata": "ICN", "name": "Incheon International", "city": "Seoul, KR", "region": "Asia-Pacific"},
+    "VTBS": {"iata": "BKK", "name": "Suvarnabhumi Airport", "city": "Bangkok, TH", "region": "Asia-Pacific"},
+    # Africa
+    "FAOR": {"iata": "JNB", "name": "O.R. Tambo International", "city": "Johannesburg, ZA", "region": "Africa"},
+    "GMMN": {"iata": "CMN", "name": "Mohammed V International", "city": "Casablanca, MA", "region": "Africa"},
+}
+
 
 @router.get("/flights", response_model=FlightListResponse)
 async def get_flights(
@@ -917,3 +953,91 @@ async def delete_airport(icao_code: str) -> dict:
             status_code=500,
             detail=f"Failed to delete airport {icao_code}"
         )
+
+
+# ==============================================================================
+# Airport Pre-load Routes
+# ==============================================================================
+
+@router.get("/airports/preload/status", tags=["airport"])
+async def preload_status() -> dict:
+    """
+    Check which well-known airports are cached in the lakehouse.
+
+    Returns metadata and cache status for all well-known airports.
+    """
+    service = get_airport_config_service()
+    persisted = service.list_persisted_airports()
+    persisted_codes = {a.get("icao_code", a.get("icaoCode", "")).upper() for a in persisted}
+
+    airports = []
+    for icao, info in WELL_KNOWN_AIRPORT_INFO.items():
+        airports.append({
+            "icao": icao,
+            "iata": info["iata"],
+            "name": info["name"],
+            "city": info["city"],
+            "region": info["region"],
+            "cached": icao in persisted_codes,
+        })
+
+    return {"airports": airports}
+
+
+@router.post("/airports/preload", tags=["airport"])
+async def preload_airports(
+    icao_codes: list[str] = Body(default=None, description="ICAO codes to preload. If null, preloads all well-known airports"),
+) -> dict:
+    """
+    Pre-load airports into the lakehouse cache.
+
+    Fetches airport data from OSM for each airport not already cached.
+    Processes sequentially to respect Overpass API rate limits.
+    Broadcasts progress via WebSocket.
+    """
+    from app.backend.api.websocket import broadcaster
+
+    codes = icao_codes if icao_codes else list(WELL_KNOWN_AIRPORT_INFO.keys())
+    service = get_airport_config_service()
+
+    # Determine which are already cached
+    persisted = service.list_persisted_airports()
+    persisted_codes = {a.get("icao_code", a.get("icaoCode", "")).upper() for a in persisted}
+
+    already_cached = [c for c in codes if c.upper() in persisted_codes]
+    to_preload = [c for c in codes if c.upper() not in persisted_codes]
+
+    preloaded = []
+    failed = []
+
+    for i, icao in enumerate(to_preload, 1):
+        await broadcaster.broadcast_progress(
+            i, len(to_preload),
+            f"Pre-loading {icao} ({i}/{len(to_preload)})...",
+            icao,
+        )
+        try:
+            loaded = service.initialize_from_lakehouse(
+                icao_code=icao.upper(),
+                fallback_to_osm=True,
+            )
+            if loaded:
+                preloaded.append(icao.upper())
+            else:
+                failed.append({"icao": icao.upper(), "error": "Load returned false"})
+        except Exception as e:
+            logger.error(f"Failed to preload {icao}: {e}")
+            failed.append({"icao": icao.upper(), "error": str(e)})
+
+    await broadcaster.broadcast_progress(
+        len(to_preload), len(to_preload),
+        "Pre-load complete",
+        "all",
+        done=True,
+    )
+
+    return {
+        "preloaded": preloaded,
+        "already_cached": already_cached,
+        "failed": failed,
+    }

@@ -327,6 +327,48 @@ export const handlers = [
     })
   }),
 
+  // Airport preload status
+  http.get('/api/airports/preload/status', async () => {
+    await delay(20)
+    return HttpResponse.json({
+      airports: [
+        { icao: 'KSFO', iata: 'SFO', name: 'San Francisco International', city: 'San Francisco, CA', region: 'Americas', cached: true },
+        { icao: 'KJFK', iata: 'JFK', name: 'John F. Kennedy International', city: 'New York, NY', region: 'Americas', cached: false },
+        { icao: 'KLAX', iata: 'LAX', name: 'Los Angeles International', city: 'Los Angeles, CA', region: 'Americas', cached: false },
+        { icao: 'KORD', iata: 'ORD', name: "O'Hare International", city: 'Chicago, IL', region: 'Americas', cached: false },
+        { icao: 'KATL', iata: 'ATL', name: 'Hartsfield-Jackson Atlanta', city: 'Atlanta, GA', region: 'Americas', cached: false },
+        { icao: 'KDFW', iata: 'DFW', name: 'Dallas/Fort Worth International', city: 'Dallas, TX', region: 'Americas', cached: false },
+        { icao: 'KDEN', iata: 'DEN', name: 'Denver International', city: 'Denver, CO', region: 'Americas', cached: false },
+        { icao: 'KMIA', iata: 'MIA', name: 'Miami International', city: 'Miami, FL', region: 'Americas', cached: false },
+        { icao: 'KSEA', iata: 'SEA', name: 'Seattle-Tacoma International', city: 'Seattle, WA', region: 'Americas', cached: false },
+        { icao: 'SBGR', iata: 'GRU', name: 'Guarulhos International', city: 'Sao Paulo, BR', region: 'Americas', cached: false },
+        { icao: 'MMMX', iata: 'MEX', name: 'Mexico City International', city: 'Mexico City, MX', region: 'Americas', cached: false },
+        { icao: 'EGLL', iata: 'LHR', name: 'London Heathrow', city: 'London, UK', region: 'Europe', cached: false },
+        { icao: 'LFPG', iata: 'CDG', name: 'Charles de Gaulle', city: 'Paris, FR', region: 'Europe', cached: false },
+        { icao: 'EHAM', iata: 'AMS', name: 'Amsterdam Schiphol', city: 'Amsterdam, NL', region: 'Europe', cached: false },
+        { icao: 'EDDF', iata: 'FRA', name: 'Frankfurt Airport', city: 'Frankfurt, DE', region: 'Europe', cached: false },
+        { icao: 'LEMD', iata: 'MAD', name: 'Adolfo Suarez Madrid-Barajas', city: 'Madrid, ES', region: 'Europe', cached: false },
+        { icao: 'LIRF', iata: 'FCO', name: 'Leonardo da Vinci (Fiumicino)', city: 'Rome, IT', region: 'Europe', cached: false },
+        { icao: 'OMAA', iata: 'AUH', name: 'Abu Dhabi International', city: 'Abu Dhabi, AE', region: 'Middle East', cached: false },
+        { icao: 'OMDB', iata: 'DXB', name: 'Dubai International', city: 'Dubai, AE', region: 'Middle East', cached: false },
+        { icao: 'RJTT', iata: 'HND', name: 'Tokyo Haneda', city: 'Tokyo, JP', region: 'Asia-Pacific', cached: false },
+        { icao: 'VHHH', iata: 'HKG', name: 'Hong Kong International', city: 'Hong Kong', region: 'Asia-Pacific', cached: false },
+        { icao: 'WSSS', iata: 'SIN', name: 'Singapore Changi', city: 'Singapore', region: 'Asia-Pacific', cached: false },
+        { icao: 'ZBAA', iata: 'PEK', name: 'Beijing Capital International', city: 'Beijing, CN', region: 'Asia-Pacific', cached: false },
+        { icao: 'RKSI', iata: 'ICN', name: 'Incheon International', city: 'Seoul, KR', region: 'Asia-Pacific', cached: false },
+        { icao: 'VTBS', iata: 'BKK', name: 'Suvarnabhumi Airport', city: 'Bangkok, TH', region: 'Asia-Pacific', cached: false },
+        { icao: 'FAOR', iata: 'JNB', name: 'O.R. Tambo International', city: 'Johannesburg, ZA', region: 'Africa', cached: false },
+        { icao: 'GMMN', iata: 'CMN', name: 'Mohammed V International', city: 'Casablanca, MA', region: 'Africa', cached: false },
+      ],
+    })
+  }),
+
+  // Airport preload trigger
+  http.post('/api/airports/preload', async () => {
+    await delay(100)
+    return HttpResponse.json({ preloaded: [], already_cached: ['KSFO'], failed: [] })
+  }),
+
   // Airport config endpoint
   http.get('/api/airport/config', async () => {
     await delay(30)

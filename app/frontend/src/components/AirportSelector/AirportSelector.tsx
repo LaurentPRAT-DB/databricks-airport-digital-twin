@@ -2,33 +2,22 @@
  * Airport Selector Component
  *
  * Dropdown for selecting airports by ICAO code.
- * Provides a list of well-known airports and a custom ICAO input.
- * Loads airport data from OpenStreetMap via the backend.
+ * Fetches airport list and cache status from backend.
+ * Groups airports by region with cache status indicators.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
-interface AirportEntry {
+interface AirportInfo {
   icao: string;
   iata: string;
   name: string;
   city: string;
+  region: string;
+  cached: boolean;
 }
 
-const WELL_KNOWN_AIRPORTS: AirportEntry[] = [
-  { icao: 'KSFO', iata: 'SFO', name: 'San Francisco International', city: 'San Francisco, CA' },
-  { icao: 'KJFK', iata: 'JFK', name: 'John F. Kennedy International', city: 'New York, NY' },
-  { icao: 'KLAX', iata: 'LAX', name: 'Los Angeles International', city: 'Los Angeles, CA' },
-  { icao: 'KORD', iata: 'ORD', name: "O'Hare International", city: 'Chicago, IL' },
-  { icao: 'KATL', iata: 'ATL', name: 'Hartsfield-Jackson Atlanta', city: 'Atlanta, GA' },
-  { icao: 'EGLL', iata: 'LHR', name: 'London Heathrow', city: 'London, UK' },
-  { icao: 'LFPG', iata: 'CDG', name: 'Charles de Gaulle', city: 'Paris, France' },
-  { icao: 'OMAA', iata: 'AUH', name: 'Abu Dhabi International', city: 'Abu Dhabi, UAE' },
-  { icao: 'OMDB', iata: 'DXB', name: 'Dubai International', city: 'Dubai, UAE' },
-  { icao: 'RJTT', iata: 'HND', name: 'Tokyo Haneda', city: 'Tokyo, Japan' },
-  { icao: 'VHHH', iata: 'HKG', name: 'Hong Kong International', city: 'Hong Kong' },
-  { icao: 'WSSS', iata: 'SIN', name: 'Singapore Changi', city: 'Singapore' },
-];
+const REGION_ORDER = ['Americas', 'Europe', 'Middle East', 'Asia-Pacific', 'Africa'];
 
 interface AirportSelectorProps {
   currentAirport?: string;
@@ -44,6 +33,8 @@ export default function AirportSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [customIcao, setCustomIcao] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [airports, setAirports] = useState<AirportInfo[]>([]);
+  const [preloading, setPreloading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -56,6 +47,39 @@ export default function AirportSelector({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // AbortController to cancel in-flight fetches on unmount
+  const abortRef = useRef<AbortController | null>(null);
+
+  const fetchCacheStatus = useCallback(async () => {
+    // Cancel any previous in-flight fetch
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const res = await fetch('/api/airports/preload/status', { signal: controller.signal });
+      if (res.ok) {
+        const data = await res.json();
+        if (!controller.signal.aborted) {
+          setAirports(data.airports || []);
+        }
+      }
+    } catch {
+      // Silently fail — abort errors and network errors both land here
+    }
+  }, []);
+
+  // Fetch on mount for button label, then refresh each time dropdown opens
+  useEffect(() => {
+    fetchCacheStatus();
+    return () => { abortRef.current?.abort(); };
+  }, [fetchCacheStatus]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchCacheStatus();
+    }
+  }, [isOpen, fetchCacheStatus]);
 
   const handleSelect = async (icaoCode: string) => {
     if (icaoCode === currentAirport) {
@@ -79,16 +103,47 @@ export default function AirportSelector({
     }
   };
 
+  const handlePreloadAll = async () => {
+    setPreloading(true);
+    try {
+      const res = await fetch('/api/airports/preload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(null),
+      });
+      if (res.ok) {
+        // Refresh cache status after preload
+        await fetchCacheStatus();
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setPreloading(false);
+    }
+  };
+
+  // Group airports by region
+  const groupedAirports = REGION_ORDER.reduce<Record<string, AirportInfo[]>>((acc, region) => {
+    const regionAirports = airports.filter((a) => a.region === region);
+    if (regionAirports.length > 0) {
+      acc[region] = regionAirports;
+    }
+    return acc;
+  }, {});
+
   // Find current airport info
-  const currentInfo = WELL_KNOWN_AIRPORTS.find((a) => a.icao === currentAirport);
+  const currentInfo = airports.find((a) => a.icao === currentAirport);
   const displayName = currentInfo
     ? `${currentInfo.icao} (${currentInfo.iata})`
     : currentAirport || 'Select Airport';
 
+  const cachedCount = airports.filter((a) => a.cached).length;
+  const totalCount = airports.length;
+
   return (
     <div ref={dropdownRef} className="relative">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => { if (!isOpen) setLoadError(null); setIsOpen(!isOpen); }}
         disabled={isLoading}
         className={`
           flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium
@@ -148,34 +203,68 @@ export default function AirportSelector({
             </div>
           )}
 
-          {/* Airport list */}
-          <div className="max-h-64 overflow-y-auto">
-            {WELL_KNOWN_AIRPORTS.map((airport) => (
-              <button
-                key={airport.icao}
-                onClick={() => handleSelect(airport.icao)}
-                className={`
-                  w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors
-                  ${airport.icao === currentAirport ? 'bg-blue-100' : ''}
-                `}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-mono font-bold text-slate-800">{airport.icao}</span>
-                    <span className="ml-1 text-slate-500 text-sm">({airport.iata})</span>
-                  </div>
-                  {airport.icao === currentAirport && (
-                    <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd" />
-                    </svg>
-                  )}
+          {/* Airport list grouped by region */}
+          <div className="max-h-72 overflow-y-auto">
+            {Object.entries(groupedAirports).map(([region, regionAirports]) => (
+              <div key={region}>
+                <div className="px-3 py-1 bg-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0">
+                  {region}
                 </div>
-                <div className="text-sm text-slate-600 truncate">{airport.name}</div>
-                <div className="text-xs text-slate-400">{airport.city}</div>
-              </button>
+                {regionAirports.map((airport) => (
+                  <button
+                    key={airport.icao}
+                    onClick={() => handleSelect(airport.icao)}
+                    className={`
+                      w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors
+                      ${airport.icao === currentAirport ? 'bg-blue-100' : ''}
+                    `}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${airport.cached ? 'bg-green-500' : 'bg-slate-300'}`}
+                          title={airport.cached ? 'Cached (fast switch)' : 'Not cached (will fetch from OSM)'}
+                        />
+                        <span className="font-mono font-bold text-slate-800">{airport.icao}</span>
+                        <span className="text-slate-500 text-sm">({airport.iata})</span>
+                      </div>
+                      {airport.icao === currentAirport && (
+                        <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd"
+                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                            clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="text-sm text-slate-600 truncate ml-4">{airport.name}</div>
+                    <div className="text-xs text-slate-400 ml-4">{airport.city}</div>
+                  </button>
+                ))}
+              </div>
             ))}
+          </div>
+
+          {/* Pre-load all button */}
+          <div className="p-2 border-t border-slate-100 bg-slate-50">
+            <button
+              onClick={handlePreloadAll}
+              disabled={preloading || cachedCount === totalCount}
+              className="w-full px-3 py-1.5 text-xs font-medium rounded transition-colors
+                bg-slate-200 hover:bg-slate-300 text-slate-700
+                disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed
+                flex items-center justify-center gap-2"
+            >
+              {preloading ? (
+                <>
+                  <span className="w-3 h-3 rounded-full border-2 border-slate-400 border-t-transparent animate-spin" />
+                  Pre-loading...
+                </>
+              ) : cachedCount === totalCount && totalCount > 0 ? (
+                <>All {totalCount} airports cached</>
+              ) : (
+                <>Pre-load All ({cachedCount}/{totalCount} cached)</>
+              )}
+            </button>
           </div>
         </div>
       )}

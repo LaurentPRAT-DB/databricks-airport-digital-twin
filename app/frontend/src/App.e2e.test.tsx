@@ -445,7 +445,7 @@ describe('End-to-end user interaction flows', () => {
       await waitForAppReady()
 
       // Find and click the airport selector button
-      const selectorButton = screen.getByTitle(/select airport|san francisco/i)
+      const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
 
       const openTime = await timed(async () => {
         await user.click(selectorButton)
@@ -479,7 +479,7 @@ describe('End-to-end user interaction flows', () => {
       await waitForAppReady()
 
       // Open selector
-      const selectorButton = screen.getByTitle(/select airport|san francisco/i)
+      const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
       await user.click(selectorButton)
 
       await waitFor(() => {
@@ -491,7 +491,7 @@ describe('End-to-end user interaction flows', () => {
       await user.type(icaoInput, 'EDDF')
 
       // Click "Load" button
-      const loadButton = screen.getByRole('button', { name: /load/i })
+      const loadButton = screen.getByRole('button', { name: /^load$/i })
       expect(loadButton).not.toBeDisabled()
 
       await user.click(loadButton)
@@ -507,21 +507,368 @@ describe('End-to-end user interaction flows', () => {
       renderApp()
       await waitForAppReady()
 
-      const selectorButton = screen.getByTitle(/select airport|san francisco/i)
+      const selectorButton = await screen.findByTitle(/select airport|san francisco|KSFO/i, {}, { timeout: 3000 })
+      await user.click(selectorButton)
+
+      const icaoInput = await screen.findByPlaceholderText(/enter icao code/i, {}, { timeout: 3000 })
+
+      // Load button should be disabled with empty input
+      const loadButton = screen.getByRole('button', { name: /^load$/i })
+      expect(loadButton).toBeDisabled()
+
+      // Type only 2 chars — still disabled
+      await user.type(icaoInput, 'KS')
+      expect(loadButton).toBeDisabled()
+    })
+  })
+
+  // =========================================================================
+  // 7b. Airport selector — region grouping, cache status, pre-load
+  // =========================================================================
+  // 7b. Airport Selector — Pre-load, Cache Status & Region Grouping
+  //
+  // Tests the airport selector dropdown after the pre-load/cache feature:
+  //
+  //  #  Test                                            Covers
+  //  ── ─────────────────────────────────────────────── ─────────────────────────
+  //  1  dropdown shows all 5 region headers              Region grouping UI
+  //  2  dropdown lists all 27 well-known airports        Airport count integrity
+  //  3  shows new airports added in this release         15 new airports visible
+  //  4  green dot for cached, gray for uncached          Cache status indicator
+  //  5  cache dots have accessible title attributes      Accessibility / tooltips
+  //  6  Pre-load All button with correct cache count     Button label & state
+  //  7  Pre-load All shows spinner while preloading      Loading UX
+  //  8  Pre-load All disabled when all cached            Completion state
+  //  9  selecting current airport closes w/o reload      No-op selection
+  // 10  current airport shows checkmark icon             Active indicator
+  // 11  custom ICAO submits on Enter key                 Keyboard shortcut
+  // 12  custom ICAO auto-uppercases input                Input normalization
+  // 13  dropdown closes when clicking outside            Dismiss behavior
+  // 14  open/close multiple times renders correctly      State stability
+  // 15  gracefully handles API failure                   Degraded mode
+  //
+  // Backend endpoints exercised:
+  //   GET  /api/airports/preload/status  → airport list + cached boolean
+  //   POST /api/airports/preload         → bulk pre-load trigger
+  //
+  // MSW mock handlers in: src/test/mocks/handlers.ts
+  // =========================================================================
+  describe('Airport selector — regions, cache, and pre-load', () => {
+    /** Helper: open dropdown and wait for airports to load from API.
+     *  Returns the dropdown container for scoped queries via `within()`. */
+    async function openAirportDropdown(user: ReturnType<typeof userEvent.setup>) {
+      const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
+      await user.click(selectorButton)
+      // Then wait for the async fetch to populate the airport list
+      const jfkEl = await screen.findByText(/John F. Kennedy International/, {}, { timeout: 5000 })
+      // Return the dropdown panel (the absolute-positioned div)
+      return jfkEl.closest('.absolute')! as HTMLElement
+    }
+
+    it('dropdown shows all 5 region headers', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const dropdown = await openAirportDropdown(user)
+
+      // All 5 regions should appear as section headers (CSS uppercase, DOM mixed-case)
+      expect(within(dropdown).getByText('Americas')).toBeInTheDocument()
+      expect(within(dropdown).getByText('Europe')).toBeInTheDocument()
+      expect(within(dropdown).getByText('Middle East')).toBeInTheDocument()
+      expect(within(dropdown).getByText('Asia-Pacific')).toBeInTheDocument()
+      expect(within(dropdown).getByText('Africa')).toBeInTheDocument()
+    })
+
+    it('dropdown lists all 27 well-known airports', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const dropdown = await openAirportDropdown(user)
+
+      // Each airport has a cache status dot with a title attribute
+      const cachedDots = within(dropdown).getAllByTitle('Cached (fast switch)')
+      const uncachedDots = within(dropdown).getAllByTitle('Not cached (will fetch from OSM)')
+      expect(cachedDots.length + uncachedDots.length).toBe(27)
+    })
+
+    it('shows new airports added in this release', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      await openAirportDropdown(user)
+
+      // Americas additions
+      expect(screen.getByText(/Dallas\/Fort Worth International/)).toBeInTheDocument()
+      expect(screen.getByText(/Denver International/)).toBeInTheDocument()
+      expect(screen.getByText(/Miami International/)).toBeInTheDocument()
+      expect(screen.getByText(/Seattle-Tacoma International/)).toBeInTheDocument()
+      expect(screen.getByText(/Guarulhos International/)).toBeInTheDocument()
+      expect(screen.getByText(/Mexico City International/)).toBeInTheDocument()
+
+      // Europe additions
+      expect(screen.getByText(/Amsterdam Schiphol/)).toBeInTheDocument()
+      expect(screen.getByText(/Frankfurt Airport/)).toBeInTheDocument()
+      expect(screen.getByText(/Madrid-Barajas/)).toBeInTheDocument()
+      expect(screen.getByText(/Fiumicino/)).toBeInTheDocument()
+
+      // Asia-Pacific additions
+      expect(screen.getByText(/Beijing Capital International/)).toBeInTheDocument()
+      expect(screen.getByText(/Incheon International/)).toBeInTheDocument()
+      expect(screen.getByText(/Suvarnabhumi Airport/)).toBeInTheDocument()
+
+      // Africa additions
+      expect(screen.getByText(/O\.R\. Tambo International/)).toBeInTheDocument()
+      expect(screen.getByText(/Mohammed V International/)).toBeInTheDocument()
+    })
+
+    it('shows green cache dot for KSFO (cached) and gray for uncached airports', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const dropdown = await openAirportDropdown(user)
+
+      // KSFO is cached in mock data — its row should have a green dot
+      const ksfoButton = within(dropdown).getByText('KSFO').closest('button')!
+      const greenDot = ksfoButton.querySelector('.bg-green-500')
+      expect(greenDot).toBeInTheDocument()
+
+      // KJFK is not cached — its row should have a gray dot
+      const kjfkButton = within(dropdown).getByText('KJFK').closest('button')!
+      const grayDot = kjfkButton.querySelector('.bg-slate-300')
+      expect(grayDot).toBeInTheDocument()
+    })
+
+    it('cache status dots have accessible title attributes', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const dropdown = await openAirportDropdown(user)
+
+      // Cached airport dot should explain fast switch
+      expect(within(dropdown).getByTitle('Cached (fast switch)')).toBeInTheDocument()
+
+      // Uncached airports should explain OSM fetch
+      const osmTitles = within(dropdown).getAllByTitle('Not cached (will fetch from OSM)')
+      expect(osmTitles.length).toBe(26) // 27 total minus 1 cached
+    })
+
+    it('shows Pre-load All button with correct cache count', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const dropdown = await openAirportDropdown(user)
+
+      // Pre-load button shows count: 1 cached out of 27
+      const preloadButton = within(dropdown).getByRole('button', { name: /pre-load all/i })
+      expect(preloadButton).toBeInTheDocument()
+      expect(preloadButton).toHaveTextContent('1/27 cached')
+      expect(preloadButton).not.toBeDisabled()
+    })
+
+    it('Pre-load All button shows spinner while preloading', async () => {
+      // Use a slow handler so we can observe the loading state
+      const { server } = await import('./test/mocks/server')
+      const { http, HttpResponse, delay } = await import('msw')
+      server.use(
+        http.post('/api/airports/preload', async () => {
+          await delay(300)
+          return HttpResponse.json({ preloaded: [], already_cached: ['KSFO'], failed: [] })
+        }),
+      )
+
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const dropdown = await openAirportDropdown(user)
+
+      const preloadButton = within(dropdown).getByRole('button', { name: /pre-load all/i })
+      await user.click(preloadButton)
+
+      // Should show "Pre-loading..." while in progress
+      await waitFor(() => {
+        expect(screen.getByText(/pre-loading\.\.\./i)).toBeInTheDocument()
+      })
+
+      // Button should be disabled during preload
+      const preloadingButton = screen.getByRole('button', { name: /pre-loading/i })
+      expect(preloadingButton).toBeDisabled()
+
+      // Wait for preload to finish AND the subsequent cache status refresh to settle
+      await waitFor(
+        () => {
+          // Button should revert to showing the Pre-load All text
+          expect(screen.getByRole('button', { name: /pre-load all/i })).toBeInTheDocument()
+        },
+        { timeout: 5000 },
+      )
+    })
+
+    it('Pre-load All button disabled when all airports are cached', async () => {
+      // Override handler to return all airports as cached
+      const { server } = await import('./test/mocks/server')
+      const { http, HttpResponse } = await import('msw')
+      server.use(
+        http.get('/api/airports/preload/status', async () => {
+          return HttpResponse.json({
+            airports: [
+              { icao: 'KSFO', iata: 'SFO', name: 'San Francisco International', city: 'San Francisco, CA', region: 'Americas', cached: true },
+              { icao: 'KJFK', iata: 'JFK', name: 'John F. Kennedy International', city: 'New York, NY', region: 'Americas', cached: true },
+            ],
+          })
+        }),
+      )
+
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
+      await user.click(selectorButton)
+
+      await waitFor(() => {
+        expect(screen.getByText(/all 2 airports cached/i)).toBeInTheDocument()
+      })
+
+      const preloadButton = screen.getByRole('button', { name: /all 2 airports cached/i })
+      expect(preloadButton).toBeDisabled()
+    })
+
+    it('selecting the current airport just closes dropdown without triggering load', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const dropdown = await openAirportDropdown(user)
+
+      // KSFO should be highlighted as current
+      const ksfoButton = within(dropdown).getByText('KSFO').closest('button')!
+      expect(ksfoButton).toHaveClass('bg-blue-100')
+
+      // Click it — dropdown should close without triggering activate
+      await user.click(ksfoButton)
+      await waitFor(() => {
+        expect(screen.queryByText('Americas')).not.toBeInTheDocument()
+      })
+    })
+
+    it('current airport shows checkmark icon', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const dropdown = await openAirportDropdown(user)
+
+      // KSFO row should contain a checkmark SVG (the only airport button with an SVG)
+      const ksfoButton = within(dropdown).getByText('KSFO').closest('button')!
+      const checkmark = ksfoButton.querySelector('svg')
+      expect(checkmark).toBeInTheDocument()
+    })
+
+    it('custom ICAO input submits on Enter key', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
+      await user.click(selectorButton)
+
+      await waitFor(
+        () => {
+          expect(screen.getByPlaceholderText(/enter icao code/i)).toBeInTheDocument()
+        },
+        { timeout: 3000 },
+      )
+
+      const icaoInput = screen.getByPlaceholderText(/enter icao code/i)
+      await user.type(icaoInput, 'RJAA{Enter}')
+
+      // Dropdown should close after Enter submission
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText(/enter icao code/i)).not.toBeInTheDocument()
+      })
+    })
+
+    it('custom ICAO input auto-uppercases user input', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
       await user.click(selectorButton)
 
       await waitFor(() => {
         expect(screen.getByPlaceholderText(/enter icao code/i)).toBeInTheDocument()
       })
 
-      // Load button should be disabled with empty input
-      const loadButton = screen.getByRole('button', { name: /load/i })
-      expect(loadButton).toBeDisabled()
-
-      // Type only 2 chars — still disabled
       const icaoInput = screen.getByPlaceholderText(/enter icao code/i)
-      await user.type(icaoInput, 'KS')
-      expect(loadButton).toBeDisabled()
+      await user.type(icaoInput, 'ksfo')
+
+      // Input value should be uppercased
+      expect(icaoInput).toHaveValue('KSFO')
+    })
+
+    it('dropdown closes when clicking outside', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      await openAirportDropdown(user)
+
+      // Click on the main area (outside dropdown)
+      await user.click(document.body)
+
+      await waitFor(() => {
+        expect(screen.queryByText('Americas')).not.toBeInTheDocument()
+      })
+    })
+
+    it('opening and closing dropdown multiple times renders correctly', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
+
+      // Open — wait for airports to load
+      await user.click(selectorButton)
+      await screen.findByText(/John F. Kennedy International/, {}, { timeout: 5000 })
+
+      // Close via toggle
+      await user.click(selectorButton)
+      await waitFor(() => {
+        expect(screen.queryByText(/John F. Kennedy International/)).not.toBeInTheDocument()
+      })
+
+      // Open again — airports should reload from cache or re-fetch
+      await user.click(selectorButton)
+      await screen.findByText(/John F. Kennedy International/, {}, { timeout: 5000 })
+    })
+
+    it('dropdown gracefully handles preload status API failure', async () => {
+      const { server } = await import('./test/mocks/server')
+      const { http, HttpResponse } = await import('msw')
+      server.use(
+        http.get('/api/airports/preload/status', async () => {
+          return HttpResponse.json({ error: 'Server error' }, { status: 500 })
+        }),
+      )
+
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const selectorButton = await screen.findByTitle(/select airport|san francisco|KSFO/i, {}, { timeout: 3000 })
+      await user.click(selectorButton)
+
+      // Custom ICAO input should still work even if airport list fails
+      await screen.findByPlaceholderText(/enter icao code/i, {}, { timeout: 3000 })
     })
   })
 
