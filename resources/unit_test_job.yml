@@ -9,7 +9,7 @@ resources:
           spec:
             client: "1"
             dependencies:
-              - requirements.txt
+              - ../requirements.txt
 
       tasks:
         - task_key: run_pytest
