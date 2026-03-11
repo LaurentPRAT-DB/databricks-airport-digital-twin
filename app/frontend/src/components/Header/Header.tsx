@@ -23,6 +23,12 @@ export default function Header({ onShowFIDS }: HeaderProps) {
       )}
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-bold">Airport Digital Twin</h1>
+        <span
+          className="text-xs text-slate-500"
+          title={`Built ${__BUILD_TIME__}`}
+        >
+          v{__APP_VERSION__} · {__BUILD_HASH__}
+        </span>
 
         {/* Airport Selector */}
         <AirportSelector

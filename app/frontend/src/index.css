@@ -63,6 +63,23 @@ html, body, #root {
   pointer-events: none;
 }
 
+/* Compact permanent labels for gate markers on the 2D map */
+.leaflet-tooltip.gate-label {
+  background: rgba(0, 0, 0, 0.75);
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 14px;
+  box-shadow: none;
+}
+.leaflet-tooltip.gate-label::before {
+  display: none;
+}
+
 /* Promote spinner to GPU layer to prevent non-composited layout shifts (CLS fix) */
 .animate-spin {
   will-change: transform;

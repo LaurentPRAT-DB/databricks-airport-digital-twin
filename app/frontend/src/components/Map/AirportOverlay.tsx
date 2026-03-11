@@ -1,9 +1,28 @@
-import { GeoJSON, CircleMarker, Tooltip, Polygon, Polyline } from 'react-leaflet';
+import { useState } from 'react';
+import { GeoJSON, CircleMarker, Tooltip, Polygon, Polyline, useMapEvents } from 'react-leaflet';
 import { PathOptions, LatLngExpression } from 'leaflet';
 import { Feature, Geometry } from 'geojson';
 import { airportLayout, getFeaturesByType } from '../../constants/airportLayout';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { GeoPosition } from '../../types/airportFormats';
+
+// Zoom thresholds for gate rendering (exported for testing)
+export const GATE_LABEL_ZOOM = 16; // Show permanent text labels at this zoom and above
+const GATE_DOT_RADIUS_BY_ZOOM: Record<number, number> = {
+  12: 2,
+  13: 2,
+  14: 3,
+  15: 4,
+  16: 5,
+  17: 6,
+  18: 7,
+};
+
+export function getGateDotRadius(zoom: number): number {
+  if (zoom <= 12) return 2;
+  if (zoom >= 18) return 7;
+  return GATE_DOT_RADIUS_BY_ZOOM[zoom] ?? 3;
+}
 
 // Style function for different feature types
 function getFeatureStyle(feature: Feature<Geometry> | undefined): PathOptions {
@@ -68,6 +87,14 @@ function geoToLatLng(geoPoints: GeoPosition[] | undefined): LatLngExpression[] {
 
 export default function AirportOverlay() {
   const { getGates, getTerminals, getTaxiways, getAprons, getOSMRunways } = useAirportConfigContext();
+  const [zoom, setZoom] = useState(14);
+  useMapEvents({
+    zoomend: (e) => setZoom(e.target.getZoom()),
+    zoom: (e) => setZoom(e.target.getZoom()),
+  });
+  const showGateLabels = zoom >= GATE_LABEL_ZOOM;
+  const gateDotRadius = getGateDotRadius(zoom);
+
   const osmGates = getGates();
   const osmTerminals = getTerminals();
   const osmTaxiways = getTaxiways();
@@ -189,42 +216,62 @@ export default function AirportOverlay() {
       })}
 
       {/* Render OSM gates as circle markers (preferred) - top layer so labels are visible */}
-      {useOsmGates && osmGates.map((gate) => (
-        <CircleMarker
-          key={gate.id}
-          center={[Number(gate.geo.latitude), Number(gate.geo.longitude)]}
-          radius={6}
-          pathOptions={{
-            fillColor: '#10b981', // emerald-500
-            fillOpacity: 0.8,
-            color: '#059669', // emerald-600
-            weight: 2,
-          }}
-        >
-          <Tooltip direction="top" offset={[0, -5]}>
-            Gate {gate.ref || gate.name || gate.id}
-          </Tooltip>
-        </CircleMarker>
-      ))}
+      {useOsmGates && osmGates.map((gate) => {
+        const label = gate.ref || gate.name || gate.id;
+        return (
+          <CircleMarker
+            key={gate.id}
+            center={[Number(gate.geo.latitude), Number(gate.geo.longitude)]}
+            radius={gateDotRadius}
+            pathOptions={{
+              fillColor: '#10b981', // emerald-500
+              fillOpacity: 0.9,
+              color: '#059669', // emerald-600
+              weight: 1,
+            }}
+          >
+            {showGateLabels ? (
+              <Tooltip permanent direction="top" offset={[0, -4]}
+                className="gate-label"
+              >
+                {label}
+              </Tooltip>
+            ) : (
+              <Tooltip direction="top" offset={[0, -4]}>
+                Gate {label}
+              </Tooltip>
+            )}
+          </CircleMarker>
+        );
+      })}
 
       {/* Fallback: Render hardcoded gates as circle markers */}
       {!useOsmGates && hardcodedGates.map((gate) => {
         const coords = (gate.geometry as GeoJSON.Point).coordinates;
+        const label = gate.properties?.name;
         return (
           <CircleMarker
-            key={gate.properties?.name}
+            key={label}
             center={[coords[1], coords[0]]}
-            radius={6}
+            radius={gateDotRadius}
             pathOptions={{
               fillColor: '#10b981', // emerald-500
-              fillOpacity: 0.8,
+              fillOpacity: 0.9,
               color: '#059669', // emerald-600
-              weight: 2,
+              weight: 1,
             }}
           >
-            <Tooltip direction="top" offset={[0, -5]}>
-              Gate {gate.properties?.name}
-            </Tooltip>
+            {showGateLabels ? (
+              <Tooltip permanent direction="top" offset={[0, -4]}
+                className="gate-label"
+              >
+                {label}
+              </Tooltip>
+            ) : (
+              <Tooltip direction="top" offset={[0, -4]}>
+                Gate {label}
+              </Tooltip>
+            )}
           </CircleMarker>
         );
       })}

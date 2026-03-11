@@ -20,6 +20,19 @@ describe('Header', () => {
       const title = screen.getByRole('heading', { level: 1 })
       expect(title).toHaveTextContent(/airport digital twin/i)
     })
+
+    it('displays version and build hash', () => {
+      render(<Header />)
+      // vitest.config.ts defines __APP_VERSION__ = '0.0.0-test' and __BUILD_HASH__ = 'test'
+      expect(screen.getByText(/v0\.0\.0-test/)).toBeInTheDocument()
+      expect(screen.getByText(/test/)).toBeInTheDocument()
+    })
+
+    it('shows build time in title tooltip', () => {
+      render(<Header />)
+      const versionEl = screen.getByTitle(/Built 2026/)
+      expect(versionEl).toBeInTheDocument()
+    })
   })
 
   describe('Flight count', () => {

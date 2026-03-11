@@ -3,6 +3,11 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify('0.0.0-test'),
+    __BUILD_HASH__: JSON.stringify('test'),
+    __BUILD_TIME__: JSON.stringify('2026-01-01T00:00:00.000Z'),
+  },
   plugins: [react()],
   test: {
     globals: true,
