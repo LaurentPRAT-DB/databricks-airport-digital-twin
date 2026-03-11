@@ -117,7 +117,7 @@ export function Map3D({
   airportCenter: airportCenterProp,
 }: Map3DProps) {
   const { lighting } = AIRPORT_3D_CONFIG;
-  const { getTerminals, getAirportCenter, getTaxiways: getOSMTaxiwaysHook, getAprons, getOSMRunways } = useAirportConfig();
+  const { isLoading, switchProgress, getTerminals, getAirportCenter, getTaxiways: getOSMTaxiwaysHook, getAprons, getOSMRunways } = useAirportConfig();
   const terminals = getTerminals();
   const airportCenter = airportCenterProp ?? getAirportCenter();
   const osmTaxiways = getOSMTaxiwaysHook();
@@ -220,7 +220,7 @@ export function Map3D({
   }, [terminals, osmRunways, osmTaxiways, osmAprons, airportCenter?.lat, airportCenter?.lon, sharedViewport]);
 
   return (
-    <div className={className} style={{ width: '100%', height: '100%' }}>
+    <div className={`relative ${className || ''}`} style={{ width: '100%', height: '100%' }}>
       <Canvas
         shadows={{ type: THREE.PCFShadowMap }}
         gl={{ antialias: true }}
@@ -285,6 +285,26 @@ export function Map3D({
           target={cameraTarget}
         />
       </Canvas>
+
+      {/* Loading overlay during airport switch */}
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
+          <div className="flex flex-col items-center gap-3 bg-slate-800/90 rounded-xl px-8 py-6 shadow-2xl">
+            <div className="w-10 h-10 rounded-full border-4 border-blue-400 border-t-transparent animate-spin" />
+            <span className="text-white text-sm font-medium">
+              {switchProgress?.message || 'Loading airport...'}
+            </span>
+            {switchProgress && !switchProgress.done && (
+              <div className="w-48 h-1.5 bg-slate-600 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-400 rounded-full transition-all duration-300"
+                  style={{ width: `${(switchProgress.step / switchProgress.total) * 100}%` }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -438,14 +438,19 @@ _RWY_10R_LON = -122.393105
 APPROACH_WAYPOINTS = [
     # Initial approach fix - 15 NM east of threshold, over San Pablo Bay
     (-122.10, 37.58, 6000),
+    (-122.15, 37.588, 5000),
     # Intermediate fix - 10 NM from threshold
     (-122.20, 37.595, 4000),
+    (-122.24, 37.600, 3200),
     # Final approach fix - 5 NM from threshold
     (-122.28, 37.605, 2500),
+    (-122.30, 37.607, 1800),
     # Glideslope intercept - 3 NM from threshold
     (-122.32, 37.608, 1000),
+    (-122.333, 37.609, 650),
     # Short final - 1 NM from threshold
     (-122.345, 37.610, 300),
+    (-122.352, 37.6109, 150),
     # Runway 28L threshold (touchdown zone)
     (_RWY_28L_LON, _RWY_28L_LAT, 15),
 ]
@@ -473,43 +478,98 @@ DEPARTURE_WAYPOINTS = [
 ]
 
 
-def _get_approach_waypoints() -> list:
+def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     """Get approach waypoints relative to current airport center.
 
-    For SFO, returns the static APPROACH_WAYPOINTS.
-    For other airports, generates generic approach from the east.
+    When *origin_iata* is provided the approach starts from the bearing of that
+    airport, so a flight from SEA appears from the north, one from LAX from the
+    south, etc.  When origin is ``None`` the legacy behaviour is preserved:
+    SFO returns the static APPROACH_WAYPOINTS, other airports get a generic
+    approach from the east.
     """
     center = get_airport_center()
-    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01 and abs(center[1] - AIRPORT_CENTER[1]) < 0.01:
-        return APPROACH_WAYPOINTS
     lat, lon = center
-    return [
-        (lon + 0.25, lat - 0.04, 6000),
-        (lon + 0.17, lat - 0.025, 4000),
-        (lon + 0.10, lat - 0.015, 2500),
-        (lon + 0.05, lat - 0.01, 1000),
-        (lon + 0.02, lat - 0.005, 300),
-        (lon, lat, 15),
-    ]
+
+    # SFO backward-compat: no origin → static waypoints
+    if origin_iata is None:
+        if abs(lat - AIRPORT_CENTER[0]) < 0.01 and abs(lon - AIRPORT_CENTER[1]) < 0.01:
+            return APPROACH_WAYPOINTS
+        # Non-SFO, no origin: default from east (bearing 90)
+        entry_dir = 90.0
+    else:
+        # Direction from airport center to the entry point (where aircraft spawns)
+        bearing_to_apt = _bearing_from_airport(origin_iata)
+        entry_dir = (bearing_to_apt + 180) % 360
+
+    # Distances from center (degrees) and altitudes for 11 waypoints
+    distances = [0.25, 0.21, 0.17, 0.135, 0.10, 0.075, 0.05, 0.035, 0.02, 0.01, 0.0]
+    altitudes = [6000, 5000, 4000, 3200, 2500, 1800, 1000, 650, 300, 150, 15]
+
+    waypoints = []
+    for dist, alt in zip(distances, altitudes):
+        if dist == 0.0:
+            waypoints.append((lon, lat, alt))
+        else:
+            pt = _point_on_circle(lat, lon, entry_dir, dist)
+            waypoints.append((pt[1], pt[0], alt))  # (lon, lat, alt)
+    return waypoints
 
 
-def _get_departure_waypoints() -> list:
+def _get_runway_heading() -> float:
+    """Compute the runway landing heading from the last two approach waypoints.
+
+    This derives the heading dynamically so it works for any airport,
+    not just SFO's runway 28L (284°).
+    """
+    wps = _get_approach_waypoints()
+    if len(wps) < 2:
+        return 0.0
+    # Second-to-last → last waypoint gives the final approach heading
+    wp_prev = wps[-2]
+    wp_last = wps[-1]
+    return _calculate_heading((wp_prev[1], wp_prev[0]), (wp_last[1], wp_last[0]))
+
+
+def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
     """Get departure waypoints relative to current airport center.
 
-    For SFO, returns the static DEPARTURE_WAYPOINTS.
-    For other airports, generates generic departure to the east.
+    When *destination_iata* is provided the departure curves toward that
+    airport's bearing so the trajectory visually heads in the right direction.
+    When destination is ``None`` the legacy behaviour is preserved: SFO returns
+    the static DEPARTURE_WAYPOINTS, other airports get a generic departure
+    toward the east.
     """
     center = get_airport_center()
-    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01 and abs(center[1] - AIRPORT_CENTER[1]) < 0.01:
-        return DEPARTURE_WAYPOINTS
     lat, lon = center
-    return [
-        (lon + 0.02, lat, 500),
-        (lon + 0.05, lat - 0.01, 2000),
-        (lon + 0.10, lat - 0.02, 4000),
-        (lon + 0.17, lat - 0.03, 8000),
-        (lon + 0.25, lat - 0.04, 12000),
-    ]
+
+    # SFO backward-compat
+    if destination_iata is None:
+        if abs(lat - AIRPORT_CENTER[0]) < 0.01 and abs(lon - AIRPORT_CENTER[1]) < 0.01:
+            return DEPARTURE_WAYPOINTS
+        exit_dir = 90.0
+    else:
+        exit_dir = _bearing_to_airport(destination_iata)
+
+    # Runway heading for initial climb (first 2 waypoints follow runway)
+    rwy_heading = _get_runway_heading()
+
+    # Distances and altitudes for 9 departure waypoints
+    distances = [0.02, 0.035, 0.05, 0.075, 0.10, 0.135, 0.17, 0.21, 0.25]
+    altitudes = [500, 1200, 2000, 3000, 4000, 6000, 8000, 10000, 12000]
+
+    waypoints = []
+    for i, (dist, alt) in enumerate(zip(distances, altitudes)):
+        # Blend from runway heading to destination bearing over the first 4 waypoints
+        if i < 2:
+            bearing = rwy_heading
+        elif i < 5:
+            blend = (i - 2) / 3.0  # 0.0 → 1.0 over waypoints 2-4
+            bearing = rwy_heading + _shortest_angle_diff(rwy_heading, exit_dir) * blend
+        else:
+            bearing = exit_dir
+        pt = _point_on_circle(lat, lon, bearing, dist)
+        waypoints.append((pt[1], pt[0], alt))  # (lon, lat, alt)
+    return waypoints
 
 
 def _get_runway_threshold() -> tuple:
@@ -719,12 +779,21 @@ def _distance_nm(pos1: tuple, pos2: tuple) -> float:
     return deg_dist / NM_TO_DEG
 
 def _find_aircraft_ahead_on_approach(state: FlightState) -> Optional[FlightState]:
-    """Find the aircraft directly ahead on the approach path."""
+    """Find the aircraft directly ahead on the approach path.
+
+    "Ahead" means closer to the airport center (further along the approach).
+    Uses distance-from-center so it works regardless of approach bearing.
+    """
     if state.phase not in [FlightPhase.APPROACHING, FlightPhase.LANDING]:
         return None
 
+    center = get_airport_center()
+    state_dist_to_center = _distance_between(
+        (state.latitude, state.longitude), center
+    )
+
     closest_ahead = None
-    closest_dist = float('inf')
+    closest_gap = float('inf')
 
     for icao24, other in _flight_states.items():
         if icao24 == state.icao24:
@@ -732,34 +801,39 @@ def _find_aircraft_ahead_on_approach(state: FlightState) -> Optional[FlightState
         if other.phase not in [FlightPhase.APPROACHING, FlightPhase.LANDING]:
             continue
 
-        # Check if other aircraft is ahead (further along approach = lower longitude toward runway)
-        if other.longitude < state.longitude:  # Closer to runway (west)
-            dist = _distance_between(
+        other_dist_to_center = _distance_between(
+            (other.latitude, other.longitude), center
+        )
+        # Other is ahead if it is closer to the airport
+        if other_dist_to_center < state_dist_to_center:
+            gap = _distance_between(
                 (state.latitude, state.longitude),
                 (other.latitude, other.longitude)
             )
-            if dist < closest_dist:
-                closest_dist = dist
+            if gap < closest_gap:
+                closest_gap = gap
                 closest_ahead = other
 
     return closest_ahead
 
 
 def _find_last_aircraft_on_approach() -> Optional[FlightState]:
-    """Find the aircraft furthest back in the approach queue (highest longitude).
+    """Find the aircraft furthest back in the approach queue.
 
-    This is used when spawning new aircraft to ensure proper separation.
+    "Furthest back" means the greatest distance from the airport center.
+    Uses distance-from-center so it works regardless of approach bearing.
     """
+    center = get_airport_center()
     last_aircraft = None
-    max_longitude = -float('inf')
+    max_dist = -1.0
 
     for icao24, state in _flight_states.items():
         if state.phase not in [FlightPhase.APPROACHING, FlightPhase.LANDING]:
             continue
 
-        # Aircraft furthest from runway (highest longitude = furthest east)
-        if state.longitude > max_longitude:
-            max_longitude = state.longitude
+        dist = _distance_between((state.latitude, state.longitude), center)
+        if dist > max_dist:
+            max_dist = dist
             last_aircraft = state
 
     return last_aircraft
@@ -848,14 +922,20 @@ def _get_approach_queue_position(icao24: str) -> int:
     """Get position in approach queue (0 = first/next to land)."""
     queue = [s for s in _flight_states.values()
              if s.phase in [FlightPhase.APPROACHING, FlightPhase.LANDING]]
-    # Sort by distance to runway (closest first)
-    runway_pos = (RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0])
-    queue.sort(key=lambda s: _distance_between((s.latitude, s.longitude), runway_pos))
+    # Sort by distance to airport center (closest first)
+    center = get_airport_center()
+    queue.sort(key=lambda s: _distance_between((s.latitude, s.longitude), center))
 
     for i, s in enumerate(queue):
         if s.icao24 == icao24:
             return i
     return len(queue)
+
+
+def _shortest_angle_diff(from_deg: float, to_deg: float) -> float:
+    """Signed shortest rotation from *from_deg* to *to_deg* (both 0-360)."""
+    diff = (to_deg - from_deg + 180) % 360 - 180
+    return diff
 
 
 def _calculate_heading(from_pos: tuple, to_pos: tuple) -> float:
@@ -1053,8 +1133,9 @@ def _create_new_flight(
     aircraft_type = _get_aircraft_type_for_airline(callsign, is_international=is_intl)
 
     if phase == FlightPhase.APPROACHING:
-        # Start on approach from the east WITH PROPER WAKE TURBULENCE SEPARATION
-        base_wp = _get_approach_waypoints()[0]
+        # Start on approach from the origin direction WITH PROPER WAKE TURBULENCE SEPARATION
+        base_wp = _get_approach_waypoints(origin)[0]
+        center = get_airport_center()
 
         # Find how many aircraft are already approaching
         approaching_count = _count_aircraft_in_phase(FlightPhase.APPROACHING)
@@ -1081,9 +1162,16 @@ def _create_new_flight(
             )
             required_sep_deg *= 1.2
 
-            # Position new aircraft behind the last one (higher longitude = further east)
-            lat = last_aircraft.latitude + random.uniform(-0.005, 0.005)
-            lon = last_aircraft.longitude + required_sep_deg
+            # Position new aircraft behind the last one (further from airport center)
+            dir_from_center = _calculate_heading(
+                center, (last_aircraft.latitude, last_aircraft.longitude)
+            )
+            new_pos = _point_on_circle(
+                last_aircraft.latitude, last_aircraft.longitude,
+                dir_from_center, required_sep_deg
+            )
+            lat = new_pos[0] + random.uniform(-0.005, 0.005)
+            lon = new_pos[1]
             alt = last_aircraft.altitude + 500
 
         return FlightState(
@@ -1093,7 +1181,7 @@ def _create_new_flight(
             longitude=lon,
             altitude=alt + random.uniform(-200, 200),
             velocity=180 + random.uniform(-10, 10),
-            heading=_calculate_heading((lat, lon), (RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0])),
+            heading=_calculate_heading((lat, lon), center),
             vertical_rate=-800,
             on_ground=False,
             phase=phase,
@@ -1956,7 +2044,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     # Touchdown zone is at the runway 28L threshold
 
     points = []
-    num_points = min(limit, 40)
+    num_points = min(limit, 80)
     now = datetime.now(timezone.utc)
     interval_seconds = (minutes * 60) / num_points
 
@@ -1968,18 +2056,26 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
     if is_on_ground:
         # Aircraft is on ground - show approach + landing + taxi trajectory
-        # Divide trajectory: 60% approach, 10% landing roll, 30% taxi
+        # Divide trajectory: 55% approach, 10% landing roll, 35% taxi
+
+        # Landing roll direction along actual runway heading (derived from approach waypoints)
+        _rwy_heading = _get_runway_heading()
+        _rwy_heading_rad = math.radians(_rwy_heading)
+        _roll_distance = 0.012  # ~1.3 km roll in degrees
+        roll_dlat = _roll_distance * math.cos(_rwy_heading_rad)
+        roll_dlon = _roll_distance * math.sin(_rwy_heading_rad) / math.cos(math.radians(runway_28l_lat))
 
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
-            if progress < 0.60:
+            if progress < 0.55:
                 # APPROACH PHASE: Following ILS glideslope
-                approach_progress = progress / 0.60  # 0 to 1
+                approach_progress = progress / 0.55  # 0 to 1
 
                 # Interpolate along the approach waypoints
                 # Start from initial approach fix, end at threshold
-                _traj_app_wps = _get_approach_waypoints()
+                _origin_airport = current_state.origin_airport if current_state else None
+                _traj_app_wps = _get_approach_waypoints(_origin_airport)
                 wp_count = len(_traj_app_wps)
                 wp_progress = approach_progress * (wp_count - 1)
                 wp_idx = int(wp_progress)
@@ -2004,27 +2100,27 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 velocity = 180 - approach_progress * 50  # Slow from 180 to 130 kts
                 vertical_rate = -700 if alt > 100 else -300
 
-            elif progress < 0.70:
+            elif progress < 0.65:
                 # LANDING ROLL: Decelerating on runway
-                roll_progress = (progress - 0.60) / 0.10
+                roll_progress = (progress - 0.55) / 0.10
 
-                # Move along runway 28L from threshold toward high-speed exit
-                lat = runway_28l_lat + roll_progress * 0.004  # Move north-ish
-                lon = runway_28l_lon - roll_progress * 0.012  # Move west on runway
+                # Move along runway heading
+                lat = runway_28l_lat + roll_progress * roll_dlat
+                lon = runway_28l_lon + roll_progress * roll_dlon
                 alt = 0
 
-                heading = 284  # Runway heading
+                heading = _rwy_heading
                 phase = "ground"
                 velocity = 130 - roll_progress * 100  # Decelerate to 30 kts
                 vertical_rate = 0
 
             else:
                 # TAXI PHASE: Follow taxiway route from runway to current position
-                taxi_progress = (progress - 0.70) / 0.30
+                taxi_progress = (progress - 0.65) / 0.35
 
                 # Landing roll endpoint (must match the roll phase above)
-                roll_end_lat = runway_28l_lat + 0.004
-                roll_end_lon = runway_28l_lon - 0.012
+                roll_end_lat = runway_28l_lat + roll_dlat
+                roll_end_lon = runway_28l_lon + roll_dlon
 
                 # Build taxi path: use the flight's taxi route if available,
                 # otherwise fall back to the gate-based route or straight line.
@@ -2037,7 +2133,26 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
                 if len(taxi_path) >= 2:
                     taxi_path_latlons = [(lat_wp, lon_wp) for lon_wp, lat_wp in taxi_path]
-                    # Prepend landing roll endpoint so trajectory connects smoothly
+
+                    # Connect roll endpoint to the taxi route smoothly:
+                    # Find the closest point on the taxi route to roll_end,
+                    # then splice from that point onward to avoid backtracking.
+                    best_idx = 0
+                    best_dist = _distance_between(
+                        (roll_end_lat, roll_end_lon), taxi_path_latlons[0]
+                    )
+                    for _ti in range(1, len(taxi_path_latlons)):
+                        d = _distance_between(
+                            (roll_end_lat, roll_end_lon), taxi_path_latlons[_ti]
+                        )
+                        if d < best_dist:
+                            best_dist = d
+                            best_idx = _ti
+
+                    # Trim the taxi path: start from the closest point onward
+                    taxi_path_latlons = taxi_path_latlons[best_idx:]
+
+                    # Prepend roll endpoint for smooth phase transition
                     taxi_path_latlons.insert(0, (roll_end_lat, roll_end_lon))
                     # Append current position as final point
                     taxi_path_latlons.append((end_lat, end_lon))
@@ -2082,8 +2197,18 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
             # Append point for this iteration (inside the for loop)
             timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
 
-            # Reduce noise for ground taxi to keep trajectory on taxiways
-            pos_noise = 0.00005 if phase == "ground" else 0.0005
+            # Scale noise by phase and altitude:
+            # - Ground taxi: minimal noise to stay on taxiways
+            # - Low altitude approach (<1000ft): reduced noise for clean final
+            # - High altitude approach: normal noise for realistic radar scatter
+            if phase == "ground":
+                pos_noise = 0.00005
+            elif alt < 500:
+                pos_noise = 0.0001
+            elif alt < 2000:
+                pos_noise = 0.0002
+            else:
+                pos_noise = 0.0003
             points.append({
                 "timestamp": timestamp.isoformat(),
                 "icao24": icao24,
@@ -2102,12 +2227,13 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     elif current_phase in ["climbing", "cruising", "departing", "takeoff", "enroute"]:
         # DEPARTURE trajectory - show takeoff, climb, then turn toward destination
         dest_airport = current_state.destination_airport if current_state else None
-        dest_bearing = _bearing_to_airport(dest_airport) if dest_airport else 284
+        _dep_rwy_heading = _get_runway_heading()  # Reuse for departure (parallel runways)
+        dest_bearing = _bearing_to_airport(dest_airport) if dest_airport else _dep_rwy_heading
 
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
-            _traj_dep_wps = _get_departure_waypoints()
+            _traj_dep_wps = _get_departure_waypoints(dest_airport)
             if progress < 0.15:
                 # Takeoff roll and initial climb
                 takeoff_progress = progress / 0.15
@@ -2115,7 +2241,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 lat = dep_rwy_lat + takeoff_progress * (wp[1] - dep_rwy_lat)
                 lon = dep_rwy_lon + takeoff_progress * (wp[0] - dep_rwy_lon)
                 alt = takeoff_progress * wp[2]
-                heading = 284
+                heading = _dep_rwy_heading
                 velocity = 100 + takeoff_progress * 100
                 vertical_rate = 2000 if takeoff_progress > 0.3 else 0
                 phase = "takeoff" if takeoff_progress < 0.5 else "climbing"
@@ -2181,62 +2307,62 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
     else:
         # APPROACH trajectory (aircraft still descending)
-        # Start from the direction of origin airport, then curve onto approach
+        # Use origin-aware approach waypoints so the trajectory starts from
+        # the correct direction, then interpolate toward the aircraft's
+        # current position.  Only show waypoints up to the aircraft's
+        # current position along the approach (not past it).
         origin_airport = current_state.origin_airport if current_state else None
         center = get_airport_center()
-        _traj_app_wps2 = _get_approach_waypoints()
+        _traj_app_wps2 = _get_approach_waypoints(origin_airport)
 
         # Clamp end position to reasonable airport vicinity
         clamped_lat = max(center[0] - 0.5, min(center[0] + 0.5, end_lat))
         clamped_lon = max(center[1] - 0.5, min(center[1] + 0.5, end_lon))
-
-        if origin_airport:
-            # Calculate where the flight entered from (edge of visibility circle)
-            bearing_to_apt = _bearing_from_airport(origin_airport)
-            spawn_bearing = (bearing_to_apt + 180) % 360
-            entry_point = _point_on_circle(center[0], center[1], spawn_bearing, 0.4)
-            start_lat, start_lon = entry_point
-            start_alt = 15000 if _is_international_airport(origin_airport) else 10000
-        else:
-            # Fallback to first approach waypoint
-            start_wp = _traj_app_wps2[0]
-            start_lat = start_wp[1]
-            start_lon = start_wp[0]
-            start_alt = start_wp[2]
-
         final_alt = end_alt if abs(end_lat - center[0]) < 0.5 else 3000
 
-        # Build trajectory: entry point → first approach waypoint → current position
-        first_wp = _traj_app_wps2[0]
-        mid_lat, mid_lon = first_wp[1], first_wp[0]
-        mid_alt = first_wp[2]
+        # Determine how far along the approach the aircraft currently is
+        # by finding the closest waypoint to the current position.
+        wp_count = len(_traj_app_wps2)
+        best_wp_idx = 0
+        best_wp_dist = float('inf')
+        for _wi in range(wp_count):
+            _wd = _distance_between(
+                (clamped_lat, clamped_lon),
+                (_traj_app_wps2[_wi][1], _traj_app_wps2[_wi][0])
+            )
+            if _wd < best_wp_dist:
+                best_wp_dist = _wd
+                best_wp_idx = _wi
+
+        # Build path: approach waypoints from first up to nearest-to-aircraft,
+        # then final segment to the aircraft's exact position.
+        # Trim waypoints to only those before (or at) the aircraft.
+        path_wps = _traj_app_wps2[:best_wp_idx + 1]
+        # Append current position as the final target
+        path_wps.append((clamped_lon, clamped_lat, final_alt))
+        path_count = len(path_wps)
 
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
-            if origin_airport and progress < 0.4:
-                # Enroute segment: from entry point toward first approach waypoint
-                seg_progress = progress / 0.4
-                lat = start_lat + seg_progress * (mid_lat - start_lat)
-                lon = start_lon + seg_progress * (mid_lon - start_lon)
-                alt = start_alt + seg_progress * (mid_alt - start_alt)
-                heading = _calculate_heading((lat, lon), (mid_lat, mid_lon))
-                velocity = 350 - seg_progress * 150
-                vertical_rate = -1000
-                phase = "approaching"
-            else:
-                # Approach segment: from first waypoint toward current position
-                if origin_airport:
-                    seg_progress = (progress - 0.4) / 0.6
-                else:
-                    seg_progress = progress
-                lat = mid_lat + seg_progress * (clamped_lat - mid_lat)
-                lon = mid_lon + seg_progress * (clamped_lon - mid_lon)
-                alt = mid_alt + seg_progress * (final_alt - mid_alt)
-                heading = _calculate_heading((lat, lon), (clamped_lat, clamped_lon))
-                velocity = 200 - seg_progress * 60
-                vertical_rate = -800 if alt > 500 else -400
-                phase = "approaching" if alt > 500 else "landing"
+            wp_progress = progress * (path_count - 1)
+            wp_idx = int(wp_progress)
+            wp_frac = wp_progress - wp_idx
+            if wp_idx >= path_count - 1:
+                wp_idx = path_count - 2
+                wp_frac = 1.0
+
+            wp1 = path_wps[wp_idx]
+            wp2 = path_wps[min(wp_idx + 1, path_count - 1)]
+
+            lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
+            lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
+            alt = wp1[2] + (wp2[2] - wp1[2]) * wp_frac
+
+            heading = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
+            velocity = 350 - progress * 210
+            vertical_rate = -1000 if alt > 2000 else (-600 if alt > 500 else -400)
+            phase = "approaching" if alt > 500 else "landing"
 
             timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
 
