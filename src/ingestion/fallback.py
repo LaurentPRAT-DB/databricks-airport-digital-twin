@@ -2030,7 +2030,7 @@ def generate_synthetic_flights(
             state.aircraft_type,                       # 19: aircraft_type (custom)
             state.origin_airport,                      # 20: origin_airport (custom)
             state.destination_airport,                 # 21: destination_airport (custom)
-            state.assigned_gate,                       # 22: assigned_gate (custom)
+            state.assigned_gate if state.phase in (FlightPhase.PARKED, FlightPhase.TAXI_TO_GATE) else None,  # 22: assigned_gate (only at/approaching gate)
         ]
         states.append(state_vector)
 
