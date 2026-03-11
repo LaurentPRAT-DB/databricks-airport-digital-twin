@@ -44,6 +44,10 @@ from src.ingestion.fallback import (
     _gate_states,
     _runway_28L,
     _runway_28R,
+    _get_approach_waypoints,
+    _get_runway_heading,
+    _calculate_heading,
+    _shortest_angle_diff,
 )
 from src.ingestion.schedule_generator import (
     AIRLINES,
@@ -1280,6 +1284,171 @@ class TestWaypoints:
     def test_taxi_waypoints_exist(self):
         assert len(TAXI_WAYPOINTS_ARRIVAL) >= 3
         assert len(TAXI_WAYPOINTS_DEPARTURE) >= 3
+
+
+# ============================================================================
+# 30b. Final Approach Runway Alignment (ICAO Doc 8168 / FAA 8260.3)
+# ============================================================================
+class TestFinalApproachRunwayAlignment:
+    """Verify that approach waypoints align with the runway on final approach.
+
+    Per ICAO Doc 8168 (PANS-OPS) and FAA Order 8260.3, aircraft must intercept
+    the final approach course (aligned with the runway centerline) before the
+    final approach fix (~5-10 NM from threshold).
+    """
+
+    def test_final_waypoints_aligned_with_runway_heading(self):
+        """The last few approach waypoints should follow the runway heading.
+
+        Waypoints are ordered far→near, so the heading from wp[i] to wp[i+1]
+        (inbound) should match the runway landing heading, not the reciprocal
+        approach course.
+        """
+        rwy_heading = _get_runway_heading()
+
+        # With origin from the north (SEA), final approach must still align with runway
+        wps = _get_approach_waypoints("SEA")
+        assert len(wps) >= 7, "Need at least 7 waypoints for full approach"
+
+        # Check the last 3 non-threshold inner waypoints (indices -4, -3, -2)
+        # heading from each to the next (inbound) should match runway heading
+        for i in range(-4, -1):
+            wp_from = wps[i]
+            wp_to = wps[i + 1]
+            heading = _calculate_heading(
+                (wp_from[1], wp_from[0]), (wp_to[1], wp_to[0])
+            )
+            diff = abs(_shortest_angle_diff(heading, rwy_heading))
+            assert diff < 5.0, (
+                f"Final waypoint pair [{len(wps)+i}→{len(wps)+i+1}] heading "
+                f"{heading:.1f}° differs from runway heading {rwy_heading:.1f}° "
+                f"by {diff:.1f}°"
+            )
+
+    def test_different_origins_same_final_approach(self):
+        """Flights from different origins must converge on the same final course."""
+        origins = ["SEA", "JFK", "LAX", "ORD"]
+        final_headings = []
+        for origin in origins:
+            wps = _get_approach_waypoints(origin)
+            # Heading from second-to-last to last waypoint
+            wp_prev = wps[-2]
+            wp_last = wps[-1]
+            heading = _calculate_heading(
+                (wp_prev[1], wp_prev[0]), (wp_last[1], wp_last[0])
+            )
+            final_headings.append(heading)
+
+        # All final headings should be within 2° of each other
+        for i in range(1, len(final_headings)):
+            diff = abs(_shortest_angle_diff(final_headings[0], final_headings[i]))
+            assert diff < 2.0, (
+                f"Final heading from {origins[i]} ({final_headings[i]:.1f}°) differs "
+                f"from {origins[0]} ({final_headings[0]:.1f}°) by {diff:.1f}°"
+            )
+
+    def test_outer_waypoints_differ_by_origin(self):
+        """Phase 1 (base leg) waypoints should vary based on origin direction."""
+        wps_sea = _get_approach_waypoints("SEA")  # from north
+        wps_lax = _get_approach_waypoints("LAX")  # from south
+
+        # First waypoint should be in different positions (different entry bearings)
+        sea_first = wps_sea[0]
+        lax_first = wps_lax[0]
+        dist = math.sqrt(
+            (sea_first[0] - lax_first[0]) ** 2 + (sea_first[1] - lax_first[1]) ** 2
+        )
+        assert dist > 0.01, (
+            f"First waypoints from SEA and LAX should differ significantly, "
+            f"but distance is only {dist:.4f}°"
+        )
+
+    def test_approach_has_two_phases(self):
+        """Approach should have base leg (blended) + final (runway-aligned) phases."""
+        wps = _get_approach_waypoints("JFK")
+
+        # Total should be 11 waypoints (4 base + 7 final)
+        assert len(wps) == 11, f"Expected 11 waypoints, got {len(wps)}"
+
+        # Altitude should monotonically decrease
+        for i in range(1, len(wps)):
+            assert wps[i][2] <= wps[i - 1][2], (
+                f"Waypoint {i} altitude {wps[i][2]} should be <= "
+                f"waypoint {i-1} altitude {wps[i-1][2]}"
+            )
+
+    def test_approach_starts_at_6000ft_ends_near_threshold(self):
+        """First waypoint at ~6000ft, last at runway threshold altitude."""
+        wps = _get_approach_waypoints("ORD")
+        assert wps[0][2] == 6000, f"Expected 6000ft start, got {wps[0][2]}"
+        assert wps[-1][2] < 100, f"Expected <100ft at threshold, got {wps[-1][2]}"
+
+    def test_final_approach_fix_at_approximately_6nm(self):
+        """The FAF (start of final approach) should be ~6 NM from threshold.
+
+        0.10° ≈ 6 NM at mid-latitudes.
+        """
+        wps = _get_approach_waypoints("SEA")
+        # The 5th waypoint (index 4) is the first final-approach waypoint
+        # at distance 0.10° from center
+        faf = wps[4]  # First final approach waypoint
+        threshold = wps[-1]  # Airport center
+        dist_deg = math.sqrt(
+            (faf[0] - threshold[0]) ** 2 + (faf[1] - threshold[1]) ** 2
+        )
+        dist_nm = dist_deg * 60  # approximate
+        assert 4.0 < dist_nm < 8.0, (
+            f"FAF should be 4-8 NM from threshold, got {dist_nm:.1f} NM"
+        )
+
+    def test_glideslope_approximately_3_degrees(self):
+        """Final approach segment should approximate a 3° glideslope (~300ft/NM)."""
+        wps = _get_approach_waypoints("DEN")
+        # Check between FAF (2500ft at ~6NM) and a mid-final point (1000ft at ~3NM)
+        faf = wps[4]   # 2500ft, 0.10° out
+        mid = wps[6]   # 1000ft, 0.05° out
+
+        dist_deg = math.sqrt((faf[0] - mid[0]) ** 2 + (faf[1] - mid[1]) ** 2)
+        dist_nm = dist_deg * 60
+        alt_diff = faf[2] - mid[2]  # 2500 - 1000 = 1500ft
+
+        if dist_nm > 0:
+            ft_per_nm = alt_diff / dist_nm
+            # 3° glideslope ≈ 318 ft/NM; allow 200-500 ft/NM range
+            assert 200 < ft_per_nm < 500, (
+                f"Glideslope {ft_per_nm:.0f} ft/NM outside 200-500 range"
+            )
+
+    def test_sfo_no_origin_returns_static_waypoints(self):
+        """SFO with no origin should still return the static APPROACH_WAYPOINTS."""
+        wps = _get_approach_waypoints(None)
+        assert wps == APPROACH_WAYPOINTS
+
+    def test_localizer_intercept_angle_reasonable(self):
+        """The blending from entry bearing to approach course should not exceed 90°
+        of turn per waypoint (no unrealistic snap turns)."""
+        rwy_heading = _get_runway_heading()
+        approach_course = (rwy_heading + 180) % 360
+
+        for origin in ["SEA", "JFK", "LAX", "MIA"]:
+            wps = _get_approach_waypoints(origin)
+            # Check heading change between consecutive base-leg waypoints
+            for i in range(len(wps) - 1):
+                wp_from = wps[i]
+                wp_to = wps[i + 1]
+                heading = _calculate_heading(
+                    (wp_from[1], wp_from[0]), (wp_to[1], wp_to[0])
+                )
+                if i < len(wps) - 2:
+                    wp_next = wps[i + 2]
+                    next_heading = _calculate_heading(
+                        (wp_to[1], wp_to[0]), (wp_next[1], wp_next[0])
+                    )
+                    turn = abs(_shortest_angle_diff(heading, next_heading))
+                    assert turn < 90, (
+                        f"Origin {origin}, waypoints {i}→{i+1}→{i+2}: "
+                        f"turn of {turn:.1f}° exceeds 90° max"
+                    )
 
 
 # ============================================================================

@@ -501,30 +501,53 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
         bearing_to_apt = _bearing_from_airport(origin_iata)
         entry_dir = (bearing_to_apt + 180) % 360
 
-    # Distances from center (degrees) and altitudes for 11 waypoints
-    distances = [0.25, 0.21, 0.17, 0.135, 0.10, 0.075, 0.05, 0.035, 0.02, 0.01, 0.0]
-    altitudes = [6000, 5000, 4000, 3200, 2500, 1800, 1000, 650, 300, 150, 15]
+    # Runway approach course (reciprocal of runway heading)
+    rwy_heading = _get_runway_heading()
+    approach_course = (rwy_heading + 180) % 360
 
-    waypoints = []
-    for dist, alt in zip(distances, altitudes):
+    # Phase 2: Final approach — aligned with runway centerline
+    final_distances = [0.10, 0.075, 0.05, 0.035, 0.02, 0.01, 0.0]
+    final_altitudes = [2500, 1800, 1000, 650, 300, 150, 15]
+    final_wps = []
+    for dist, alt in zip(final_distances, final_altitudes):
         if dist == 0.0:
-            waypoints.append((lon, lat, alt))
+            final_wps.append((lon, lat, alt))
         else:
-            pt = _point_on_circle(lat, lon, entry_dir, dist)
-            waypoints.append((pt[1], pt[0], alt))  # (lon, lat, alt)
-    return waypoints
+            pt = _point_on_circle(lat, lon, approach_course, dist)
+            final_wps.append((pt[1], pt[0], alt))
+
+    # Phase 1: Base leg — blend from entry_dir to approach_course
+    base_distances = [0.25, 0.21, 0.17, 0.135]
+    base_altitudes = [6000, 5000, 4000, 3200]
+    base_wps = []
+    for i, (dist, alt) in enumerate(zip(base_distances, base_altitudes)):
+        blend = i / len(base_distances)  # 0→0.75
+        bearing = entry_dir + _shortest_angle_diff(entry_dir, approach_course) * blend
+        pt = _point_on_circle(lat, lon, bearing, dist)
+        base_wps.append((pt[1], pt[0], alt))
+
+    return base_wps + final_wps
 
 
 def _get_runway_heading() -> float:
-    """Compute the runway landing heading from the last two approach waypoints.
+    """Compute the runway landing heading from static reference data.
 
-    This derives the heading dynamically so it works for any airport,
-    not just SFO's runway 28L (284°).
+    For SFO uses the static APPROACH_WAYPOINTS.  For other airports derives
+    a default heading (270°, landing from the east) from a small offset so
+    that _get_approach_waypoints can call this without circular recursion.
     """
-    wps = _get_approach_waypoints()
+    center = get_airport_center()
+    lat, lon = center
+    # SFO: use static waypoints
+    if abs(lat - AIRPORT_CENTER[0]) < 0.01 and abs(lon - AIRPORT_CENTER[1]) < 0.01:
+        wps = APPROACH_WAYPOINTS
+    else:
+        # Non-SFO default: runway faces west (approach from east, bearing 90)
+        pt = _point_on_circle(lat, lon, 90.0, 0.01)
+        wps = [(pt[1], pt[0], 150), (lon, lat, 15)]
+
     if len(wps) < 2:
         return 0.0
-    # Second-to-last → last waypoint gives the final approach heading
     wp_prev = wps[-2]
     wp_last = wps[-1]
     return _calculate_heading((wp_prev[1], wp_prev[0]), (wp_last[1], wp_last[0]))
@@ -1391,7 +1414,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
     if state.phase == FlightPhase.APPROACHING:
         # Descend toward airport following approach waypoints WITH SEPARATION
-        approach_wps = _get_approach_waypoints()
+        approach_wps = _get_approach_waypoints(state.origin_airport)
         if state.waypoint_index < len(approach_wps):
             wp = approach_wps[state.waypoint_index]
             target = (wp[1], wp[0])  # lat, lon
