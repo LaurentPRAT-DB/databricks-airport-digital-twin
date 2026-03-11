@@ -1169,8 +1169,9 @@ class TestCreateNewFlightGraphIntegration:
                 break
 
         assert reached_parked, "Aircraft should reach PARKED via graph route"
-        # Should be near the gate
-        dist = _distance_between((state.latitude, state.longitude), gate_pos)
+        # Should be near the assigned gate (may differ from first gate due to random selection)
+        actual_gate_pos = get_gates()[state.assigned_gate]
+        dist = _distance_between((state.latitude, state.longitude), actual_gate_pos)
         assert dist < 0.001
 
     def test_full_departure_lifecycle_with_graph(self):

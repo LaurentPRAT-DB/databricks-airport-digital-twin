@@ -925,13 +925,16 @@ def _release_runway(icao24: str, runway: str = "28R"):
         runway_state.last_arrival_time = time.time()
 
 def _find_available_gate() -> Optional[str]:
-    """Find an available gate that isn't occupied."""
+    """Find a random available gate (spread across terminals)."""
     _init_gate_states()
     current_time = time.time()
 
-    for gate, state in _gate_states.items():
-        if state.occupied_by is None and current_time >= state.available_at:
-            return gate
+    available = [
+        gate for gate, state in _gate_states.items()
+        if state.occupied_by is None and current_time >= state.available_at
+    ]
+    if available:
+        return random.choice(available)
     return None
 
 def _occupy_gate(icao24: str, gate: str):
@@ -1229,6 +1232,12 @@ def _create_new_flight(
             lon = new_pos[1]
             alt = last_aircraft.altitude + 500
 
+        # Pre-assign a gate so it shows as INBOUND on the gate status panel
+        _init_gate_states()
+        pre_gate = _find_available_gate()
+        if pre_gate:
+            _occupy_gate(icao24, pre_gate)
+
         return FlightState(
             icao24=icao24,
             callsign=callsign,
@@ -1241,6 +1250,7 @@ def _create_new_flight(
             on_ground=False,
             phase=phase,
             aircraft_type=aircraft_type,
+            assigned_gate=pre_gate,
             waypoint_index=0,
             origin_airport=origin,
             destination_airport=destination,
@@ -1529,18 +1539,28 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.taxi_route = None  # Will be computed below
             # Release runway when exiting to taxiway
             _release_runway(state.icao24, "28R")
-            # Find an available gate (don't just pick random)
-            available_gate = _find_available_gate()
-            if available_gate:
-                state.assigned_gate = available_gate
-                _occupy_gate(state.icao24, available_gate)
-                emit_gate_event(state.icao24, state.callsign, available_gate, "assign", state.aircraft_type)
-                state.taxi_route = _get_taxi_waypoints_arrival(available_gate)
+            # Reuse pre-assigned gate from approach if still held, else find new one
+            _init_gate_states()
+            pre_gate = state.assigned_gate
+            if pre_gate and pre_gate in _gate_states and _gate_states[pre_gate].occupied_by == state.icao24:
+                # Keep pre-assigned gate
+                emit_gate_event(state.icao24, state.callsign, pre_gate, "assign", state.aircraft_type)
+                state.taxi_route = _get_taxi_waypoints_arrival(pre_gate)
             else:
-                # All gates occupied - hold position until gate available
-                state.assigned_gate = None
-                state.velocity = 0  # Hold on runway exit
-                return state
+                available_gate = _find_available_gate()
+                if available_gate:
+                    # Release old pre-assigned gate if it was held
+                    if pre_gate and pre_gate in _gate_states and _gate_states[pre_gate].occupied_by == state.icao24:
+                        _release_gate(state.icao24, pre_gate)
+                    state.assigned_gate = available_gate
+                    _occupy_gate(state.icao24, available_gate)
+                    emit_gate_event(state.icao24, state.callsign, available_gate, "assign", state.aircraft_type)
+                    state.taxi_route = _get_taxi_waypoints_arrival(available_gate)
+                else:
+                    # All gates occupied - hold position until gate available
+                    state.assigned_gate = None
+                    state.velocity = 0  # Hold on runway exit
+                    return state
 
     elif state.phase == FlightPhase.TAXI_TO_GATE:
         # Taxi along waypoints to assigned gate WITH SEPARATION

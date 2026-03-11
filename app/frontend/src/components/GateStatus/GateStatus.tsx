@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { useCongestion } from '../../hooks/usePredictions';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { useFlightContext } from '../../context/FlightContext';
@@ -178,10 +178,16 @@ function GateDetailCard({
   onSelectFlight: (flight: Flight) => void;
   onClose: () => void;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+  }, []);
+
   const colors = statusBadgeColors[gate.status];
 
   return (
     <div
+      ref={cardRef}
       className="mt-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs"
     >
       <div className="flex items-center justify-between mb-1.5">

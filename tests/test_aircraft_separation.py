@@ -49,6 +49,8 @@ from src.ingestion.fallback import (
     _init_gate_states,
     # Main generator
     generate_synthetic_flights,
+    _create_new_flight,
+    _update_flight_state,
 )
 
 
@@ -616,6 +618,120 @@ class TestGateManagement:
 
         # Should not be immediately available
         # (In real test, would need to mock time or wait)
+
+
+class TestGateDistributionAndPreAssignment:
+    """Tests for randomized gate selection and approaching flight gate pre-assignment."""
+
+    def setup_method(self):
+        _init_gate_states()
+        for gate in _gate_states:
+            _gate_states[gate].occupied_by = None
+            _gate_states[gate].available_at = 0
+        _flight_states.clear()
+
+    def teardown_method(self):
+        for gate in _gate_states:
+            _gate_states[gate].occupied_by = None
+            _gate_states[gate].available_at = 0
+        _flight_states.clear()
+
+    def test_find_available_gate_returns_random_not_always_first(self):
+        """Gate selection should not always return the same gate."""
+        results = set()
+        for i in range(50):
+            # Reset all gates each iteration
+            for gate in _gate_states:
+                _gate_states[gate].occupied_by = None
+                _gate_states[gate].available_at = 0
+            gate = _find_available_gate()
+            assert gate is not None
+            results.add(gate)
+        # With 9 gates and 50 trials, random selection should hit at least 3 different gates
+        assert len(results) >= 3, f"Expected random distribution, got only {results}"
+
+    def test_gate_distribution_across_terminals(self):
+        """Parking multiple flights should spread gates across terminals."""
+        assigned_gates = []
+        for i in range(min(7, len(GATES))):
+            gate = _find_available_gate()
+            assert gate is not None
+            _occupy_gate(f"test_{i}", gate)
+            assigned_gates.append(gate)
+
+        # Extract terminal prefixes (e.g., A, B, C, G)
+        prefixes = set(g[0] for g in assigned_gates)
+        # With random selection across 9 gates in 4 terminals (A, B, C, G),
+        # 7 assignments should hit at least 2 different terminal prefixes
+        assert len(prefixes) >= 2, f"Expected multi-terminal spread, got only prefix(es): {prefixes}"
+
+    def test_approaching_flight_gets_pre_assigned_gate(self):
+        """Flights created as APPROACHING should have an assigned_gate (INBOUND)."""
+        state = _create_new_flight("app01", "UAL100", FlightPhase.APPROACHING, origin="LAX", destination="SFO")
+        # APPROACHING may be redirected to ENROUTE if too many on approach
+        if state.phase == FlightPhase.APPROACHING:
+            assert state.assigned_gate is not None, "Approaching flight should have a pre-assigned gate"
+            assert state.assigned_gate in GATES, f"Pre-assigned gate {state.assigned_gate} not in GATES"
+            # Gate should be marked as occupied by this aircraft
+            assert _gate_states[state.assigned_gate].occupied_by == state.icao24
+
+    def test_approaching_gate_shows_as_occupied(self):
+        """Pre-assigned gate should be unavailable to other flights."""
+        state = _create_new_flight("app02", "DAL200", FlightPhase.APPROACHING, origin="JFK", destination="SFO")
+        if state.phase == FlightPhase.APPROACHING and state.assigned_gate:
+            pre_gate = state.assigned_gate
+            # Try to assign the same gate to another flight manually
+            assert _gate_states[pre_gate].occupied_by == "app02"
+            # _find_available_gate should not return this gate
+            for _ in range(20):
+                other = _find_available_gate()
+                if other is not None:
+                    assert other != pre_gate, "Pre-assigned gate should not be offered to others"
+
+    def test_landing_reuses_pre_assigned_gate(self):
+        """When approaching flight lands, it should reuse its pre-assigned gate."""
+        state = _create_new_flight("land01", "SWA300", FlightPhase.APPROACHING, origin="DEN", destination="SFO")
+        if state.phase != FlightPhase.APPROACHING:
+            pytest.skip("Could not spawn as APPROACHING")
+
+        pre_gate = state.assigned_gate
+        assert pre_gate is not None
+
+        _flight_states[state.icao24] = state
+
+        # Simulate until TAXI_TO_GATE or PARKED
+        reached_taxi = False
+        for _ in range(5000):
+            state = _update_flight_state(state, 1.0)
+            _flight_states[state.icao24] = state
+            if state.phase == FlightPhase.TAXI_TO_GATE:
+                reached_taxi = True
+                break
+            if state.phase == FlightPhase.PARKED:
+                reached_taxi = True
+                break
+
+        if reached_taxi:
+            assert state.assigned_gate == pre_gate, (
+                f"Expected pre-assigned gate {pre_gate}, got {state.assigned_gate}"
+            )
+
+    def test_multiple_approaching_flights_get_different_gates(self):
+        """Multiple approaching flights should each get a unique gate."""
+        gates_assigned = []
+        for i in range(3):
+            state = _create_new_flight(
+                f"multi{i}", f"AAL{i}00", FlightPhase.APPROACHING,
+                origin="ORD", destination="SFO"
+            )
+            _flight_states[state.icao24] = state
+            if state.phase == FlightPhase.APPROACHING and state.assigned_gate:
+                gates_assigned.append(state.assigned_gate)
+
+        # All assigned gates should be unique (no double-booking)
+        assert len(gates_assigned) == len(set(gates_assigned)), (
+            f"Gate collision: {gates_assigned}"
+        )
 
 
 class TestSeparationOverMultipleUpdates:
