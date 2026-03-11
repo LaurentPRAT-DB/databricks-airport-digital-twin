@@ -34,6 +34,34 @@ html, body, #root {
   color: #3b82f6;
 }
 
+/* Remaining trajectory — marching ants animation (lightweight CSS only) */
+.trajectory-remaining {
+  animation: marching-ants 0.8s linear infinite;
+}
+
+@keyframes marching-ants {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+/* Permanent gate label below aircraft icon at gate */
+.flight-marker .gate-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: white;
+  border-radius: 3px;
+  padding: 0 3px;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 14px;
+  pointer-events: none;
+}
+
 /* 3D scene cursor styles - using class toggle avoids forced reflow */
 body.cursor-pointer {
   cursor: pointer;
