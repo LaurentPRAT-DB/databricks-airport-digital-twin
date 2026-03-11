@@ -515,7 +515,7 @@ class AirportConfigService:
         self,
         icao_code: str = DEFAULT_AIRPORT,
         fallback_to_osm: bool = True,
-    ) -> bool:
+    ) -> str | bool:
         """
         Initialize configuration with 3-tier loading:
         1. Lakebase cache (<10ms)
@@ -527,21 +527,26 @@ class AirportConfigService:
             fallback_to_osm: If True, fetch from OSM as last resort
 
         Returns:
-            True if configuration was loaded
+            Source string ("lakebase_cache", "unity_catalog", "osm_api") on success,
+            False on failure. Also truthy for backward compat.
         """
         # Tier 1: Lakebase cache (fastest)
+        logger.info(f"Tier 1: Trying Lakebase cache for {icao_code}...")
         if self.load_from_lakebase_cache(icao_code):
-            return True
+            logger.info(f"Loaded {icao_code} from Lakebase cache (Tier 1)")
+            return "lakebase_cache"
 
         # Tier 2: Unity Catalog (SQL Warehouse)
+        logger.info(f"Tier 2: Trying Unity Catalog for {icao_code}...")
         if self.load_from_lakehouse(icao_code):
             # Write-through to Lakebase for next startup
             self.save_to_lakebase_cache(icao_code)
-            return True
+            logger.info(f"Loaded {icao_code} from Unity Catalog (Tier 2)")
+            return "unity_catalog"
 
         # Tier 3: OSM fallback
         if fallback_to_osm:
-            logger.info(f"Falling back to OSM import for {icao_code}")
+            logger.info(f"Tier 3: Falling back to OSM Overpass API for {icao_code}...")
             try:
                 self.import_osm(
                     icao_code,
@@ -567,7 +572,8 @@ class AirportConfigService:
                 # Persist to both Unity Catalog and Lakebase cache
                 self.persist_config(icao_code)
                 self.save_to_lakebase_cache(icao_code)
-                return True
+                logger.info(f"Loaded {icao_code} from OSM Overpass API (Tier 3)")
+                return "osm_api"
             except Exception as e:
                 logger.error(f"OSM fallback failed: {e}")
                 return False

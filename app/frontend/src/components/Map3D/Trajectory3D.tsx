@@ -95,12 +95,12 @@ export function Trajectory3D({ airportCenter }: Trajectory3DProps) {
         />
       )}
 
-      {/* Remaining trajectory — dotted line (· · ·) */}
+      {/* Remaining trajectory — dotted line (· · ·), dark for visibility */}
       {remainingPts.length >= 2 && (
         <Line
           points={remainingPts}
-          color="#93c5fd"
-          lineWidth={2}
+          color="#1e293b"
+          lineWidth={3}
           dashed={true}
           dashSize={1.5 * METERS_TO_SCENE_UNITS}
           gapSize={4 * METERS_TO_SCENE_UNITS}

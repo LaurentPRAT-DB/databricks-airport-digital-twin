@@ -2010,6 +2010,7 @@ def generate_synthetic_flights(
             state.aircraft_type,                       # 19: aircraft_type (custom)
             state.origin_airport,                      # 20: origin_airport (custom)
             state.destination_airport,                 # 21: destination_airport (custom)
+            state.assigned_gate,                       # 22: assigned_gate (custom)
         ]
         states.append(state_vector)
 

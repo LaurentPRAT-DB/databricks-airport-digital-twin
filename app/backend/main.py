@@ -22,6 +22,16 @@ from src.ingestion.fallback import reload_gates, set_airport_center, AIRPORT_CEN
 from src.ml.gate_model import reload_gate_recommender
 from src.ml.registry import get_model_registry
 
+# Configure logging based on DEBUG_MODE env var
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() in ("true", "1", "yes")
+log_level = logging.DEBUG if DEBUG_MODE else logging.INFO
+log_format = (
+    "%(asctime)s [%(levelname)-8s] %(name)s:%(funcName)s:%(lineno)d - %(message)s"
+    if DEBUG_MODE
+    else "%(asctime)s [%(levelname)-8s] %(name)s - %(message)s"
+)
+logging.basicConfig(level=log_level, format=log_format, force=True)
+
 logger = logging.getLogger(__name__)
 
 # Resolve frontend dist path
@@ -29,28 +39,42 @@ FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 logger.info(f"FRONTEND_DIST resolved to: {FRONTEND_DIST} (exists: {FRONTEND_DIST.exists()})")
 
 
+_SOURCE_LABELS = {
+    "lakebase_cache": "Lakebase cache (Tier 1, <10ms)",
+    "unity_catalog": "Unity Catalog (Tier 2, SQL Warehouse)",
+    "osm_api": "OSM Overpass API (Tier 3, external)",
+}
+
+
 async def _background_init(app: FastAPI):
     """Run heavy initialization in the background so the app accepts requests immediately."""
+    import time
+
     try:
         # Phase 1: Load airport configuration (3-tier: Lakebase cache → Unity Catalog → OSM)
-        app.state.startup_status = "Loading airport config from cache..."
+        app.state.startup_status = "Loading airport config (trying Lakebase cache → Unity Catalog → OSM)..."
         logger.info(app.state.startup_status)
 
         airport_config = get_airport_config_service()
-        loaded = airport_config.initialize_from_lakehouse(
+        t0 = time.monotonic()
+        source = airport_config.initialize_from_lakehouse(
             icao_code="KSFO",
             fallback_to_osm=True,
         )
-        if loaded:
+        load_ms = (time.monotonic() - t0) * 1000
+
+        if source:
+            source_label = _SOURCE_LABELS.get(source, source)
             config = airport_config.get_config()
-            source = config.get("source", "OSM")
-            logger.info(
-                f"Loaded airport data from {source}: "
+            counts = (
                 f"{len(config.get('terminals', []))} terminals, "
                 f"{len(config.get('gates', []))} gates, "
                 f"{len(config.get('osmTaxiways', []))} taxiways, "
                 f"{len(config.get('osmAprons', []))} aprons"
             )
+            app.state.startup_status = f"Airport data loaded from {source_label} in {load_ms:.0f}ms — {counts}"
+            logger.info(app.state.startup_status)
+
             # Ensure airport center is set to SFO default on startup
             set_airport_center(AIRPORT_CENTER[0], AIRPORT_CENTER[1], "SFO")
             gates = reload_gates()
@@ -60,11 +84,14 @@ async def _background_init(app: FastAPI):
             logger.info(f"Gate recommender initialized with {gate_count} OSM gates")
 
             # Refresh the AirportModelRegistry so PredictionService uses OSM gates too
+            app.state.startup_status = "Retraining ML models with airport data..."
+            logger.info(app.state.startup_status)
             registry = get_model_registry()
             registry.retrain("KSFO")
             logger.info("AirportModelRegistry retrained with fresh OSM gate data")
         else:
-            logger.warning("Failed to load airport config from any source")
+            logger.warning("Failed to load airport config from any source (tried all 3 tiers)")
+            app.state.startup_status = "Warning: airport config failed to load from all sources"
 
         if not airport_config.config_ready:
             logger.warning(
@@ -77,19 +104,23 @@ async def _background_init(app: FastAPI):
         logger.info(app.state.startup_status)
 
         data_generator = get_data_generator_service()
+        t1 = time.monotonic()
         init_success = await data_generator.initialize_all_data(airport_icao="KSFO")
+        gen_ms = (time.monotonic() - t1) * 1000
         if init_success:
             await data_generator.start_periodic_refresh()
-            logger.info("Data generation service started with periodic refresh")
+            app.state.startup_status = f"Synthetic data generated in {gen_ms:.0f}ms — starting periodic refresh"
+            logger.info(app.state.startup_status)
         else:
             logger.warning("Data initialization failed - using fallback generators only")
+            app.state.startup_status = "Warning: data init failed, using fallback generators"
 
         app.state.ready = True
         app.state.startup_status = "Ready"
-        logger.info("Background initialization complete")
+        logger.info("Background initialization complete — app ready")
 
     except Exception as e:
-        logger.error(f"Background initialization failed: {e}")
+        logger.error(f"Background initialization failed: {e}", exc_info=DEBUG_MODE)
         app.state.startup_status = f"Initialization error: {e}"
 
 

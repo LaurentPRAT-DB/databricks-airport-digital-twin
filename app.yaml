@@ -5,8 +5,14 @@ command:
   - "0.0.0.0"
   - "--port"
   - "8000"
+  - "--log-level"
+  - "debug"
 
 env:
+  # Debug mode — set to "false" to disable verbose logging
+  - name: DEBUG_MODE
+    value: "true"
+
   # Data source configuration
   - name: USE_MOCK_BACKEND
     value: "true"

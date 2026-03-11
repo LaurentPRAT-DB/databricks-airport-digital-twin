@@ -16,6 +16,7 @@ html, body, #root {
 /* Custom flight marker styles */
 .flight-marker {
   transition: transform 0.3s ease-out;
+  overflow: visible !important;
 }
 
 .flight-marker-ground {

@@ -91,15 +91,16 @@ export default function TrajectoryLine() {
         />
       )}
 
-      {/* Remaining trajectory — dotted line (· · ·) */}
+      {/* Remaining trajectory — animated marching-ants dotted line */}
       {remainingPositions.length >= 2 && (
         <Polyline
           positions={remainingPositions}
           pathOptions={{
-            color: '#93c5fd',
-            weight: 2,
-            opacity: 0.6,
-            dashArray: '3, 8',
+            color: '#1e293b',
+            weight: 3,
+            opacity: 0.7,
+            dashArray: '4, 8',
+            className: 'trajectory-remaining',
           }}
         />
       )}

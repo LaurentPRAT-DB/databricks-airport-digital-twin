@@ -14,6 +14,7 @@ export interface Flight {
   aircraft_type?: string; // ICAO aircraft type code (e.g., A320, B738)
   origin_airport?: string; // Origin airport IATA code
   destination_airport?: string; // Destination airport IATA code
+  assigned_gate?: string | null; // Gate assignment (e.g., "A1", "B12")
 }
 
 export interface FlightsResponse {

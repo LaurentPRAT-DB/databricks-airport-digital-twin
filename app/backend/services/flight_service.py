@@ -57,6 +57,7 @@ def _dict_to_flight_position(data: dict, source: str) -> FlightPosition:
         flight_phase=data.get("flight_phase") or _determine_flight_phase(
             altitude, vertical_rate, on_ground
         ),
+        assigned_gate=data.get("assigned_gate"),
     )
 
 
@@ -151,6 +152,7 @@ class FlightService:
             aircraft_type = state[19] if len(state) > 19 else None
             origin_airport = state[20] if len(state) > 20 else None
             destination_airport = state[21] if len(state) > 21 else None
+            assigned_gate = state[22] if len(state) > 22 else None
 
             flight = FlightPosition(
                 icao24=state[0],
@@ -166,6 +168,7 @@ class FlightService:
                 data_source="synthetic",
                 flight_phase=flight_phase,
                 aircraft_type=aircraft_type,
+                assigned_gate=assigned_gate,
                 origin_airport=origin_airport,
                 destination_airport=destination_airport,
             )

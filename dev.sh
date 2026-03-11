@@ -13,8 +13,17 @@ trap cleanup SIGINT SIGTERM
 
 cd "$(dirname "$0")"
 
+# Debug mode: pass --debug flag or set DEBUG_MODE=true
+if [[ "$1" == "--debug" ]] || [[ "${DEBUG_MODE}" == "true" ]]; then
+    export DEBUG_MODE=true
+    UVICORN_LOG_LEVEL="debug"
+    echo "Debug mode ON — verbose logging enabled"
+else
+    UVICORN_LOG_LEVEL="info"
+fi
+
 echo "Starting backend on http://localhost:8000..."
-uv run uvicorn app.backend.main:app --reload --port 8000 &
+uv run uvicorn app.backend.main:app --reload --port 8000 --log-level "$UVICORN_LOG_LEVEL" &
 BACKEND_PID=$!
 
 echo "Starting frontend on http://localhost:5173..."
