@@ -1,0 +1,25 @@
+resources:
+  jobs:
+    unit_test:
+      name: "[${bundle.target}] Airport DT - Python Unit Tests"
+      description: "Runs pytest backend unit tests on serverless compute"
+
+      environments:
+        - environment_key: test_env
+          spec:
+            client: "1"
+            dependencies:
+              - requirements.txt
+
+      tasks:
+        - task_key: run_pytest
+          notebook_task:
+            notebook_path: ../databricks/notebooks/test_unit_tests.py
+          environment_key: test_env
+
+      tags:
+        project: airport-digital-twin
+        component: unit-test
+        target: ${bundle.target}
+
+      timeout_seconds: 600

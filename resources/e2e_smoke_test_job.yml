@@ -1,0 +1,25 @@
+resources:
+  jobs:
+    e2e_smoke_test:
+      name: "[${bundle.target}] Airport DT - E2E Smoke Tests"
+      description: "Smoke tests against the deployed Airport Digital Twin app"
+
+      environments:
+        - environment_key: test_env
+          spec:
+            client: "1"
+
+      tasks:
+        - task_key: smoke_test
+          notebook_task:
+            notebook_path: ../databricks/notebooks/test_e2e_smoke.py
+            base_parameters:
+              app_url: "https://airport-digital-twin-${bundle.target}-7474645572615955.aws.databricksapps.com"
+          environment_key: test_env
+
+      tags:
+        project: airport-digital-twin
+        component: e2e-smoke-test
+        target: ${bundle.target}
+
+      timeout_seconds: 300

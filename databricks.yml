@@ -5,6 +5,7 @@ sync:
   include:
     - app/**
     - src/**
+    - tests/**
     - app.yaml
     - requirements.txt
     - pyproject.toml
@@ -16,7 +17,6 @@ sync:
     - __pycache__/**
     - .venv/**
     - .git/**
-    - tests/**
     - .planning/**
     - .databricks/**
 
