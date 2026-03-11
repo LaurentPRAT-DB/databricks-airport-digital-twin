@@ -124,8 +124,14 @@ export function Map3D({
   const osmAprons = getAprons();
   const osmRunways = getOSMRunways();
 
+  // Find the selected flight object (for camera framing on 2D→3D switch)
+  const selectedFlightObj = useMemo(
+    () => selectedFlight ? flights.find(f => f.icao24 === selectedFlight) : undefined,
+    [selectedFlight, flights]
+  );
+
   // Compute camera position to frame the airport infrastructure.
-  // If a shared viewport is provided (from 2D), convert it to 3D camera position.
+  // Priority: selected flight > shared viewport > default airport view
   const { cameraPosition, cameraTarget, farPlane, computedExtent } = useMemo(() => {
     // First, compute the airport bounding box extent (needed for zoom conversion)
     const allGeoPoints: { lat: number; lon: number }[] = [];
@@ -160,7 +166,49 @@ export function Map3D({
       extent = Math.max(width, depth, 100);
     }
 
-    // If we have a shared viewport from 2D, use it to position the camera
+    // ── Priority 1: Frame the selected flight ──
+    if (selectedFlightObj) {
+      const pos3D = latLonTo3D(
+        selectedFlightObj.latitude,
+        selectedFlightObj.longitude,
+        selectedFlightObj.altitude,
+        airportCenter?.lat,
+        airportCenter?.lon
+      );
+      const isGround = selectedFlightObj.flight_phase === 'ground';
+      // Heading in degrees — position camera behind the aircraft
+      const headingDeg = selectedFlightObj.heading ?? 0;
+      const headingRad = (headingDeg * Math.PI) / 180;
+
+      if (isGround) {
+        // Close "ramp view": 40m back, 25m up, looking at the aircraft
+        const camDist = 40;
+        const camHeight = 25;
+        // Camera behind the aircraft (opposite to heading direction)
+        const camX = pos3D.x - Math.sin(headingRad) * camDist;
+        const camZ = pos3D.z - Math.cos(headingRad) * camDist;
+        return {
+          cameraPosition: [camX, pos3D.y + camHeight, camZ] as [number, number, number],
+          cameraTarget: [pos3D.x, pos3D.y, pos3D.z] as [number, number, number],
+          farPlane: Math.max(extent * 10, 5000),
+          computedExtent: extent,
+        };
+      } else {
+        // Airborne: farther back (150m), slightly above, to see trajectory
+        const camDist = 150;
+        const camHeight = 60;
+        const camX = pos3D.x - Math.sin(headingRad) * camDist;
+        const camZ = pos3D.z - Math.cos(headingRad) * camDist;
+        return {
+          cameraPosition: [camX, pos3D.y + camHeight, camZ] as [number, number, number],
+          cameraTarget: [pos3D.x, pos3D.y, pos3D.z] as [number, number, number],
+          farPlane: Math.max(extent * 10, 5000),
+          computedExtent: extent,
+        };
+      }
+    }
+
+    // ── Priority 2: Shared viewport from 2D ──
     if (sharedViewport) {
       const target3D = latLonTo3D(
         sharedViewport.center.lat,
@@ -186,7 +234,7 @@ export function Map3D({
       };
     }
 
-    // No shared viewport — compute default camera from OSM bounding box
+    // ── Priority 3: Default airport overview ──
     if (allGeoPoints.length === 0) {
       return {
         cameraPosition: [0, 300, 200] as [number, number, number],
@@ -217,7 +265,7 @@ export function Map3D({
       farPlane: Math.max(extent * 10, 5000),
       computedExtent: extent,
     };
-  }, [terminals, osmRunways, osmTaxiways, osmAprons, airportCenter?.lat, airportCenter?.lon, sharedViewport]);
+  }, [terminals, osmRunways, osmTaxiways, osmAprons, airportCenter?.lat, airportCenter?.lon, sharedViewport, selectedFlightObj]);
 
   return (
     <div className={`relative ${className || ''}`} style={{ width: '100%', height: '100%' }}>
