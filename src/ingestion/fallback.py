@@ -1838,12 +1838,13 @@ def generate_synthetic_flights(
     # Initialize flights if needed (fill up to target count)
     if len(_flight_states) < count:
         # Predefined test flights - diversified phases to avoid conflicts
+        local_iata = get_current_airport_iata()
         test_flights = [
-            ("a12345", "UAL123", FlightPhase.APPROACHING, "ORD", None),
-            ("b67890", "DAL456", FlightPhase.ENROUTE, "NRT", None),
-            ("c11111", "SWA789", FlightPhase.ENROUTE, "LAX", None),
+            ("a12345", "UAL123", FlightPhase.APPROACHING, "ORD", local_iata),
+            ("b67890", "DAL456", FlightPhase.ENROUTE, "NRT", local_iata),
+            ("c11111", "SWA789", FlightPhase.ENROUTE, "LAX", local_iata),
             ("d22222", "AAL100", FlightPhase.PARKED, "JFK", "DEN"),
-            ("e33333", "JBU555", FlightPhase.DEPARTING, None, "BOS"),
+            ("e33333", "JBU555", FlightPhase.DEPARTING, local_iata, "BOS"),
         ]
 
         for icao24, callsign, phase, origin, dest in test_flights:
