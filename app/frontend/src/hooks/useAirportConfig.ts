@@ -25,6 +25,9 @@ import { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON } from '../utils/map3d-calculati
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// Module-level guard to deduplicate concurrent refresh() calls
+let _inflightRefresh: Promise<void> | null = null;
+
 export interface SwitchProgress {
   step: number;
   total: number;
@@ -195,36 +198,45 @@ export function useAirportConfig(): UseAirportConfigReturn {
    * Fetch current configuration from API
    */
   const refresh = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+    // Deduplicate: if a refresh is already in-flight, reuse it
+    if (_inflightRefresh) return _inflightRefresh;
 
-    try {
-      const response = await fetch(`${API_BASE}/api/airport/config`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch config: ${response.statusText}`);
-      }
+    const doRefresh = async () => {
+      setIsLoading(true);
+      setError(null);
 
-      const data: ConfigResponse = await response.json();
-
-      if (data.config && Object.keys(data.config).length > 0) {
-        const configData = data.config as AirportConfig & { icaoCode?: string };
-        setConfig((prev) => ({
-          ...prev,
-          ...configData,
-          sources: configData.sources || prev.sources,
-          lastUpdated: data.lastUpdated || undefined,
-        }));
-        // Update current airport from config
-        if (configData.icaoCode) {
-          setCurrentAirport(configData.icaoCode);
+      try {
+        const response = await fetch(`${API_BASE}/api/airport/config`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch config: ${response.statusText}`);
         }
+
+        const data: ConfigResponse = await response.json();
+
+        if (data.config && Object.keys(data.config).length > 0) {
+          const configData = data.config as AirportConfig & { icaoCode?: string };
+          setConfig((prev) => ({
+            ...prev,
+            ...configData,
+            sources: configData.sources || prev.sources,
+            lastUpdated: data.lastUpdated || undefined,
+          }));
+          // Update current airport from config
+          if (configData.icaoCode) {
+            setCurrentAirport(configData.icaoCode);
+          }
+        }
+      } catch (err) {
+        // API might not have config yet, fall back to default
+        console.warn('Failed to load config from API, using defaults:', err);
+      } finally {
+        setIsLoading(false);
+        _inflightRefresh = null;
       }
-    } catch (err) {
-      // API might not have config yet, fall back to default
-      console.warn('Failed to load config from API, using defaults:', err);
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    _inflightRefresh = doRefresh();
+    return _inflightRefresh;
   }, []);
 
   /**

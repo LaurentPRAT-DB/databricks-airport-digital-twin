@@ -63,6 +63,11 @@ html, body, #root {
   pointer-events: none;
 }
 
+/* Promote spinner to GPU layer to prevent non-composited layout shifts (CLS fix) */
+.animate-spin {
+  will-change: transform;
+}
+
 /* 3D scene cursor styles - using class toggle avoids forced reflow */
 body.cursor-pointer {
   cursor: pointer;
