@@ -1,7 +1,12 @@
 import { useMemo } from 'react';
 import { Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 import { useFlightContext } from '../../context/FlightContext';
-import { useTrajectory, TrajectoryPoint } from '../../hooks/useTrajectory';
+import { useTrajectory } from '../../hooks/useTrajectory';
+
+/** Squared distance between two lat/lon points (cheap, no sqrt needed). */
+function distSq(lat1: number, lon1: number, lat2: number, lon2: number) {
+  return (lat1 - lat2) ** 2 + (lon1 - lon2) ** 2;
+}
 
 export default function TrajectoryLine() {
   const { selectedFlight, showTrajectory } = useFlightContext();
@@ -10,54 +15,57 @@ export default function TrajectoryLine() {
     showTrajectory
   );
 
-  // Combine historical trajectory with current position for real-time updates
+  // All trajectory points with valid coordinates
   const validPoints = useMemo(() => {
     if (!trajectory) return [];
-
-    // Filter out points with null coordinates from historical data
-    const historicalPoints = trajectory.points.filter(
+    return trajectory.points.filter(
       (p) => p.latitude !== null && p.longitude !== null
     );
+  }, [trajectory]);
 
-    // Append current aircraft position if available and different from last point
-    if (selectedFlight?.latitude != null && selectedFlight?.longitude != null) {
-      const lastPoint = historicalPoints[historicalPoints.length - 1];
-      const currentPos = {
-        icao24: selectedFlight.icao24,
-        callsign: selectedFlight.callsign,
-        latitude: selectedFlight.latitude,
-        longitude: selectedFlight.longitude,
-        altitude: selectedFlight.altitude,
-        velocity: selectedFlight.velocity,
-        heading: selectedFlight.heading,
-        vertical_rate: selectedFlight.vertical_rate,
-        on_ground: selectedFlight.on_ground,
-        flight_phase: selectedFlight.flight_phase,
-        timestamp: Date.now() / 1000,
-      } as TrajectoryPoint;
+  // Split trajectory into traveled (past) and remaining (future) at the
+  // aircraft's current position.  The split index is the closest trajectory
+  // point to the live position.
+  const { traveledPositions, remainingPositions } = useMemo(() => {
+    if (validPoints.length < 2 || !selectedFlight?.latitude || !selectedFlight?.longitude) {
+      const all: [number, number][] = validPoints.map((p) => [p.latitude!, p.longitude!]);
+      return { traveledPositions: all, remainingPositions: [] as [number, number][] };
+    }
 
-      // Only append if position is different from last historical point
-      if (
-        !lastPoint ||
-        Math.abs(lastPoint.latitude! - currentPos.latitude!) > 0.0001 ||
-        Math.abs(lastPoint.longitude! - currentPos.longitude!) > 0.0001
-      ) {
-        return [...historicalPoints, currentPos];
+    const curLat = selectedFlight.latitude;
+    const curLon = selectedFlight.longitude;
+
+    // Find closest trajectory point to aircraft
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < validPoints.length; i++) {
+      const d = distSq(validPoints[i].latitude!, validPoints[i].longitude!, curLat, curLon);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
       }
     }
 
-    return historicalPoints;
-  }, [trajectory, selectedFlight]);
+    const currentPos: [number, number] = [curLat, curLon];
 
-  if (!showTrajectory || validPoints.length < 2) {
+    // Traveled: start → closest point → current position
+    const traveled: [number, number][] = validPoints
+      .slice(0, bestIdx + 1)
+      .map((p) => [p.latitude!, p.longitude!]);
+    traveled.push(currentPos);
+
+    // Remaining: current position → rest of trajectory
+    const remaining: [number, number][] = [currentPos];
+    for (let i = bestIdx + 1; i < validPoints.length; i++) {
+      remaining.push([validPoints[i].latitude!, validPoints[i].longitude!]);
+    }
+
+    return { traveledPositions: traveled, remainingPositions: remaining };
+  }, [validPoints, selectedFlight?.latitude, selectedFlight?.longitude]);
+
+  if (!showTrajectory || (traveledPositions.length < 2 && remainingPositions.length < 2)) {
     return null;
   }
-
-  // Create polyline coordinates
-  const positions: [number, number][] = validPoints.map((p) => [
-    p.latitude!,
-    p.longitude!,
-  ]);
 
   // Color gradient based on altitude (if available)
   const getAltitudeColor = (altitude: number | null): string => {
@@ -70,16 +78,31 @@ export default function TrajectoryLine() {
 
   return (
     <>
-      {/* Main trajectory line */}
-      <Polyline
-        positions={positions}
-        pathOptions={{
-          color: '#3b82f6',
-          weight: 3,
-          opacity: 0.8,
-          dashArray: '10, 5',
-        }}
-      />
+      {/* Traveled trajectory — dashed line (─ ─ ─) */}
+      {traveledPositions.length >= 2 && (
+        <Polyline
+          positions={traveledPositions}
+          pathOptions={{
+            color: '#3b82f6',
+            weight: 3,
+            opacity: 0.8,
+            dashArray: '10, 5',
+          }}
+        />
+      )}
+
+      {/* Remaining trajectory — dotted line (· · ·) */}
+      {remainingPositions.length >= 2 && (
+        <Polyline
+          positions={remainingPositions}
+          pathOptions={{
+            color: '#93c5fd',
+            weight: 2,
+            opacity: 0.6,
+            dashArray: '3, 8',
+          }}
+        />
+      )}
 
       {/* Historical position markers (show every Nth point) */}
       {validPoints
