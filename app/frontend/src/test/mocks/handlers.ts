@@ -16,6 +16,9 @@ export const mockFlights = [
     data_source: 'synthetic',
     flight_phase: 'descending' as const,
     aircraft_type: 'B737',
+    origin_airport: 'LAX',
+    destination_airport: 'SFO',
+    assigned_gate: 'A3',
   },
   {
     icao24: 'b67890',
@@ -31,6 +34,8 @@ export const mockFlights = [
     data_source: 'synthetic',
     flight_phase: 'cruising' as const,
     aircraft_type: 'A320',
+    origin_airport: 'JFK',
+    destination_airport: 'SFO',
   },
   {
     icao24: 'c11111',
@@ -46,6 +51,9 @@ export const mockFlights = [
     data_source: 'synthetic',
     flight_phase: 'ground' as const,
     aircraft_type: 'B738',
+    origin_airport: 'DEN',
+    destination_airport: 'SFO',
+    assigned_gate: 'A5',
   },
 ]
 

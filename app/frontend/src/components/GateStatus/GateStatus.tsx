@@ -1,14 +1,18 @@
 import { useMemo, useState } from 'react';
 import { useCongestion } from '../../hooks/usePredictions';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
-import { CongestionArea } from '../../types/flight';
+import { useFlightContext } from '../../context/FlightContext';
+import { CongestionArea, Flight } from '../../types/flight';
 import { OSMGate } from '../../types/airportFormats';
+
+type GateStatusLabel = 'ON STAND' | 'TAXI IN' | 'INBOUND' | 'VACANT';
 
 interface Gate {
   id: string;
   ref: string;
   terminal: string;
-  isOccupied: boolean;
+  status: GateStatusLabel;
+  flight: Flight | null;
 }
 
 // Congestion level colors
@@ -17,6 +21,20 @@ const congestionColors: Record<string, { bg: string; text: string; border: strin
   moderate: { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300' },
   high: { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300' },
   critical: { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300' },
+};
+
+const gateStatusColors: Record<GateStatusLabel, { bg: string; text: string; hover: string }> = {
+  'ON STAND': { bg: 'bg-red-100', text: 'text-red-700', hover: 'hover:bg-red-200' },
+  'TAXI IN': { bg: 'bg-amber-100', text: 'text-amber-700', hover: 'hover:bg-amber-200' },
+  'INBOUND': { bg: 'bg-amber-100', text: 'text-amber-700', hover: 'hover:bg-amber-200' },
+  'VACANT': { bg: 'bg-green-100', text: 'text-green-700', hover: 'hover:bg-green-200' },
+};
+
+const statusBadgeColors: Record<GateStatusLabel, string> = {
+  'ON STAND': 'bg-red-500 text-white',
+  'TAXI IN': 'bg-amber-500 text-white',
+  'INBOUND': 'bg-amber-500 text-white',
+  'VACANT': 'bg-green-500 text-white',
 };
 
 // Natural sort comparator: A1, A2, A10 (not A1, A10, A2)
@@ -48,24 +66,64 @@ function inferTerminal(ref: string): string {
   return 'Other';
 }
 
-// Build gates from OSM data, falling back to hardcoded defaults
-function buildGates(osmGates: OSMGate[]): Gate[] {
+// Classify the status of a flight at a gate
+function classifyGateStatus(flight: Flight): GateStatusLabel {
+  if (flight.flight_phase === 'ground') {
+    const vel = Number(flight.velocity) || 0;
+    return vel === 0 ? 'ON STAND' : 'TAXI IN';
+  }
+  if (flight.flight_phase === 'descending') {
+    return 'INBOUND';
+  }
+  // Climbing/cruising with a gate assigned — treat as on stand (pre-departure)
+  return 'ON STAND';
+}
+
+// Build a lookup: gate ref → flight + status
+function buildGateFlightMap(flights: Flight[]): Map<string, { flight: Flight; status: GateStatusLabel }> {
+  const map = new Map<string, { flight: Flight; status: GateStatusLabel }>();
+  for (const f of flights) {
+    if (f.assigned_gate) {
+      const ref = f.assigned_gate;
+      const existing = map.get(ref);
+      // Prefer ON STAND > TAXI IN > INBOUND (closest to gate wins)
+      const status = classifyGateStatus(f);
+      const priority: Record<GateStatusLabel, number> = { 'ON STAND': 3, 'TAXI IN': 2, 'INBOUND': 1, 'VACANT': 0 };
+      if (!existing || priority[status] > priority[existing.status]) {
+        map.set(ref, { flight: f, status });
+      }
+    }
+  }
+  return map;
+}
+
+// Build gates from OSM data, enriched with flight data
+function buildGates(osmGates: OSMGate[], gateFlightMap: Map<string, { flight: Flight; status: GateStatusLabel }>): Gate[] {
   if (osmGates.length > 0) {
-    return osmGates.map((g) => ({
-      id: g.id,
-      ref: g.ref || g.id,
-      terminal: g.terminal || inferTerminal(g.ref || g.id),
-      isOccupied: Math.random() > 0.6, // ~40% occupied (demo)
-    }));
+    return osmGates.map((g) => {
+      const ref = g.ref || g.id;
+      const info = gateFlightMap.get(ref);
+      return {
+        id: g.id,
+        ref,
+        terminal: g.terminal || inferTerminal(ref),
+        status: info?.status ?? 'VACANT',
+        flight: info?.flight ?? null,
+      };
+    });
   }
 
   // Fallback: hardcoded defaults
   const gates: Gate[] = [];
   for (let i = 1; i <= 10; i++) {
-    gates.push({ id: `A${i}`, ref: `A${i}`, terminal: 'Terminal A', isOccupied: Math.random() > 0.6 });
+    const ref = `A${i}`;
+    const info = gateFlightMap.get(ref);
+    gates.push({ id: ref, ref, terminal: 'Terminal A', status: info?.status ?? 'VACANT', flight: info?.flight ?? null });
   }
   for (let i = 1; i <= 10; i++) {
-    gates.push({ id: `B${i}`, ref: `B${i}`, terminal: 'Terminal B', isOccupied: Math.random() > 0.6 });
+    const ref = `B${i}`;
+    const info = gateFlightMap.get(ref);
+    gates.push({ id: ref, ref, terminal: 'Terminal B', status: info?.status ?? 'VACANT', flight: info?.flight ?? null });
   }
   return gates;
 }
@@ -110,12 +168,75 @@ function CongestionIndicator({ congestion }: { congestion?: CongestionArea }) {
   );
 }
 
+// Gate detail card shown when a gate is clicked
+function GateDetailCard({
+  gate,
+  onSelectFlight,
+  onClose,
+}: {
+  gate: Gate;
+  onSelectFlight: (flight: Flight) => void;
+  onClose: () => void;
+}) {
+  const colors = statusBadgeColors[gate.status];
+
+  return (
+    <div
+      className="mt-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs"
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-slate-700">Gate {gate.ref}</span>
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${colors}`}>
+            {gate.status}
+          </span>
+        </div>
+        <button
+          className="text-slate-400 hover:text-slate-600 text-sm leading-none"
+          onClick={onClose}
+          aria-label="Close gate detail"
+        >
+          ×
+        </button>
+      </div>
+
+      {gate.flight ? (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <button
+              className="font-mono font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+              onClick={() => onSelectFlight(gate.flight!)}
+              title="Select flight on map"
+            >
+              {gate.flight.callsign || gate.flight.icao24}
+            </button>
+            {gate.flight.aircraft_type && (
+              <span className="text-slate-500">{gate.flight.aircraft_type}</span>
+            )}
+          </div>
+          {(gate.flight.origin_airport || gate.flight.destination_airport) && (
+            <div className="text-slate-500">
+              {gate.flight.origin_airport || '???'} → {gate.flight.destination_airport || '???'}
+            </div>
+          )}
+          <div className="text-slate-400 capitalize">{gate.flight.flight_phase}</div>
+        </div>
+      ) : (
+        <div className="text-slate-400">No flight assigned</div>
+      )}
+    </div>
+  );
+}
+
 export default function GateStatus() {
   const { getGates } = useAirportConfigContext();
   const osmGates = getGates();
+  const { flights, setSelectedFlight } = useFlightContext();
   const [selectedTerminal, setSelectedTerminal] = useState<string | null>(null);
+  const [selectedGateId, setSelectedGateId] = useState<string | null>(null);
 
-  const gates = useMemo(() => buildGates(osmGates), [osmGates]);
+  const gateFlightMap = useMemo(() => buildGateFlightMap(flights), [flights]);
+  const gates = useMemo(() => buildGates(osmGates, gateFlightMap), [osmGates, gateFlightMap]);
   const terminalGroups = useMemo(() => groupByTerminal(gates), [gates]);
   const terminalNames = useMemo(
     () => Array.from(terminalGroups.keys()).sort((a, b) => naturalSort(a, b)),
@@ -124,8 +245,18 @@ export default function GateStatus() {
 
   const { congestion, isLoading: isCongestionLoading } = useCongestion();
 
-  const occupiedCount = gates.filter((g) => g.isOccupied).length;
+  const occupiedCount = gates.filter((g) => g.status !== 'VACANT').length;
   const availableCount = gates.length - occupiedCount;
+
+  const selectedGate = selectedGateId ? gates.find((g) => g.id === selectedGateId) ?? null : null;
+
+  function handleGateClick(gate: Gate) {
+    setSelectedGateId((prev) => (prev === gate.id ? null : gate.id));
+  }
+
+  function handleSelectFlight(flight: Flight) {
+    setSelectedFlight(flight);
+  }
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3">
@@ -154,7 +285,7 @@ export default function GateStatus() {
               ? 'bg-blue-600 text-white'
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
-          onClick={() => setSelectedTerminal(null)}
+          onClick={() => { setSelectedTerminal(null); setSelectedGateId(null); }}
         >
           All
         </button>
@@ -170,7 +301,7 @@ export default function GateStatus() {
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
-              onClick={() => setSelectedTerminal(name)}
+              onClick={() => { setSelectedTerminal(name); setSelectedGateId(null); }}
             >
               {short}
             </button>
@@ -183,7 +314,7 @@ export default function GateStatus() {
         <div className="space-y-1">
           {terminalNames.map((name) => {
             const tGates = terminalGroups.get(name) || [];
-            const occ = tGates.filter((g) => g.isOccupied).length;
+            const occ = tGates.filter((g) => g.status !== 'VACANT').length;
             const avail = tGates.length - occ;
             return (
               <button
@@ -224,26 +355,57 @@ export default function GateStatus() {
             </span>
           </div>
           <div className="grid grid-cols-8 gap-1">
-            {(terminalGroups.get(selectedTerminal) || []).map((gate) => (
-              <div
-                key={gate.id}
-                className={`
-                  aspect-square flex items-center justify-center
-                  text-[10px] font-medium rounded cursor-pointer
-                  transition-colors duration-150
-                  ${gate.isOccupied
-                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                    : 'bg-green-100 text-green-700 hover:bg-green-200'
-                  }
-                `}
-                title={`${gate.ref}: ${gate.isOccupied ? 'Occupied' : 'Available'}`}
-              >
-                {gate.ref}
-              </div>
-            ))}
+            {(terminalGroups.get(selectedTerminal) || []).map((gate) => {
+              const colors = gateStatusColors[gate.status];
+              const isSelected = selectedGateId === gate.id;
+              return (
+                <button
+                  key={gate.id}
+                  className={`
+                    aspect-square flex items-center justify-center
+                    text-[10px] font-medium rounded cursor-pointer
+                    transition-colors duration-150
+                    ${colors.bg} ${colors.text} ${colors.hover}
+                    ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
+                  `}
+                  title={`${gate.ref}: ${gate.status}${gate.flight ? ` — ${gate.flight.callsign || gate.flight.icao24}` : ''}`}
+                  onClick={() => handleGateClick(gate)}
+                >
+                  {gate.ref}
+                </button>
+              );
+            })}
           </div>
+
+          {/* Gate detail card */}
+          {selectedGate && selectedGate.terminal === selectedTerminal && (
+            <GateDetailCard
+              gate={selectedGate}
+              onSelectFlight={handleSelectFlight}
+              onClose={() => setSelectedGateId(null)}
+            />
+          )}
         </div>
       )}
+
+      {/* Gate color legend */}
+      <div className="mt-2 pt-2 border-t border-slate-100">
+        <div className="text-[10px] font-medium text-slate-500 mb-1">Stand</div>
+        <div className="flex flex-wrap gap-1.5">
+          <span className="flex items-center gap-1 text-[10px]">
+            <span className="w-2 h-2 rounded bg-red-400" />
+            <span className="text-slate-500">On Stand</span>
+          </span>
+          <span className="flex items-center gap-1 text-[10px]">
+            <span className="w-2 h-2 rounded bg-amber-400" />
+            <span className="text-slate-500">Taxi In / Inbound</span>
+          </span>
+          <span className="flex items-center gap-1 text-[10px]">
+            <span className="w-2 h-2 rounded bg-green-400" />
+            <span className="text-slate-500">Vacant</span>
+          </span>
+        </div>
+      </div>
 
       {/* Congestion Legend */}
       <div className="mt-2 pt-2 border-t border-slate-100">
