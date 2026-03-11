@@ -2214,8 +2214,12 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
                     # Prepend roll endpoint for smooth phase transition
                     taxi_path_latlons.insert(0, (roll_end_lat, roll_end_lon))
-                    # Append current position as final point
-                    taxi_path_latlons.append((end_lat, end_lon))
+                    # Append current position only if close to last taxi waypoint
+                    # to avoid a visible "jump" across the airport
+                    last_taxi = taxi_path_latlons[-1]
+                    gap = _distance_between(last_taxi, (end_lat, end_lon))
+                    if gap < 0.005:  # ~500m — reasonable gate proximity
+                        taxi_path_latlons.append((end_lat, end_lon))
 
                     # Compute cumulative distances along the path
                     cum_dist = [0.0]
