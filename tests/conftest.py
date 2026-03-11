@@ -4,6 +4,35 @@ import pytest
 import tempfile
 import os
 from pathlib import Path
+from unittest.mock import patch
+
+
+# SFO runway 28L geometry as OSM-format geoPoints (threshold → far end)
+_SFO_RWY_28L_OSM = {
+    "id": "RWY_28L",
+    "ref": "28L/10R",
+    "geoPoints": [
+        {"latitude": 37.611712, "longitude": -122.358349},  # 28L threshold
+        {"latitude": 37.626291, "longitude": -122.393105},  # 10R end
+    ],
+    "width": 60.0,
+}
+
+
+@pytest.fixture(autouse=True)
+def _provide_osm_runway_data():
+    """Inject SFO runway OSM data for all tests so trajectory functions work.
+
+    Production code reads runway geometry from the OSM config service.  In the
+    test environment there is no config service, so we patch the lookup function
+    to return SFO's primary runway.  Tests that need a different airport or no
+    runway data can override this fixture or re-patch as needed.
+    """
+    with patch(
+        "src.ingestion.fallback._get_osm_primary_runway",
+        return_value=_SFO_RWY_28L_OSM,
+    ):
+        yield
 
 
 @pytest.fixture

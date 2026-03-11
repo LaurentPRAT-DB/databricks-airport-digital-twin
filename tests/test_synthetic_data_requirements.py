@@ -45,7 +45,10 @@ from src.ingestion.fallback import (
     _runway_28L,
     _runway_28R,
     _get_approach_waypoints,
+    _get_departure_waypoints,
     _get_runway_heading,
+    _get_runway_threshold,
+    _get_departure_runway,
     _calculate_heading,
     _shortest_angle_diff,
 )
@@ -1419,10 +1422,18 @@ class TestFinalApproachRunwayAlignment:
                 f"Glideslope {ft_per_nm:.0f} ft/NM outside 200-500 range"
             )
 
-    def test_sfo_no_origin_returns_static_waypoints(self):
-        """SFO with no origin should still return the static APPROACH_WAYPOINTS."""
+    def test_no_origin_returns_waypoints_converging_on_threshold(self):
+        """Approach with no origin should produce waypoints converging on runway threshold."""
         wps = _get_approach_waypoints(None)
-        assert wps == APPROACH_WAYPOINTS
+        assert len(wps) >= 5, "Should have enough waypoints for a proper approach"
+        # Last waypoint should be at the runway threshold (low altitude)
+        last = wps[-1]
+        assert last[2] < 50, f"Last waypoint altitude should be near ground, got {last[2]}"
+        # Altitudes should generally decrease toward threshold
+        for i in range(len(wps) - 1):
+            assert wps[i][2] >= wps[i + 1][2], (
+                f"Waypoint {i} altitude {wps[i][2]} should be >= next {wps[i+1][2]}"
+            )
 
     def test_localizer_intercept_angle_reasonable(self):
         """The blending from entry bearing to approach course should not exceed 90°
@@ -1449,6 +1460,46 @@ class TestFinalApproachRunwayAlignment:
                         f"Origin {origin}, waypoints {i}→{i+1}→{i+2}: "
                         f"turn of {turn:.1f}° exceeds 90° max"
                     )
+
+
+# ============================================================================
+# 30b. No OSM Runway = Disabled Trajectories
+# ============================================================================
+class TestNoRunwayDisablesTrajectories:
+    """When no OSM runway data is available, trajectory functions return empty
+    lists rather than generating nonsensical routes."""
+
+    def test_approach_waypoints_empty_without_osm(self, _provide_osm_runway_data):
+        """No OSM runway → empty approach waypoints."""
+        from unittest.mock import patch
+        with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
+            wps = _get_approach_waypoints("LAX")
+            assert wps == []
+
+    def test_departure_waypoints_empty_without_osm(self, _provide_osm_runway_data):
+        """No OSM runway → empty departure waypoints."""
+        from unittest.mock import patch
+        with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
+            wps = _get_departure_waypoints("JFK")
+            assert wps == []
+
+    def test_runway_threshold_none_without_osm(self, _provide_osm_runway_data):
+        """No OSM runway → threshold returns None."""
+        from unittest.mock import patch
+        with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
+            assert _get_runway_threshold() is None
+
+    def test_runway_heading_none_without_osm(self, _provide_osm_runway_data):
+        """No OSM runway → heading returns None."""
+        from unittest.mock import patch
+        with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
+            assert _get_runway_heading() is None
+
+    def test_departure_runway_none_without_osm(self, _provide_osm_runway_data):
+        """No OSM runway → departure runway returns None."""
+        from unittest.mock import patch
+        with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
+            assert _get_departure_runway() is None
 
 
 # ============================================================================

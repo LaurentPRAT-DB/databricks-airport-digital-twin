@@ -479,102 +479,89 @@ DEPARTURE_WAYPOINTS = [
 
 
 def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
-    """Get approach waypoints relative to current airport center.
+    """Get approach waypoints aligned with the actual runway.
 
     When *origin_iata* is provided the approach starts from the bearing of that
     airport, so a flight from SEA appears from the north, one from LAX from the
-    south, etc.  When origin is ``None`` the legacy behaviour is preserved:
-    SFO returns the static APPROACH_WAYPOINTS, other airports get a generic
-    approach from the east.
-    """
-    center = get_airport_center()
-    lat, lon = center
+    south, etc.  When origin is ``None`` a default entry from the east is used.
 
-    # SFO backward-compat: no origin → static waypoints
+    Returns an empty list when no OSM runway data is available, which disables
+    the approach trajectory line rather than producing a nonsensical route.
+    """
+    # Require real runway data — no runway, no trajectory
+    rwy_threshold = _get_runway_threshold()  # (lon, lat) or None
+    rwy_heading = _get_runway_heading()       # float or None
+    if rwy_threshold is None or rwy_heading is None:
+        return []
+
+    rwy_lat, rwy_lon = rwy_threshold[1], rwy_threshold[0]
+    approach_course = (rwy_heading + 180) % 360
+
     if origin_iata is None:
-        if abs(lat - AIRPORT_CENTER[0]) < 0.01 and abs(lon - AIRPORT_CENTER[1]) < 0.01:
-            return APPROACH_WAYPOINTS
-        # Non-SFO, no origin: default from east (bearing 90)
-        entry_dir = 90.0
+        entry_dir = (approach_course + 180) % 360  # Default: from behind the approach course
     else:
-        # Direction from airport center to the entry point (where aircraft spawns)
         bearing_to_apt = _bearing_from_airport(origin_iata)
         entry_dir = (bearing_to_apt + 180) % 360
 
-    # Runway approach course (reciprocal of runway heading)
-    rwy_heading = _get_runway_heading()
-    approach_course = (rwy_heading + 180) % 360
-
-    # Phase 2: Final approach — aligned with runway centerline
+    # Phase 2: Final approach — centered on RUNWAY THRESHOLD
     final_distances = [0.10, 0.075, 0.05, 0.035, 0.02, 0.01, 0.0]
     final_altitudes = [2500, 1800, 1000, 650, 300, 150, 15]
     final_wps = []
     for dist, alt in zip(final_distances, final_altitudes):
         if dist == 0.0:
-            final_wps.append((lon, lat, alt))
+            final_wps.append((rwy_lon, rwy_lat, alt))
         else:
-            pt = _point_on_circle(lat, lon, approach_course, dist)
+            pt = _point_on_circle(rwy_lat, rwy_lon, approach_course, dist)
             final_wps.append((pt[1], pt[0], alt))
 
     # Phase 1: Base leg — blend from entry_dir to approach_course
-    base_distances = [0.25, 0.21, 0.17, 0.135]
+    # Radiate from the outermost final approach point so they connect smoothly
+    anchor_lat, anchor_lon = final_wps[0][1], final_wps[0][0]
+    base_distances = [0.15, 0.12, 0.09, 0.05]
     base_altitudes = [6000, 5000, 4000, 3200]
     base_wps = []
     for i, (dist, alt) in enumerate(zip(base_distances, base_altitudes)):
         blend = i / len(base_distances)  # 0→0.75
         bearing = entry_dir + _shortest_angle_diff(entry_dir, approach_course) * blend
-        pt = _point_on_circle(lat, lon, bearing, dist)
+        pt = _point_on_circle(anchor_lat, anchor_lon, bearing, dist)
         base_wps.append((pt[1], pt[0], alt))
 
     return base_wps + final_wps
 
 
-def _get_runway_heading() -> float:
-    """Compute the runway landing heading from static reference data.
+def _get_runway_heading() -> Optional[float]:
+    """Compute the runway heading from OSM runway geometry.
 
-    For SFO uses the static APPROACH_WAYPOINTS.  For other airports derives
-    a default heading (270°, landing from the east) from a small offset so
-    that _get_approach_waypoints can call this without circular recursion.
+    Returns the heading in degrees or None when no OSM runway data is available.
     """
-    center = get_airport_center()
-    lat, lon = center
-    # SFO: use static waypoints
-    if abs(lat - AIRPORT_CENTER[0]) < 0.01 and abs(lon - AIRPORT_CENTER[1]) < 0.01:
-        wps = APPROACH_WAYPOINTS
-    else:
-        # Non-SFO default: runway faces west (approach from east, bearing 90)
-        pt = _point_on_circle(lat, lon, 90.0, 0.01)
-        wps = [(pt[1], pt[0], 150), (lon, lat, 15)]
-
-    if len(wps) < 2:
-        return 0.0
-    wp_prev = wps[-2]
-    wp_last = wps[-1]
-    return _calculate_heading((wp_prev[1], wp_prev[0]), (wp_last[1], wp_last[0]))
+    rwy = _get_osm_primary_runway()
+    if rwy:
+        _, _, heading = _osm_runway_endpoints(rwy)
+        return heading
+    return None
 
 
 def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
-    """Get departure waypoints relative to current airport center.
+    """Get departure waypoints aligned with the actual runway.
 
     When *destination_iata* is provided the departure curves toward that
     airport's bearing so the trajectory visually heads in the right direction.
-    When destination is ``None`` the legacy behaviour is preserved: SFO returns
-    the static DEPARTURE_WAYPOINTS, other airports get a generic departure
-    toward the east.
-    """
-    center = get_airport_center()
-    lat, lon = center
 
-    # SFO backward-compat
+    Returns an empty list when no OSM runway data is available, which disables
+    the departure trajectory line rather than producing a nonsensical route.
+    """
+    # Require real runway data — no runway, no trajectory
+    dep_rwy = _get_departure_runway()  # (lon, lat) or None
+    rwy_heading = _get_runway_heading()  # float or None
+    if dep_rwy is None or rwy_heading is None:
+        return []
+
+    dep_lat, dep_lon = dep_rwy[1], dep_rwy[0]
+
     if destination_iata is None:
-        if abs(lat - AIRPORT_CENTER[0]) < 0.01 and abs(lon - AIRPORT_CENTER[1]) < 0.01:
-            return DEPARTURE_WAYPOINTS
-        exit_dir = 90.0
+        exit_dir = rwy_heading  # Default: continue along runway heading
     else:
         exit_dir = _bearing_to_airport(destination_iata)
-
-    # Runway heading for initial climb (first 2 waypoints follow runway)
-    rwy_heading = _get_runway_heading()
 
     # Distances and altitudes for 9 departure waypoints
     distances = [0.02, 0.035, 0.05, 0.075, 0.10, 0.135, 0.17, 0.21, 0.25]
@@ -590,25 +577,70 @@ def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
             bearing = rwy_heading + _shortest_angle_diff(rwy_heading, exit_dir) * blend
         else:
             bearing = exit_dir
-        pt = _point_on_circle(lat, lon, bearing, dist)
+        pt = _point_on_circle(dep_lat, dep_lon, bearing, dist)
         waypoints.append((pt[1], pt[0], alt))  # (lon, lat, alt)
     return waypoints
 
 
-def _get_runway_threshold() -> tuple:
-    """Get approximate runway threshold (lon, lat) for current airport."""
-    center = get_airport_center()
-    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01 and abs(center[1] - AIRPORT_CENTER[1]) < 0.01:
-        return (_RWY_28L_LON, _RWY_28L_LAT)
-    return (center[1], center[0])  # (lon, lat)
+def _get_osm_primary_runway() -> Optional[dict]:
+    """Get the primary (longest) runway from OSM config data.
+
+    Returns the runway dict with 'geoPoints' [{latitude, longitude}, ...] or None
+    if no OSM runway data is available.
+    """
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+        runways = config.get("osmRunways", [])
+        if not runways:
+            return None
+        # Pick the longest runway by number of geoPoints (proxy for length)
+        best = max(runways, key=lambda r: len(r.get("geoPoints", [])))
+        if len(best.get("geoPoints", [])) < 2:
+            return None
+        return best
+    except Exception:
+        return None
 
 
-def _get_departure_runway() -> tuple:
-    """Get approximate departure runway start (lon, lat) for current airport."""
-    center = get_airport_center()
-    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01 and abs(center[1] - AIRPORT_CENTER[1]) < 0.01:
-        return (_RWY_28R_LON, _RWY_28R_LAT)
-    return (center[1], center[0])  # (lon, lat)
+def _osm_runway_endpoints(runway: dict) -> tuple:
+    """Extract threshold and opposite-end positions from an OSM runway.
+
+    Returns ((threshold_lon, threshold_lat), (far_lon, far_lat), heading_deg).
+    The 'threshold' is the first geoPoint and 'far end' is the last one.
+    Heading is computed from threshold → far end.
+    """
+    pts = runway["geoPoints"]
+    t_lat, t_lon = pts[0]["latitude"], pts[0]["longitude"]
+    f_lat, f_lon = pts[-1]["latitude"], pts[-1]["longitude"]
+    heading = _calculate_heading((t_lat, t_lon), (f_lat, f_lon))
+    return (t_lon, t_lat), (f_lon, f_lat), heading
+
+
+def _get_runway_threshold() -> Optional[tuple]:
+    """Get the approach runway threshold (lon, lat) from OSM data.
+
+    Returns (lon, lat) tuple or None when no OSM runway data is available.
+    """
+    rwy = _get_osm_primary_runway()
+    if rwy:
+        threshold, _, _ = _osm_runway_endpoints(rwy)
+        return threshold
+    return None
+
+
+def _get_departure_runway() -> Optional[tuple]:
+    """Get the departure runway start (lon, lat) from OSM data.
+
+    Uses the far end of the primary runway (opposite from approach threshold).
+    Returns (lon, lat) tuple or None when no OSM runway data is available.
+    """
+    rwy = _get_osm_primary_runway()
+    if rwy:
+        _, far_end, _ = _osm_runway_endpoints(rwy)
+        return far_end
+    return None
 
 
 def _get_taxi_waypoints_arrival(gate_ref: str) -> List[tuple]:
@@ -624,9 +656,9 @@ def _get_taxi_waypoints_arrival(gate_ref: str) -> List[tuple]:
         service = get_airport_config_service()
         graph = service.taxiway_graph
         if graph:
-            runway_exit = _get_runway_threshold()  # (lon, lat)
+            runway_exit = _get_runway_threshold()  # (lon, lat) or None
             gate_pos = get_gates().get(gate_ref)
-            if gate_pos:
+            if runway_exit and gate_pos:
                 route = graph.find_route(
                     (runway_exit[1], runway_exit[0]),  # (lat, lon) for graph
                     gate_pos,  # (lat, lon)
@@ -660,9 +692,9 @@ def _get_taxi_waypoints_departure(gate_ref: str) -> List[tuple]:
         service = get_airport_config_service()
         graph = service.taxiway_graph
         if graph:
-            runway_threshold = _get_departure_runway()  # (lon, lat)
+            runway_threshold = _get_departure_runway()  # (lon, lat) or None
             gate_pos = get_gates().get(gate_ref)
-            if gate_pos:
+            if runway_threshold and gate_pos:
                 route = graph.find_route(
                     gate_pos,  # (lat, lon)
                     (runway_threshold[1], runway_threshold[0]),  # (lat, lon) for graph
@@ -2072,18 +2104,22 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     now = datetime.now(timezone.utc)
     interval_seconds = (minutes * 60) / num_points
 
-    # Runway approach parameters (dynamic per airport)
+    # Runway parameters from OSM data — no runway = no trajectory
     _rwy_threshold = _get_runway_threshold()
-    runway_28l_lon, runway_28l_lat = _rwy_threshold[0], _rwy_threshold[1]
     _dep_threshold = _get_departure_runway()
+    if _rwy_threshold is None or _dep_threshold is None:
+        return []  # No runway data, disable trajectory
+    runway_28l_lon, runway_28l_lat = _rwy_threshold[0], _rwy_threshold[1]
     dep_rwy_lon, dep_rwy_lat = _dep_threshold[0], _dep_threshold[1]
 
     if is_on_ground:
         # Aircraft is on ground - show approach + landing + taxi trajectory
         # Divide trajectory: 55% approach, 10% landing roll, 35% taxi
 
-        # Landing roll direction along actual runway heading (derived from approach waypoints)
+        # Landing roll direction along actual runway heading
         _rwy_heading = _get_runway_heading()
+        if _rwy_heading is None:
+            return []
         _rwy_heading_rad = math.radians(_rwy_heading)
         _roll_distance = 0.012  # ~1.3 km roll in degrees
         roll_dlat = _roll_distance * math.cos(_rwy_heading_rad)
@@ -2251,13 +2287,18 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     elif current_phase in ["climbing", "cruising", "departing", "takeoff", "enroute"]:
         # DEPARTURE trajectory - show takeoff, climb, then turn toward destination
         dest_airport = current_state.destination_airport if current_state else None
-        _dep_rwy_heading = _get_runway_heading()  # Reuse for departure (parallel runways)
+        _dep_rwy_heading = _get_runway_heading()
+        if _dep_rwy_heading is None:
+            return []  # No runway data, disable trajectory
         dest_bearing = _bearing_to_airport(dest_airport) if dest_airport else _dep_rwy_heading
+
+        _traj_dep_wps = _get_departure_waypoints(dest_airport)
+        if not _traj_dep_wps:
+            return []  # No runway data, disable trajectory
 
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
-            _traj_dep_wps = _get_departure_waypoints(dest_airport)
             if progress < 0.15:
                 # Takeoff roll and initial climb
                 takeoff_progress = progress / 0.15
