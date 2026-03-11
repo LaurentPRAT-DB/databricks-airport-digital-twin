@@ -96,6 +96,52 @@ export default function AirportOverlay() {
         />
       )}
 
+      {/* Render OSM aprons (parking areas) - bottom layer */}
+      {useOsmAprons && osmAprons.map((apron) => {
+        const positions = geoToLatLng(apron.geoPolygon);
+        if (positions.length < 3) return null;
+        return (
+          <Polygon
+            key={apron.id}
+            positions={positions}
+            pathOptions={{
+              fillColor: '#6b7280', // gray-500
+              fillOpacity: 0.3,
+              color: '#4b5563', // gray-600
+              weight: 1,
+            }}
+          >
+            {apron.name && (
+              <Tooltip direction="center">
+                {apron.name}
+              </Tooltip>
+            )}
+          </Polygon>
+        );
+      })}
+
+      {/* Render OSM terminals - below runways, taxiways, and gates */}
+      {useOsmTerminals && osmTerminals.map((terminal) => {
+        const positions = geoToLatLng(terminal.geoPolygon);
+        if (positions.length < 3) return null;
+        return (
+          <Polygon
+            key={terminal.id}
+            positions={positions}
+            pathOptions={{
+              fillColor: '#3b82f6', // blue-500
+              fillOpacity: 0.6,
+              color: '#1d4ed8', // blue-700
+              weight: 2,
+            }}
+          >
+            <Tooltip direction="center">
+              {terminal.name}
+            </Tooltip>
+          </Polygon>
+        );
+      })}
+
       {/* Render OSM runways as polylines */}
       {useOsmRunways && osmRunways.map((runway) => {
         const positions = geoToLatLng(runway.geoPoints);
@@ -119,7 +165,30 @@ export default function AirportOverlay() {
         );
       })}
 
-      {/* Render OSM gates as circle markers (preferred) */}
+      {/* Render OSM taxiways */}
+      {useOsmTaxiways && osmTaxiways.map((taxiway) => {
+        const positions = geoToLatLng(taxiway.geoPoints);
+        if (positions.length < 2) return null;
+        return (
+          <Polyline
+            key={taxiway.id}
+            positions={positions}
+            pathOptions={{
+              color: '#fbbf24', // amber-400
+              weight: 3,
+              opacity: 0.7,
+            }}
+          >
+            {taxiway.name && (
+              <Tooltip direction="center">
+                TWY {taxiway.name}
+              </Tooltip>
+            )}
+          </Polyline>
+        );
+      })}
+
+      {/* Render OSM gates as circle markers (preferred) - top layer so labels are visible */}
       {useOsmGates && osmGates.map((gate) => (
         <CircleMarker
           key={gate.id}
@@ -157,75 +226,6 @@ export default function AirportOverlay() {
               Gate {gate.properties?.name}
             </Tooltip>
           </CircleMarker>
-        );
-      })}
-
-      {/* Render OSM aprons (parking areas) - render first so they're behind other elements */}
-      {useOsmAprons && osmAprons.map((apron) => {
-        const positions = geoToLatLng(apron.geoPolygon);
-        if (positions.length < 3) return null;
-        return (
-          <Polygon
-            key={apron.id}
-            positions={positions}
-            pathOptions={{
-              fillColor: '#6b7280', // gray-500
-              fillOpacity: 0.3,
-              color: '#4b5563', // gray-600
-              weight: 1,
-            }}
-          >
-            {apron.name && (
-              <Tooltip direction="center">
-                {apron.name}
-              </Tooltip>
-            )}
-          </Polygon>
-        );
-      })}
-
-      {/* Render OSM taxiways */}
-      {useOsmTaxiways && osmTaxiways.map((taxiway) => {
-        const positions = geoToLatLng(taxiway.geoPoints);
-        if (positions.length < 2) return null;
-        return (
-          <Polyline
-            key={taxiway.id}
-            positions={positions}
-            pathOptions={{
-              color: '#fbbf24', // amber-400
-              weight: 3,
-              opacity: 0.7,
-            }}
-          >
-            {taxiway.name && (
-              <Tooltip direction="center">
-                TWY {taxiway.name}
-              </Tooltip>
-            )}
-          </Polyline>
-        );
-      })}
-
-      {/* Render OSM terminals */}
-      {useOsmTerminals && osmTerminals.map((terminal) => {
-        const positions = geoToLatLng(terminal.geoPolygon);
-        if (positions.length < 3) return null;
-        return (
-          <Polygon
-            key={terminal.id}
-            positions={positions}
-            pathOptions={{
-              fillColor: '#3b82f6', // blue-500
-              fillOpacity: 0.6,
-              color: '#1d4ed8', // blue-700
-              weight: 2,
-            }}
-          >
-            <Tooltip direction="center">
-              {terminal.name}
-            </Tooltip>
-          </Polygon>
         );
       })}
     </>
