@@ -21,7 +21,7 @@ class TestFlightBroadcaster:
         """Test broadcaster initialization."""
         fb = FlightBroadcaster()
         assert fb._connections == set()
-        assert fb._running is False
+        assert fb._broadcast_task is None
 
     @pytest.mark.asyncio
     async def test_connect(self):
@@ -150,23 +150,13 @@ class TestFlightBroadcaster:
         # Should not raise - datetime should be serialized
         mock_ws.send_text.assert_called_once()
 
-    def test_stop_broadcasting(self):
-        """Test stop_broadcasting sets flag."""
-        fb = FlightBroadcaster()
-        fb._running = True
-
-        fb.stop_broadcasting()
-
-        assert fb._running is False
-
     @pytest.mark.asyncio
-    async def test_start_broadcasting_loop(self):
-        """Test start_broadcasting runs the broadcast loop."""
+    async def test_broadcast_loop_pushes_updates(self):
+        """Test _broadcast_loop sends flight updates to connected clients."""
         fb = FlightBroadcaster()
         mock_ws = AsyncMock(spec=WebSocket)
         fb._connections.add(mock_ws)
 
-        # Mock flight service
         mock_flight = MagicMock()
         mock_flight.model_dump.return_value = {"icao24": "abc123"}
 
@@ -179,32 +169,42 @@ class TestFlightBroadcaster:
         mock_service.get_flights.return_value = mock_response
 
         with patch('app.backend.api.websocket.get_flight_service', return_value=mock_service):
-            # Start broadcasting in background task
-            task = asyncio.create_task(fb.start_broadcasting(interval=0.1))
-
-            # Let it run briefly
+            task = asyncio.create_task(fb._broadcast_loop(interval=0.1))
             await asyncio.sleep(0.15)
-
-            # Stop it
-            fb.stop_broadcasting()
+            # Remove connections so loop exits naturally
+            fb._connections.clear()
             await task
 
         # Should have broadcast at least once
         assert mock_ws.send_text.call_count >= 1
 
     @pytest.mark.asyncio
-    async def test_start_broadcasting_handles_exceptions(self):
-        """Test that start_broadcasting continues on exceptions."""
+    async def test_broadcast_loop_stops_when_no_clients(self):
+        """Test _broadcast_loop exits when no clients are connected."""
         fb = FlightBroadcaster()
+        # No connections → loop should return immediately
+
+        mock_service = AsyncMock()
+        with patch('app.backend.api.websocket.get_flight_service', return_value=mock_service):
+            await fb._broadcast_loop(interval=0.1)
+
+        # get_flights should never have been called
+        mock_service.get_flights.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_broadcast_loop_handles_exceptions(self):
+        """Test that _broadcast_loop continues on exceptions."""
+        fb = FlightBroadcaster()
+        mock_ws = AsyncMock(spec=WebSocket)
+        fb._connections.add(mock_ws)
 
         mock_service = AsyncMock()
         mock_service.get_flights.side_effect = Exception("Service error")
 
         with patch('app.backend.api.websocket.get_flight_service', return_value=mock_service):
-            # Should not raise - continues broadcasting
-            task = asyncio.create_task(fb.start_broadcasting(interval=0.1))
+            task = asyncio.create_task(fb._broadcast_loop(interval=0.1))
             await asyncio.sleep(0.15)
-            fb.stop_broadcasting()
+            fb._connections.clear()
             await task
 
 
