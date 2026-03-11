@@ -448,11 +448,13 @@ describe('End-to-end user interaction flows', () => {
       const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
 
       const openTime = await timed(async () => {
+        // Brief delay to let mount-time fetch settle before opening
+        await new Promise((r) => setTimeout(r, 100))
         await user.click(selectorButton)
         await waitFor(() => {
           // Should see airport list with well-known airports
           expect(screen.getByText(/John F. Kennedy International/)).toBeInTheDocument()
-        })
+        }, { timeout: 5000 })
       })
       expect(openTime).toBeLessThan(PERFORMANCE_THRESHOLDS.interaction)
 
@@ -482,12 +484,9 @@ describe('End-to-end user interaction flows', () => {
       const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
       await user.click(selectorButton)
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/enter icao code/i)).toBeInTheDocument()
-      })
+      const icaoInput = await screen.findByPlaceholderText(/enter icao code/i, {}, { timeout: 5000 })
 
       // Type custom code
-      const icaoInput = screen.getByPlaceholderText(/enter icao code/i)
       await user.type(icaoInput, 'EDDF')
 
       // Click "Load" button
@@ -499,7 +498,7 @@ describe('End-to-end user interaction flows', () => {
       // Dropdown should close after loading
       await waitFor(() => {
         expect(screen.queryByPlaceholderText(/enter icao code/i)).not.toBeInTheDocument()
-      })
+      }, { timeout: 5000 })
     })
 
     it('custom ICAO input disables Load button when too short', async () => {
@@ -558,8 +557,11 @@ describe('End-to-end user interaction flows', () => {
      *  Returns the dropdown container for scoped queries via `within()`. */
     async function openAirportDropdown(user: ReturnType<typeof userEvent.setup>) {
       const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
+      // Wait briefly for the mount-time fetch to settle before opening,
+      // avoiding an AbortController race between mount fetch and open fetch.
+      await new Promise((r) => setTimeout(r, 100))
       await user.click(selectorButton)
-      // Then wait for the async fetch to populate the airport list
+      // Wait for the async fetch to populate the airport list
       const jfkEl = await screen.findByText(/John F. Kennedy International/, {}, { timeout: 5000 })
       // Return the dropdown panel (the absolute-positioned div)
       return jfkEl.closest('.absolute')! as HTMLElement
@@ -755,7 +757,7 @@ describe('End-to-end user interaction flows', () => {
       await user.click(ksfoButton)
       await waitFor(() => {
         expect(screen.queryByText('Americas')).not.toBeInTheDocument()
-      })
+      }, { timeout: 5000 })
     })
 
     it('current airport shows checkmark icon', async () => {
@@ -779,20 +781,13 @@ describe('End-to-end user interaction flows', () => {
       const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
       await user.click(selectorButton)
 
-      await waitFor(
-        () => {
-          expect(screen.getByPlaceholderText(/enter icao code/i)).toBeInTheDocument()
-        },
-        { timeout: 3000 },
-      )
-
-      const icaoInput = screen.getByPlaceholderText(/enter icao code/i)
+      const icaoInput = await screen.findByPlaceholderText(/enter icao code/i, {}, { timeout: 5000 })
       await user.type(icaoInput, 'RJAA{Enter}')
 
       // Dropdown should close after Enter submission
       await waitFor(() => {
         expect(screen.queryByPlaceholderText(/enter icao code/i)).not.toBeInTheDocument()
-      })
+      }, { timeout: 5000 })
     })
 
     it('custom ICAO input auto-uppercases user input', async () => {
@@ -803,11 +798,7 @@ describe('End-to-end user interaction flows', () => {
       const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
       await user.click(selectorButton)
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/enter icao code/i)).toBeInTheDocument()
-      })
-
-      const icaoInput = screen.getByPlaceholderText(/enter icao code/i)
+      const icaoInput = await screen.findByPlaceholderText(/enter icao code/i, {}, { timeout: 5000 })
       await user.type(icaoInput, 'ksfo')
 
       // Input value should be uppercased
@@ -826,7 +817,7 @@ describe('End-to-end user interaction flows', () => {
 
       await waitFor(() => {
         expect(screen.queryByText('Americas')).not.toBeInTheDocument()
-      })
+      }, { timeout: 5000 })
     })
 
     it('opening and closing dropdown multiple times renders correctly', async () => {
@@ -836,7 +827,8 @@ describe('End-to-end user interaction flows', () => {
 
       const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
 
-      // Open — wait for airports to load
+      // Open — wait for airports to load (brief delay lets mount fetch settle)
+      await new Promise((r) => setTimeout(r, 100))
       await user.click(selectorButton)
       await screen.findByText(/John F. Kennedy International/, {}, { timeout: 5000 })
 

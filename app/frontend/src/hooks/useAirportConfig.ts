@@ -25,9 +25,6 @@ import { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON } from '../utils/map3d-calculati
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-// Module-level guard to deduplicate concurrent refresh() calls
-let _inflightRefresh: Promise<void> | null = null;
-
 export interface SwitchProgress {
   step: number;
   total: number;
@@ -197,9 +194,12 @@ export function useAirportConfig(): UseAirportConfigReturn {
   /**
    * Fetch current configuration from API
    */
+  // Instance-level guard to deduplicate concurrent refresh() calls
+  const inflightRef = useRef<Promise<void> | null>(null);
+
   const refresh = useCallback(async () => {
     // Deduplicate: if a refresh is already in-flight, reuse it
-    if (_inflightRefresh) return _inflightRefresh;
+    if (inflightRef.current) return inflightRef.current;
 
     const doRefresh = async () => {
       setIsLoading(true);
@@ -231,12 +231,12 @@ export function useAirportConfig(): UseAirportConfigReturn {
         console.warn('Failed to load config from API, using defaults:', err);
       } finally {
         setIsLoading(false);
-        _inflightRefresh = null;
+        inflightRef.current = null;
       }
     };
 
-    _inflightRefresh = doRefresh();
-    return _inflightRefresh;
+    inflightRef.current = doRefresh();
+    return inflightRef.current;
   }, []);
 
   /**

@@ -47,8 +47,8 @@ class MockResizeObserver {
   disconnect: vi.fn(),
 }))
 
-// Mock fetch if not using MSW for some tests
-vi.stubGlobal('fetch', vi.fn())
+// Note: do NOT stub fetch globally here — MSW needs the real fetch to intercept.
+// Tests that need a raw fetch mock should set it up locally (see aircraftModels.test.ts).
 
 // Performance measurement utilities
 export const measureRenderTime = async (callback: () => Promise<void>): Promise<number> => {

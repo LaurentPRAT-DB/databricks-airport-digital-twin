@@ -336,8 +336,7 @@ export const handlers = [
   }),
 
   // Airport preload status
-  http.get('/api/airports/preload/status', async () => {
-    await delay(20)
+  http.get('/api/airports/preload/status', () => {
     return HttpResponse.json({
       airports: [
         { icao: 'KSFO', iata: 'SFO', name: 'San Francisco International', city: 'San Francisco, CA', region: 'Americas', cached: true },
