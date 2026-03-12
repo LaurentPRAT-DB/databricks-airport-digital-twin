@@ -27,7 +27,7 @@ export default function Header({ onShowFIDS }: HeaderProps) {
           className="text-xs text-slate-500"
           title={`Built ${__BUILD_TIME__}`}
         >
-          v{__APP_VERSION__} · {__BUILD_HASH__}
+          v{__APP_VERSION__} · #{__BUILD_NUMBER__}
         </span>
 
         {/* Airport Selector */}

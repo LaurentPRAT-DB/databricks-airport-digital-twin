@@ -5,9 +5,9 @@ import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
 
 const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'))
-let gitHash = 'dev'
+let buildNumber = '0'
 try {
-  gitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
+  buildNumber = execSync('git rev-list --count HEAD', { encoding: 'utf-8' }).trim()
 } catch { /* not in a git repo */ }
 const buildTime = new Date().toISOString()
 
@@ -15,7 +15,7 @@ const buildTime = new Date().toISOString()
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
-    __BUILD_HASH__: JSON.stringify(gitHash),
+    __BUILD_NUMBER__: JSON.stringify(buildNumber),
     __BUILD_TIME__: JSON.stringify(buildTime),
   },
   plugins: [react()],
