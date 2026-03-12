@@ -778,10 +778,9 @@ describe('End-to-end user interaction flows', () => {
       renderApp()
       await waitForAppReady()
 
-      const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
-      await user.click(selectorButton)
+      const dropdown = await openAirportDropdown(user)
 
-      const icaoInput = await screen.findByPlaceholderText(/enter icao code/i, {}, { timeout: 5000 })
+      const icaoInput = within(dropdown).getByPlaceholderText(/enter icao code/i)
       await user.type(icaoInput, 'RJAA{Enter}')
 
       // Dropdown should close after Enter submission
@@ -795,10 +794,9 @@ describe('End-to-end user interaction flows', () => {
       renderApp()
       await waitForAppReady()
 
-      const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
-      await user.click(selectorButton)
+      const dropdown = await openAirportDropdown(user)
 
-      const icaoInput = await screen.findByPlaceholderText(/enter icao code/i, {}, { timeout: 5000 })
+      const icaoInput = within(dropdown).getByPlaceholderText(/enter icao code/i)
       await user.type(icaoInput, 'ksfo')
 
       // Input value should be uppercased

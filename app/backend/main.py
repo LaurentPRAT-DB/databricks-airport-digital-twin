@@ -22,6 +22,7 @@ from app.backend.services.prediction_service import get_prediction_service
 from src.ingestion.fallback import reload_gates, set_airport_center, AIRPORT_CENTER
 from src.ml.gate_model import reload_gate_recommender
 from src.ml.registry import get_model_registry
+from app.backend.services.weather_service import get_weather_service
 
 # Configure logging based on DEBUG_MODE env var
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() in ("true", "1", "yes")
@@ -115,6 +116,14 @@ async def _background_init(app: FastAPI):
         else:
             logger.warning("Data initialization failed - using fallback generators only")
             app.state.startup_status = "Warning: data init failed, using fallback generators"
+
+        # Phase 3: Pre-warm weather cache so first visitor gets instant weather
+        try:
+            weather_svc = get_weather_service()
+            weather_svc.get_current_weather()
+            logger.info("Weather cache pre-warmed for KSFO")
+        except Exception as e:
+            logger.warning(f"Weather pre-warm failed (non-critical): {e}")
 
         app.state.ready = True
         app.state.startup_status = "Ready"

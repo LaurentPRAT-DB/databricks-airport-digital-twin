@@ -13,6 +13,51 @@ from app.backend.services.flight_service import get_flight_service
 logger = logging.getLogger(__name__)
 websocket_router = APIRouter(tags=["websocket"])
 
+# Fields that change every update (position/movement) — sent as deltas
+_DELTA_FIELDS = {
+    "latitude", "longitude", "altitude", "velocity",
+    "heading", "on_ground", "vertical_rate", "flight_phase",
+}
+
+
+def _compute_deltas(
+    prev_flights: dict[str, dict],
+    current_flights: list[dict],
+) -> tuple[list[dict], list[str]]:
+    """Compare current flights against previous snapshot.
+
+    Returns (deltas, removed_icao24s).
+    Each delta contains icao24 + only the fields that changed.
+    New flights are sent in full.
+    """
+    deltas: list[dict] = []
+    removed = [k for k in prev_flights if not any(f["icao24"] == k for f in current_flights)]
+
+    for flight in current_flights:
+        icao24 = flight["icao24"]
+        prev = prev_flights.get(icao24)
+        if prev is None:
+            # New flight — send full data
+            deltas.append(flight)
+            continue
+
+        diff: dict = {"icao24": icao24}
+        for key in _DELTA_FIELDS:
+            cur_val = flight.get(key)
+            if cur_val != prev.get(key):
+                diff[key] = cur_val
+
+        # Also include non-delta fields that changed (gate reassignment, etc.)
+        for key in flight:
+            if key not in _DELTA_FIELDS and key != "icao24":
+                if flight[key] != prev.get(key):
+                    diff[key] = flight[key]
+
+        if len(diff) > 1:  # More than just icao24
+            deltas.append(diff)
+
+    return deltas, removed
+
 
 class FlightBroadcaster:
     """Manager for WebSocket connections and broadcasting flight updates."""
@@ -21,6 +66,7 @@ class FlightBroadcaster:
         """Initialize the broadcaster."""
         self._connections: Set[WebSocket] = set()
         self._broadcast_task: asyncio.Task | None = None
+        self._prev_flights: dict[str, dict] = {}
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -71,18 +117,28 @@ class FlightBroadcaster:
         service = get_flight_service()
         while True:
             if not self._connections:
-                # No clients — stop the loop; it restarts on next connect
                 logger.debug("No WS clients, stopping broadcast loop")
                 return
 
             try:
                 flight_data = await service.get_flights()
+                flights_dicts = [f.model_dump() for f in flight_data.flights]
+                timestamp = flight_data.timestamp.isoformat()
+
+                # Compute deltas against previous broadcast
+                deltas, removed = _compute_deltas(self._prev_flights, flights_dicts)
+
+                # Update snapshot for next cycle
+                self._prev_flights = {f["icao24"]: f for f in flights_dicts}
+
+                # Send delta update (smaller payload)
                 await self.broadcast({
-                    "type": "flight_update",
+                    "type": "flight_delta",
                     "data": {
-                        "flights": [f.model_dump() for f in flight_data.flights],
+                        "deltas": deltas,
+                        "removed": removed,
                         "count": flight_data.count,
-                        "timestamp": flight_data.timestamp.isoformat(),
+                        "timestamp": timestamp,
                     },
                 })
             except Exception:

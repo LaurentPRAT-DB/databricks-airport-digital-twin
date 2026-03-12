@@ -432,21 +432,24 @@ async def get_baggage_alerts() -> BaggageAlertsResponse:
 # ==============================================================================
 
 @router.get("/airport/config", tags=["airport"])
-async def get_airport_config() -> dict:
+async def get_airport_config(request: Request) -> dict:
     """
     Get current airport configuration.
 
     Returns the merged configuration from all imported sources
     (AIXM, IFC, AIDM) or default configuration if nothing imported.
+    If the backend hasn't finished initialization, includes a ready flag.
     """
     service = get_airport_config_service()
     config = service.get_config()
     last_updated = service.get_last_updated()
+    app_ready = getattr(request.app.state, "ready", False)
 
     return {
         "config": config,
         "lastUpdated": last_updated.isoformat() if last_updated else None,
         "elementCounts": service.get_element_counts(),
+        "ready": app_ready,
     }
 
 

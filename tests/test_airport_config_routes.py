@@ -103,6 +103,41 @@ class TestGetAirportConfig:
         assert "elementCounts" in data
         assert "runways" in data["elementCounts"]
 
+    def test_get_config_includes_ready_flag(self, client):
+        """Test that config response includes ready flag for cold-start detection."""
+        response = client.get("/api/airport/config")
+
+        data = response.json()
+        assert "ready" in data
+        assert isinstance(data["ready"], bool)
+
+    def test_get_config_ready_false_before_init(self, client):
+        """Test ready=False when app hasn't finished initialization."""
+        from app.backend.main import app as fastapi_app
+        # Simulate pre-init state
+        original = getattr(fastapi_app.state, "ready", None)
+        fastapi_app.state.ready = False
+        try:
+            response = client.get("/api/airport/config")
+            data = response.json()
+            assert data["ready"] is False
+        finally:
+            if original is not None:
+                fastapi_app.state.ready = original
+
+    def test_get_config_ready_true_after_init(self, client):
+        """Test ready=True when app has finished initialization."""
+        from app.backend.main import app as fastapi_app
+        original = getattr(fastapi_app.state, "ready", None)
+        fastapi_app.state.ready = True
+        try:
+            response = client.get("/api/airport/config")
+            data = response.json()
+            assert data["ready"] is True
+        finally:
+            if original is not None:
+                fastapi_app.state.ready = original
+
 
 class TestImportAIXM:
     """Tests for POST /api/airport/import/aixm endpoint."""

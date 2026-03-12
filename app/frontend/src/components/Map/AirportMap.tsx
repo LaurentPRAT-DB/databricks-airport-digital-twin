@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import { AIRPORT_CENTER, DEFAULT_ZOOM } from '../../constants/airportLayout';
 import AirportOverlay from './AirportOverlay';
 import FlightMarker from './FlightMarker';

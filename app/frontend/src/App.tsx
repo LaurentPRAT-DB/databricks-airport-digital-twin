@@ -3,7 +3,8 @@ import { FlightProvider, useFlightContext } from './context/FlightContext';
 import { AirportConfigProvider, useAirportConfigContext } from './context/AirportConfigContext';
 import Header from './components/Header/Header';
 import FlightList from './components/FlightList/FlightList';
-import AirportMap from './components/Map/AirportMap';
+// Lazy load 2D map (Leaflet) to reduce initial bundle size — header + flight list render first
+const AirportMap = lazy(() => import('./components/Map/AirportMap'));
 import FlightDetail from './components/FlightDetail/FlightDetail';
 import GateStatus from './components/GateStatus/GateStatus';
 import FIDS from './components/FIDS/FIDS';
@@ -12,13 +13,13 @@ import { useViewportState, SharedViewport } from './hooks/useViewportState';
 // Lazy load 3D map to reduce initial bundle size
 const Map3D = lazy(() => import('./components/Map3D').then(m => ({ default: m.Map3D })));
 
-// Loading fallback for 3D view
-function Map3DLoadingFallback() {
+// Loading fallback for map views
+function MapLoadingFallback({ label }: { label: string }) {
   return (
     <div className="w-full h-full flex items-center justify-center bg-slate-900">
       <div className="text-center text-white">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-        <p className="text-lg">Loading 3D View...</p>
+        <p className="text-lg">{label}</p>
       </div>
     </div>
   );
@@ -219,13 +220,17 @@ function AppContent() {
         {/* Center: Airport Map (2D or 3D) */}
         <div className="flex-1 overflow-hidden relative">
           <ViewToggle viewMode={viewMode} onToggle={setViewMode} />
-          {viewMode === '2d' ? (
-            <AirportMap
-              sharedViewport={viewport}
-              onViewportChange={handle2DViewportChange}
-            />
-          ) : (
-            <Suspense fallback={<Map3DLoadingFallback />}>
+          {/* Keep 2D map mounted (hidden) once loaded to avoid Leaflet re-init */}
+          <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
+            <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>
+              <AirportMap
+                sharedViewport={viewport}
+                onViewportChange={handle2DViewportChange}
+              />
+            </Suspense>
+          </div>
+          {viewMode === '3d' && (
+            <Suspense fallback={<MapLoadingFallback label="Loading 3D View..." />}>
               <Map3D
                 flights={flights}
                 selectedFlight={selectedFlight?.icao24 || null}

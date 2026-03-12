@@ -293,6 +293,224 @@ describe('useFlights', () => {
     })
   })
 
+  describe('Delta WebSocket updates', () => {
+    it('applies flight_delta to update existing flights', async () => {
+      const { result } = renderHook(() => useFlights(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
+
+      // Send initial full data
+      mockWsInstances[0].simulateMessage({
+        type: 'initial',
+        data: {
+          flights: [
+            { icao24: 'abc', callsign: 'UAL1', latitude: 37.0, longitude: -122.0, altitude: 5000 },
+            { icao24: 'def', callsign: 'DAL2', latitude: 38.0, longitude: -121.0, altitude: 6000 },
+          ],
+          count: 2,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => expect(result.current.flights.length).toBe(2))
+
+      // Send delta — only update abc's position
+      mockWsInstances[0].simulateMessage({
+        type: 'flight_delta',
+        data: {
+          deltas: [{ icao24: 'abc', latitude: 37.01, longitude: -122.01 }],
+          removed: [],
+          count: 2,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => {
+        const abc = result.current.flights.find(f => f.icao24 === 'abc')
+        expect(abc?.latitude).toBe(37.01)
+        expect(abc?.longitude).toBe(-122.01)
+      })
+
+      // Unchanged fields should be preserved
+      const abc = result.current.flights.find(f => f.icao24 === 'abc')
+      expect(abc?.callsign).toBe('UAL1')
+      expect(abc?.altitude).toBe(5000)
+
+      // Other flight should be unchanged
+      const def2 = result.current.flights.find(f => f.icao24 === 'def')
+      expect(def2?.latitude).toBe(38.0)
+    })
+
+    it('adds new flights from delta', async () => {
+      const { result } = renderHook(() => useFlights(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
+
+      // Send initial with one flight
+      mockWsInstances[0].simulateMessage({
+        type: 'initial',
+        data: {
+          flights: [{ icao24: 'abc', callsign: 'UAL1', latitude: 37.0, longitude: -122.0, altitude: 5000 }],
+          count: 1,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => expect(result.current.flights.length).toBe(1))
+
+      // Delta adds a new flight
+      mockWsInstances[0].simulateMessage({
+        type: 'flight_delta',
+        data: {
+          deltas: [{ icao24: 'xyz', callsign: 'SWA5', latitude: 39.0, longitude: -120.0, altitude: 8000 }],
+          removed: [],
+          count: 2,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => expect(result.current.flights.length).toBe(2))
+      const xyz = result.current.flights.find(f => f.icao24 === 'xyz')
+      expect(xyz?.callsign).toBe('SWA5')
+    })
+
+    it('removes departed flights from delta', async () => {
+      const { result } = renderHook(() => useFlights(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
+
+      // Send initial with two flights
+      mockWsInstances[0].simulateMessage({
+        type: 'initial',
+        data: {
+          flights: [
+            { icao24: 'abc', callsign: 'UAL1', latitude: 37.0, longitude: -122.0, altitude: 5000 },
+            { icao24: 'def', callsign: 'DAL2', latitude: 38.0, longitude: -121.0, altitude: 6000 },
+          ],
+          count: 2,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => expect(result.current.flights.length).toBe(2))
+
+      // Delta removes one flight
+      mockWsInstances[0].simulateMessage({
+        type: 'flight_delta',
+        data: {
+          deltas: [],
+          removed: ['def'],
+          count: 1,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => expect(result.current.flights.length).toBe(1))
+      expect(result.current.flights[0].icao24).toBe('abc')
+    })
+
+    it('handles mixed add/update/remove in single delta', async () => {
+      const { result } = renderHook(() => useFlights(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
+
+      // Initial: 3 flights
+      mockWsInstances[0].simulateMessage({
+        type: 'initial',
+        data: {
+          flights: [
+            { icao24: 'aaa', callsign: 'F1', latitude: 1.0, longitude: 1.0, altitude: 1000 },
+            { icao24: 'bbb', callsign: 'F2', latitude: 2.0, longitude: 2.0, altitude: 2000 },
+            { icao24: 'ccc', callsign: 'F3', latitude: 3.0, longitude: 3.0, altitude: 3000 },
+          ],
+          count: 3,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => expect(result.current.flights.length).toBe(3))
+
+      // Delta: update aaa, remove bbb, add ddd
+      mockWsInstances[0].simulateMessage({
+        type: 'flight_delta',
+        data: {
+          deltas: [
+            { icao24: 'aaa', latitude: 1.5 },
+            { icao24: 'ddd', callsign: 'F4', latitude: 4.0, longitude: 4.0, altitude: 4000 },
+          ],
+          removed: ['bbb'],
+          count: 3,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => {
+        const ids = result.current.flights.map(f => f.icao24).sort()
+        expect(ids).toEqual(['aaa', 'ccc', 'ddd'])
+      })
+
+      const aaa = result.current.flights.find(f => f.icao24 === 'aaa')
+      expect(aaa?.latitude).toBe(1.5)
+      expect(aaa?.callsign).toBe('F1') // preserved
+    })
+
+    it('full update after delta replaces entire state', async () => {
+      const { result } = renderHook(() => useFlights(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
+
+      // Initial
+      mockWsInstances[0].simulateMessage({
+        type: 'initial',
+        data: {
+          flights: [{ icao24: 'abc', callsign: 'UAL1', latitude: 37.0, longitude: -122.0, altitude: 5000 }],
+          count: 1,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => expect(result.current.flights.length).toBe(1))
+
+      // Delta adds a flight
+      mockWsInstances[0].simulateMessage({
+        type: 'flight_delta',
+        data: {
+          deltas: [{ icao24: 'xyz', callsign: 'SWA5', latitude: 39.0, longitude: -120.0, altitude: 8000 }],
+          removed: [],
+          count: 2,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => expect(result.current.flights.length).toBe(2))
+
+      // Full flight_update replaces everything
+      mockWsInstances[0].simulateMessage({
+        type: 'flight_update',
+        data: {
+          flights: [{ icao24: 'new1', callsign: 'NEW', latitude: 40.0, longitude: -119.0, altitude: 9000 }],
+          count: 1,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      await waitFor(() => {
+        expect(result.current.flights.length).toBe(1)
+        expect(result.current.flights[0].icao24).toBe('new1')
+      })
+    })
+  })
+
   describe('Network timeout (HTTP fallback)', () => {
     it('handles slow network gracefully', async () => {
       vi.stubGlobal('WebSocket', class {

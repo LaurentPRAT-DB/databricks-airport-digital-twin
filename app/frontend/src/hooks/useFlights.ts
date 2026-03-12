@@ -26,8 +26,8 @@ function getWsUrl(): string {
   return `${protocol}//${window.location.host}/ws/flights`;
 }
 
-interface WsFlightMessage {
-  type: 'initial' | 'flight_update' | 'airport_switch_progress';
+interface WsFullMessage {
+  type: 'initial' | 'flight_update';
   data: {
     flights: Flight[];
     count: number;
@@ -35,12 +35,25 @@ interface WsFlightMessage {
   };
 }
 
+interface WsDeltaMessage {
+  type: 'flight_delta';
+  data: {
+    deltas: Partial<Flight & { icao24: string }>[];
+    removed: string[];
+    count: number;
+    timestamp: string;
+  };
+}
+
+type WsFlightMessage = WsFullMessage | WsDeltaMessage | { type: 'airport_switch_progress'; data: unknown };
+
 export function useFlights(): UseFlightsResult {
   const [wsData, setWsData] = useState<FlightsResponse | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectCount = useRef(0);
+  const flightsMapRef = useRef<Map<string, Flight>>(new Map());
   const MAX_RECONNECT = 5;
 
   const connect = useCallback(() => {
@@ -58,10 +71,45 @@ export function useFlights(): UseFlightsResult {
         try {
           const msg: WsFlightMessage = JSON.parse(event.data);
           if (msg.type === 'initial' || msg.type === 'flight_update') {
+            const fullMsg = msg as WsFullMessage;
+            // Full update — replace map entirely
+            const map = new Map<string, Flight>();
+            for (const f of fullMsg.data.flights) {
+              map.set(f.icao24, f);
+            }
+            flightsMapRef.current = map;
             setWsData({
-              flights: msg.data.flights,
-              count: msg.data.count,
-              timestamp: msg.data.timestamp,
+              flights: fullMsg.data.flights,
+              count: fullMsg.data.count,
+              timestamp: fullMsg.data.timestamp,
+              data_source: 'synthetic',
+            });
+          } else if (msg.type === 'flight_delta') {
+            const deltaMsg = msg as WsDeltaMessage;
+            const map = flightsMapRef.current;
+
+            // Remove departed flights
+            for (const id of deltaMsg.data.removed) {
+              map.delete(id);
+            }
+
+            // Merge deltas into existing flights
+            for (const delta of deltaMsg.data.deltas) {
+              const icao24 = delta.icao24!;
+              const existing = map.get(icao24);
+              if (existing) {
+                map.set(icao24, { ...existing, ...delta } as Flight);
+              } else {
+                // New flight — delta contains full data
+                map.set(icao24, delta as Flight);
+              }
+            }
+
+            flightsMapRef.current = map;
+            setWsData({
+              flights: Array.from(map.values()),
+              count: deltaMsg.data.count,
+              timestamp: deltaMsg.data.timestamp,
               data_source: 'synthetic',
             });
           }
