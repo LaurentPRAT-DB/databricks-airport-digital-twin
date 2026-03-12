@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { AirportScene } from './AirportScene';
 import { AIRPORT_3D_CONFIG } from '../../constants/airport3D';
 import { Flight } from '../../types/flight';
-import { useAirportConfig } from '../../hooks/useAirportConfig';
+import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { latLonTo3D, position3DToLatLon } from '../../utils/map3d-calculations';
 import { SharedViewport } from '../../hooks/useViewportState';
 
@@ -117,7 +117,7 @@ export function Map3D({
   airportCenter: airportCenterProp,
 }: Map3DProps) {
   const { lighting } = AIRPORT_3D_CONFIG;
-  const { isLoading, switchProgress, getTerminals, getAirportCenter, getTaxiways: getOSMTaxiwaysHook, getAprons, getOSMRunways } = useAirportConfig();
+  const { isLoading, switchProgress, getTerminals, getAirportCenter, getTaxiways: getOSMTaxiwaysHook, getAprons, getOSMRunways } = useAirportConfigContext();
   const terminals = getTerminals();
   const airportCenter = airportCenterProp ?? getAirportCenter();
   const osmTaxiways = getOSMTaxiwaysHook();

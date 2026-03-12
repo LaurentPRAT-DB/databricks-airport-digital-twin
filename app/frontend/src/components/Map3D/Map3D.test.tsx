@@ -13,15 +13,19 @@ let lastAirportSceneProps: Record<string, unknown> = {};
 let lastOrbitControlsProps: Record<string, unknown> = {};
 let lastCameraProps: Record<string, unknown> = {};
 
-// Mock useAirportConfig
+// Mock useAirportConfigContext (shared React Context — Map3D uses this, not the raw hook)
 const mockGetTerminals = vi.fn((): OSMTerminal[] => []);
 const mockGetAirportCenter = vi.fn(() => ({ lat: 37.6213, lon: -122.379 }));
 const mockGetTaxiways = vi.fn((): OSMTaxiway[] => []);
 const mockGetAprons = vi.fn((): OSMApron[] => []);
 const mockGetOSMRunways = vi.fn((): OSMRunway[] => []);
+let mockIsLoading = false;
+let mockSwitchProgress: { message: string; step: number; total: number; done: boolean } | null = null;
 
-vi.mock('../../hooks/useAirportConfig', () => ({
-  useAirportConfig: () => ({
+vi.mock('../../context/AirportConfigContext', () => ({
+  useAirportConfigContext: () => ({
+    isLoading: mockIsLoading,
+    switchProgress: mockSwitchProgress,
     getTerminals: mockGetTerminals,
     getAirportCenter: mockGetAirportCenter,
     getTaxiways: mockGetTaxiways,
@@ -138,6 +142,8 @@ describe('Map3D', () => {
     mockGetTaxiways.mockReturnValue([]);
     mockGetAprons.mockReturnValue([]);
     mockGetOSMRunways.mockReturnValue([]);
+    mockIsLoading = false;
+    mockSwitchProgress = null;
   });
 
   describe('Basic rendering', () => {
