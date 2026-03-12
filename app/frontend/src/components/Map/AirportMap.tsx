@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useMemo, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { AIRPORT_CENTER, DEFAULT_ZOOM } from '../../constants/airportLayout';
@@ -45,10 +45,21 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
     }
     if (count === 0) return null;
     return [sumLat / count, sumLon / count];
-  }, [getGates, getTerminals]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getGates, getTerminals, currentAirport]);
+
+  const prevAirportRef = useRef(currentAirport);
 
   useEffect(() => {
-    // If we have a shared viewport from 3D, restore it immediately
+    const airportChanged = prevAirportRef.current !== currentAirport;
+    prevAirportRef.current = currentAirport;
+
+    // On airport switch, always recenter to the new airport
+    if (airportChanged && center) {
+      map.flyTo(center, DEFAULT_ZOOM, { duration: 1.5 });
+      return;
+    }
+    // If we have a shared viewport from 3D (same airport), restore it
     if (sharedViewport) {
       map.setView(
         [sharedViewport.center.lat, sharedViewport.center.lon],
@@ -61,7 +72,6 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
     if (center) {
       map.flyTo(center, DEFAULT_ZOOM, { duration: 1.5 });
     }
-  // Only run on mount or airport change — sharedViewport is initial-only
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center, map, currentAirport]);
 

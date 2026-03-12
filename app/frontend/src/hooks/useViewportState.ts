@@ -17,8 +17,8 @@ export interface SharedViewport {
 export interface UseViewportStateReturn {
   /** Current shared viewport (null if never set) */
   viewport: SharedViewport | null;
-  /** Save viewport state (called on view unmount) */
-  setViewport: (vp: SharedViewport) => void;
+  /** Save viewport state (called on view unmount, null to reset) */
+  setViewport: (vp: SharedViewport | null) => void;
   /** Source of last viewport update ('2d' | '3d' | null) */
   lastSource: '2d' | '3d' | null;
   /** Record which view last saved the viewport */
@@ -33,7 +33,7 @@ export function useViewportState(): UseViewportStateReturn {
   const [viewport, setViewportState] = useState<SharedViewport | null>(null);
   const lastSourceRef = useRef<'2d' | '3d' | null>(null);
 
-  const setViewport = useCallback((vp: SharedViewport) => {
+  const setViewport = useCallback((vp: SharedViewport | null) => {
     setViewportState(vp);
   }, []);
 

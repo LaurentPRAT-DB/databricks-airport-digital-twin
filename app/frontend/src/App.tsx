@@ -151,6 +151,11 @@ function AppContent() {
   const { currentAirport, refresh: refreshConfig } = useAirportConfigContext();
   const { viewport, setViewport, setLastSource } = useViewportState();
 
+  // Clear shared viewport when airport changes so map recenters on new airport
+  useEffect(() => {
+    setViewport(null);
+  }, [currentAirport, setViewport]);
+
   // Viewport callbacks for 2D and 3D views
   const handle2DViewportChange = useCallback((vp: SharedViewport) => {
     setViewport(vp);
