@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
+import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { AIRPORT_CENTER, DEFAULT_ZOOM } from '../../constants/airportLayout';
 import AirportOverlay from './AirportOverlay';
@@ -109,8 +109,18 @@ function MapViewportSaver({ onViewportChange }: { onViewportChange?: (vp: Shared
   return null;
 }
 
+/** Tracks map zoom and calls back with the current value. */
+function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
+  useMapEvents({
+    zoomend: (e) => onZoom(e.target.getZoom()),
+    zoom: (e) => onZoom(e.target.getZoom()),
+  });
+  return null;
+}
+
 export default function AirportMap({ sharedViewport, onViewportChange }: AirportMapProps) {
   const { flights, isLoading, error, lastUpdated } = useFlightContext();
+  const [zoom, setZoom] = useState(sharedViewport?.zoom ?? DEFAULT_ZOOM);
 
   // Use shared viewport center/zoom if available, otherwise defaults
   const initialCenter: [number, number] = sharedViewport
@@ -131,12 +141,13 @@ export default function AirportMap({ sharedViewport, onViewportChange }: Airport
         />
         <MapRecenter sharedViewport={sharedViewport} />
         <MapViewportSaver onViewportChange={onViewportChange} />
+        <ZoomTracker onZoom={setZoom} />
         <AirportOverlay />
         <TrajectoryLine />
         {flights
           .filter((f) => f.latitude != null && f.longitude != null && !isNaN(f.latitude) && !isNaN(f.longitude))
           .map((flight) => (
-            <FlightMarker key={flight.icao24} flight={flight} />
+            <FlightMarker key={flight.icao24} flight={flight} zoom={zoom} />
           ))}
       </MapContainer>
 

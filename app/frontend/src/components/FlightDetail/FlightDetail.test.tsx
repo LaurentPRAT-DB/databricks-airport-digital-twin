@@ -188,7 +188,8 @@ describe('FlightDetail', () => {
 
       await waitFor(
         () => {
-          expect(screen.getByText(/%/)).toBeInTheDocument()
+          // Confidence shows as "75%" in a small text element
+          expect(screen.getByText(/^\d+%$/)).toBeInTheDocument()
         },
         { timeout: 5000 }
       )

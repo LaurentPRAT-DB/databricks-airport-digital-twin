@@ -6,6 +6,7 @@ import { useFlightContext } from '../../context/FlightContext';
 
 interface FlightMarkerProps {
   flight: Flight;
+  zoom?: number;
 }
 
 // Get color based on flight phase
@@ -27,8 +28,21 @@ function getPhaseColor(phase: Flight['flight_phase']): string {
 // Selection color (green)
 const SELECTION_COLOR = '#22c55e';
 
+// Airplane pixel size by zoom level — scales with the map so it looks natural
+// At zoom 18, ~1px ≈ 0.6m, so 40px ≈ 24m (small regional jet)
+// At zoom 14, ~1px ≈ 10m, so 14px is still visible but not oversized
+function getIconSize(zoom: number): number {
+  if (zoom >= 18) return 40;
+  if (zoom >= 17) return 34;
+  if (zoom >= 16) return 28;
+  if (zoom >= 15) return 22;
+  if (zoom >= 14) return 16;
+  if (zoom >= 13) return 12;
+  return 10;
+}
+
 // Create airplane SVG icon with rotation, ARIA label, and optional gate label
-function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'], isSelected: boolean, callsign?: string | null, icao24?: string, gateName?: string | null): L.DivIcon {
+function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'], isSelected: boolean, size: number, callsign?: string | null, icao24?: string, gateName?: string | null): L.DivIcon {
   const rotation = heading ?? 0;
   const color = isSelected ? SELECTION_COLOR : getPhaseColor(phase);
   const label = callsign || icao24 || 'Unknown';
@@ -37,11 +51,12 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
     ? `<div class="gate-label">${gateName}</div>`
     : '';
 
-  // Airplane silhouette: nose at top (0° = north), tail at bottom.
-  // Fuselage runs top-to-bottom; wings spread left-right near center; tailfin at bottom.
+  const half = size / 2;
+
+  // Airplane top-down silhouette: nose at top (0° heading = north).
   const svgIcon = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="${color}" width="24" height="24" style="transform: rotate(${rotation}deg); transform-origin: center;" role="img" aria-label="Flight ${label}">
-      <path d="M16 1 L14.5 10 L3 15 L3 17 L14.5 14 L14 24 L10 27 L10 29 L16 27 L22 29 L22 27 L18 24 L17.5 14 L29 17 L29 15 L17.5 10 Z"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="${color}" width="${size}" height="${size}" style="transform: rotate(${rotation}deg); transform-origin: center; filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.4));" role="img" aria-label="Flight ${label}">
+      <path d="M128 8 L120 80 L28 130 L28 145 L120 120 L116 200 L88 224 L88 240 L128 224 L168 240 L168 224 L140 200 L136 120 L228 145 L228 130 L136 80 Z"/>
     </svg>
     ${gateLabel}
   `;
@@ -49,9 +64,9 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
   return L.divIcon({
     html: svgIcon,
     className: 'flight-marker',
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-    popupAnchor: [0, -12],
+    iconSize: [size, size],
+    iconAnchor: [half, half],
+    popupAnchor: [0, -half],
   });
 }
 
@@ -61,14 +76,15 @@ function formatAltitude(altitude: number | null): string {
   return `${Math.round(altitude)} ft`;
 }
 
-export default function FlightMarker({ flight }: FlightMarkerProps) {
+export default function FlightMarker({ flight, zoom = 14 }: FlightMarkerProps) {
   const { selectedFlight, setSelectedFlight } = useFlightContext();
   const isSelected = selectedFlight?.icao24 === flight.icao24;
   const markerRef = useRef<L.Marker>(null);
+  const size = getIconSize(zoom);
 
   const icon = useMemo(
-    () => createAirplaneIcon(flight.heading, flight.flight_phase, isSelected, flight.callsign, flight.icao24, flight.assigned_gate),
-    [flight.heading, flight.flight_phase, isSelected, flight.callsign, flight.icao24, flight.assigned_gate]
+    () => createAirplaneIcon(flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate),
+    [flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate]
   );
 
   // Update marker icon when selection changes without full re-render
