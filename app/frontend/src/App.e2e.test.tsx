@@ -963,12 +963,12 @@ describe('End-to-end user interaction flows', () => {
       })
     })
 
-    it('shows demo mode badge for synthetic data', async () => {
+    it('shows demo badge for synthetic data', async () => {
       renderApp()
       await waitForAppReady()
 
       await waitFor(() => {
-        expect(screen.getByText(/demo mode/i)).toBeInTheDocument()
+        expect(screen.getByText(/demo/i)).toBeInTheDocument()
       })
     })
   })
@@ -1043,16 +1043,15 @@ describe('End-to-end user interaction flows', () => {
         await user.click(flightRow)
         await waitFor(
           () => {
-            expect(screen.getByText(/expected delay/i)).toBeInTheDocument()
+            expect(screen.getByText(/slight delay/i)).toBeInTheDocument()
           },
           { timeout: 5000 },
         )
       })
       expect(predictionTime).toBeLessThan(PERFORMANCE_THRESHOLDS.apiResponse)
 
-      // Verify prediction data renders
-      expect(screen.getByText(/confidence/i)).toBeInTheDocument()
-      expect(screen.getByText(/slight delay/i)).toBeInTheDocument()
+      // Verify delay minutes render
+      expect(screen.getByText(/\+\d+m/)).toBeInTheDocument()
     })
   })
 
@@ -1363,9 +1362,6 @@ describe('End-to-end user interaction flows', () => {
       // Override /api/ready to delay readiness
       const { server } = await import('./test/mocks/server')
       const { http, HttpResponse, delay: mswDelay } = await import('msw')
-
-      let resolveReady: () => void
-      const readyPromise = new Promise<void>((r) => { resolveReady = r })
 
       server.use(
         http.get('/api/ready', async () => {

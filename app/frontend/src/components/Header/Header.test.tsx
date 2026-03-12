@@ -54,19 +54,19 @@ describe('Header', () => {
   })
 
   describe('Data source indicator', () => {
-    it('shows demo mode badge for synthetic data', async () => {
+    it('shows demo badge for synthetic data', async () => {
       render(<Header />)
 
       await waitFor(() => {
-        expect(screen.getByText(/demo mode/i)).toBeInTheDocument()
+        expect(screen.getByText(/demo/i)).toBeInTheDocument()
       })
     })
 
-    it('shows data source type', async () => {
+    it('shows data source in tooltip', async () => {
       render(<Header />)
 
       await waitFor(() => {
-        expect(screen.getByText(/synthetic/i)).toBeInTheDocument()
+        expect(screen.getByTitle(/synthetic/i)).toBeInTheDocument()
       })
     })
   })

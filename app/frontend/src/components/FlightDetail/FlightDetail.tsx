@@ -241,35 +241,32 @@ export default function FlightDetail() {
         {isDelayLoading ? (
           <div className="text-sm text-slate-400">Loading predictions...</div>
         ) : delay ? (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">Expected Delay</span>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-slate-800 text-sm">
-                  {delay.delay_minutes.toFixed(0)} min
-                </span>
+              <div className="flex items-center gap-1.5">
                 <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-medium text-white ${
+                  className={`w-2 h-2 rounded-full ${
                     delayColors[delay.category] || 'bg-gray-500'
                   }`}
-                >
+                />
+                <span className="text-sm text-slate-600 font-medium">
                   {delayLabels[delay.category] || delay.category}
                 </span>
               </div>
+              <span className="font-mono text-slate-800 text-sm">
+                +{delay.delay_minutes.toFixed(0)}m
+              </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">Confidence</span>
-              <div className="flex items-center gap-2">
-                <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 rounded-full"
-                    style={{ width: `${delay.confidence * 100}%` }}
-                  />
-                </div>
-                <span className="font-mono text-slate-800 text-sm">
-                  {(delay.confidence * 100).toFixed(0)}%
-                </span>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 rounded-full"
+                  style={{ width: `${delay.confidence * 100}%` }}
+                />
               </div>
+              <span className="font-mono text-slate-500 text-xs">
+                {(delay.confidence * 100).toFixed(0)}%
+              </span>
             </div>
           </div>
         ) : (

@@ -257,7 +257,12 @@ export default function GateStatus() {
   const selectedGate = selectedGateId ? gates.find((g) => g.id === selectedGateId) ?? null : null;
 
   function handleGateClick(gate: Gate) {
-    setSelectedGateId((prev) => (prev === gate.id ? null : gate.id));
+    const toggling = selectedGateId === gate.id;
+    setSelectedGateId(toggling ? null : gate.id);
+    // Select/deselect the flight on the map (shows trajectory if enabled)
+    if (gate.flight) {
+      setSelectedFlight(toggling ? null : gate.flight);
+    }
   }
 
   function handleSelectFlight(flight: Flight) {

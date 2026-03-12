@@ -46,9 +46,8 @@ export default function Header({ onShowFIDS }: HeaderProps) {
         </div>
         {/* Data source indicator */}
         {dataSource && dataSource !== 'live' && (
-          <div className="flex items-center gap-2 bg-amber-600 px-3 py-1 rounded-full text-sm">
-            <span className="font-medium">Demo Mode</span>
-            <span className="text-amber-200">({dataSource} data)</span>
+          <div className="bg-amber-600 px-2 py-0.5 rounded-full text-xs font-medium cursor-default" title={`Using ${dataSource} data`}>
+            Demo
           </div>
         )}
       </div>

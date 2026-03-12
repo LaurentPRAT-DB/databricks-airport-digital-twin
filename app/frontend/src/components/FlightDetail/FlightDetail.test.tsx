@@ -172,23 +172,23 @@ describe('FlightDetail', () => {
       )
     })
 
-    it('shows delay minutes when loaded', async () => {
+    it('shows delay category and minutes when loaded', async () => {
       renderWithFlightSelection(0)
 
       await waitFor(
         () => {
-          expect(screen.getByText(/expected delay/i)).toBeInTheDocument()
+          expect(screen.getByText(/slight delay/i)).toBeInTheDocument()
         },
         { timeout: 5000 }
       )
     })
 
-    it('shows confidence indicator', async () => {
+    it('shows confidence percentage', async () => {
       renderWithFlightSelection(0)
 
       await waitFor(
         () => {
-          expect(screen.getByText(/confidence/i)).toBeInTheDocument()
+          expect(screen.getByText(/%/)).toBeInTheDocument()
         },
         { timeout: 5000 }
       )
