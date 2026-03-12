@@ -431,6 +431,50 @@ async def get_baggage_alerts() -> BaggageAlertsResponse:
 # Airport Configuration Routes
 # ==============================================================================
 
+def _slim_config(config: dict) -> dict:
+    """Strip verbose OSM metadata fields the frontend doesn't use."""
+    if not config:
+        return config
+
+    slimmed = dict(config)
+
+    # Strip tags from OSM collections
+    for key in ("osmTaxiways", "osmAprons", "osmRunways", "terminals"):
+        items = slimmed.get(key)
+        if isinstance(items, list):
+            slimmed[key] = [
+                {k: v for k, v in item.items() if k not in ("tags", "source", "osmId")}
+                for item in items
+            ]
+
+    # Strip gates to only id, ref, name, geo
+    gates = slimmed.get("gates")
+    if isinstance(gates, list):
+        slimmed["gates"] = [
+            {k: v for k, v in gate.items() if k in ("id", "ref", "name", "geo")}
+            for gate in gates
+        ]
+
+    # Truncate geoPolygon coordinate precision to 6 decimals
+    for key in ("osmTaxiways", "osmAprons", "osmRunways", "terminals"):
+        items = slimmed.get(key)
+        if isinstance(items, list):
+            for item in items:
+                for geo_key in ("geoPolygon", "geoPoints"):
+                    points = item.get(geo_key)
+                    if isinstance(points, list):
+                        item[geo_key] = [
+                            {
+                                k: round(float(v), 6) if k in ("latitude", "longitude") and v is not None else v
+                                for k, v in pt.items()
+                            }
+                            for pt in points
+                            if isinstance(pt, dict)
+                        ]
+
+    return slimmed
+
+
 @router.get("/airport/config", tags=["airport"])
 async def get_airport_config(request: Request) -> dict:
     """
@@ -441,7 +485,7 @@ async def get_airport_config(request: Request) -> dict:
     If the backend hasn't finished initialization, includes a ready flag.
     """
     service = get_airport_config_service()
-    config = service.get_config()
+    config = _slim_config(service.get_config())
     last_updated = service.get_last_updated()
     app_ready = getattr(request.app.state, "ready", False)
 

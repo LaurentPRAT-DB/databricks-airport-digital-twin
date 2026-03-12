@@ -230,15 +230,17 @@ function AppContent() {
             </Suspense>
           </div>
           {viewMode === '3d' && (
-            <Suspense fallback={<MapLoadingFallback label="Loading 3D View..." />}>
-              <Map3D
-                flights={flights}
-                selectedFlight={selectedFlight?.icao24 || null}
-                onSelectFlight={handleFlightSelect}
-                sharedViewport={viewport}
-                onViewportChange={handle3DViewportChange}
-              />
-            </Suspense>
+            <div className="absolute inset-0">
+              <Suspense fallback={<MapLoadingFallback label="Loading 3D View..." />}>
+                <Map3D
+                  flights={flights}
+                  selectedFlight={selectedFlight?.icao24 || null}
+                  onSelectFlight={handleFlightSelect}
+                  sharedViewport={viewport}
+                  onViewportChange={handle3DViewportChange}
+                />
+              </Suspense>
+            </div>
           )}
         </div>
 

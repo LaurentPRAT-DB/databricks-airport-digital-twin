@@ -152,6 +152,9 @@ function createDefaultConfig(): AirportConfig {
 /**
  * Hook for managing airport configuration
  */
+// Per-airport config cache (shared across hook instances via module scope)
+const configCache = new Map<string, ConfigResponse>();
+
 export function useAirportConfig(): UseAirportConfigReturn {
   const [config, setConfig] = useState<AirportConfig>(createDefaultConfig);
   const [currentAirport, setCurrentAirport] = useState<string | null>('KSFO');
@@ -202,6 +205,25 @@ export function useAirportConfig(): UseAirportConfigReturn {
     if (inflightRef.current) return inflightRef.current;
 
     const doRefresh = async () => {
+      // Check cache first
+      if (currentAirport && configCache.has(currentAirport)) {
+        const cached = configCache.get(currentAirport)!;
+        const configData = cached.config as AirportConfig & { icaoCode?: string };
+        if (configData && Object.keys(configData).length > 0) {
+          setConfig((prev) => ({
+            ...prev,
+            ...configData,
+            sources: configData.sources || prev.sources,
+            lastUpdated: cached.lastUpdated || undefined,
+          }));
+          if (configData.icaoCode) {
+            setCurrentAirport(configData.icaoCode);
+          }
+        }
+        inflightRef.current = null;
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
 
@@ -224,6 +246,9 @@ export function useAirportConfig(): UseAirportConfigReturn {
           // Update current airport from config
           if (configData.icaoCode) {
             setCurrentAirport(configData.icaoCode);
+            configCache.set(configData.icaoCode, data);
+          } else if (currentAirport) {
+            configCache.set(currentAirport, data);
           }
         }
       } catch (err) {
