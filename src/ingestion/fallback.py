@@ -580,19 +580,25 @@ def _get_runway_heading() -> Optional[float]:
 def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
     """Get departure waypoints aligned with the actual runway.
 
+    Same-direction ops: departure climb-out extends beyond the approach
+    threshold (aircraft takes off toward the threshold, then keeps climbing
+    past it).  Waypoints radiate from the threshold in the runway heading
+    direction.
+
     When *destination_iata* is provided the departure curves toward that
     airport's bearing so the trajectory visually heads in the right direction.
 
-    Returns an empty list when no OSM runway data is available, which disables
-    the departure trajectory line rather than producing a nonsensical route.
+    Returns an empty list when no OSM runway data is available.
     """
     # Require real runway data — no runway, no trajectory
-    dep_rwy = _get_departure_runway()  # (lon, lat) or None
+    rwy_threshold = _get_runway_threshold()  # (lon, lat) — approach end
     rwy_heading = _get_runway_heading()  # float or None
-    if dep_rwy is None or rwy_heading is None:
+    if rwy_threshold is None or rwy_heading is None:
         return []
 
-    dep_lat, dep_lon = dep_rwy[1], dep_rwy[0]
+    # Departure climb-out starts at the threshold (liftoff point) and extends
+    # in the same direction as the runway heading.
+    dep_lat, dep_lon = rwy_threshold[1], rwy_threshold[0]
 
     if destination_iata is None:
         exit_dir = rwy_heading  # Default: continue along runway heading
@@ -669,7 +675,12 @@ def _get_runway_threshold() -> Optional[tuple]:
 def _get_departure_runway() -> Optional[tuple]:
     """Get the departure runway start (lon, lat) from OSM data.
 
-    Uses the far end of the primary runway (opposite from approach threshold).
+    Departures use the SAME active runway direction as arrivals (real-world
+    standard: both ops into the wind).  The departure start is the far end
+    of the runway from the approach threshold — aircraft line up at the far
+    end and take off TOWARD the threshold, i.e. the same direction as the
+    approach course.
+
     Returns (lon, lat) tuple or None when no OSM runway data is available.
     """
     rwy = _get_osm_primary_runway()
@@ -691,11 +702,13 @@ def _get_takeoff_runway_geometry() -> tuple:
     hdg = _get_runway_heading()      # heading from threshold → far end
 
     if dep is not None and thr is not None and hdg is not None:
-        # dep is the far end from approach perspective = start of departure roll
-        # thr is the approach threshold = end of departure roll
+        # Same-direction ops: departures take off in the SAME direction as arrivals.
+        # dep = far end of runway (start of takeoff roll)
+        # thr = approach threshold (end of takeoff roll / lift-off point)
+        # Aircraft rolls from dep → thr, heading matches the approach course (hdg).
         start = (dep[1], dep[0])    # (lat, lon)
         end = (thr[1], thr[0])      # (lat, lon)
-        dep_heading = (hdg + 180) % 360  # Reverse: departures go opposite direction
+        dep_heading = hdg  # Same direction as approach (into the wind)
         # Estimate length from coordinates (~111,000 m/deg lat, 1 ft = 0.3048 m)
         dlat = end[0] - start[0]
         dlon = end[1] - start[1]
@@ -703,10 +716,11 @@ def _get_takeoff_runway_geometry() -> tuple:
         length_ft = dist_m / 0.3048
         return start, end, dep_heading, max(length_ft, 3000)
 
-    # Fallback: SFO Runway 28R (departure heading ~280)
-    start = (RUNWAY_28R_EAST[1], RUNWAY_28R_EAST[0])
-    end = (RUNWAY_28R_WEST[1], RUNWAY_28R_WEST[0])
-    return start, end, 280.0, 11870.0
+    # Fallback: SFO Runway 28L — same-direction ops, heading ~284 (west)
+    # Start at east end (10R threshold), roll toward west end (28L threshold)
+    start = (RUNWAY_10R_THRESHOLD[1], RUNWAY_10R_THRESHOLD[0])
+    end = (RUNWAY_28L_THRESHOLD[1], RUNWAY_28L_THRESHOLD[0])
+    return start, end, 284.0, 11381.0
 
 
 def _get_taxi_waypoints_arrival(gate_ref: str) -> List[tuple]:
@@ -1205,6 +1219,43 @@ def _point_on_circle(center_lat: float, center_lon: float, bearing_deg: float, r
     return (lat, lon)
 
 
+def _get_parked_heading(gate_lat: float, gate_lon: float) -> float:
+    """Compute heading for a parked aircraft: nose toward nearest terminal center.
+
+    Falls back to airport center if no terminal data is available,
+    or 180° as a last resort.
+    """
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+        terminals = config.get("terminals", [])
+        if terminals:
+            # Find nearest terminal centroid
+            best_dist = float('inf')
+            best_target = None
+            for terminal in terminals:
+                geo_polygon = terminal.get("geoPolygon", [])
+                if not geo_polygon:
+                    continue
+                # Compute centroid of terminal polygon
+                t_lat = sum(float(p.get("latitude", 0)) for p in geo_polygon) / len(geo_polygon)
+                t_lon = sum(float(p.get("longitude", 0)) for p in geo_polygon) / len(geo_polygon)
+                d = _distance_between((gate_lat, gate_lon), (t_lat, t_lon))
+                if d < best_dist:
+                    best_dist = d
+                    best_target = (t_lat, t_lon)
+            if best_target:
+                return _calculate_heading((gate_lat, gate_lon), best_target)
+    except Exception:
+        pass
+    # Fallback: face toward airport center
+    center = get_airport_center()
+    if _distance_between((gate_lat, gate_lon), center) > 0.0001:
+        return _calculate_heading((gate_lat, gate_lon), center)
+    return 180.0
+
+
 def _is_international_airport(iata: str) -> bool:
     """Check if an airport code is in the international list."""
     from src.ingestion.schedule_generator import INTERNATIONAL_AIRPORTS
@@ -1310,6 +1361,18 @@ def _create_new_flight(
         if pre_gate:
             _occupy_gate(icao24, pre_gate)
 
+        # Snap waypoint_index to the closest approach waypoint to spawn position
+        # so the aircraft doesn't chase a waypoint that's behind it
+        approach_wps = _get_approach_waypoints(origin)
+        best_wp_idx = 0
+        if approach_wps:
+            best_dist = float('inf')
+            for wi, wp in enumerate(approach_wps):
+                d = _distance_between((lat, lon), (wp[1], wp[0]))
+                if d < best_dist:
+                    best_dist = d
+                    best_wp_idx = wi
+
         return FlightState(
             icao24=icao24,
             callsign=callsign,
@@ -1323,13 +1386,13 @@ def _create_new_flight(
             phase=phase,
             aircraft_type=aircraft_type,
             assigned_gate=pre_gate,
-            waypoint_index=0,
+            waypoint_index=best_wp_idx,
             origin_airport=origin,
             destination_airport=destination,
         )
 
     elif phase == FlightPhase.PARKED:
-        # Start at a gate (facing the terminal, heading ~180)
+        # Start at a gate, nose facing toward the nearest terminal center
         _init_gate_states()
 
         # Find an available gate
@@ -1341,6 +1404,9 @@ def _create_new_flight(
         lat, lon = get_gates()[gate]
         _occupy_gate(icao24, gate)
 
+        # Compute heading toward nearest terminal (or airport center as fallback)
+        parked_heading = _get_parked_heading(lat, lon)
+
         return FlightState(
             icao24=icao24,
             callsign=callsign,
@@ -1348,7 +1414,7 @@ def _create_new_flight(
             longitude=lon,
             altitude=0,
             velocity=0,
-            heading=180,  # Facing terminal (south)
+            heading=parked_heading,
             vertical_rate=0,
             on_ground=True,
             phase=phase,
@@ -1720,6 +1786,15 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
         # After 5-10 minutes, start pushback
         if state.time_at_gate > random.uniform(300, 600):
+            # Ensure correct origin/dest for departure: origin=local, dest=new airport
+            local_iata = get_current_airport_iata()
+            if state.origin_airport != local_iata:
+                # Aircraft arrived here — swap to departing: origin=local, dest=new
+                state.origin_airport = local_iata
+                state.destination_airport = _pick_random_destination()
+            elif not state.destination_airport or state.destination_airport == local_iata:
+                # No valid destination set — pick one
+                state.destination_airport = _pick_random_destination()
             emit_phase_transition(
                 state.icao24, state.callsign,
                 FlightPhase.PARKED.value, FlightPhase.PUSHBACK.value,
@@ -1917,8 +1992,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.takeoff_roll_dist_ft = 0.0
 
     elif state.phase == FlightPhase.DEPARTING:
-        # Climb out following departure path
-        departure_wps = _get_departure_waypoints()
+        # Climb out following departure path (destination-aware turn)
+        departure_wps = _get_departure_waypoints(state.destination_airport)
         if state.waypoint_index < len(departure_wps):
             wp = departure_wps[state.waypoint_index]
             target = (wp[1], wp[0])
@@ -1965,7 +2040,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.heading += max(-3, min(3, heading_diff)) * dt
             state.heading = state.heading % 360
 
-            if dist_from_airport < APPROACH_RADIUS_DEG:
+            # Enforce approach capacity at runtime (max 4 on approach)
+            approach_count = (_count_aircraft_in_phase(FlightPhase.APPROACHING)
+                              + _count_aircraft_in_phase(FlightPhase.LANDING))
+            can_start_approach = approach_count < 4
+
+            if can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
                 # Close enough — transition to approach
                 emit_phase_transition(
                     state.icao24, state.callsign,
@@ -1975,7 +2055,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 )
                 state.phase = FlightPhase.APPROACHING
                 state.waypoint_index = 0
-            elif random.random() < 0.01 * dt and dist_from_airport < 0.35:
+            elif can_start_approach and random.random() < 0.01 * dt and dist_from_airport < 0.35:
                 emit_phase_transition(
                     state.icao24, state.callsign,
                     FlightPhase.ENROUTE.value, FlightPhase.APPROACHING.value,
@@ -1984,6 +2064,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 )
                 state.phase = FlightPhase.APPROACHING
                 state.waypoint_index = 0
+            elif not can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
+                # Approach full — hold at current distance (orbit)
+                state.heading = (state.heading + 2 * dt) % 360
 
         elif state.destination_airport:
             # DEPARTING enroute: heading away from SFO toward destination
