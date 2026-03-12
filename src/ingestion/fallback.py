@@ -210,6 +210,42 @@ MIN_APPROACH_SEPARATION_DEG = 3.0 * NM_TO_DEG  # 3 NM minimum on approach
 MIN_TAXI_SEPARATION_DEG = 0.003  # ~300m for taxi operations (larger for 3D visibility)
 MIN_GATE_SEPARATION_DEG = 0.010  # ~800m in 3D scale for gate area (prevents overlap)
 
+# ============================================================================
+# TAKEOFF PERFORMANCE DATA (14 CFR 25.107 / manufacturer performance manuals)
+# ============================================================================
+# type: (V1_kts, VR_kts, V2_kts, accel_kts_per_s, initial_climb_fpm)
+TAKEOFF_PERFORMANCE = {
+    "A318": (125, 130, 135, 3.0, 2500),
+    "A319": (128, 133, 138, 2.8, 2400),
+    "A320": (130, 135, 140, 2.7, 2300),
+    "A321": (135, 140, 145, 2.5, 2200),
+    "B737": (128, 133, 138, 2.8, 2500),
+    "B738": (132, 137, 142, 2.6, 2300),
+    "B739": (134, 139, 144, 2.5, 2200),
+    "CRJ9": (120, 125, 130, 3.2, 2800),
+    "E175": (118, 123, 128, 3.3, 3000),
+    "E190": (122, 127, 132, 3.1, 2700),
+    "A330": (140, 145, 150, 2.0, 1800),
+    "A340": (145, 150, 155, 1.8, 1600),
+    "A345": (145, 150, 155, 1.8, 1600),
+    "A350": (138, 143, 148, 2.2, 2000),
+    "B777": (142, 147, 152, 2.0, 1900),
+    "B787": (138, 143, 148, 2.3, 2100),
+    "B747": (150, 155, 160, 1.6, 1500),
+    "A380": (150, 155, 165, 1.5, 1400),
+}
+_DEFAULT_TAKEOFF_PERF = (130, 135, 140, 2.7, 2300)  # A320-class fallback
+
+# Departure wake turbulence separation (FAA 7110.65 5-8-1 / ICAO Doc 4444 6.3.3)
+# (leader_category, follower_category) -> minimum seconds
+DEPARTURE_SEPARATION_S = {
+    ("SUPER", "SUPER"): 180, ("SUPER", "HEAVY"): 180,
+    ("SUPER", "LARGE"): 180, ("SUPER", "SMALL"): 180,
+    ("HEAVY", "HEAVY"): 120, ("HEAVY", "LARGE"): 120,
+    ("HEAVY", "SMALL"): 120, ("LARGE", "SMALL"): 120,
+}
+DEFAULT_DEPARTURE_SEPARATION_S = 60  # Default same-runway spacing
+
 # Common US airline callsign prefixes with typical aircraft types
 AIRLINE_FLEET = {
     "UAL": ["B738", "B739", "A320", "A319", "B777", "B787"],  # United Airlines
@@ -643,6 +679,36 @@ def _get_departure_runway() -> Optional[tuple]:
     return None
 
 
+def _get_takeoff_runway_geometry() -> tuple:
+    """Get departure runway geometry for takeoff: start position, end position, heading, length.
+
+    Uses OSM data when available, falls back to SFO Runway 28R constants.
+    Returns ((start_lat, start_lon), (end_lat, end_lon), heading_deg, length_ft).
+    Start is where the aircraft begins the roll; end is the far threshold.
+    """
+    dep = _get_departure_runway()    # (lon, lat) — the start of the departure roll
+    thr = _get_runway_threshold()    # (lon, lat) — approach threshold (far end for departures)
+    hdg = _get_runway_heading()      # heading from threshold → far end
+
+    if dep is not None and thr is not None and hdg is not None:
+        # dep is the far end from approach perspective = start of departure roll
+        # thr is the approach threshold = end of departure roll
+        start = (dep[1], dep[0])    # (lat, lon)
+        end = (thr[1], thr[0])      # (lat, lon)
+        dep_heading = (hdg + 180) % 360  # Reverse: departures go opposite direction
+        # Estimate length from coordinates (~111,000 m/deg lat, 1 ft = 0.3048 m)
+        dlat = end[0] - start[0]
+        dlon = end[1] - start[1]
+        dist_m = math.sqrt((dlat * 111000)**2 + (dlon * 111000 * math.cos(math.radians(start[0])))**2)
+        length_ft = dist_m / 0.3048
+        return start, end, dep_heading, max(length_ft, 3000)
+
+    # Fallback: SFO Runway 28R (departure heading ~280)
+    start = (RUNWAY_28R_EAST[1], RUNWAY_28R_EAST[0])
+    end = (RUNWAY_28R_WEST[1], RUNWAY_28R_WEST[0])
+    return start, end, 280.0, 11870.0
+
+
 def _get_taxi_waypoints_arrival(gate_ref: str) -> List[tuple]:
     """Get taxi route from landing runway exit to assigned gate.
 
@@ -771,6 +837,8 @@ class FlightState:
     origin_airport: Optional[str] = None      # IATA code of origin
     destination_airport: Optional[str] = None  # IATA code of destination
     taxi_route: Optional[List] = None          # Cached taxi waypoints [(lon, lat), ...]
+    takeoff_subphase: str = "lineup"           # lineup/roll/rotate/liftoff/initial_climb
+    takeoff_roll_dist_ft: float = 0.0          # Accumulated ground roll distance in feet
 
 
 # Global state storage
@@ -789,6 +857,7 @@ class RunwayState:
     last_arrival_time: float = 0.0     # Timestamp of last arrival
     approach_queue: List[str] = field(default_factory=list)  # Ordered approach sequence
     departure_queue: List[str] = field(default_factory=list)  # Ordered departure sequence
+    last_departure_type: str = "LARGE"  # Wake category of last departure (FAA 7110.65)
 
 @dataclass
 class GateState:
@@ -917,12 +986,15 @@ def _occupy_runway(icao24: str, runway: str = "28R"):
     runway_state = _runway_28R if runway == "28R" else _runway_28L
     runway_state.occupied_by = icao24
 
-def _release_runway(icao24: str, runway: str = "28R"):
-    """Release runway when aircraft clears."""
+def _release_runway(icao24: str, runway: str = "28R", aircraft_type: str = ""):
+    """Release runway when aircraft clears. Stores wake category for departure separation."""
     runway_state = _runway_28R if runway == "28R" else _runway_28L
     if runway_state.occupied_by == icao24:
         runway_state.occupied_by = None
         runway_state.last_arrival_time = time.time()
+        if aircraft_type:
+            runway_state.last_departure_type = _get_wake_category(aircraft_type)
+            runway_state.last_departure_time = time.time()
 
 def _find_available_gate() -> Optional[str]:
     """Find a random available gate (spread across terminals)."""
@@ -1710,35 +1782,129 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if _distance_between((state.latitude, state.longitude), target) < max(speed_deg, 0.0005):
                 state.waypoint_index += 1
         else:
-            # At runway hold line - check if runway is clear before takeoff
-            if _is_runway_clear("28R"):
-                emit_phase_transition(
-                    state.icao24, state.callsign,
-                    FlightPhase.TAXI_TO_RUNWAY.value, FlightPhase.TAKEOFF.value,
-                    state.latitude, state.longitude, state.altitude,
-                    state.aircraft_type, state.assigned_gate,
+            # At runway hold line - check runway clear AND departure wake separation
+            runway_clear = _is_runway_clear("28R")
+            if runway_clear:
+                # Check departure wake turbulence separation (FAA 7110.65 5-8-1)
+                runway_st = _runway_28R
+                elapsed = time.time() - runway_st.last_departure_time
+                lead_cat = runway_st.last_departure_type
+                follow_cat = _get_wake_category(state.aircraft_type)
+                required = DEPARTURE_SEPARATION_S.get(
+                    (lead_cat, follow_cat), DEFAULT_DEPARTURE_SEPARATION_S
                 )
-                state.phase = FlightPhase.TAKEOFF
-                state.heading = 280  # Runway heading
-                _occupy_runway(state.icao24, "28R")
+                if elapsed >= required:
+                    emit_phase_transition(
+                        state.icao24, state.callsign,
+                        FlightPhase.TAXI_TO_RUNWAY.value, FlightPhase.TAKEOFF.value,
+                        state.latitude, state.longitude, state.altitude,
+                        state.aircraft_type, state.assigned_gate,
+                    )
+                    state.phase = FlightPhase.TAKEOFF
+                    _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
+                    state.heading = dep_hdg
+                    state.takeoff_subphase = "lineup"
+                    state.phase_progress = 0.0
+                    state.takeoff_roll_dist_ft = 0.0
+                    _occupy_runway(state.icao24, "28R")
+                else:
+                    # Hold short: wake separation not yet met
+                    state.velocity = 0
             else:
                 # Hold short of runway
                 state.velocity = 0
 
     elif state.phase == FlightPhase.TAKEOFF:
-        # Accelerate down runway and lift off (runway heading ~280 = west)
-        state.velocity = min(state.velocity + 30 * dt, 160)
-        state.longitude -= 0.002 * dt  # Move west down runway
-        state.heading = 280  # Runway heading
+        # Realistic takeoff with sub-phases (14 CFR 25.107/111)
+        perf = TAKEOFF_PERFORMANCE.get(state.aircraft_type, _DEFAULT_TAKEOFF_PERF)
+        v1, vr, v2, accel_rate, climb_fpm = perf
 
-        if state.velocity >= 140:  # Rotation speed
+        # Dynamic runway geometry (OSM-aware with SFO fallback)
+        rwy_start, rwy_end, rwy_heading, rwy_len_ft = _get_takeoff_runway_geometry()
+        rwy_dlat = rwy_end[0] - rwy_start[0]
+        rwy_dlon = rwy_end[1] - rwy_start[1]
+        rwy_len_deg = math.sqrt(rwy_dlat**2 + rwy_dlon**2)
+
+        state.heading = rwy_heading
+
+        if state.takeoff_subphase == "lineup":
+            # Align on runway centerline, brief pause (~3s)
+            state.velocity = 0
+            state.on_ground = True
+            state.phase_progress += dt
+            # Snap to runway start position
+            state.latitude = rwy_start[0]
+            state.longitude = rwy_start[1]
+            if state.phase_progress >= 3.0:
+                state.takeoff_subphase = "roll"
+                state.phase_progress = 0.0
+                state.takeoff_roll_dist_ft = 0.0
+
+        elif state.takeoff_subphase == "roll":
+            # Ground roll: accelerate at aircraft-specific rate until VR
+            state.velocity = min(state.velocity + accel_rate * dt, vr)
+            state.on_ground = True
+            # Accumulate ground roll distance
+            velocity_ft_s = state.velocity * 1.6878  # knots to ft/s
+            state.takeoff_roll_dist_ft += velocity_ft_s * dt
+            # Interpolate position along runway centerline
+            roll_frac = min(state.takeoff_roll_dist_ft / rwy_len_ft, 0.95)
+            state.latitude = rwy_start[0] + rwy_dlat * roll_frac
+            state.longitude = rwy_start[1] + rwy_dlon * roll_frac
+            if state.velocity >= vr:
+                state.takeoff_subphase = "rotate"
+                state.phase_progress = 0.0
+
+        elif state.takeoff_subphase == "rotate":
+            # Rotation: nose pitches up, reduced acceleration (~3s)
+            state.velocity = min(state.velocity + accel_rate * 0.8 * dt, v2 + 5)
+            state.on_ground = True
+            # Still rolling on ground during rotation
+            velocity_ft_s = state.velocity * 1.6878
+            state.takeoff_roll_dist_ft += velocity_ft_s * dt
+            roll_frac = min(state.takeoff_roll_dist_ft / rwy_len_ft, 0.98)
+            state.latitude = rwy_start[0] + rwy_dlat * roll_frac
+            state.longitude = rwy_start[1] + rwy_dlon * roll_frac
+            # Ramp vertical rate from 0 toward 500 fpm
+            state.phase_progress += dt
+            state.vertical_rate = min(500 * (state.phase_progress / 3.0), 500)
+            if state.phase_progress >= 3.0 or state.velocity >= v2:
+                state.takeoff_subphase = "liftoff"
+                state.phase_progress = 0.0
+                state.on_ground = False  # Wheels leave the ground
+
+        elif state.takeoff_subphase == "liftoff":
+            # Wheels off ground, climb to 35 ft screen height
             state.on_ground = False
-            state.altitude += 1500 * dt
-            state.vertical_rate = 2000
+            state.velocity = min(state.velocity + accel_rate * 0.5 * dt, v2 + 10)
+            # Ramp vertical rate from 500 toward initial climb rate
+            state.phase_progress += dt
+            ramp = min(state.phase_progress / 5.0, 1.0)
+            state.vertical_rate = 500 + (climb_fpm - 500) * ramp
+            state.altitude += state.vertical_rate / 60.0 * dt
+            # Continue along runway heading
+            speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+            state.latitude += (rwy_dlat / rwy_len_deg) * speed_deg
+            state.longitude += (rwy_dlon / rwy_len_deg) * speed_deg
+            if state.altitude >= 35:
+                state.takeoff_subphase = "initial_climb"
+                state.phase_progress = 0.0
 
-            if state.altitude > 500:
-                # Release runway when airborne and clear
-                _release_runway(state.icao24, "28R")
+        elif state.takeoff_subphase == "initial_climb":
+            # Climb from 35 ft to 500 ft, then transition to DEPARTING
+            # 14 CFR 25.111: min 2.4% net climb gradient, all-engine
+            state.on_ground = False
+            state.velocity = min(state.velocity + accel_rate * 0.3 * dt, v2 + 10)
+            state.vertical_rate = climb_fpm
+            state.altitude += climb_fpm / 60.0 * dt
+            # Continue along runway heading (noise abatement: no turns below 400 ft)
+            speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+            state.latitude += (rwy_dlat / rwy_len_deg) * speed_deg
+            state.longitude += (rwy_dlon / rwy_len_deg) * speed_deg
+
+            if state.altitude >= 500:
+                # Release runway and transition to DEPARTING
+                _release_runway(state.icao24, "28R", state.aircraft_type)
                 emit_phase_transition(
                     state.icao24, state.callsign,
                     FlightPhase.TAKEOFF.value, FlightPhase.DEPARTING.value,
@@ -1747,6 +1913,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 )
                 state.phase = FlightPhase.DEPARTING
                 state.waypoint_index = 0
+                state.takeoff_subphase = "lineup"  # Reset for next use
+                state.takeoff_roll_dist_ft = 0.0
 
     elif state.phase == FlightPhase.DEPARTING:
         # Climb out following departure path

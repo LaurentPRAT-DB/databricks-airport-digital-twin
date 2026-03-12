@@ -245,7 +245,7 @@ class TestSpeedConstraints:
         "landing": (0, 140, 0, 200),
         "taxi": (15, 25, 0, 0),
         "pushback": (3, 5, 0, 0),
-        "takeoff": (0, 160, 0, 400),
+        "takeoff": (0, 170, 0, 500),
         "departure": (200, 300, 400, 10000),
     }
 
