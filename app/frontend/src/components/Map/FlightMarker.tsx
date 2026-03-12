@@ -37,9 +37,11 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
     ? `<div class="gate-label">${gateName}</div>`
     : '';
 
+  // Airplane silhouette: nose at top (0° = north), tail at bottom.
+  // Fuselage runs top-to-bottom; wings spread left-right near center; tailfin at bottom.
   const svgIcon = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="24" height="24" style="transform: rotate(${rotation}deg);" role="img" aria-label="Flight ${label}">
-      <path d="M12 2L4 14h3l1 8h8l1-8h3L12 2z"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="${color}" width="24" height="24" style="transform: rotate(${rotation}deg); transform-origin: center;" role="img" aria-label="Flight ${label}">
+      <path d="M16 1 L14.5 10 L3 15 L3 17 L14.5 14 L14 24 L10 27 L10 29 L16 27 L22 29 L22 27 L18 24 L17.5 14 L29 17 L29 15 L17.5 10 Z"/>
     </svg>
     ${gateLabel}
   `;
