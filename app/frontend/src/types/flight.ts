@@ -57,6 +57,13 @@ export interface CongestionResponse {
   count: number;
 }
 
+export interface CongestionSummaryResponse {
+  areas: CongestionArea[];
+  bottlenecks: CongestionArea[];
+  areas_count: number;
+  bottlenecks_count: number;
+}
+
 export interface FlightWithPredictions extends Flight {
   delayPrediction?: DelayPrediction;
   gateRecommendations?: GateRecommendation[];

@@ -59,6 +59,15 @@ class CongestionListResponse(BaseModel):
     count: int
 
 
+class CongestionSummaryResponse(BaseModel):
+    """Response model for combined congestion + bottlenecks."""
+
+    areas: List[CongestionResponse]
+    bottlenecks: List[CongestionResponse]
+    areas_count: int
+    bottlenecks_count: int
+
+
 # Router
 prediction_router = APIRouter(prefix="/api/predictions", tags=["predictions"])
 
@@ -229,3 +238,40 @@ async def get_bottlenecks(
     ]
 
     return CongestionListResponse(areas=areas, count=len(areas))
+
+
+@prediction_router.get("/congestion-summary", response_model=CongestionSummaryResponse)
+async def get_congestion_summary(
+    prediction_service: PredictionService = Depends(get_prediction_service),
+    flight_service: FlightService = Depends(get_flight_service),
+) -> CongestionSummaryResponse:
+    """
+    Get congestion levels and bottlenecks in a single response.
+
+    Returns all congestion areas plus a filtered subset of high/critical bottlenecks,
+    avoiding duplicate flight fetches.
+    """
+    flight_response = await flight_service.get_flights()
+    flights = [f.model_dump() for f in flight_response.flights]
+
+    congestion = await prediction_service.get_congestion(flights)
+
+    all_areas = [
+        CongestionResponse(
+            area_id=c.area_id,
+            area_type=c.area_type,
+            level=c.level.value,
+            flight_count=c.flight_count,
+            wait_minutes=c.predicted_wait_minutes,
+        )
+        for c in congestion
+    ]
+
+    bottleneck_areas = [a for a in all_areas if a.level in ("high", "critical")]
+
+    return CongestionSummaryResponse(
+        areas=all_areas,
+        bottlenecks=bottleneck_areas,
+        areas_count=len(all_areas),
+        bottlenecks_count=len(bottleneck_areas),
+    )

@@ -268,6 +268,8 @@ export function useAirportConfig(): UseAirportConfigReturn {
    * Load airport (lakehouse first, OSM fallback, auto-persists)
    */
   const loadAirport = useCallback(async (icaoCode: string) => {
+    // Invalidate cache for this airport since activation resets state
+    configCache.delete(icaoCode);
     setIsLoading(true);
     setError(null);
 

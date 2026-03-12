@@ -4,7 +4,7 @@ import {
   DelaysResponse,
   GateRecommendation,
   CongestionArea,
-  CongestionResponse,
+  CongestionSummaryResponse,
   Flight,
 } from '../types/flight';
 
@@ -32,20 +32,11 @@ async function fetchGateRecommendations(
   return response.json();
 }
 
-// Fetch congestion for all areas
-async function fetchCongestion(): Promise<CongestionResponse> {
-  const response = await fetch('/api/predictions/congestion');
+// Fetch congestion summary (areas + bottlenecks in one call)
+async function fetchCongestionSummary(): Promise<CongestionSummaryResponse> {
+  const response = await fetch('/api/predictions/congestion-summary');
   if (!response.ok) {
-    throw new Error(`Failed to fetch congestion: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-// Fetch bottlenecks (high/critical congestion only)
-async function fetchBottlenecks(): Promise<CongestionResponse> {
-  const response = await fetch('/api/predictions/bottlenecks');
-  if (!response.ok) {
-    throw new Error(`Failed to fetch bottlenecks: ${response.statusText}`);
+    throw new Error(`Failed to fetch congestion summary: ${response.statusText}`);
   }
   return response.json();
 }
@@ -67,8 +58,8 @@ export function usePredictions(flights: Flight[]): UsePredictionsResult {
     queryKey: ['predictions', 'delays', flights.map((f) => f.icao24).join(',')],
     queryFn: () => fetchDelays(),
     enabled: flights.length > 0,
-    refetchInterval: 10000, // Refresh every 10 seconds
-    staleTime: 8000,
+    refetchInterval: 30000,
+    staleTime: 25000,
     retry: 2,
   });
 
@@ -103,8 +94,8 @@ export function useDelayPrediction(icao24: string | null): UseDelayPredictionRes
     queryKey: ['predictions', 'delay', icao24],
     queryFn: () => fetchDelays(icao24!),
     enabled: !!icao24,
-    refetchInterval: 10000,
-    staleTime: 8000,
+    refetchInterval: 30000,
+    staleTime: 25000,
     retry: 2,
   });
 
@@ -161,34 +152,18 @@ export interface UseCongestionResult {
  * @returns Congestion data for all areas and bottlenecks
  */
 export function useCongestion(): UseCongestionResult {
-  const {
-    data: congestionData,
-    isLoading: isLoadingCongestion,
-    error: congestionError,
-  } = useQuery<CongestionResponse, Error>({
-    queryKey: ['predictions', 'congestion'],
-    queryFn: fetchCongestion,
-    refetchInterval: 10000, // Refresh every 10 seconds
-    staleTime: 8000,
-    retry: 2,
-  });
-
-  const {
-    data: bottleneckData,
-    isLoading: isLoadingBottlenecks,
-    error: bottleneckError,
-  } = useQuery<CongestionResponse, Error>({
-    queryKey: ['predictions', 'bottlenecks'],
-    queryFn: fetchBottlenecks,
-    refetchInterval: 10000,
-    staleTime: 8000,
+  const { data, isLoading, error } = useQuery<CongestionSummaryResponse, Error>({
+    queryKey: ['predictions', 'congestion-summary'],
+    queryFn: fetchCongestionSummary,
+    refetchInterval: 30000,
+    staleTime: 25000,
     retry: 2,
   });
 
   return {
-    congestion: congestionData?.areas ?? [],
-    bottlenecks: bottleneckData?.areas ?? [],
-    isLoading: isLoadingCongestion || isLoadingBottlenecks,
-    error: congestionError ?? bottleneckError ?? null,
+    congestion: data?.areas ?? [],
+    bottlenecks: data?.bottlenecks ?? [],
+    isLoading,
+    error: error ?? null,
   };
 }

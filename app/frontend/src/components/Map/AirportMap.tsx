@@ -123,9 +123,11 @@ export default function AirportMap({ sharedViewport, onViewportChange }: Airport
         <MapViewportSaver onViewportChange={onViewportChange} />
         <AirportOverlay />
         <TrajectoryLine />
-        {flights.map((flight) => (
-          <FlightMarker key={flight.icao24} flight={flight} />
-        ))}
+        {flights
+          .filter((f) => f.latitude != null && f.longitude != null && !isNaN(f.latitude) && !isNaN(f.longitude))
+          .map((flight) => (
+            <FlightMarker key={flight.icao24} flight={flight} />
+          ))}
       </MapContainer>
 
       {/* Status overlay */}

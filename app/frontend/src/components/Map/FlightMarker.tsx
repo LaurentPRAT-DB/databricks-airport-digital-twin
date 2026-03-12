@@ -27,17 +27,18 @@ function getPhaseColor(phase: Flight['flight_phase']): string {
 // Selection color (green)
 const SELECTION_COLOR = '#22c55e';
 
-// Create airplane SVG icon with rotation and optional gate label
-function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'], isSelected: boolean, gateName?: string | null): L.DivIcon {
+// Create airplane SVG icon with rotation, ARIA label, and optional gate label
+function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'], isSelected: boolean, callsign?: string | null, icao24?: string, gateName?: string | null): L.DivIcon {
   const rotation = heading ?? 0;
   const color = isSelected ? SELECTION_COLOR : getPhaseColor(phase);
+  const label = callsign || icao24 || 'Unknown';
 
   const gateLabel = gateName && phase === 'ground'
     ? `<div class="gate-label">${gateName}</div>`
     : '';
 
   const svgIcon = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="24" height="24" style="transform: rotate(${rotation}deg);">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="24" height="24" style="transform: rotate(${rotation}deg);" role="img" aria-label="Flight ${label}">
       <path d="M12 2L4 14h3l1 8h8l1-8h3L12 2z"/>
     </svg>
     ${gateLabel}
@@ -64,8 +65,8 @@ export default function FlightMarker({ flight }: FlightMarkerProps) {
   const markerRef = useRef<L.Marker>(null);
 
   const icon = useMemo(
-    () => createAirplaneIcon(flight.heading, flight.flight_phase, isSelected, flight.assigned_gate),
-    [flight.heading, flight.flight_phase, isSelected, flight.assigned_gate]
+    () => createAirplaneIcon(flight.heading, flight.flight_phase, isSelected, flight.callsign, flight.icao24, flight.assigned_gate),
+    [flight.heading, flight.flight_phase, isSelected, flight.callsign, flight.icao24, flight.assigned_gate]
   );
 
   // Update marker icon when selection changes without full re-render
@@ -74,6 +75,11 @@ export default function FlightMarker({ flight }: FlightMarkerProps) {
       markerRef.current.setIcon(icon);
     }
   }, [icon]);
+
+  // Guard against invalid coordinates (defense in depth)
+  if (flight.latitude == null || flight.longitude == null || isNaN(flight.latitude) || isNaN(flight.longitude)) {
+    return null;
+  }
 
   return (
     <Marker

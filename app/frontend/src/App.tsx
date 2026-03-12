@@ -139,6 +139,14 @@ function AppContent() {
   const [showFIDS, setShowFIDS] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Initializing');
+
+  // Prefetch 3D bundle after initial render so it loads faster when user switches
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      import('./components/Map3D').catch(() => {});
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
   const { flights, selectedFlight, setSelectedFlight } = useFlightContext();
   const { currentAirport, refresh: refreshConfig } = useAirportConfigContext();
   const { viewport, setViewport, setLastSource } = useViewportState();

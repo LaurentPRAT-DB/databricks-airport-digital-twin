@@ -259,13 +259,26 @@ export const handlers = [
     return HttpResponse.json(mockCongestion)
   }),
 
-  // Bottlenecks
+  // Bottlenecks (kept for backward compat)
   http.get('/api/predictions/bottlenecks', async () => {
     await delay(40)
+    const bottlenecks = mockCongestion.areas.filter((a: { level: string }) => ['high', 'critical'].includes(a.level));
     return HttpResponse.json({
-      areas: mockCongestion.areas.filter((a) => ['high', 'critical'].includes(a.level)),
-      count: 0,
+      areas: bottlenecks,
+      count: bottlenecks.length,
       timestamp: new Date().toISOString(),
+    })
+  }),
+
+  // Congestion summary (merged endpoint used by frontend)
+  http.get('/api/predictions/congestion-summary', async () => {
+    await delay(40)
+    const bottlenecks = mockCongestion.areas.filter((a: { level: string }) => ['high', 'critical'].includes(a.level));
+    return HttpResponse.json({
+      areas: mockCongestion.areas,
+      bottlenecks,
+      areas_count: mockCongestion.areas.length,
+      bottlenecks_count: bottlenecks.length,
     })
   }),
 
