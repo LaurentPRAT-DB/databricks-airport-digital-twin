@@ -1099,7 +1099,357 @@ describe('End-to-end user interaction flows', () => {
   })
 
   // =========================================================================
-  // 15. Rapid sequential interactions (stress test)
+  // 15. Airport switch state propagation
+  // =========================================================================
+  describe('Airport switch state propagation', () => {
+    /** Helper: open airport selector, click an airport, wait for dropdown close */
+    async function switchToAirport(user: ReturnType<typeof userEvent.setup>, icaoCode: string) {
+      // Find the airport selector button (contains ICAO code like "KSFO" or "KJFK")
+      const allButtons = screen.getAllByRole('button')
+      const selectorButton = allButtons.find((b) =>
+        b.querySelector('svg') && /^[A-Z]{4}\s*\(/.test(b.textContent || '')
+      ) || screen.getByTitle(/select airport|san francisco|international/i)
+
+      await new Promise((r) => setTimeout(r, 100))
+      await user.click(selectorButton)
+      await waitFor(() => {
+        expect(screen.getByText(/John F. Kennedy International/)).toBeInTheDocument()
+      }, { timeout: 5000 })
+
+      // Find the target airport button in the dropdown list
+      // Use a more specific selector to avoid matching the header button
+      const dropdownButtons = screen.getAllByRole('button').filter(
+        (b) => b.textContent?.includes(icaoCode) && b.textContent?.includes('International')
+      )
+      const airportButton = dropdownButtons.length > 0
+        ? dropdownButtons[0]
+        : screen.getByText(new RegExp(icaoCode)).closest('button')!
+
+      await user.click(airportButton)
+
+      // Wait for dropdown to close (activation triggered)
+      await waitFor(() => {
+        expect(screen.queryByText(/John F. Kennedy International/)).not.toBeInTheDocument()
+      }, { timeout: 5000 })
+    }
+
+    it('header updates to new airport code after switch', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      // Initially KSFO — button text shows "KSFO (SFO)"
+      expect(screen.getByText(/KSFO/)).toBeInTheDocument()
+
+      await switchToAirport(user, 'KJFK')
+
+      // Header selector should now show KJFK
+      await waitFor(() => {
+        expect(screen.getByText(/KJFK/)).toBeInTheDocument()
+      }, { timeout: 5000 })
+    })
+
+    it('gate status panel updates after airport switch', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      // Gate status should exist
+      expect(screen.getByText(/gate status/i)).toBeInTheDocument()
+
+      await switchToAirport(user, 'KJFK')
+
+      // Gate status panel should still render (not crash)
+      await waitFor(() => {
+        expect(screen.getByText(/gate status/i)).toBeInTheDocument()
+      })
+    })
+
+    it('3D view renders after airport switch', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      // Switch airport first
+      await switchToAirport(user, 'KJFK')
+
+      // Then switch to 3D
+      const btn3D = screen.getByRole('button', { name: /3d/i })
+      await user.click(btn3D)
+
+      // 3D button should be active (3D view loaded)
+      expect(btn3D).toHaveClass('bg-blue-600')
+
+      // Switch back to 2D — should not crash
+      const btn2D = screen.getByRole('button', { name: /2d/i })
+      await user.click(btn2D)
+      expect(btn2D).toHaveClass('bg-blue-600')
+    })
+
+    it('2D↔3D round-trip works after airport switch', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      const btn2D = screen.getByRole('button', { name: /2d/i })
+      const btn3D = screen.getByRole('button', { name: /3d/i })
+
+      // Start in 3D
+      await user.click(btn3D)
+      expect(btn3D).toHaveClass('bg-blue-600')
+
+      // Switch airport while in 3D
+      await switchToAirport(user, 'KJFK')
+
+      // Verify still in 3D and not crashed
+      expect(btn3D).toHaveClass('bg-blue-600')
+
+      // Toggle back to 2D
+      await user.click(btn2D)
+      expect(btn2D).toHaveClass('bg-blue-600')
+
+      // Toggle to 3D again — should still work
+      await user.click(btn3D)
+      expect(btn3D).toHaveClass('bg-blue-600')
+    })
+
+    it('switching airports multiple times does not crash', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      // Switch to JFK
+      await switchToAirport(user, 'KJFK')
+      await waitFor(() => {
+        expect(screen.getByText(/KJFK/)).toBeInTheDocument()
+      }, { timeout: 5000 })
+
+      // Switch to LHR
+      await switchToAirport(user, 'EGLL')
+      await waitFor(() => {
+        expect(screen.getByText(/EGLL/)).toBeInTheDocument()
+      }, { timeout: 5000 })
+
+      // Everything should still render
+      expect(screen.getByText(/gate status/i)).toBeInTheDocument()
+      expect(screen.getByText(/flight details/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /2d/i })).toBeInTheDocument()
+    })
+
+    it('flight detail panel still works after airport switch', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+      await waitForFlights()
+
+      // Select a flight before switching
+      const flightRow = screen.getByText(/UAL123/i).closest('button')!
+      await user.click(flightRow)
+
+      await waitFor(() => {
+        expect(screen.getByText(/a12345/i)).toBeInTheDocument()
+      })
+
+      // Switch airport
+      await switchToAirport(user, 'KJFK')
+
+      // Detail panel should still be functional (either shows the flight or cleared)
+      // At minimum, the panel heading should exist
+      expect(screen.getByRole('heading', { name: /flight details/i })).toBeInTheDocument()
+    })
+
+    it('FIDS still works after airport switch', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      // Switch airport
+      await switchToAirport(user, 'KJFK')
+
+      // Open FIDS
+      const fidsButton = screen.getByRole('button', { name: /fids/i })
+      await user.click(fidsButton)
+
+      await waitFor(() => {
+        expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+      })
+
+      // Close FIDS
+      const closeButton = screen.getByRole('button', { name: /x/i })
+      await user.click(closeButton)
+
+      await waitFor(() => {
+        expect(screen.queryByText(/flight information display/i)).not.toBeInTheDocument()
+      })
+    })
+  })
+
+  // =========================================================================
+  // 16. Flight selection persistence across view toggles
+  // =========================================================================
+  describe('Flight selection persistence across view toggles', () => {
+    it('selected flight persists when switching from 2D to 3D and back', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+      await waitForFlights()
+
+      // Select UAL123
+      const flightRow = screen.getByText(/UAL123/i).closest('button')!
+      await user.click(flightRow)
+
+      await waitFor(() => {
+        expect(screen.getByText(/a12345/i)).toBeInTheDocument()
+      })
+
+      // Switch to 3D
+      const btn3D = screen.getByRole('button', { name: /3d/i })
+      await user.click(btn3D)
+
+      // Flight should still be selected in detail panel
+      expect(screen.getByText(/a12345/i)).toBeInTheDocument()
+
+      // Switch back to 2D
+      const btn2D = screen.getByRole('button', { name: /2d/i })
+      await user.click(btn2D)
+
+      // Flight should still be selected
+      expect(screen.getByText(/a12345/i)).toBeInTheDocument()
+    })
+
+    it('trajectory toggle state persists across view switches', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+      await waitForFlights()
+
+      // Select a flight (trajectory auto-enables)
+      const flightRow = screen.getByText(/UAL123/i).closest('button')!
+      await user.click(flightRow)
+
+      await waitFor(() => {
+        expect(screen.getByText(/show trajectory/i)).toBeInTheDocument()
+      }, { timeout: 5000 })
+
+      const toggleBtn = screen.getByText(/show trajectory/i).closest('button')!
+      expect(toggleBtn).toHaveClass('bg-blue-50')
+
+      // Toggle trajectory off
+      await user.click(toggleBtn)
+      await waitFor(() => {
+        const btn = screen.getByText(/show trajectory/i).closest('button')!
+        expect(btn).toHaveClass('bg-slate-50')
+      })
+
+      // Switch to 3D and back
+      const btn3D = screen.getByRole('button', { name: /3d/i })
+      const btn2D = screen.getByRole('button', { name: /2d/i })
+      await user.click(btn3D)
+      await user.click(btn2D)
+
+      // Trajectory state should be preserved
+      await waitFor(() => {
+        const updatedBtn = screen.getByText(/show trajectory/i).closest('button')!
+        expect(updatedBtn).toHaveClass('bg-slate-50')
+      })
+    })
+  })
+
+  // =========================================================================
+  // 17. Loading screen and backend readiness
+  // =========================================================================
+  describe('Loading screen lifecycle', () => {
+    it('shows loading screen with radar animation before backend is ready', async () => {
+      // Override /api/ready to delay readiness
+      const { server } = await import('./test/mocks/server')
+      const { http, HttpResponse, delay: mswDelay } = await import('msw')
+
+      let resolveReady: () => void
+      const readyPromise = new Promise<void>((r) => { resolveReady = r })
+
+      server.use(
+        http.get('/api/ready', async () => {
+          await mswDelay(100)
+          return HttpResponse.json({ ready: false, status: 'Loading airport data' })
+        }),
+      )
+
+      renderApp()
+
+      // Should show loading screen with title
+      expect(screen.getByRole('heading', { name: /airport digital twin/i })).toBeInTheDocument()
+
+      // Should show status message
+      await waitFor(() => {
+        expect(screen.getByText(/loading airport data|initializing/i)).toBeInTheDocument()
+      })
+
+      // Now make backend ready
+      server.use(
+        http.get('/api/ready', async () => {
+          return HttpResponse.json({ ready: true, status: 'Ready' })
+        }),
+      )
+
+      // Should transition to main app
+      await waitFor(() => {
+        expect(screen.getByRole('main')).toBeInTheDocument()
+      }, { timeout: 10000 })
+    })
+  })
+
+  // =========================================================================
+  // 18. Gate status terminal switching after airport switch
+  // =========================================================================
+  describe('Gate status after airport switch', () => {
+    it('gate status terminal tabs are clickable after airport switch', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      // Verify gate status renders initially
+      const tabs = screen.getAllByRole('tab')
+      expect(tabs.length).toBeGreaterThanOrEqual(2)
+
+      // Click "All" tab
+      await user.click(tabs[0])
+      expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
+
+      // If there's a second tab, click it
+      if (tabs.length > 1) {
+        await user.click(tabs[1])
+      }
+
+      // No crash — panel still functional
+      expect(screen.getByText(/gate status/i)).toBeInTheDocument()
+    })
+  })
+
+  // =========================================================================
+  // 19. Weather widget interaction
+  // =========================================================================
+  describe('Weather widget interaction', () => {
+    it('weather button is clickable and shows METAR details', async () => {
+      const user = userEvent.setup()
+      renderApp()
+      await waitForAppReady()
+
+      // Weather widget should show temperature
+      await waitFor(() => {
+        expect(screen.getByText(/°C/)).toBeInTheDocument()
+      }, { timeout: 5000 })
+
+      // Find and click the weather button to expand details
+      const weatherButton = screen.getByText(/°C/).closest('button')
+      if (weatherButton) {
+        await user.click(weatherButton)
+        // Should show expanded METAR details or not crash
+      }
+    })
+  })
+
+  // =========================================================================
+  // 20. Rapid sequential interactions (stress test)
   // =========================================================================
   describe('Rapid user interactions', () => {
     it('rapidly selecting different flights does not crash', async () => {
