@@ -225,7 +225,31 @@ NM_TO_DEG = 1.0 / 60.0
 MIN_APPROACH_SEPARATION_DEG = 3.0 * NM_TO_DEG  # 3 NM minimum on approach
 MIN_TAXI_SEPARATION_DEG = 0.003  # ~300m for taxi operations (larger for 3D visibility)
 MIN_GATE_SEPARATION_DEG = 0.010  # ~800m in 3D scale for gate area (prevents overlap)
-GATE_STANDOFF_METERS = 30  # Offset aircraft from gate point so nose reaches jetbridge, body sits on apron
+# Aircraft fuselage half-lengths in meters (nose-to-center), by ICAO type designator.
+# Used to compute how far to offset parked aircraft from the gate/jetbridge point
+# so the fuselage sits on the apron instead of overlapping the terminal building.
+# Sources: manufacturer specs (Airbus, Boeing, Bombardier, Embraer).
+AIRCRAFT_HALF_LENGTH_M = {
+    "A318": 15.6,  # 31.4m total
+    "A319": 16.8,  # 33.8m
+    "A320": 18.9,  # 37.6m
+    "A321": 22.2,  # 44.5m
+    "B737": 19.6,  # 39.5m (B737-800 representative)
+    "B738": 19.8,  # 39.5m
+    "B739": 21.0,  # 42.1m
+    "CRJ9": 18.4,  # 36.4m
+    "E175": 15.9,  # 31.7m
+    "E190": 18.2,  # 36.2m
+    "A330": 29.6,  # 58.8m (A330-300)
+    "A340": 31.7,  # 63.7m (A340-300)
+    "A345": 37.6,  # 75.3m (A340-600)
+    "A350": 33.1,  # 66.8m (A350-900)
+    "B777": 36.9,  # 73.9m (B777-300)
+    "B787": 28.3,  # 56.7m (B787-8)
+    "B747": 35.3,  # 70.7m (B747-400)
+    "A380": 36.4,  # 72.7m
+}
+_DEFAULT_HALF_LENGTH_M = 18.9  # A320-class fallback
 
 # ============================================================================
 # TAKEOFF PERFORMANCE DATA (14 CFR 25.107 / manufacturer performance manuals)
@@ -359,19 +383,57 @@ _DEFAULT_GATES = {
     "G1": (37.6145, -122.3955),  # Wide-body capable
     "G2": (37.6140, -122.3945),
     "G3": (37.6135, -122.3935),
+    "G4": (37.6130, -122.3925),
     # International Terminal - Boarding Area A
     "A1": (37.6155, -122.3900),  # Wide-body capable
     "A2": (37.6150, -122.3890),
-    # Domestic Terminal 1
+    "A3": (37.6145, -122.3880),
+    # Domestic Terminal 1 - Boarding Area B
     "B1": (37.6165, -122.3850),
     "B2": (37.6160, -122.3840),
-    # Domestic Terminal 2/3
+    "B3": (37.6155, -122.3830),
+    "B4": (37.6150, -122.3820),
+    # Domestic Terminal 2 - Boarding Area C
     "C1": (37.6175, -122.3800),
     "C2": (37.6170, -122.3790),
+    "C3": (37.6165, -122.3780),
+    # Domestic Terminal 3 - Boarding Area E
+    "E1": (37.6180, -122.3760),
+    "E2": (37.6175, -122.3750),
+    "E3": (37.6170, -122.3740),
+    # Domestic Terminal 3 - Boarding Area F
+    "F1": (37.6185, -122.3720),
+    "F2": (37.6180, -122.3710),
+    "F3": (37.6175, -122.3700),
 }
 
 # Cache for dynamically loaded gates
 _loaded_gates: Optional[Dict[str, tuple]] = None
+
+# Minimum gates to avoid constant saturation with moderate flight counts
+MIN_GATES_FOR_OPERATIONS = 15
+MAX_OVERFLOW_STANDS = 10  # Maximum dynamically generated remote parking positions
+
+
+def _generate_overflow_stands(existing_gates: Dict[str, tuple], count: int) -> Dict[str, tuple]:
+    """Generate overflow remote parking positions near the airport apron.
+
+    Places stands in a line south of the terminal area, spaced ~100m apart.
+    These serve as remote parking when all terminal gates are occupied.
+    """
+    center = get_airport_center()
+    stands = {}
+    # Place overflow stands south of terminal area
+    base_lat = center[0] - 0.005  # ~500m south of center
+    base_lon = center[1]
+    spacing = 0.001  # ~100m between stands
+
+    for i in range(min(count, MAX_OVERFLOW_STANDS)):
+        ref = f"R{i+1}"  # R for "Remote"
+        if ref not in existing_gates:
+            stands[ref] = (base_lat, base_lon + (i - count / 2) * spacing)
+
+    return stands
 
 
 def get_gates() -> Dict[str, tuple]:
@@ -379,7 +441,8 @@ def get_gates() -> Dict[str, tuple]:
     Get gate positions, preferring imported OSM data over defaults.
 
     Only caches the result once the airport config service reports ready,
-    preventing early calls from permanently locking in the 9-gate fallback.
+    preventing early calls from permanently locking in a partial gate set.
+    Generates overflow remote stands if total gates are below the minimum.
 
     Returns:
         Dictionary mapping gate refs to (latitude, longitude) tuples
@@ -388,6 +451,8 @@ def get_gates() -> Dict[str, tuple]:
 
     if _loaded_gates is not None:
         return _loaded_gates
+
+    gates = None
 
     # Try to load from airport config service
     try:
@@ -406,20 +471,34 @@ def get_gates() -> Dict[str, tuple]:
                 if ref and lat and lon:
                     gates[ref] = (float(lat), float(lon))
 
-            if gates:
-                # Only cache when config is fully loaded to avoid
-                # permanently locking in a partial/default gate set
-                if service.config_ready:
-                    _loaded_gates = gates
-                return gates
+            if not gates:
+                gates = None
+            elif service.config_ready:
+                # Only cache when config is fully loaded
+                pass  # Will cache below after overflow check
     except ImportError:
-        # App backend not available (e.g., running standalone)
         pass
     except Exception:
-        # Service not initialized or no gates loaded
         pass
 
-    return _DEFAULT_GATES
+    if gates is None:
+        gates = dict(_DEFAULT_GATES)
+
+    # Add overflow stands if total gates are below the minimum
+    if len(gates) < MIN_GATES_FOR_OPERATIONS:
+        overflow = _generate_overflow_stands(gates, MIN_GATES_FOR_OPERATIONS - len(gates))
+        gates.update(overflow)
+
+    # Cache only when service is ready
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        if service.config_ready:
+            _loaded_gates = gates
+    except Exception:
+        pass
+
+    return gates
 
 
 def reload_gates() -> Dict[str, tuple]:
@@ -906,16 +985,21 @@ _runway_28R: RunwayState = RunwayState()
 _gate_states: Dict[str, GateState] = {}
 
 def _init_gate_states():
-    """Initialize gate states if not done."""
-    global _gate_states
-    if not _gate_states:
-        for gate in get_gates():
-            _gate_states[gate] = GateState()
+    """Initialize gate states, re-syncing if OSM gates become available."""
+    current_gates = get_gates()
+    # Re-initialize if gate set has changed (e.g., OSM loaded after fallback)
+    if not _gate_states or set(_gate_states.keys()) != set(current_gates.keys()):
+        old_states = dict(_gate_states)
+        _gate_states.clear()
+        for gate in current_gates:
+            if gate in old_states:
+                _gate_states[gate] = old_states[gate]
+            else:
+                _gate_states[gate] = GateState()
 
 def _reset_gate_states():
     """Reset gate states when gates are reloaded."""
-    global _gate_states
-    _gate_states = {}
+    _gate_states.clear()
     _init_gate_states()
 
 def _get_wake_category(aircraft_type: str) -> str:
@@ -1032,7 +1116,7 @@ def _release_runway(icao24: str, runway: str = "28R", aircraft_type: str = ""):
             runway_state.last_departure_time = time.time()
 
 def _find_available_gate() -> Optional[str]:
-    """Find a random available gate (spread across terminals)."""
+    """Find a random available gate, preferring terminal gates over remote stands."""
     _init_gate_states()
     current_time = time.time()
 
@@ -1040,9 +1124,14 @@ def _find_available_gate() -> Optional[str]:
         gate for gate, state in _gate_states.items()
         if state.occupied_by is None and current_time >= state.available_at
     ]
-    if available:
-        return random.choice(available)
-    return None
+    if not available:
+        return None
+
+    # Prefer terminal gates (non-R-prefixed) over remote stands
+    terminal_gates = [g for g in available if not g.startswith("R")]
+    if terminal_gates:
+        return random.choice(terminal_gates)
+    return random.choice(available)
 
 def _occupy_gate(icao24: str, gate: str):
     """Mark gate as occupied."""
@@ -1264,6 +1353,115 @@ def _offset_position_by_heading(lat: float, lon: float, heading_deg: float, dist
     return (new_lat, new_lon)
 
 
+def _distance_meters(pos1: tuple, pos2: tuple) -> float:
+    """Approximate distance in meters between two (lat, lon) points."""
+    lat1, lon1 = pos1[:2]
+    lat2, lon2 = pos2[:2]
+    dlat = (lat2 - lat1) * 111_000
+    dlon = (lon2 - lon1) * 111_000 * math.cos(math.radians((lat1 + lat2) / 2))
+    return math.sqrt(dlat ** 2 + dlon ** 2)
+
+
+def _point_to_segment_distance_m(px: float, py: float,
+                                  ax: float, ay: float,
+                                  bx: float, by: float) -> float:
+    """Minimum distance in meters from point (px, py) to segment (ax,ay)-(bx,by).
+
+    All coordinates in (lat, lon) degrees.
+    """
+    # Project point onto segment in local meter space
+    cos_lat = math.cos(math.radians(px))
+    # Convert to meters from an arbitrary origin (ax, ay)
+    pxm = (px - ax) * 111_000
+    pym = (py - ay) * 111_000 * cos_lat
+    bxm = (bx - ax) * 111_000
+    bym = (by - ay) * 111_000 * cos_lat
+
+    seg_len_sq = bxm * bxm + bym * bym
+    if seg_len_sq < 1e-10:
+        return math.sqrt(pxm * pxm + pym * pym)
+
+    t = max(0.0, min(1.0, (pxm * bxm + pym * bym) / seg_len_sq))
+    proj_x = t * bxm
+    proj_y = t * bym
+    return math.sqrt((pxm - proj_x) ** 2 + (pym - proj_y) ** 2)
+
+
+def _gate_to_terminal_edge_distance_m(gate_lat: float, gate_lon: float) -> float | None:
+    """Compute distance in meters from a gate to the nearest terminal polygon edge.
+
+    Uses OSM terminal geoPolygon data. Returns None if no terminal data is available.
+    """
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+        terminals = config.get("terminals", [])
+        if not terminals:
+            return None
+
+        best_dist = float('inf')
+        for terminal in terminals:
+            geo_polygon = terminal.get("geoPolygon", [])
+            if len(geo_polygon) < 3:
+                continue
+            # Check distance to each edge of the terminal polygon
+            for i in range(len(geo_polygon)):
+                j = (i + 1) % len(geo_polygon)
+                a_lat = float(geo_polygon[i].get("latitude", 0))
+                a_lon = float(geo_polygon[i].get("longitude", 0))
+                b_lat = float(geo_polygon[j].get("latitude", 0))
+                b_lon = float(geo_polygon[j].get("longitude", 0))
+                d = _point_to_segment_distance_m(gate_lat, gate_lon,
+                                                  a_lat, a_lon, b_lat, b_lon)
+                if d < best_dist:
+                    best_dist = d
+        return best_dist if best_dist < float('inf') else None
+    except Exception:
+        return None
+
+
+def _compute_gate_standoff(gate_lat: float, gate_lon: float,
+                           heading_deg: float, aircraft_type: str) -> float:
+    """Compute how far to offset a parked aircraft from the gate node.
+
+    Uses the airport's OSM terminal polygon to determine the gate-to-terminal
+    edge distance, combined with the aircraft's half-length, so different
+    airports and aircraft types produce different standoff distances.
+
+    The standoff ensures:
+      - At minimum, the aircraft center moves back by half the fuselage length
+        so the nose (not the center) is at the jetbridge point.
+      - If the gate node is inside or very close to the terminal polygon edge
+        (< 5 m, typical for wall-mounted jetbridges), the aircraft is pulled
+        back by at least the half-length so the body clears the building.
+      - If the gate node is already far from the terminal (remote stand),
+        the standoff is reduced accordingly.
+
+    Args:
+        gate_lat, gate_lon: Gate/jetbridge position from OSM
+        heading_deg: Aircraft nose heading (toward terminal)
+        aircraft_type: ICAO type designator (e.g. "A320", "B777")
+
+    Returns:
+        Standoff distance in meters
+    """
+    half_length = AIRCRAFT_HALF_LENGTH_M.get(aircraft_type, _DEFAULT_HALF_LENGTH_M)
+
+    edge_dist = _gate_to_terminal_edge_distance_m(gate_lat, gate_lon)
+    if edge_dist is None:
+        # No OSM terminal data — use aircraft half-length as best guess
+        return half_length
+
+    # Gate is on or very near the terminal wall (typical jetbridge config):
+    # offset by full half-length so fuselage clears the building.
+    # Gate is further out (remote stand / hardstand):
+    # reduce the offset since the aircraft is already away from the building.
+    # Never go below a small minimum to keep nose near the gate node.
+    standoff = max(half_length - edge_dist, half_length * 0.3)
+    return standoff
+
+
 def _get_parked_heading(gate_lat: float, gate_lon: float) -> float:
     """Compute heading for a parked aircraft: nose toward nearest terminal center.
 
@@ -1452,8 +1650,9 @@ def _create_new_flight(
         # Compute heading toward nearest terminal (or airport center as fallback)
         parked_heading = _get_parked_heading(lat, lon)
 
-        # Offset aircraft away from terminal so nose reaches gate, body sits on apron
-        lat, lon = _offset_position_by_heading(lat, lon, parked_heading, GATE_STANDOFF_METERS)
+        # Offset aircraft away from terminal based on OSM geometry + aircraft dimensions
+        standoff = _compute_gate_standoff(lat, lon, parked_heading, aircraft_type)
+        lat, lon = _offset_position_by_heading(lat, lon, parked_heading, standoff)
 
         return FlightState(
             icao24=icao24,
@@ -1833,11 +2032,14 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.velocity = 0
                 state.time_at_gate = 0
                 _occupy_gate(state.icao24, state.assigned_gate)
-                # Offset aircraft away from terminal so nose reaches gate, body sits on apron
+                # Offset aircraft away from terminal based on OSM geometry + aircraft dimensions
                 parked_heading = _get_parked_heading(state.latitude, state.longitude)
                 state.heading = parked_heading
+                standoff = _compute_gate_standoff(
+                    state.latitude, state.longitude, parked_heading, state.aircraft_type
+                )
                 state.latitude, state.longitude = _offset_position_by_heading(
-                    state.latitude, state.longitude, parked_heading, GATE_STANDOFF_METERS
+                    state.latitude, state.longitude, parked_heading, standoff
                 )
 
     elif state.phase == FlightPhase.PARKED:

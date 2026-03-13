@@ -22,11 +22,15 @@ from src.ingestion.fallback import (
     _create_new_flight,
     _distance_between,
     _find_aircraft_ahead_on_approach,
+    _find_available_gate,
     _flight_states,
+    _generate_overflow_stands,
     _get_approach_waypoints,
     _get_departure_waypoints,
     _get_parked_heading,
     _get_takeoff_runway_geometry,
+    _init_gate_states,
+    _occupy_gate,
     _shortest_angle_diff,
     _update_flight_state,
     _count_aircraft_in_phase,
@@ -41,9 +45,11 @@ from src.ingestion.fallback import (
     APPROACH_WAYPOINTS,
     DEPARTURE_WAYPOINTS,
     NM_TO_DEG,
+    MIN_GATES_FOR_OPERATIONS,
     MAX_SPEED_BELOW_FL100_KTS,
     VREF_SPEEDS,
     _DEFAULT_VREF,
+    _DEFAULT_GATES,
     RunwayState,
     GateState,
 )
@@ -1069,3 +1075,100 @@ class TestSpeedBelowFL100:
             f"Enroute arriving at {flight.altitude:.0f} ft: {flight.velocity:.0f} kts "
             f"exceeds {MAX_SPEED_BELOW_FL100_KTS} kts limit"
         )
+
+
+class TestGateLoadingAndOverflow:
+    """Verify gate loading prefers OSM data and provides overflow stands."""
+
+    def setup_method(self):
+        """Clear gate states before each test."""
+        _gate_states.clear()
+        _flight_states.clear()
+
+    def teardown_method(self):
+        """Restore gate states so subsequent tests are not polluted."""
+        _gate_states.clear()
+        _flight_states.clear()
+
+    def test_default_gates_at_least_15(self):
+        """Fallback gates should have at least 15 positions."""
+        assert len(_DEFAULT_GATES) >= 15, (
+            f"_DEFAULT_GATES has only {len(_DEFAULT_GATES)} gates, need at least 15"
+        )
+
+    def test_default_gates_cover_multiple_boarding_areas(self):
+        """Fallback gates should span multiple SFO boarding areas."""
+        prefixes = {gate[0] for gate in _DEFAULT_GATES}
+        assert len(prefixes) >= 5, (
+            f"Expected gates in >=5 boarding areas, got: {sorted(prefixes)}"
+        )
+
+    def test_overflow_stands_generated_when_gates_few(self):
+        """When fewer than MIN_GATES gates exist, overflow stands are added."""
+        small_gates = {"X1": (37.62, -122.38), "X2": (37.621, -122.381)}
+        overflow = _generate_overflow_stands(small_gates, 5)
+        assert len(overflow) == 5
+        assert all(ref.startswith("R") for ref in overflow)
+
+    def test_overflow_stands_do_not_collide_with_existing(self):
+        """Overflow stands should not overwrite existing gate refs."""
+        existing = {"R1": (37.62, -122.38), "R2": (37.621, -122.381)}
+        overflow = _generate_overflow_stands(existing, 3)
+        # R1 and R2 already exist, so overflow generates R3, R4, R5
+        assert "R1" not in overflow
+        assert "R2" not in overflow
+        assert len(overflow) >= 1  # At least some non-colliding stands
+
+    def test_overflow_stands_capped_at_max(self):
+        """Overflow generation should not exceed MAX_OVERFLOW_STANDS."""
+        from src.ingestion.fallback import MAX_OVERFLOW_STANDS
+        overflow = _generate_overflow_stands({}, 100)
+        assert len(overflow) <= MAX_OVERFLOW_STANDS
+
+    def test_find_available_gate_prefers_terminal(self):
+        """Terminal gates should be preferred over remote stands."""
+        test_gates = {"B1": (37.62, -122.38), "R1": (37.621, -122.381)}
+        _gate_states.clear()
+        _gate_states["B1"] = GateState()
+        _gate_states["R1"] = GateState()
+
+        with patch("src.ingestion.fallback.get_gates", return_value=test_gates):
+            choices = {_find_available_gate() for _ in range(50)}
+        assert choices == {"B1"}, (
+            f"Expected only terminal gate 'B1', but got: {choices}"
+        )
+
+    def test_find_available_gate_falls_back_to_remote(self):
+        """When all terminal gates are occupied, remote stands are used."""
+        test_gates = {"B1": (37.62, -122.38), "R1": (37.621, -122.381)}
+        _gate_states.clear()
+        _gate_states["B1"] = GateState(occupied_by="abc123")
+        _gate_states["R1"] = GateState()
+
+        with patch("src.ingestion.fallback.get_gates", return_value=test_gates):
+            gate = _find_available_gate()
+        assert gate == "R1"
+
+    def test_find_available_gate_returns_none_when_all_full(self):
+        """When every gate is occupied, return None."""
+        test_gates = {"B1": (37.62, -122.38), "R1": (37.621, -122.381)}
+        _gate_states.clear()
+        _gate_states["B1"] = GateState(occupied_by="abc123")
+        _gate_states["R1"] = GateState(occupied_by="def456")
+
+        with patch("src.ingestion.fallback.get_gates", return_value=test_gates):
+            assert _find_available_gate() is None
+
+    def test_gate_states_resync_when_gates_change(self):
+        """Gate states should re-initialize when gate set changes."""
+        _gate_states.clear()
+        _gate_states["OLD1"] = GateState(occupied_by="flight1")
+
+        new_gates = {"OLD1": (37.62, -122.38), "NEW1": (37.621, -122.381)}
+        with patch("src.ingestion.fallback.get_gates", return_value=new_gates):
+            _init_gate_states()
+
+        assert "OLD1" in _gate_states
+        assert _gate_states["OLD1"].occupied_by == "flight1"
+        assert "NEW1" in _gate_states
+        assert _gate_states["NEW1"].occupied_by is None

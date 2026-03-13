@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
@@ -267,6 +267,28 @@ export function Map3D({
     };
   }, [terminals, osmRunways, osmTaxiways, osmAprons, airportCenter?.lat, airportCenter?.lon, sharedViewport, selectedFlightObj]);
 
+  // Navigation controls hint — auto-hides after 5s, reappears on hover
+  const [hintVisible, setHintVisible] = useState(true);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const startHintTimer = useCallback(() => {
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    hintTimerRef.current = setTimeout(() => setHintVisible(false), 5000);
+  }, []);
+
+  // Start the initial 5s timer on mount
+  useEffect(() => {
+    startHintTimer();
+    return () => {
+      if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    };
+  }, [startHintTimer]);
+
+  const handleHintMouseEnter = useCallback(() => {
+    setHintVisible(true);
+    startHintTimer();
+  }, [startHintTimer]);
+
   return (
     <div className={`relative ${className || ''}`} style={{ width: '100%', height: '100%' }}>
       <Canvas
@@ -333,6 +355,14 @@ export function Map3D({
           target={cameraTarget}
         />
       </Canvas>
+
+      {/* Navigation controls hint */}
+      <div
+        className={`absolute bottom-3 left-3 bg-black/50 text-white/80 text-xs rounded px-3 py-2 pointer-events-auto transition-opacity duration-700 ${hintVisible ? 'opacity-100' : 'opacity-0'}`}
+        onMouseEnter={handleHintMouseEnter}
+      >
+        Left-click drag: Rotate | Right-click drag: Pan | Scroll: Zoom
+      </div>
 
       {/* Loading overlay during airport switch */}
       {isLoading && (

@@ -107,11 +107,28 @@ class OSMConverter:
             if converted:
                 config["osmHelipads"].append(converted)
 
-        # Convert parking positions
+        # Convert parking positions — also add as usable gates (remote stands)
         for pp in doc.parking_positions:
             converted = self._convert_parking_position(pp)
             if converted:
                 config["osmParkingPositions"].append(converted)
+                # Parking positions are legitimate aircraft stands
+                ref = converted.get("ref") or converted.get("id")
+                if ref and converted.get("geo"):
+                    gate_entry = {
+                        "id": ref,
+                        "osmId": converted.get("osmId"),
+                        "ref": ref,
+                        "terminal": None,  # Remote stand — no terminal
+                        "name": converted.get("name"),
+                        "level": None,
+                        "operator": None,
+                        "elevation": None,
+                        "position": converted.get("position"),
+                        "geo": converted["geo"],
+                        "is_remote_stand": True,
+                    }
+                    config["gates"].append(gate_entry)
 
         return config
 
