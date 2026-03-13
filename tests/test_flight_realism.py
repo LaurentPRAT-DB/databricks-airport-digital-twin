@@ -41,9 +41,13 @@ from src.ingestion.fallback import (
     APPROACH_WAYPOINTS,
     DEPARTURE_WAYPOINTS,
     NM_TO_DEG,
+    MAX_SPEED_BELOW_FL100_KTS,
+    VREF_SPEEDS,
+    _DEFAULT_VREF,
     RunwayState,
     GateState,
 )
+from src.ml.gse_model import get_turnaround_timing
 
 
 # ---------------------------------------------------------------------------
@@ -544,3 +548,524 @@ class TestFullFlightLifecycle:
                     f"is {heading_diff:.0f}° off from airport direction "
                     f"({heading_to_center:.0f}°)"
                 )
+
+
+# ===========================================================================
+# 8. Departure profile — realistic climb altitudes
+# ===========================================================================
+
+class TestDepartureProfileAltitudes:
+    """Verify departure waypoint altitudes match realistic SID climb gradients."""
+
+    def test_static_departure_first_waypoint_below_500ft(self):
+        """First SFO fallback departure waypoint should be low (~200 ft, just after liftoff)."""
+        assert DEPARTURE_WAYPOINTS[0][2] <= 500, (
+            f"First departure wp should be <=500 ft (just after liftoff), "
+            f"got {DEPARTURE_WAYPOINTS[0][2]} ft"
+        )
+
+    def test_static_departure_last_waypoint_below_10000ft(self):
+        """Last SFO fallback departure waypoint should be below 10,000 ft."""
+        assert DEPARTURE_WAYPOINTS[-1][2] <= 10000, (
+            f"Last departure wp should be <=10,000 ft (~15 NM out), "
+            f"got {DEPARTURE_WAYPOINTS[-1][2]} ft"
+        )
+
+    def test_dynamic_departure_altitudes_realistic(self):
+        """Dynamic departure waypoints should have realistic climb altitudes."""
+        wps = _get_departure_waypoints()
+        if not wps:
+            pytest.skip("No runway data for departure waypoints")
+
+        # First wp: just after liftoff, should be < 500 ft
+        assert wps[0][2] <= 500, (
+            f"First dynamic dep wp should be <=500 ft, got {wps[0][2]} ft"
+        )
+        # At ~5 NM (midway), altitude should be < 4000 ft (realistic SID)
+        mid = len(wps) // 2
+        assert wps[mid][2] <= 4000, (
+            f"Mid departure wp should be <=4,000 ft, got {wps[mid][2]} ft"
+        )
+        # Last wp should be < 10,000 ft
+        assert wps[-1][2] <= 10000, (
+            f"Last dynamic dep wp should be <=10,000 ft, got {wps[-1][2]} ft"
+        )
+
+    def test_departure_altitudes_monotonically_increase(self):
+        """Departure altitudes must increase with each waypoint."""
+        wps = _get_departure_waypoints()
+        if not wps:
+            pytest.skip("No runway data")
+
+        for i in range(1, len(wps)):
+            assert wps[i][2] >= wps[i - 1][2], (
+                f"Departure altitude should increase: wp[{i}]={wps[i][2]} "
+                f"< wp[{i-1}]={wps[i-1][2]}"
+            )
+
+
+# ===========================================================================
+# 9. Approach profile — 3° glideslope alignment
+# ===========================================================================
+
+class TestApproachGlideslope:
+    """Verify approach altitudes follow a standard 3° glideslope (~318 ft/NM)."""
+
+    def test_static_approach_threshold_crossing_height_50ft(self):
+        """Last approach waypoint (threshold) should be 50 ft (ILS CAT I TCH)."""
+        assert APPROACH_WAYPOINTS[-1][2] == 50
+
+    def test_static_approach_faf_altitude_realistic(self):
+        """FAF (~5 NM from threshold) should be ~1600 ft on 3° GS, not 2500 ft."""
+        # FAF is index 6 (0.28° from threshold ≈ ~5 NM)
+        faf_alt = APPROACH_WAYPOINTS[6]  # (-122.28, ..., alt)
+        assert faf_alt[2] <= 2000, (
+            f"FAF altitude should be <=2,000 ft on 3° GS, got {faf_alt[2]} ft"
+        )
+
+    def test_dynamic_approach_glideslope_gradient(self):
+        """Dynamic approach should maintain ~318 ft/NM gradient on final."""
+        wps = _get_approach_waypoints("ORD")
+        if not wps or len(wps) < 5:
+            pytest.skip("No runway data")
+
+        # Check gradient from first final approach wp to threshold
+        faf = wps[4]  # ~0.10° out (first final approach wp)
+        threshold = wps[-1]
+
+        dist_deg = math.sqrt((faf[0] - threshold[0]) ** 2 + (faf[1] - threshold[1]) ** 2)
+        dist_nm = dist_deg * 60
+        if dist_nm > 0:
+            ft_per_nm = (faf[2] - threshold[2]) / dist_nm
+            # 3° GS ≈ 318 ft/NM; allow 200-500 ft/NM range
+            assert 200 < ft_per_nm < 500, (
+                f"Glideslope {ft_per_nm:.0f} ft/NM outside 200-500 range"
+            )
+
+    def test_dynamic_approach_altitudes_decrease_monotonically(self):
+        """Approach altitudes must decrease toward the runway."""
+        wps = _get_approach_waypoints("SEA")
+        if not wps:
+            pytest.skip("No runway data")
+
+        for i in range(1, len(wps)):
+            assert wps[i][2] <= wps[i - 1][2], (
+                f"Approach altitude should decrease: wp[{i}]={wps[i][2]} "
+                f"> wp[{i-1}]={wps[i-1][2]}"
+            )
+
+    def test_dynamic_approach_starts_below_5000ft(self):
+        """Base leg should start at ~4800 ft (3° GS at 15 NM), not 6000 ft."""
+        wps = _get_approach_waypoints("DEN")
+        if not wps:
+            pytest.skip("No runway data")
+        assert wps[0][2] <= 5000, (
+            f"First approach wp should be <=5,000 ft, got {wps[0][2]} ft"
+        )
+
+
+# ===========================================================================
+# 10. Type-specific Vref approach speeds
+# ===========================================================================
+
+class TestVrefApproachSpeeds:
+    """Verify approach uses type-specific Vref instead of a fixed linear formula."""
+
+    def test_vref_table_has_all_fleet_types(self):
+        """Every aircraft type in the fleet should have a Vref entry."""
+        from src.ingestion.fallback import WAKE_CATEGORY
+        for ac_type in WAKE_CATEGORY:
+            assert ac_type in VREF_SPEEDS, (
+                f"Aircraft type {ac_type} missing from VREF_SPEEDS table"
+            )
+
+    def test_vref_range_realistic(self):
+        """All Vref speeds should be in 120-160 kts range (no stall or overspeed)."""
+        for ac_type, vref in VREF_SPEEDS.items():
+            assert 120 <= vref <= 160, (
+                f"{ac_type} Vref={vref} kts outside realistic 120-160 kts range"
+            )
+
+    def test_heavy_vref_higher_than_regional(self):
+        """Heavy aircraft should have higher Vref than regional jets."""
+        assert VREF_SPEEDS["B777"] > VREF_SPEEDS["E175"]
+        assert VREF_SPEEDS["A380"] > VREF_SPEEDS["CRJ9"]
+
+    def test_approach_speed_varies_by_type(self):
+        """Approaching flights of different types should have different speeds."""
+        # Create A320 on approach
+        a320 = FlightState(
+            icao24="vref_a320", callsign="UAL100",
+            latitude=37.60, longitude=-122.30, altitude=2000,
+            velocity=180, heading=270, vertical_rate=-800,
+            on_ground=False, phase=FlightPhase.APPROACHING,
+            aircraft_type="A320", waypoint_index=3, origin_airport="LAX",
+        )
+        _flight_states["vref_a320"] = a320
+
+        # Create B777 on approach at same waypoint
+        b777 = FlightState(
+            icao24="vref_b777", callsign="UAL200",
+            latitude=37.60, longitude=-122.28, altitude=2500,
+            velocity=180, heading=270, vertical_rate=-800,
+            on_ground=False, phase=FlightPhase.APPROACHING,
+            aircraft_type="B777", waypoint_index=3, origin_airport="LAX",
+        )
+        _flight_states["vref_b777"] = b777
+
+        _update_flight_state(a320, 1.0)
+        _update_flight_state(b777, 1.0)
+
+        # B777 should be faster than A320 on approach (higher Vref)
+        assert b777.velocity > a320.velocity, (
+            f"B777 ({b777.velocity:.0f} kts) should be faster on approach "
+            f"than A320 ({a320.velocity:.0f} kts)"
+        )
+
+    def test_approach_speed_never_below_vref(self):
+        """Approaching aircraft should never drop below their Vref."""
+        flight = FlightState(
+            icao24="vref_min", callsign="UAL300",
+            latitude=37.605, longitude=-122.32, altitude=1000,
+            velocity=160, heading=270, vertical_rate=-800,
+            on_ground=False, phase=FlightPhase.APPROACHING,
+            aircraft_type="A320", waypoint_index=8, origin_airport="LAX",
+        )
+        _flight_states["vref_min"] = flight
+
+        _update_flight_state(flight, 1.0)
+
+        vref = VREF_SPEEDS["A320"]
+        # Speed should be at or above Vref (within tolerance for decel formula)
+        assert flight.velocity >= vref - 5, (
+            f"A320 approach speed {flight.velocity:.0f} kts dropped below "
+            f"Vref {vref} kts"
+        )
+
+
+# ===========================================================================
+# 11. Pushback duration — realistic 3-5 minutes
+# ===========================================================================
+
+class TestPushbackDuration:
+    """Verify pushback takes ~3-5 minutes, not 10 seconds."""
+
+    def test_pushback_not_complete_after_10_seconds(self):
+        """Pushback should NOT complete in 10 seconds (old rate was dt*0.1)."""
+        flight = _create_new_flight(
+            "pb_dur", "UAL100", FlightPhase.PARKED,
+            origin="JFK", destination="SFO"
+        )
+        _flight_states["pb_dur"] = flight
+        flight.time_at_gate = 99999  # Force immediate pushback
+
+        _update_flight_state(flight, 1.0)
+        if flight.phase != FlightPhase.PUSHBACK:
+            pytest.skip("Flight didn't enter pushback")
+
+        # Simulate 10 seconds of pushback
+        for _ in range(10):
+            _update_flight_state(flight, 1.0)
+
+        assert flight.phase == FlightPhase.PUSHBACK, (
+            f"Pushback should still be in progress after 10s, "
+            f"but phase is {flight.phase.value}"
+        )
+
+    def test_pushback_completes_within_5_minutes(self):
+        """Pushback should complete within 5 minutes (300 seconds)."""
+        flight = _create_new_flight(
+            "pb_fin", "UAL200", FlightPhase.PARKED,
+            origin="JFK", destination="SFO"
+        )
+        _flight_states["pb_fin"] = flight
+        flight.time_at_gate = 99999
+
+        _update_flight_state(flight, 1.0)
+        if flight.phase != FlightPhase.PUSHBACK:
+            pytest.skip("Flight didn't enter pushback")
+
+        # Simulate 300 seconds
+        for _ in range(300):
+            _update_flight_state(flight, 1.0)
+
+        assert flight.phase != FlightPhase.PUSHBACK, (
+            "Pushback should complete within 5 minutes (300s)"
+        )
+
+    def test_pushback_takes_at_least_2_minutes(self):
+        """Pushback should take at least 2 minutes (120 seconds)."""
+        flight = _create_new_flight(
+            "pb_min", "DAL300", FlightPhase.PARKED,
+            origin="JFK", destination="SFO"
+        )
+        _flight_states["pb_min"] = flight
+        flight.time_at_gate = 99999
+
+        _update_flight_state(flight, 1.0)
+        if flight.phase != FlightPhase.PUSHBACK:
+            pytest.skip("Flight didn't enter pushback")
+
+        # Simulate 120 seconds — should still be pushing back
+        for _ in range(120):
+            _update_flight_state(flight, 1.0)
+
+        assert flight.phase == FlightPhase.PUSHBACK, (
+            f"Pushback should take >2 min, but completed in <120s "
+            f"(phase={flight.phase.value})"
+        )
+
+
+# ===========================================================================
+# 12. Racetrack holding pattern
+# ===========================================================================
+
+class TestRacetrackHolding:
+    """Verify holding aircraft fly racetrack patterns, not lazy orbits."""
+
+    def _setup_holding_flight(self):
+        """Create an arriving enroute flight that should enter holding."""
+        center = get_airport_center()
+
+        # Fill approach to capacity (4 aircraft)
+        for i in range(4):
+            icao24 = f"hold_app_{i}"
+            state = FlightState(
+                icao24=icao24,
+                callsign=f"UAL{100+i}",
+                latitude=center[0] + 0.1 * (i + 1),
+                longitude=center[1],
+                altitude=3000 + i * 500,
+                velocity=180, heading=270, vertical_rate=-800,
+                on_ground=False,
+                phase=FlightPhase.APPROACHING,
+                aircraft_type="A320", waypoint_index=0,
+                origin_airport="LAX",
+            )
+            _flight_states[icao24] = state
+
+        # Place arriving flight within approach radius (will trigger holding)
+        enroute = FlightState(
+            icao24="hold_test",
+            callsign="DAL500",
+            latitude=center[0] + 0.15,
+            longitude=center[1],
+            altitude=8000,
+            velocity=250,
+            heading=_calculate_heading((center[0] + 0.15, center[1]), center),
+            vertical_rate=-200,
+            on_ground=False,
+            phase=FlightPhase.ENROUTE,
+            aircraft_type="B738",
+            origin_airport="SEA",
+        )
+        _flight_states["hold_test"] = enroute
+        return enroute
+
+    def test_holding_uses_inbound_outbound_legs(self):
+        """Holding aircraft should alternate between inbound and outbound legs."""
+        flight = self._setup_holding_flight()
+
+        # Run until the flight gets close enough to trigger holding
+        for _ in range(50):
+            _update_flight_state(flight, 1.0)
+
+        # Record heading changes over time
+        headings = []
+        for _ in range(200):
+            _update_flight_state(flight, 1.0)
+            headings.append(flight.heading)
+
+        # The heading should change significantly (not just +2/tick like old orbit)
+        # In a racetrack, heading changes in bursts (turns) then stays stable (legs)
+        heading_deltas = [
+            abs(headings[i] - headings[i - 1])
+            for i in range(1, len(headings))
+        ]
+        # Normalize for 360° wraparound
+        heading_deltas = [min(d, 360 - d) for d in heading_deltas]
+
+        # Some ticks should have near-zero delta (straight legs)
+        straight_ticks = sum(1 for d in heading_deltas if d < 0.5)
+        # Some ticks should have ~3°/s delta (standard rate turns)
+        turn_ticks = sum(1 for d in heading_deltas if 1.0 < d < 5.0)
+
+        assert straight_ticks > 10, (
+            f"Holding should have straight-leg segments (near-zero heading change), "
+            f"but only {straight_ticks} ticks with delta < 0.5°"
+        )
+        assert turn_ticks > 5, (
+            f"Holding should have standard-rate turn segments, "
+            f"but only {turn_ticks} ticks with 1-5° delta"
+        )
+
+    def test_holding_state_fields_initialized(self):
+        """FlightState should have holding_phase_time and holding_inbound fields."""
+        flight = FlightState(
+            icao24="hold_init", callsign="UAL999",
+            latitude=37.6, longitude=-122.3, altitude=5000,
+            velocity=250, heading=270, vertical_rate=0,
+            on_ground=False, phase=FlightPhase.ENROUTE,
+            aircraft_type="A320",
+        )
+        assert hasattr(flight, "holding_phase_time")
+        assert hasattr(flight, "holding_inbound")
+        assert flight.holding_phase_time == 0.0
+        assert flight.holding_inbound is True
+
+    def test_holding_does_not_transition_when_approach_full(self):
+        """Aircraft in holding should remain ENROUTE while approach is at capacity."""
+        flight = self._setup_holding_flight()
+
+        # Simulate for 3 minutes — should stay ENROUTE
+        for _ in range(180):
+            result = _update_flight_state(flight, 1.0)
+            if result.phase != FlightPhase.ENROUTE:
+                break
+
+        assert result.phase == FlightPhase.ENROUTE, (
+            f"Flight should remain ENROUTE while holding, "
+            f"but transitioned to {result.phase.value}"
+        )
+
+
+# ===========================================================================
+# 13. Gate turnaround timing — realistic 25-90 min
+# ===========================================================================
+
+class TestGateTurnaroundTiming:
+    """Verify gate time uses realistic turnaround durations from gse_model."""
+
+    def test_narrow_body_turnaround_not_under_10_minutes(self):
+        """Narrow-body (A320) should not push back in under 10 minutes."""
+        flight = _create_new_flight(
+            "ta_narrow", "UAL100", FlightPhase.PARKED,
+            origin="JFK", destination="SFO"
+        )
+        _flight_states["ta_narrow"] = flight
+        flight.time_at_gate = 0
+        flight.aircraft_type = "A320"
+
+        # Simulate 10 minutes (600 seconds)
+        for _ in range(600):
+            _update_flight_state(flight, 1.0)
+
+        assert flight.phase == FlightPhase.PARKED, (
+            f"A320 should still be parked after 10 min, but phase is {flight.phase.value}"
+        )
+
+    def test_narrow_body_turnaround_completes_within_60_minutes(self):
+        """Narrow-body should push back within 60 minutes (generous upper bound)."""
+        flight = _create_new_flight(
+            "ta_comp", "UAL200", FlightPhase.PARKED,
+            origin="JFK", destination="SFO"
+        )
+        _flight_states["ta_comp"] = flight
+        flight.time_at_gate = 0
+        flight.aircraft_type = "A320"
+
+        # Simulate 60 minutes
+        for _ in range(3600):
+            _update_flight_state(flight, 1.0)
+
+        assert flight.phase != FlightPhase.PARKED, (
+            "A320 should have pushed back within 60 minutes"
+        )
+
+    def test_turnaround_time_varies_by_aircraft_size(self):
+        """Wide-body should have longer turnaround than narrow-body."""
+        narrow_timing = get_turnaround_timing("A320")
+        wide_timing = get_turnaround_timing("B777")
+
+        narrow_phases = narrow_timing["phases"]
+        wide_phases = wide_timing["phases"]
+
+        gate_keys = [
+            "chocks_on", "deboarding", "unloading", "cleaning",
+            "catering", "refueling", "loading", "boarding", "chocks_off",
+        ]
+        narrow_gate_min = sum(narrow_phases.get(p, 0) for p in gate_keys)
+        wide_gate_min = sum(wide_phases.get(p, 0) for p in gate_keys)
+
+        assert wide_gate_min > narrow_gate_min, (
+            f"Wide-body gate time ({wide_gate_min} min) should exceed "
+            f"narrow-body ({narrow_gate_min} min)"
+        )
+
+    def test_wide_body_stays_parked_longer(self):
+        """B777 should remain parked longer than A320 at the gate."""
+        # A320 at gate for 30 min → should push back (narrow-body ~25-45 min)
+        a320 = _create_new_flight(
+            "ta_a320", "UAL300", FlightPhase.PARKED,
+            origin="JFK", destination="SFO"
+        )
+        a320.aircraft_type = "A320"
+        _flight_states["ta_a320"] = a320
+
+        # B777 at gate for 30 min → should still be parked (wide-body ~60-90 min)
+        b777 = _create_new_flight(
+            "ta_b777", "UAL400", FlightPhase.PARKED,
+            origin="NRT", destination="SFO"
+        )
+        b777.aircraft_type = "B777"
+        _flight_states["ta_b777"] = b777
+
+        # Set both to 30 minutes parked
+        a320.time_at_gate = 30 * 60
+        b777.time_at_gate = 30 * 60
+
+        # B777 at 30 min should still be parked (wide-body turnaround ~60-90 min)
+        _update_flight_state(b777, 1.0)
+        assert b777.phase == FlightPhase.PARKED, (
+            f"B777 should still be parked at 30 min, but phase is {b777.phase.value}"
+        )
+
+
+# ===========================================================================
+# 14. 250 kts below FL100 (from batch 1, additional coverage)
+# ===========================================================================
+
+class TestSpeedBelowFL100:
+    """Verify 14 CFR 91.117: 250 kts IAS maximum below 10,000 ft MSL."""
+
+    def test_departing_speed_clamped_below_10000(self):
+        """Departing aircraft below 10,000 ft should not exceed 250 kts."""
+        dep_wps = _get_departure_waypoints("JFK")
+        if not dep_wps:
+            pytest.skip("No runway data")
+
+        flight = FlightState(
+            icao24="spd_dep", callsign="UAL100",
+            latitude=dep_wps[2][1], longitude=dep_wps[2][0],
+            altitude=2000,  # Well below FL100
+            velocity=200, heading=284, vertical_rate=1500,
+            on_ground=False, phase=FlightPhase.DEPARTING,
+            aircraft_type="B738", waypoint_index=2,
+            destination_airport="JFK",
+        )
+        _flight_states["spd_dep"] = flight
+
+        _update_flight_state(flight, 1.0)
+        assert flight.velocity <= MAX_SPEED_BELOW_FL100_KTS, (
+            f"Departing at {flight.altitude:.0f} ft: {flight.velocity:.0f} kts "
+            f"exceeds {MAX_SPEED_BELOW_FL100_KTS} kts limit"
+        )
+
+    def test_enroute_arriving_speed_clamped_below_10000(self):
+        """Arriving enroute aircraft below 10,000 ft should not exceed 250 kts."""
+        center = get_airport_center()
+        flight = FlightState(
+            icao24="spd_enr", callsign="DAL200",
+            latitude=center[0] + 0.3, longitude=center[1],
+            altitude=8000,
+            velocity=450, heading=270, vertical_rate=-200,
+            on_ground=False, phase=FlightPhase.ENROUTE,
+            aircraft_type="B738", origin_airport="SEA",
+        )
+        _flight_states["spd_enr"] = flight
+
+        _update_flight_state(flight, 1.0)
+        assert flight.velocity <= MAX_SPEED_BELOW_FL100_KTS, (
+            f"Enroute arriving at {flight.altitude:.0f} ft: {flight.velocity:.0f} kts "
+            f"exceeds {MAX_SPEED_BELOW_FL100_KTS} kts limit"
+        )

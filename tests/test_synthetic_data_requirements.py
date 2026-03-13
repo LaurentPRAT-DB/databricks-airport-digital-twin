@@ -114,10 +114,11 @@ class TestWakeTurbulenceCategories:
         for ac in expected:
             assert WAKE_CATEGORY[ac] == "LARGE", f"{ac} should be LARGE"
 
-    def test_small_category(self):
+    def test_regional_jet_category(self):
+        """Regional jets are LARGE (MTOW > 41,000 lbs / 18,600 kg)."""
         expected = ["CRJ9", "E175", "E190"]
         for ac in expected:
-            assert WAKE_CATEGORY[ac] == "SMALL", f"{ac} should be SMALL"
+            assert WAKE_CATEGORY[ac] == "LARGE", f"{ac} should be LARGE"
 
     def test_categories_mutually_exclusive(self):
         all_types = list(WAKE_CATEGORY.keys())
@@ -1380,11 +1381,11 @@ class TestFinalApproachRunwayAlignment:
                 f"waypoint {i-1} altitude {wps[i-1][2]}"
             )
 
-    def test_approach_starts_at_6000ft_ends_near_threshold(self):
-        """First waypoint at ~6000ft, last at runway threshold altitude."""
+    def test_approach_starts_at_4800ft_ends_near_threshold(self):
+        """First waypoint at ~4800ft (3° GS at 15 NM), last at runway threshold altitude."""
         wps = _get_approach_waypoints("ORD")
-        assert wps[0][2] == 6000, f"Expected 6000ft start, got {wps[0][2]}"
-        assert wps[-1][2] < 100, f"Expected <100ft at threshold, got {wps[-1][2]}"
+        assert wps[0][2] == 4800, f"Expected 4800ft start, got {wps[0][2]}"
+        assert wps[-1][2] <= 50, f"Expected <=50ft at threshold, got {wps[-1][2]}"
 
     def test_final_approach_fix_at_approximately_6nm(self):
         """The FAF (start of final approach) should be ~6 NM from threshold.
@@ -1405,15 +1406,15 @@ class TestFinalApproachRunwayAlignment:
         )
 
     def test_glideslope_approximately_3_degrees(self):
-        """Final approach segment should approximate a 3° glideslope (~300ft/NM)."""
+        """Final approach segment should approximate a 3° glideslope (~318 ft/NM)."""
         wps = _get_approach_waypoints("DEN")
-        # Check between FAF (2500ft at ~6NM) and a mid-final point (1000ft at ~3NM)
-        faf = wps[4]   # 2500ft, 0.10° out
-        mid = wps[6]   # 1000ft, 0.05° out
+        # Check overall final approach gradient from FAF (1600ft, 0.10° out) to threshold (50ft)
+        faf = wps[4]       # 1600ft at 0.10° from threshold
+        threshold = wps[-1]  # 50ft at threshold
 
-        dist_deg = math.sqrt((faf[0] - mid[0]) ** 2 + (faf[1] - mid[1]) ** 2)
+        dist_deg = math.sqrt((faf[0] - threshold[0]) ** 2 + (faf[1] - threshold[1]) ** 2)
         dist_nm = dist_deg * 60
-        alt_diff = faf[2] - mid[2]  # 2500 - 1000 = 1500ft
+        alt_diff = faf[2] - threshold[2]
 
         if dist_nm > 0:
             ft_per_nm = alt_diff / dist_nm
@@ -1428,7 +1429,7 @@ class TestFinalApproachRunwayAlignment:
         assert len(wps) >= 5, "Should have enough waypoints for a proper approach"
         # Last waypoint should be at the runway threshold (low altitude)
         last = wps[-1]
-        assert last[2] < 50, f"Last waypoint altitude should be near ground, got {last[2]}"
+        assert last[2] <= 50, f"Last waypoint altitude should be near ground, got {last[2]}"
         # Altitudes should generally decrease toward threshold
         for i in range(len(wps) - 1):
             assert wps[i][2] >= wps[i + 1][2], (

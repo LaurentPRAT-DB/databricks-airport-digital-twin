@@ -25,6 +25,8 @@ from enum import Enum
 
 from faker import Faker
 
+from src.ml.gse_model import get_turnaround_timing
+
 
 fake = Faker()
 
@@ -174,7 +176,7 @@ WAKE_CATEGORY = {
     "A340": "HEAVY", "A350": "HEAVY", "A345": "HEAVY",
     "A320": "LARGE", "A321": "LARGE", "A319": "LARGE", "A318": "LARGE",
     "B737": "LARGE", "B738": "LARGE", "B739": "LARGE",
-    "CRJ9": "SMALL", "E175": "SMALL", "E190": "SMALL",
+    "CRJ9": "LARGE", "E175": "LARGE", "E190": "LARGE",
 }
 
 # Minimum separation in nautical miles (lead aircraft → following aircraft)
@@ -201,6 +203,20 @@ TAXI_SPEED_TURN_KTS = 15        # Reduced speed through turns
 TAXI_SPEED_RAMP_KTS = 8         # Near-gate / ramp area
 TAXI_SPEED_PUSHBACK_KTS = 3     # Tug-assisted pushback
 
+MAX_SPEED_BELOW_FL100_KTS = 250  # 14 CFR 91.117: 250 kts IAS below 10,000 ft MSL
+
+# Reference approach speeds (Vref) by aircraft type (kts, typical landing weight)
+# Sources: manufacturer operating manuals, airline performance data
+VREF_SPEEDS = {
+    "A318": 125, "A319": 130, "A320": 133, "A321": 138,
+    "B737": 130, "B738": 135, "B739": 137,
+    "CRJ9": 128, "E175": 126, "E190": 130,
+    "A330": 140, "A340": 145, "A345": 145,
+    "A350": 142, "B777": 149, "B787": 143,
+    "B747": 152, "A380": 145,
+}
+_DEFAULT_VREF = 135  # A320-class fallback
+
 # Convert NM to degrees (approximate at this latitude)
 # 1 NM ≈ 1/60 degree ≈ 0.0167 degrees
 NM_TO_DEG = 1.0 / 60.0
@@ -209,6 +225,7 @@ NM_TO_DEG = 1.0 / 60.0
 MIN_APPROACH_SEPARATION_DEG = 3.0 * NM_TO_DEG  # 3 NM minimum on approach
 MIN_TAXI_SEPARATION_DEG = 0.003  # ~300m for taxi operations (larger for 3D visibility)
 MIN_GATE_SEPARATION_DEG = 0.010  # ~800m in 3D scale for gate area (prevents overlap)
+GATE_STANDOFF_METERS = 30  # Offset aircraft from gate point so nose reaches jetbridge, body sits on apron
 
 # ============================================================================
 # TAKEOFF PERFORMANCE DATA (14 CFR 25.107 / manufacturer performance manuals)
@@ -472,23 +489,23 @@ _RWY_10R_LON = -122.393105
 # Approach path extends east from 28L threshold, following the extended centerline
 # Each waypoint: (longitude, latitude, altitude_feet)
 APPROACH_WAYPOINTS = [
-    # Initial approach fix - 15 NM east of threshold, over San Pablo Bay
-    (-122.10, 37.58, 6000),
-    (-122.15, 37.588, 5000),
-    # Intermediate fix - 10 NM from threshold
-    (-122.20, 37.595, 4000),
-    (-122.24, 37.600, 3200),
-    # Final approach fix - 5 NM from threshold
-    (-122.28, 37.605, 2500),
-    (-122.30, 37.607, 1800),
-    # Glideslope intercept - 3 NM from threshold
-    (-122.32, 37.608, 1000),
-    (-122.333, 37.609, 650),
-    # Short final - 1 NM from threshold
-    (-122.345, 37.610, 300),
-    (-122.352, 37.6109, 150),
-    # Runway 28L threshold (touchdown zone)
-    (_RWY_28L_LON, _RWY_28L_LAT, 15),
+    # Initial approach fix - 15 NM east of threshold (~4770 ft on 3° GS)
+    (-122.10, 37.58, 4800),
+    (-122.15, 37.588, 3800),
+    # Intermediate fix - 10 NM from threshold (~3180 ft on 3° GS)
+    (-122.20, 37.595, 3200),
+    (-122.24, 37.600, 2500),
+    # Final approach fix - 5 NM from threshold (~1590 ft on 3° GS)
+    (-122.28, 37.605, 1600),
+    (-122.30, 37.607, 1300),
+    # Glideslope intercept - 3 NM from threshold (~950 ft on 3° GS)
+    (-122.32, 37.608, 950),
+    (-122.333, 37.609, 630),
+    # Short final - 1 NM from threshold (~318 ft on 3° GS)
+    (-122.345, 37.610, 320),
+    (-122.352, 37.6109, 160),
+    # Runway 28L threshold (50 ft TCH per 14 CFR 97.3)
+    (_RWY_28L_LON, _RWY_28L_LAT, 50),
 ]
 
 # ============================================================================
@@ -501,16 +518,16 @@ _RWY_28R_LAT = 37.613534
 _RWY_28R_LON = -122.357141
 
 DEPARTURE_WAYPOINTS = [
-    # Initial climb - runway 28R at rotation
-    (_RWY_28R_LON + 0.02, _RWY_28R_LAT, 500),
-    # Climbing runway heading (284° true)
-    (-122.32, 37.608, 2000),
-    # Continue climb over bay
-    (-122.28, 37.60, 4000),
-    # Departure fix - climbing to cruise
-    (-122.20, 37.58, 8000),
-    # Enroute - over the bay
-    (-122.10, 37.55, 12000),
+    # Initial climb - runway 28R just after liftoff (~0.5 NM)
+    (_RWY_28R_LON + 0.02, _RWY_28R_LAT, 200),
+    # Climbing runway heading (~2 NM, 284° true)
+    (-122.32, 37.608, 1000),
+    # Continue climb over bay (~4 NM)
+    (-122.28, 37.60, 2000),
+    # Departure fix - climbing to cruise (~10 NM)
+    (-122.20, 37.58, 5000),
+    # Enroute - over the bay (~15 NM)
+    (-122.10, 37.55, 8000),
 ]
 
 
@@ -540,8 +557,9 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
         entry_dir = (bearing_to_apt + 180) % 360
 
     # Phase 2: Final approach — centered on RUNWAY THRESHOLD
+    # Altitudes follow standard 3° glideslope (~318 ft/NM)
     final_distances = [0.10, 0.075, 0.05, 0.035, 0.02, 0.01, 0.0]
-    final_altitudes = [2500, 1800, 1000, 650, 300, 150, 15]
+    final_altitudes = [1600, 1300, 950, 630, 320, 160, 50]
     final_wps = []
     for dist, alt in zip(final_distances, final_altitudes):
         if dist == 0.0:
@@ -554,7 +572,7 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     # Radiate from the outermost final approach point so they connect smoothly
     anchor_lat, anchor_lon = final_wps[0][1], final_wps[0][0]
     base_distances = [0.15, 0.12, 0.09, 0.05]
-    base_altitudes = [6000, 5000, 4000, 3200]
+    base_altitudes = [4800, 3800, 3200, 2500]
     base_wps = []
     for i, (dist, alt) in enumerate(zip(base_distances, base_altitudes)):
         blend = i / len(base_distances)  # 0→0.75
@@ -606,8 +624,9 @@ def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
         exit_dir = _bearing_to_airport(destination_iata)
 
     # Distances and altitudes for 9 departure waypoints
+    # Realistic SID climb: ~250 ft/NM average (varies by SID and noise abatement)
     distances = [0.02, 0.035, 0.05, 0.075, 0.10, 0.135, 0.17, 0.21, 0.25]
-    altitudes = [500, 1200, 2000, 3000, 4000, 6000, 8000, 10000, 12000]
+    altitudes = [200, 600, 1000, 1800, 2500, 3500, 5000, 6500, 8000]
 
     waypoints = []
     for i, (dist, alt) in enumerate(zip(distances, altitudes)):
@@ -853,6 +872,8 @@ class FlightState:
     taxi_route: Optional[List] = None          # Cached taxi waypoints [(lon, lat), ...]
     takeoff_subphase: str = "lineup"           # lineup/roll/rotate/liftoff/initial_climb
     takeoff_roll_dist_ft: float = 0.0          # Accumulated ground roll distance in feet
+    holding_phase_time: float = 0.0            # Elapsed time in current holding leg (seconds)
+    holding_inbound: bool = True               # True = inbound leg, False = outbound leg
 
 
 # Global state storage
@@ -1219,6 +1240,30 @@ def _point_on_circle(center_lat: float, center_lon: float, bearing_deg: float, r
     return (lat, lon)
 
 
+def _offset_position_by_heading(lat: float, lon: float, heading_deg: float, distance_meters: float) -> tuple:
+    """Move a point away from a heading direction (i.e., pull aircraft back from gate).
+
+    The aircraft nose points at heading_deg (toward the terminal). This function
+    moves the position in the *opposite* direction so the nose reaches the gate
+    point while the fuselage sits on the apron.
+
+    Args:
+        lat, lon: Original position in degrees (gate/jetbridge point)
+        heading_deg: Direction the nose is pointing (toward terminal)
+        distance_meters: How far to pull the aircraft back
+
+    Returns:
+        (latitude, longitude) tuple offset away from the terminal
+    """
+    # Move in the opposite direction of the heading
+    reverse_bearing_rad = math.radians((heading_deg + 180) % 360)
+    # Convert meters to degrees (approximate)
+    distance_deg = distance_meters / 111_000  # ~111 km per degree of latitude
+    new_lat = lat + distance_deg * math.cos(reverse_bearing_rad)
+    new_lon = lon + distance_deg * math.sin(reverse_bearing_rad) / math.cos(math.radians(lat))
+    return (new_lat, new_lon)
+
+
 def _get_parked_heading(gate_lat: float, gate_lon: float) -> float:
     """Compute heading for a parked aircraft: nose toward nearest terminal center.
 
@@ -1407,6 +1452,9 @@ def _create_new_flight(
         # Compute heading toward nearest terminal (or airport center as fallback)
         parked_heading = _get_parked_heading(lat, lon)
 
+        # Offset aircraft away from terminal so nose reaches gate, body sits on apron
+        lat, lon = _offset_position_by_heading(lat, lon, parked_heading, GATE_STANDOFF_METERS)
+
         return FlightState(
             icao24=icao24,
             callsign=callsign,
@@ -1443,7 +1491,7 @@ def _create_new_flight(
             lat, lon = spawn_point
             heading = _calculate_heading((lat, lon), center)
             # International = higher altitude
-            alt = random.uniform(15000, 25000) if is_intl else random.uniform(8000, 15000)
+            alt = random.uniform(33000, 43000) if is_intl else random.uniform(28000, 39000)
         elif destination:
             # Departing flight that's already enroute: heading toward destination
             bearing = _bearing_to_airport(destination)
@@ -1455,7 +1503,7 @@ def _create_new_flight(
             )
             lat, lon = spawn_point
             heading = bearing + random.uniform(-5, 5)
-            alt = random.uniform(8000, 15000)
+            alt = random.uniform(28000, 39000)
         else:
             # No origin/destination — random position on the circle edge
             center = get_airport_center()
@@ -1467,7 +1515,7 @@ def _create_new_flight(
             )
             lat, lon = spawn_point
             heading = _calculate_heading((lat, lon), center)
-            alt = random.uniform(8000, 15000)
+            alt = random.uniform(28000, 39000)
 
         return FlightState(
             icao24=icao24,
@@ -1621,7 +1669,14 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
                 # Descend
                 state.altitude = _interpolate_altitude(state.altitude, target_alt, 300 * dt)
-                state.velocity = 180 - (state.waypoint_index * 20)  # Slow down on approach
+                # Type-specific approach speed: decelerate from 180 kts to Vref
+                vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
+                total_wps = len(_get_approach_waypoints(state.origin_airport))
+                if total_wps > 1:
+                    progress = state.waypoint_index / (total_wps - 1)
+                else:
+                    progress = 1.0
+                state.velocity = 180 - progress * (180 - vref)  # Smooth decel to Vref
                 state.vertical_rate = -800 if state.altitude > target_alt else 0
             else:
                 # Too close to aircraft ahead - slow down / hold speed
@@ -1778,14 +1833,29 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.velocity = 0
                 state.time_at_gate = 0
                 _occupy_gate(state.icao24, state.assigned_gate)
+                # Offset aircraft away from terminal so nose reaches gate, body sits on apron
+                parked_heading = _get_parked_heading(state.latitude, state.longitude)
+                state.heading = parked_heading
+                state.latitude, state.longitude = _offset_position_by_heading(
+                    state.latitude, state.longitude, parked_heading, GATE_STANDOFF_METERS
+                )
 
     elif state.phase == FlightPhase.PARKED:
         # Stay at gate for some time, then pushback
         state.velocity = 0
         state.time_at_gate += dt
 
-        # After 5-10 minutes, start pushback
-        if state.time_at_gate > random.uniform(300, 600):
+        # Realistic turnaround: use total_minutes (accounts for parallel phases)
+        # minus arrival/departure taxi and pushback (handled by other sim phases)
+        timing = get_turnaround_timing(state.aircraft_type)
+        total_min = timing["total_minutes"]  # 45 min narrow-body, 90 min wide-body
+        non_gate_min = (timing["phases"].get("arrival_taxi", 0)
+                        + timing["phases"].get("pushback", 0)
+                        + timing["phases"].get("departure_taxi", 0))
+        gate_minutes = total_min - non_gate_min
+        gate_seconds = gate_minutes * 60
+        target = gate_seconds * random.uniform(0.8, 1.2)
+        if state.time_at_gate > target:
             # Ensure correct origin/dest for departure: origin=local, dest=new airport
             local_iata = get_current_airport_iata()
             if state.origin_airport != local_iata:
@@ -1806,11 +1876,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
     elif state.phase == FlightPhase.PUSHBACK:
         # Slow pushback from gate WITH separation check
+        # Real pushback: disconnect jetbridge, engine start, tug pushback, tug disconnect (~3-5 min)
         # Determine pushback heading from taxiway graph or fallback to south
         pb_heading = _get_pushback_heading(state.assigned_gate) if state.assigned_gate else 180.0
         if _check_taxi_separation(state):
             state.velocity = TAXI_SPEED_PUSHBACK_KTS
-            state.phase_progress += dt * 0.1
+            state.phase_progress += dt / 240.0  # ~4 min (240s) for full pushback
             # Move in pushback direction (away from terminal toward taxiway)
             pb_rad = math.radians(pb_heading)
             pb_speed_deg = TAXI_SPEED_PUSHBACK_KTS * _KTS_TO_DEG_PER_SEC * dt
@@ -2002,7 +2073,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             new_pos = _move_toward((state.latitude, state.longitude), target, 0.002)
             state.latitude, state.longitude = new_pos
             state.altitude = _interpolate_altitude(state.altitude, target_alt, 500 * dt)
-            state.velocity = 200 + state.waypoint_index * 50
+            raw_speed = 200 + state.waypoint_index * 50
+            state.velocity = min(raw_speed, MAX_SPEED_BELOW_FL100_KTS) if state.altitude < 10000 else raw_speed
             state.vertical_rate = 1500 if state.altitude < target_alt else 0
             state.heading = _calculate_heading(new_pos, target)
 
@@ -2065,8 +2137,31 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.phase = FlightPhase.APPROACHING
                 state.waypoint_index = 0
             elif not can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
-                # Approach full — hold at current distance (orbit)
-                state.heading = (state.heading + 2 * dt) % 360
+                # Approach full — FAA standard racetrack holding pattern
+                # 1-minute inbound/outbound legs, standard rate turns (3°/s)
+                HOLDING_LEG_SECONDS = 60.0  # 1-minute legs per FAA 7110.65
+                STANDARD_RATE_DEG_S = 3.0   # Standard rate turn
+                state.holding_phase_time += dt
+                if state.holding_inbound:
+                    # Inbound leg: fly toward the fix (airport center)
+                    state.heading = _calculate_heading(
+                        (state.latitude, state.longitude), center
+                    )
+                    if state.holding_phase_time >= HOLDING_LEG_SECONDS:
+                        state.holding_phase_time = 0.0
+                        state.holding_inbound = False  # Start turn + outbound
+                else:
+                    # Outbound leg: 180° turn then fly away from fix
+                    if state.holding_phase_time < 30.0:
+                        # Standard rate 180° turn (~60s for full 360°, 30s for 180°)
+                        state.heading = (state.heading + STANDARD_RATE_DEG_S * dt) % 360
+                    elif state.holding_phase_time < 30.0 + HOLDING_LEG_SECONDS:
+                        # Straight outbound leg — maintain heading
+                        pass
+                    else:
+                        # Turn back inbound
+                        state.holding_phase_time = 0.0
+                        state.holding_inbound = True
 
         elif state.destination_airport:
             # DEPARTING enroute: heading away from SFO toward destination
@@ -2076,9 +2171,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.heading = state.heading % 360
 
             # Climb toward cruise altitude
-            if state.altitude < 20000:
+            if state.altitude < 35000:
                 state.altitude += 500 * dt
                 state.vertical_rate = 1500
+
+            # 14 CFR 91.117: 250 kts IAS below 10,000 ft MSL
+            if state.altitude < 10000:
+                state.velocity = min(state.velocity, MAX_SPEED_BELOW_FL100_KTS)
 
             # Remove when exiting visibility circle
             if dist_from_airport > EXIT_RADIUS_DEG:
@@ -2100,6 +2199,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if random.random() < 0.005 * dt:
                 state.phase = FlightPhase.APPROACHING
                 state.waypoint_index = 0
+
+        # 14 CFR 91.117: 250 kts IAS below 10,000 ft MSL
+        if state.altitude < 10000:
+            state.velocity = min(state.velocity, MAX_SPEED_BELOW_FL100_KTS)
 
         # Move in current heading direction
         state.latitude += math.cos(math.radians(state.heading)) * 0.001 * dt

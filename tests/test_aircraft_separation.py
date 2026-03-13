@@ -102,11 +102,11 @@ class TestWakeTurbulenceCategories:
         for aircraft in large_aircraft:
             assert _get_wake_category(aircraft) == "LARGE", f"{aircraft} should be LARGE"
 
-    def test_small_categories(self):
-        """Test SMALL category aircraft."""
-        small_aircraft = ["CRJ9", "E175", "E190"]
-        for aircraft in small_aircraft:
-            assert _get_wake_category(aircraft) == "SMALL", f"{aircraft} should be SMALL"
+    def test_regional_jet_categories(self):
+        """Test regional jets are LARGE (MTOW > 41,000 lbs / 18,600 kg)."""
+        regional_jets = ["CRJ9", "E175", "E190"]
+        for aircraft in regional_jets:
+            assert _get_wake_category(aircraft) == "LARGE", f"{aircraft} should be LARGE"
 
     def test_unknown_defaults_to_large(self):
         """Test unknown aircraft types default to LARGE."""
@@ -197,10 +197,10 @@ class TestSeparationCalculations:
         expected = 5.0 * NM_TO_DEG  # 5 NM for HEAVY→LARGE
         assert abs(separation - expected) < 0.001
 
-    def test_get_required_separation_super_to_small(self):
-        """Test required separation calculation for SUPER → SMALL."""
+    def test_get_required_separation_super_to_large_regional(self):
+        """Test required separation calculation for SUPER → LARGE (regional jet)."""
         separation = _get_required_separation("A380", "E175")
-        expected = 8.0 * NM_TO_DEG  # 8 NM for SUPER→SMALL
+        expected = 7.0 * NM_TO_DEG  # 7 NM for SUPER→LARGE
         assert abs(separation - expected) < 0.001
 
     def test_distance_between_calculation(self):
