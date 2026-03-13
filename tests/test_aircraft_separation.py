@@ -559,21 +559,34 @@ class TestGateManagement:
             _gate_states[gate].available_at = 0
 
     def test_gates_exist(self):
-        """Test all 9 gates are defined (real SFO terminal layout)."""
-        assert len(GATES) == 9
+        """Test all 20 gates are defined (real SFO terminal layout across 6 boarding areas)."""
+        assert len(GATES) == 20
         # International Terminal - Boarding Area G
         assert "G1" in GATES
         assert "G2" in GATES
         assert "G3" in GATES
+        assert "G4" in GATES
         # International Terminal - Boarding Area A
         assert "A1" in GATES
         assert "A2" in GATES
-        # Domestic Terminal 1
+        assert "A3" in GATES
+        # Domestic Terminal 1 - Boarding Area B
         assert "B1" in GATES
         assert "B2" in GATES
-        # Domestic Terminal 2/3
+        assert "B3" in GATES
+        assert "B4" in GATES
+        # Domestic Terminal 2 - Boarding Area C
         assert "C1" in GATES
         assert "C2" in GATES
+        assert "C3" in GATES
+        # Domestic Terminal 3 - Boarding Area E
+        assert "E1" in GATES
+        assert "E2" in GATES
+        assert "E3" in GATES
+        # Domestic Terminal 3 - Boarding Area F
+        assert "F1" in GATES
+        assert "F2" in GATES
+        assert "F3" in GATES
 
     def test_find_available_gate_all_free(self):
         """Test finding available gate when all are free."""
