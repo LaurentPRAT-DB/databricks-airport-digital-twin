@@ -5,3 +5,4 @@ duration_hours: 24
 time_step_seconds: 2.0
 seed: 42
 output_file: simulation_output/simulation_jfk_1000_winter_storm.json
+scenario_file: scenarios/jfk_winter_storm.yaml

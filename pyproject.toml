@@ -27,6 +27,7 @@ dependencies = [
     "defusedxml>=0.7.0",
     # Simulation config
     "pyyaml>=6.0",
+    "matplotlib>=3.10.8",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,8 @@
+airport: FRA
+arrivals: 500
+departures: 500
+duration_hours: 24
+time_step_seconds: 2.0
+seed: 42
+output_file: simulation_output/simulation_fra_1000_winter_crosswind.json
+scenario_file: scenarios/fra_winter_crosswind.yaml

@@ -73,6 +73,9 @@ ALTERNATE_AIRPORTS: dict[str, list[str]] = {
     "DXB": ["AUH"],
     "GRU": ["VCP"],
     "SYD": ["MEL", "BNE"],
+    "SIN": ["KUL"],
+    "FRA": ["MUC", "DUS"],
+    "JNB": ["CPT"],
 }
 
 

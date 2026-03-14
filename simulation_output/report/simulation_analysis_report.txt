@@ -1,0 +1,71 @@
+================================================================================
+AIRPORT DIGITAL TWIN — MULTI-AIRPORT SIMULATION ANALYSIS REPORT
+Generated: 2026-03-14 14:50:59
+================================================================================
+
+OVERVIEW
+----------------------------------------
+  Airports simulated:      10
+  Total flights:           10,238
+  Total position snapshots: 766,840
+  Total scenario events:   7,350
+  Regions covered:         10
+
+PER-AIRPORT SUMMARY
+----------------------------------------
+Airport Region                     Flights  Spawned   OTP%  Cancel%  AvgHold  GoAr   Div Scenario
+-------------------------------------------------------------------------------------------------
+DXB    Middle East                   1030     1030  48.8%     0.0%    74.3m     4     3 DXB Shamal Sandstorm — Arabian Gulf
+FRA    Europe (Central)              1022     1022  27.2%     0.0%    74.7m     2     2 FRA Winter Crosswind + Freezing Rain — Central Europe
+GRU    South America                 1020     1020  73.8%     0.0%     9.5m     8     4 GRU Tropical Convective Storm — South Atlantic
+JFK    North America (East)          1020     1020  17.5%     0.0%   121.0m    10     0 JFK Nor'easter Winter Storm — US Northeast
+JNB    Africa                        1019     1019  66.8%     0.0%    13.7m     3     4 JNB Highveld Thunderstorm — Southern Africa
+LHR    Europe (UK)                   1024      841   3.6%    17.9%   217.6m     2     1 LHR Winter Radiation Fog
+NRT    East Asia                     1030     1029  35.8%     0.1%    45.0m    15     0 NRT Typhoon Approach — Western Pacific
+SFO    North America (West)          1030      969  19.6%     5.9%    83.1m     4     1 SFO Summer Thunderstorm + Cascading Disruptions
+SIN    Southeast Asia                1024     1024  63.1%     0.0%    15.1m     5     1 SIN Southwest Monsoon — Equatorial Squall Line
+SYD    Oceania                       1019     1018  35.0%     0.1%    45.5m    11     0 SYD Bushfire Smoke + Sea Breeze Convergence
+
+WEATHER ALIGNMENT CHECK
+----------------------------------------
+  DXB: OK — Got: ['clear', 'dust', 'haze', 'sandstorm'] | Expected: ['dust', 'haze', 'sandstorm']
+  FRA: OK — Got: ['clear', 'freezing_rain', 'rain', 'snow', 'wind_shift'] | Expected: ['freezing_rain', 'snow', 'wind_shift']
+  GRU: OK — Got: ['clear', 'thunderstorm'] | Expected: ['thunderstorm']
+  JFK: MISMATCH — Got: ['clear', 'snow'] | Expected: ['freezing_rain', 'snow']
+  JNB: OK — Got: ['clear', 'haze', 'thunderstorm'] | Expected: ['haze', 'thunderstorm']
+  LHR: OK — Got: ['clear', 'fog', 'wind_shift'] | Expected: ['fog', 'wind_shift']
+  NRT: OK — Got: ['clear', 'thunderstorm'] | Expected: ['thunderstorm']
+  SFO: OK — Got: ['clear', 'fog', 'thunderstorm'] | Expected: ['fog', 'thunderstorm']
+  SIN: OK — Got: ['clear', 'rain', 'thunderstorm'] | Expected: ['rain', 'thunderstorm']
+  SYD: OK — Got: ['clear', 'smoke', 'thunderstorm'] | Expected: ['smoke', 'thunderstorm']
+
+ANOMALY DETECTION RESULTS
+----------------------------------------
+  ERRORS: 0 (all clean)
+
+  WARNINGS (11):
+    [WARN] DXB — phase_transitions: 968 unexpected transitions: taxi_to_runway -> takeoff, takeoff -> departing, departing -> enroute
+    [WARN] FRA — phase_transitions: 780 unexpected transitions: taxi_to_runway -> takeoff, takeoff -> departing, departing -> enroute
+    [WARN] GRU — phase_transitions: 1117 unexpected transitions: takeoff -> departing, takeoff -> departing, takeoff -> departing
+    [WARN] JFK — phase_transitions: 759 unexpected transitions: taxi_to_runway -> takeoff, takeoff -> departing, taxi_to_runway -> takeoff
+    [WARN] JFK — weather: Expected weather types not found: {'freezing_rain'}. Got: {'clear', 'snow'}
+    [WARN] JNB — phase_transitions: 1073 unexpected transitions: taxi_to_runway -> takeoff, takeoff -> departing, departing -> enroute
+    [WARN] LHR — phase_transitions: 662 unexpected transitions: takeoff -> departing, taxi_to_runway -> takeoff, takeoff -> departing
+    [WARN] NRT — phase_transitions: 794 unexpected transitions: taxi_to_runway -> takeoff, takeoff -> departing, departing -> enroute
+    [WARN] SFO — phase_transitions: 710 unexpected transitions: taxi_to_runway -> takeoff, takeoff -> departing, departing -> enroute
+    [WARN] SIN — phase_transitions: 1088 unexpected transitions: taxi_to_runway -> takeoff, takeoff -> departing, departing -> enroute
+    [WARN] SYD — phase_transitions: 965 unexpected transitions: taxi_to_runway -> takeoff, takeoff -> departing, departing -> enroute
+
+VISUALIZATIONS
+----------------------------------------
+  01_summary_dashboard.png     — KPI overview across all airports
+  02_hourly_traffic.png        — Hourly traffic distribution
+  03_position_scatter.png      — Aircraft position scatter by phase
+  04_altitude_profiles.png     — Altitude distribution by phase
+  05_disruption_timeline.png   — Scenario event timeline
+  06_cancellation_analysis.png — Cancellation & delay correlation
+  07_world_map.png             — Global overview with KPIs
+
+================================================================================
+END OF REPORT
+================================================================================

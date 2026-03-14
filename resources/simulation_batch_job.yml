@@ -1,0 +1,25 @@
+resources:
+  jobs:
+    simulation_batch:
+      name: "[${bundle.target}] Airport DT - Multi-Airport Simulation Batch"
+      description: "Runs 10 airport simulations (1000 flights each) with region-appropriate weather scenarios and generates analysis report"
+
+      environments:
+        - environment_key: simulation_env
+          spec:
+            client: "1"
+            dependencies:
+              - ../requirements.txt
+
+      tasks:
+        - task_key: run_simulations
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulations.py
+          environment_key: simulation_env
+
+      tags:
+        project: airport-digital-twin
+        component: simulation
+        target: ${bundle.target}
+
+      timeout_seconds: 3600

@@ -6,6 +6,10 @@ sync:
     - app/**
     - src/**
     - tests/**
+    - configs/**
+    - scenarios/**
+    - scripts/**
+    - simulation_output/report/**
     - app.yaml
     - requirements.txt
     - pyproject.toml
@@ -19,6 +23,7 @@ sync:
     - .git/**
     - .planning/**
     - .databricks/**
+    - simulation_output/*.json
 
 include:
   - resources/*.yml
