@@ -2,20 +2,95 @@ resources:
   jobs:
     simulation_batch:
       name: "[${bundle.target}] Airport DT - Multi-Airport Simulation Batch"
-      description: "Runs 10 airport simulations (1000 flights each) with region-appropriate weather scenarios and generates analysis report"
-
-      environments:
-        - environment_key: simulation_env
-          spec:
-            client: "1"
-            dependencies:
-              - ../requirements.txt
+      description: "Runs 10 airport simulations in parallel (1000 flights each) with region-appropriate weather, then analyzes results"
 
       tasks:
-        - task_key: run_simulations
+        # ── 10 parallel simulation tasks (one per airport) ──────────────
+        - task_key: sim_sfo
           notebook_task:
-            notebook_path: ../databricks/notebooks/run_simulations.py
-          environment_key: simulation_env
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SFO"
+              config_file: "configs/simulation_sfo_1000.yaml"
+
+        - task_key: sim_jfk
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "JFK"
+              config_file: "configs/simulation_jfk_1000.yaml"
+
+        - task_key: sim_lhr
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LHR"
+              config_file: "configs/simulation_lhr_1000.yaml"
+
+        - task_key: sim_fra
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "FRA"
+              config_file: "configs/simulation_fra_1000.yaml"
+
+        - task_key: sim_dxb
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DXB"
+              config_file: "configs/simulation_dxb_1000.yaml"
+
+        - task_key: sim_nrt
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "NRT"
+              config_file: "configs/simulation_nrt_1000.yaml"
+
+        - task_key: sim_sin
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SIN"
+              config_file: "configs/simulation_sin_1000.yaml"
+
+        - task_key: sim_gru
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "GRU"
+              config_file: "configs/simulation_gru_1000.yaml"
+
+        - task_key: sim_syd
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SYD"
+              config_file: "configs/simulation_syd_1000.yaml"
+
+        - task_key: sim_jnb
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "JNB"
+              config_file: "configs/simulation_jnb_1000.yaml"
+
+        # ── Analysis task (depends on all 10 simulations) ──────────────
+        - task_key: analyze_results
+          notebook_task:
+            notebook_path: ../databricks/notebooks/analyze_simulations.py
+          depends_on:
+            - task_key: sim_sfo
+            - task_key: sim_jfk
+            - task_key: sim_lhr
+            - task_key: sim_fra
+            - task_key: sim_dxb
+            - task_key: sim_nrt
+            - task_key: sim_sin
+            - task_key: sim_gru
+            - task_key: sim_syd
+            - task_key: sim_jnb
 
       tags:
         project: airport-digital-twin
