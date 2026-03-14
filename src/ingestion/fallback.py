@@ -1646,6 +1646,7 @@ def _create_new_flight(
 
         lat, lon = get_gates()[gate]
         _occupy_gate(icao24, gate)
+        emit_gate_event(icao24, callsign, gate, "occupy", aircraft_type)
 
         # Compute heading toward nearest terminal (or airport center as fallback)
         parked_heading = _get_parked_heading(lat, lon)
