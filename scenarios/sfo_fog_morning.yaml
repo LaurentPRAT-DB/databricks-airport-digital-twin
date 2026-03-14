@@ -1,0 +1,43 @@
+name: SFO Dense Morning Fog
+description: >
+  Classic SFO marine layer fog event. Dense fog from 06:00-09:00 reduces
+  operations to CAT III single-stream approaches (~18 arr/hr).
+  Fog gradually lifts by 10:00. Expect massive morning arrival delays,
+  holdings, and schedule compression as weather clears.
+
+weather_events:
+  - time: "06:00"
+    type: fog
+    severity: severe
+    duration_hours: 2.0
+    visibility_nm: 0.25
+    ceiling_ft: 200
+    wind_speed_kt: 5
+    wind_direction: 280
+
+  - time: "08:00"
+    type: fog
+    severity: moderate
+    duration_hours: 1.0
+    visibility_nm: 0.75
+    ceiling_ft: 400
+    wind_speed_kt: 6
+    wind_direction: 280
+
+  - time: "09:00"
+    type: fog
+    severity: light
+    duration_hours: 1.0
+    visibility_nm: 2.0
+    ceiling_ft: 1200
+    wind_speed_kt: 8
+    wind_direction: 280
+
+  - time: "10:00"
+    type: clear
+    severity: light
+    duration_hours: 14.0
+    visibility_nm: 10.0
+    ceiling_ft: 5000
+    wind_speed_kt: 12
+    wind_direction: 290

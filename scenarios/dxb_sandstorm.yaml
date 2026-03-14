@@ -1,0 +1,103 @@
+name: DXB Shamal Sandstorm — Arabian Gulf
+description: >
+  Summer shamal wind event drives sand and dust across the Gulf.
+  Visibility drops to near-zero at peak. DXB is a 24hr hub so the
+  overnight arrival bank is heavily impacted. Temperatures exceed
+  48C causing de-rating penalties and longer takeoff rolls.
+  Realistic for Jun-Aug shamal season.
+
+weather_events:
+  - time: "02:00"
+    type: dust
+    severity: moderate
+    duration_hours: 2.0
+    visibility_nm: 1.5
+    ceiling_ft: 1000
+    wind_speed_kt: 15
+    wind_direction: 320
+
+  - time: "04:00"
+    type: sandstorm
+    severity: severe
+    duration_hours: 4.0
+    visibility_nm: 0.25
+    ceiling_ft: 200
+    wind_speed_kt: 35
+    wind_gusts_kt: 50
+    wind_direction: 330
+
+  - time: "08:00"
+    type: dust
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 1.0
+    ceiling_ft: 600
+    wind_speed_kt: 25
+    wind_gusts_kt: 38
+    wind_direction: 340
+
+  - time: "11:00"
+    type: haze
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 4.0
+    ceiling_ft: 2500
+    wind_speed_kt: 18
+    wind_direction: 350
+
+  - time: "14:00"
+    type: clear
+    severity: light
+    duration_hours: 10.0
+    visibility_nm: 8.0
+    ceiling_ft: 5000
+    wind_speed_kt: 12
+    wind_direction: 010
+
+runway_events:
+  - time: "04:00"
+    type: closure
+    runway: "28L"
+    duration_minutes: 240
+    reason: Sand accumulation requires runway sweeping
+
+  - time: "05:00"
+    type: closure
+    runway: "28R"
+    duration_minutes: 180
+    reason: Visibility below minimums — all ops suspended
+
+ground_events:
+  - time: "03:00"
+    type: gate_failure
+    target: "C24"
+    duration_hours: 5.0
+
+  - time: "04:00"
+    type: gate_failure
+    target: "B15"
+    duration_hours: 4.0
+
+  - time: "04:00"
+    type: taxiway_closure
+    target: "Taxiway M (sand drift)"
+    duration_hours: 6.0
+    impact:
+      turnaround_multiplier: 1.6
+
+  - time: "10:00"
+    type: fuel_shortage
+    duration_hours: 3.0
+    impact:
+      turnaround_multiplier: 1.3
+
+traffic_modifiers:
+  - time: "01:00"
+    type: surge
+    extra_arrivals: 12
+    extra_departures: 8
+
+  - time: "09:00"
+    type: diversion
+    extra_arrivals: 10
+    diversion_origin: AUH

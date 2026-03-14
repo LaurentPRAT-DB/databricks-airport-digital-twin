@@ -107,3 +107,11 @@ docs/email_*.md
 # Test coverage and results
 app/frontend/coverage/
 app/frontend/test-results/
+
+# Simulation output data (large JSON files and screenshots)
+simulation_output/*.json
+simulation_output/screenshots/
+simulation_output_*.json
+
+# Video output
+video_output/

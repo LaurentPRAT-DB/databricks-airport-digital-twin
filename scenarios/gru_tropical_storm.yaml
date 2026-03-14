@@ -1,0 +1,109 @@
+name: GRU Tropical Convective Storm — South Atlantic
+description: >
+  Intense tropical convective activity over Sao Paulo metro area.
+  Rapid-onset cumulonimbus development in the afternoon heat, with
+  microbursts and heavy rain causing runway flooding. Lightning
+  forces ground stop. Common summer pattern (Dec-Mar) at Guarulhos.
+  Recovery complicated by secondary cells forming after sunset.
+
+weather_events:
+  - time: "12:00"
+    type: thunderstorm
+    severity: light
+    duration_hours: 1.5
+    visibility_nm: 4.0
+    ceiling_ft: 2500
+    wind_speed_kt: 15
+    wind_gusts_kt: 25
+    wind_direction: 350
+
+  - time: "13:30"
+    type: thunderstorm
+    severity: severe
+    duration_hours: 2.5
+    visibility_nm: 0.5
+    ceiling_ft: 400
+    wind_speed_kt: 30
+    wind_gusts_kt: 55
+    wind_direction: 310
+
+  - time: "16:00"
+    type: thunderstorm
+    severity: moderate
+    duration_hours: 1.5
+    visibility_nm: 1.5
+    ceiling_ft: 1000
+    wind_speed_kt: 20
+    wind_gusts_kt: 35
+    wind_direction: 280
+
+  - time: "17:30"
+    type: clear
+    severity: light
+    duration_hours: 2.5
+    visibility_nm: 6.0
+    ceiling_ft: 3500
+    wind_speed_kt: 12
+    wind_direction: 270
+
+  - time: "20:00"
+    type: thunderstorm
+    severity: moderate
+    duration_hours: 2.0
+    visibility_nm: 1.0
+    ceiling_ft: 800
+    wind_speed_kt: 22
+    wind_gusts_kt: 40
+    wind_direction: 250
+
+  - time: "22:00"
+    type: clear
+    severity: light
+    duration_hours: 2.0
+    visibility_nm: 8.0
+    ceiling_ft: 4500
+    wind_speed_kt: 10
+    wind_direction: 240
+
+runway_events:
+  - time: "14:00"
+    type: closure
+    runway: "28R"
+    duration_minutes: 90
+    reason: Runway flooding from heavy rain
+
+  - time: "14:30"
+    type: closure
+    runway: "28L"
+    duration_minutes: 60
+    reason: Lightning within 5nm — ground stop
+
+ground_events:
+  - time: "13:00"
+    type: gate_failure
+    target: "T3-E12"
+    duration_hours: 3.0
+
+  - time: "14:00"
+    type: taxiway_closure
+    target: "Taxiway C (flooding)"
+    duration_hours: 2.5
+    impact:
+      turnaround_multiplier: 1.4
+
+  - time: "20:00"
+    type: fuel_shortage
+    duration_hours: 2.0
+    impact:
+      turnaround_multiplier: 1.2
+
+traffic_modifiers:
+  - time: "11:00"
+    type: surge
+    extra_arrivals: 8
+    extra_departures: 6
+
+  - time: "15:00"
+    type: diversion
+    extra_arrivals: 6
+    diversion_origin: CGH

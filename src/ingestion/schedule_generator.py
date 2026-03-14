@@ -72,6 +72,7 @@ AIRPORT_COORDINATES = {
     "SYD": (-33.9461, 151.1772),
     "DXB": (25.2532, 55.3657),
     "ICN": (37.4602, 126.4407),
+    "GRU": (-23.4356, -46.4731),
 }
 
 # Aircraft types by category

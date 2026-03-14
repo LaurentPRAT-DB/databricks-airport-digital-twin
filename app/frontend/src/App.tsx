@@ -9,6 +9,8 @@ import FlightDetail from './components/FlightDetail/FlightDetail';
 import GateStatus from './components/GateStatus/GateStatus';
 import FIDS from './components/FIDS/FIDS';
 import { useViewportState, SharedViewport } from './hooks/useViewportState';
+import SimulationControls from './components/SimulationControls/SimulationControls';
+import { Flight } from './types/flight';
 
 // Lazy load 3D map to reduce initial bundle size
 const Map3D = lazy(() => import('./components/Map3D').then(m => ({ default: m.Map3D })));
@@ -134,11 +136,33 @@ function ViewToggle({
   );
 }
 
-function AppContent() {
+// TypeScript declaration for the headless video renderer view control API
+declare global {
+  interface Window {
+    __viewControl?: {
+      setViewMode: (mode: '2d' | '3d') => void;
+      getViewMode: () => '2d' | '3d';
+    };
+  }
+}
+
+function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (flights: Flight[] | null) => void }) {
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
   const [showFIDS, setShowFIDS] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Initializing');
+  const [, setSimulationActive] = useState(false);
+
+  // Expose view control API on window for headless video renderer (Playwright)
+  useEffect(() => {
+    window.__viewControl = {
+      setViewMode,
+      getViewMode: () => viewMode,
+    };
+    return () => {
+      delete window.__viewControl;
+    };
+  }, [viewMode, setViewMode]);
 
   // Prefetch 3D bundle after initial render so it loads faster when user switches
   useEffect(() => {
@@ -222,7 +246,12 @@ function AppContent() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <Header onShowFIDS={() => setShowFIDS(true)} />
+      <Header onShowFIDS={() => setShowFIDS(true)} simulationControls={
+        <SimulationControls
+          onFlightsChange={handleSimFlightsChange}
+          onActiveChange={setSimulationActive}
+        />
+      } />
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} />}
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List */}
@@ -268,10 +297,16 @@ function AppContent() {
 }
 
 function App() {
+  const [simulationFlights, setSimulationFlights] = useState<Flight[] | null>(null);
+
+  const handleSimFlightsChange = useCallback((flights: Flight[] | null) => {
+    setSimulationFlights(flights);
+  }, []);
+
   return (
     <AirportConfigProvider>
-      <FlightProvider>
-        <AppContent />
+      <FlightProvider simulationFlights={simulationFlights}>
+        <AppContent handleSimFlightsChange={handleSimFlightsChange} />
       </FlightProvider>
     </AirportConfigProvider>
   );

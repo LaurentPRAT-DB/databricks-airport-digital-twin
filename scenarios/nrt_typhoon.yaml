@@ -1,0 +1,113 @@
+name: NRT Typhoon Approach — Western Pacific
+description: >
+  Typhoon making landfall near Tokyo. Outer bands arrive mid-morning with
+  heavy rain and gusts to 55kt. Eye passes closest at 15:00 with brief
+  calm before rear-wall winds hit. Classic Kanto plain typhoon track
+  affecting Narita. JCAB issues ground stop during peak winds.
+  Realistic for Jul-Oct typhoon season.
+
+weather_events:
+  - time: "09:00"
+    type: thunderstorm
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 2.0
+    ceiling_ft: 1200
+    wind_speed_kt: 30
+    wind_gusts_kt: 45
+    wind_direction: 120
+
+  - time: "12:00"
+    type: thunderstorm
+    severity: severe
+    duration_hours: 3.0
+    visibility_nm: 0.5
+    ceiling_ft: 300
+    wind_speed_kt: 45
+    wind_gusts_kt: 65
+    wind_direction: 090
+
+  - time: "15:00"
+    type: clear
+    severity: light
+    duration_hours: 0.5
+    visibility_nm: 5.0
+    ceiling_ft: 3000
+    wind_speed_kt: 10
+    wind_direction: 180
+
+  - time: "15:30"
+    type: thunderstorm
+    severity: severe
+    duration_hours: 2.5
+    visibility_nm: 0.75
+    ceiling_ft: 400
+    wind_speed_kt: 40
+    wind_gusts_kt: 55
+    wind_direction: 270
+
+  - time: "18:00"
+    type: thunderstorm
+    severity: moderate
+    duration_hours: 2.0
+    visibility_nm: 2.0
+    ceiling_ft: 1500
+    wind_speed_kt: 25
+    wind_gusts_kt: 38
+    wind_direction: 300
+
+  - time: "20:00"
+    type: clear
+    severity: light
+    duration_hours: 4.0
+    visibility_nm: 8.0
+    ceiling_ft: 5000
+    wind_speed_kt: 15
+    wind_direction: 320
+
+runway_events:
+  - time: "12:00"
+    type: closure
+    runway: "28L"
+    duration_minutes: 180
+    reason: Crosswind exceeds 35kt limit
+
+  - time: "12:30"
+    type: closure
+    runway: "28R"
+    duration_minutes: 150
+    reason: Typhoon wind shear — all runways closed
+
+ground_events:
+  - time: "11:00"
+    type: gate_failure
+    target: "T1-N5"
+    duration_hours: 6.0
+
+  - time: "12:00"
+    type: gate_failure
+    target: "T2-S3"
+    duration_hours: 5.0
+
+  - time: "13:00"
+    type: taxiway_closure
+    target: "Taxiway W (flood damage)"
+    duration_hours: 8.0
+    impact:
+      turnaround_multiplier: 1.5
+
+curfew_events:
+  - start: "23:00"
+    end: "06:00"
+    max_arrivals_per_hour: 2
+
+traffic_modifiers:
+  - time: "08:00"
+    type: surge
+    extra_arrivals: 12
+    extra_departures: 10
+
+  - time: "11:00"
+    type: diversion
+    extra_arrivals: 8
+    diversion_origin: HND

@@ -23,9 +23,19 @@ class CapacityManager:
         self.ground_stop = False
         self._recent_arrivals: list[datetime] = []
         self._recent_departures: list[datetime] = []
+        # Curfew: list of (start_hour, start_min, end_hour, end_min, max_arr_per_hour)
+        self._curfews: list[tuple[int, int, int, int, int]] = []
+        # Wind-based runway config: runway heading → runway name pairs
+        # e.g. {"28L": 280, "28R": 280, "10L": 100, "10R": 100} for SFO
+        self._runway_headings: dict[str, int] = {}
+        self._wind_direction: int | None = None
+        self._runway_reversal_pairs: dict[str, str] = {}  # "28L" -> "10R", etc.
 
     def get_arrival_rate(self, sim_time: datetime) -> int:
-        """Current max arrivals/hour based on weather + runway config."""
+        """Current max arrivals/hour based on weather + runway config + curfew."""
+        curfew_max = self.curfew_max_arrivals(sim_time)
+        if curfew_max is not None:
+            return curfew_max
         base = self.base_aar
         runway_fraction = len(self.active_runways) / max(len(self.all_runways), 1)
         rate = base * runway_fraction * self.weather_multiplier
@@ -35,6 +45,8 @@ class CapacityManager:
         """Current max departures/hour."""
         if self.ground_stop:
             return 0
+        if self.is_curfew_active(sim_time):
+            return 0  # No departures during curfew
         base = self.base_adr
         runway_fraction = len(self.active_runways) / max(len(self.all_runways), 1)
         rate = base * runway_fraction * self.weather_multiplier
@@ -53,6 +65,8 @@ class CapacityManager:
     def can_release_departure(self, sim_time: datetime) -> bool:
         """Has departure rate capacity?"""
         if self.ground_stop:
+            return False
+        if self.is_curfew_active(sim_time):
             return False
         recent = self._count_recent(self._recent_departures, sim_time)
         return recent < self.get_departure_rate(sim_time)
@@ -74,11 +88,24 @@ class CapacityManager:
         """Get currently active (non-closed) runways."""
         return set(self.active_runways)
 
+    # Weather types that impose extra capacity penalties beyond visibility/ceiling
+    # (equipment damage risk, crew health, surface contamination, etc.)
+    WEATHER_TYPE_PENALTY: dict[str, float] = {
+        "sandstorm": 0.70,       # Engine ingestion risk, runway contamination
+        "dust": 0.85,            # Reduced vis recovery, engine FOD risk
+        "smoke": 0.80,           # Crew health, poor vis recovery
+        "haze": 0.95,            # Mild — mostly a vis issue already captured
+        "freezing_rain": 0.60,   # Deicing delays, surface contamination
+        "ice_pellets": 0.70,     # Runway braking action, deicing
+        "snow": 0.75,            # Plowing, deicing, braking
+    }
+
     def apply_weather(
         self,
         visibility_nm: float | None,
         ceiling_ft: int | None,
         wind_gusts_kt: int | None = None,
+        weather_type: str | None = None,
     ) -> None:
         """Recalculate flight category and weather multiplier from conditions."""
         vis = visibility_nm if visibility_nm is not None else 10.0
@@ -99,6 +126,7 @@ class CapacityManager:
 
         # Store gusts for go-around probability
         self._wind_gusts_kt = wind_gusts_kt
+        self._weather_type = weather_type
 
         # Wind gusts further reduce capacity
         if wind_gusts_kt and wind_gusts_kt > 35:
@@ -106,13 +134,18 @@ class CapacityManager:
         elif wind_gusts_kt and wind_gusts_kt > 25:
             self.weather_multiplier *= 0.90
 
+        # Weather-type-specific penalty (sandstorm, smoke, etc.)
+        if weather_type and weather_type in self.WEATHER_TYPE_PENALTY:
+            self.weather_multiplier *= self.WEATHER_TYPE_PENALTY[weather_type]
+
         logger.info(
-            "Weather update: category=%s, multiplier=%.2f (vis=%.1fnm, ceil=%dft%s)",
+            "Weather update: category=%s, multiplier=%.2f (vis=%.1fnm, ceil=%dft%s%s)",
             self.current_category,
             self.weather_multiplier,
             vis,
             ceil,
             f", gusts={wind_gusts_kt}kt" if wind_gusts_kt else "",
+            f", type={weather_type}" if weather_type else "",
         )
 
     def go_around_probability(self) -> float:
@@ -128,6 +161,101 @@ class CapacityManager:
         if not self.active_runways:
             prob = 1.0
         return min(prob, 1.0)
+
+    # Default runway configs: primary heading -> list of runway names, and their reversal pairs
+    RUNWAY_CONFIGS: dict[str, dict] = {
+        "SFO": {"runways": {"28L": 280, "28R": 280}, "reversals": {"28L": "10R", "28R": "10L"}},
+        "JFK": {"runways": {"31L": 310, "31R": 310}, "reversals": {"31L": "13R", "31R": "13L"}},
+        "LHR": {"runways": {"27L": 270, "27R": 270}, "reversals": {"27L": "09R", "27R": "09L"}},
+        "NRT": {"runways": {"34L": 340, "34R": 340}, "reversals": {"34L": "16R", "34R": "16L"}},
+        "SYD": {"runways": {"34L": 340, "34R": 340}, "reversals": {"34L": "16R", "34R": "16L"}},
+    }
+
+    def configure_runway_reversal(self) -> None:
+        """Set up runway heading data for the configured airport."""
+        cfg = self.RUNWAY_CONFIGS.get(self.airport)
+        if cfg:
+            self._runway_headings = cfg["runways"]
+            self._runway_reversal_pairs = cfg["reversals"]
+
+    def check_wind_reversal(self, wind_direction: int) -> None:
+        """If wind has shifted >90° from runway heading, swap to reciprocal config."""
+        if not self._runway_headings:
+            return
+        self._wind_direction = wind_direction
+
+        # Get the primary runway heading (all runways in a config share the same heading)
+        primary_heading = next(iter(self._runway_headings.values()), None)
+        if primary_heading is None:
+            return
+
+        # Calculate angle difference
+        diff = abs((wind_direction - primary_heading + 180) % 360 - 180)
+
+        # Tailwind component > 10kt threshold: real-world is ~90° crosswind becomes issue
+        # If wind is >90° off the runway heading, aircraft have a tailwind component
+        if diff > 90:
+            # Check if we're already on the reversed config
+            current_names = set(self.active_runways)
+            reversed_names = set(self._runway_reversal_pairs.values())
+            if current_names & reversed_names:
+                return  # Already reversed
+
+            # Swap to reciprocal runways
+            new_runways = set()
+            new_headings = {}
+            for rwy, reciprocal in self._runway_reversal_pairs.items():
+                new_runways.add(reciprocal)
+                new_headings[reciprocal] = (self._runway_headings[rwy] + 180) % 360
+            # Update — preserve any closures on the new runway names
+            old_active = set(self.active_runways)
+            self.all_runways = new_runways
+            self.active_runways = new_runways - set(self.closed_runways.keys())
+            self._runway_headings = new_headings
+            # Swap reversal pairs
+            self._runway_reversal_pairs = {v: k for k, v in self._runway_reversal_pairs.items()}
+            logger.info(
+                "Wind reversal: %d° → runway config changed from %s to %s",
+                wind_direction, old_active, self.active_runways,
+            )
+
+    def add_curfew(self, start: str, end: str, max_arrivals_per_hour: int = 2) -> None:
+        """Add a curfew period (e.g. '23:00' to '06:00')."""
+        sh, sm = map(int, start.split(":"))
+        eh, em = map(int, end.split(":"))
+        self._curfews.append((sh, sm, eh, em, max_arrivals_per_hour))
+        logger.info("Curfew added: %s-%s (max %d arr/hr)", start, end, max_arrivals_per_hour)
+
+    def is_curfew_active(self, sim_time: datetime) -> bool:
+        """Check if any curfew is active at the given time."""
+        h, m = sim_time.hour, sim_time.minute
+        t = h * 60 + m
+        for sh, sm, eh, em, _ in self._curfews:
+            start = sh * 60 + sm
+            end = eh * 60 + em
+            if start > end:
+                # Overnight curfew (e.g. 23:00 - 06:00)
+                if t >= start or t < end:
+                    return True
+            else:
+                if start <= t < end:
+                    return True
+        return False
+
+    def curfew_max_arrivals(self, sim_time: datetime) -> int | None:
+        """Return max arrivals/hr during curfew, or None if no curfew active."""
+        h, m = sim_time.hour, sim_time.minute
+        t = h * 60 + m
+        for sh, sm, eh, em, max_arr in self._curfews:
+            start = sh * 60 + sm
+            end = eh * 60 + em
+            if start > end:
+                if t >= start or t < end:
+                    return max_arr
+            else:
+                if start <= t < end:
+                    return max_arr
+        return None
 
     def close_runway(self, runway: str, until: datetime) -> None:
         """Close a runway until the specified time."""
@@ -194,4 +322,6 @@ class CapacityManager:
             parts.append(f"RWY_CLOSED:{','.join(self.closed_runways.keys())}")
         if self.failed_gates:
             parts.append(f"GATES_FAILED:{len(self.failed_gates)}")
+        if self.is_curfew_active(sim_time):
+            parts.append("CURFEW")
         return " | ".join(parts)

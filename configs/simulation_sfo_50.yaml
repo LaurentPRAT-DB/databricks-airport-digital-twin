@@ -1,0 +1,7 @@
+airport: SFO
+arrivals: 25
+departures: 25
+duration_hours: 24
+time_step_seconds: 2.0
+seed: 42
+output_file: simulation_output_sfo_50.json

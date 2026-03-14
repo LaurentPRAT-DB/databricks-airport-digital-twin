@@ -1,0 +1,105 @@
+name: LHR Winter Radiation Fog
+description: >
+  Classic London Heathrow winter scenario. Dense radiation fog forms overnight
+  and persists through mid-morning, reducing LHR to single-runway CAT IIIb
+  operations (~12 movements/hr). Afternoon wind picks up with a Channel squall.
+  Heathrow is slot-constrained at 98% capacity so any weather event cascades
+  immediately. Realistic for Nov-Feb operations.
+
+weather_events:
+  - time: "05:00"
+    type: fog
+    severity: severe
+    duration_hours: 3.0
+    visibility_nm: 0.12
+    ceiling_ft: 100
+    wind_speed_kt: 3
+    wind_direction: 180
+
+  - time: "08:00"
+    type: fog
+    severity: moderate
+    duration_hours: 2.0
+    visibility_nm: 0.5
+    ceiling_ft: 300
+    wind_speed_kt: 5
+    wind_direction: 200
+
+  - time: "10:00"
+    type: fog
+    severity: light
+    duration_hours: 1.5
+    visibility_nm: 2.0
+    ceiling_ft: 800
+    wind_speed_kt: 8
+    wind_direction: 220
+
+  - time: "11:30"
+    type: clear
+    severity: light
+    duration_hours: 4.5
+    visibility_nm: 8.0
+    ceiling_ft: 3500
+    wind_speed_kt: 12
+    wind_direction: 240
+
+  - time: "16:00"
+    type: wind_shift
+    severity: moderate
+    duration_hours: 2.0
+    visibility_nm: 5.0
+    ceiling_ft: 2000
+    wind_speed_kt: 28
+    wind_gusts_kt: 42
+    wind_direction: 270
+
+  - time: "18:00"
+    type: clear
+    severity: light
+    duration_hours: 6.0
+    visibility_nm: 10.0
+    ceiling_ft: 4000
+    wind_speed_kt: 15
+    wind_direction: 260
+
+runway_events:
+  - time: "06:00"
+    type: config_change
+    runway_config: "27L_only"
+    duration_minutes: 240
+    reason: CAT IIIb fog ops — single runway only
+
+  - time: "13:00"
+    type: closure
+    runway: "28R"
+    duration_minutes: 30
+    reason: Runway inspection after fog operations
+
+ground_events:
+  - time: "07:00"
+    type: deicing_required
+    duration_hours: 3.0
+    impact:
+      turnaround_multiplier: 1.4
+
+  - time: "09:00"
+    type: gate_failure
+    target: "T5-B3"
+    duration_hours: 2.5
+
+  - time: "14:00"
+    type: fuel_shortage
+    duration_hours: 2.0
+    impact:
+      turnaround_multiplier: 1.2
+
+traffic_modifiers:
+  - time: "06:00"
+    type: surge
+    extra_arrivals: 10
+    extra_departures: 8
+
+  - time: "10:30"
+    type: diversion
+    extra_arrivals: 6
+    diversion_origin: LGW

@@ -1,0 +1,122 @@
+name: SFO Maximum Stress Test
+description: >
+  Worst-case scenario combining multiple simultaneous disruptions.
+  Morning fog, afternoon thunderstorm, diversions, runway closure,
+  gate failures, and ground stop. Tests system resilience under
+  cascading failures. Expect severe degradation across all KPIs.
+
+weather_events:
+  - time: "06:00"
+    type: fog
+    severity: severe
+    duration_hours: 3.0
+    visibility_nm: 0.25
+    ceiling_ft: 200
+    wind_speed_kt: 5
+    wind_direction: 280
+
+  - time: "09:00"
+    type: clear
+    severity: light
+    duration_hours: 4.0
+    visibility_nm: 8.0
+    ceiling_ft: 4000
+    wind_speed_kt: 10
+    wind_direction: 280
+
+  - time: "13:00"
+    type: thunderstorm
+    severity: severe
+    duration_hours: 3.0
+    visibility_nm: 0.5
+    ceiling_ft: 500
+    wind_speed_kt: 30
+    wind_gusts_kt: 50
+    wind_direction: 220
+
+  - time: "16:00"
+    type: thunderstorm
+    severity: moderate
+    duration_hours: 1.0
+    visibility_nm: 2.0
+    ceiling_ft: 1500
+    wind_speed_kt: 20
+    wind_gusts_kt: 35
+    wind_direction: 250
+
+  - time: "17:00"
+    type: clear
+    severity: light
+    duration_hours: 7.0
+    visibility_nm: 10.0
+    ceiling_ft: 6000
+    wind_speed_kt: 12
+    wind_direction: 280
+
+runway_events:
+  - time: "07:00"
+    type: closure
+    runway: "28R"
+    duration_minutes: 120
+    reason: FOD on runway during fog operations
+
+  - time: "13:30"
+    type: closure
+    runway: "28L"
+    duration_minutes: 90
+    reason: Lightning within 3nm of field
+
+  - time: "14:00"
+    type: config_change
+    runway_config: "28R_only"
+    duration_minutes: 60
+    reason: Wind shift requires single-runway ops
+
+ground_events:
+  - time: "08:00"
+    type: gate_failure
+    target: "A3"
+    duration_hours: 4.0
+
+  - time: "12:00"
+    type: gate_failure
+    target: "B5"
+    duration_hours: 3.0
+
+  - time: "13:00"
+    type: gate_failure
+    target: "C1"
+    duration_hours: 2.0
+
+  - time: "06:00"
+    type: deicing_required
+    duration_hours: 3.0
+    impact:
+      turnaround_multiplier: 1.5
+
+  - time: "13:00"
+    type: fuel_shortage
+    duration_hours: 4.0
+    impact:
+      turnaround_multiplier: 1.4
+
+traffic_modifiers:
+  - time: "10:00"
+    type: surge
+    extra_arrivals: 5
+    extra_departures: 3
+
+  - time: "11:00"
+    type: diversion
+    extra_arrivals: 6
+    diversion_origin: OAK
+
+  - time: "13:30"
+    type: ground_stop
+    duration_hours: 2.0
+    extra_departures: 0
+
+  - time: "14:00"
+    type: diversion
+    extra_arrivals: 4
+    diversion_origin: SJC

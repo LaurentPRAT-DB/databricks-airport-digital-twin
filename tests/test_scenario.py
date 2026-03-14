@@ -875,3 +875,284 @@ class TestFlightDynamics:
         # Clean up
         _runway_28R.occupied_by = None
         _flight_states.pop("stuck01", None)
+
+
+# ---------------------------------------------------------------------------
+# TestScenarioRealism — Phase 3: weather types, curfews, wind reversal, 36h, ground stop
+# ---------------------------------------------------------------------------
+class TestScenarioRealism:
+    """Tests for Phase 3 scenario realism improvements."""
+
+    # --- #9: Weather type penalties ---
+
+    def test_sandstorm_penalty_reduces_capacity(self):
+        """Sandstorm weather type should impose extra capacity penalty beyond visibility."""
+        cm = CapacityManager(airport="DXB", runways=["28L", "28R"])
+
+        # Same visibility conditions, different weather types
+        cm.apply_weather(0.25, 200, 50, weather_type=None)
+        base_mult = cm.weather_multiplier
+
+        cm.apply_weather(0.25, 200, 50, weather_type="sandstorm")
+        sand_mult = cm.weather_multiplier
+
+        assert sand_mult < base_mult
+        # Sandstorm penalty is 0.70
+        assert abs(sand_mult - base_mult * 0.70) < 0.01
+
+    def test_smoke_penalty_reduces_capacity(self):
+        """Smoke weather type should impose penalty."""
+        cm = CapacityManager(airport="SYD", runways=["28L", "28R"])
+        cm.apply_weather(1.0, 800, None, weather_type=None)
+        base_mult = cm.weather_multiplier
+
+        cm.apply_weather(1.0, 800, None, weather_type="smoke")
+        smoke_mult = cm.weather_multiplier
+        assert smoke_mult < base_mult
+
+    def test_clear_weather_no_penalty(self):
+        """Clear weather type should not impose additional penalty."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        cm.apply_weather(10.0, 10000, None, weather_type=None)
+        base_mult = cm.weather_multiplier
+
+        cm.apply_weather(10.0, 10000, None, weather_type="clear")
+        clear_mult = cm.weather_multiplier
+        assert clear_mult == base_mult
+
+    def test_all_penalty_types_reduce_capacity(self):
+        """All weather types in WEATHER_TYPE_PENALTY should reduce multiplier."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        for wtype, penalty in CapacityManager.WEATHER_TYPE_PENALTY.items():
+            cm.apply_weather(5.0, 3000, None, weather_type=None)
+            base = cm.weather_multiplier
+            cm.apply_weather(5.0, 3000, None, weather_type=wtype)
+            assert cm.weather_multiplier < base, f"{wtype} should reduce capacity"
+
+    # --- #10: Curfew ---
+
+    def test_curfew_blocks_departures(self):
+        """Departures should be blocked during curfew."""
+        cm = CapacityManager(airport="SYD", runways=["28L", "28R"])
+        cm.add_curfew("23:00", "06:00", max_arrivals_per_hour=2)
+
+        # During curfew (1 AM)
+        curfew_time = datetime(2026, 1, 1, 1, 0)
+        assert cm.is_curfew_active(curfew_time)
+        assert cm.get_departure_rate(curfew_time) == 0
+        assert not cm.can_release_departure(curfew_time)
+
+    def test_curfew_limits_arrivals(self):
+        """Arrivals should be limited during curfew."""
+        cm = CapacityManager(airport="SYD", runways=["28L", "28R"])
+        cm.add_curfew("23:00", "06:00", max_arrivals_per_hour=2)
+
+        curfew_time = datetime(2026, 1, 1, 2, 0)
+        assert cm.get_arrival_rate(curfew_time) == 2
+
+    def test_curfew_inactive_during_day(self):
+        """Curfew should not apply during daytime."""
+        cm = CapacityManager(airport="SYD", runways=["28L", "28R"])
+        cm.add_curfew("23:00", "06:00", max_arrivals_per_hour=2)
+
+        day_time = datetime(2026, 1, 1, 12, 0)
+        assert not cm.is_curfew_active(day_time)
+        assert cm.get_departure_rate(day_time) > 0
+
+    def test_curfew_boundary_23h(self):
+        """Curfew should be active at 23:00."""
+        cm = CapacityManager(airport="NRT", runways=["28L", "28R"])
+        cm.add_curfew("23:00", "06:00", max_arrivals_per_hour=2)
+        assert cm.is_curfew_active(datetime(2026, 1, 1, 23, 0))
+        assert not cm.is_curfew_active(datetime(2026, 1, 1, 22, 59))
+
+    def test_curfew_loaded_from_scenario(self, tmp_path):
+        """Curfew events in scenario YAML should be processed."""
+        from src.simulation.engine import SimulationEngine
+
+        scenario_yaml = {
+            "name": "Curfew Test",
+            "description": "Test curfew loading",
+            "curfew_events": [
+                {"start": "23:00", "end": "06:00", "max_arrivals_per_hour": 3}
+            ],
+        }
+        path = tmp_path / "curfew_test.yaml"
+        path.write_text(yaml.dump(scenario_yaml))
+
+        config = SimulationConfig(
+            airport="SYD", arrivals=5, departures=5, seed=42,
+            duration_hours=1.0, time_step_seconds=5.0,
+            scenario_file=str(path),
+        )
+        engine = SimulationEngine(config)
+
+        assert len(engine.capacity._curfews) == 1
+        curfew_events = [e for e in engine.recorder.scenario_events if e.get("event_type") == "curfew"]
+        assert len(curfew_events) == 1
+
+    # --- #11: Wind reversal ---
+
+    def test_wind_reversal_swaps_runways(self):
+        """Wind shift > 90° from runway heading should swap config."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        cm.configure_runway_reversal()
+
+        assert "28L" in cm.active_runways
+        assert "28R" in cm.active_runways
+
+        # Wind from 100° (opposite of 280° heading) — tailwind!
+        cm.check_wind_reversal(100)
+
+        # Should have swapped to reciprocal runways
+        assert "10R" in cm.active_runways or "10L" in cm.active_runways
+        assert "28L" not in cm.active_runways
+
+    def test_wind_reversal_no_swap_headwind(self):
+        """Wind aligned with runway should not trigger swap."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        cm.configure_runway_reversal()
+
+        # Wind from 290° — close to runway heading 280°
+        cm.check_wind_reversal(290)
+        assert "28L" in cm.active_runways
+
+    def test_wind_reversal_double_swap_returns(self):
+        """Two reversals should return to original config."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        cm.configure_runway_reversal()
+
+        cm.check_wind_reversal(100)  # Swap to 10L/10R
+        cm.check_wind_reversal(280)  # Swap back to 28L/28R
+        assert "28L" in cm.active_runways or "28R" in cm.active_runways
+
+    def test_wind_reversal_unknown_airport_noop(self):
+        """Airports without reversal config should not crash."""
+        cm = CapacityManager(airport="XYZ", runways=["28L", "28R"])
+        cm.configure_runway_reversal()
+        cm.check_wind_reversal(100)  # Should be a no-op
+        assert "28L" in cm.active_runways
+
+    # --- #12: Extended duration ---
+
+    def test_parse_hhmm_beyond_24(self):
+        """Hours >= 24 should wrap to next day."""
+        from src.simulation.scenario import _parse_hhmm
+        base = datetime(2026, 1, 1, 0, 0)
+
+        result = _parse_hhmm("25:30", base)
+        assert result == datetime(2026, 1, 2, 1, 30)
+
+        result = _parse_hhmm("36:00", base)
+        assert result == datetime(2026, 1, 2, 12, 0)
+
+    def test_parse_hhmm_normal(self):
+        """Normal HH:MM should work as before."""
+        from src.simulation.scenario import _parse_hhmm
+        base = datetime(2026, 1, 1, 0, 0)
+
+        result = _parse_hhmm("14:30", base)
+        assert result == datetime(2026, 1, 1, 14, 30)
+
+    def test_36h_config_accepted(self):
+        """SimulationConfig should accept 36h duration."""
+        config = SimulationConfig(
+            airport="SFO", arrivals=10, departures=10,
+            duration_hours=36.0, time_step_seconds=5.0,
+        )
+        assert config.effective_duration_hours() == 36.0
+
+    # --- #13: Gust penalty and ground stop verification ---
+
+    def test_gust_35kt_reduces_capacity(self):
+        """Gusts > 35kt should reduce weather multiplier."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        cm.apply_weather(10.0, 10000, None)
+        vfr_mult = cm.weather_multiplier
+
+        cm.apply_weather(10.0, 10000, 40)
+        gust_mult = cm.weather_multiplier
+
+        assert gust_mult < vfr_mult
+        assert abs(gust_mult - vfr_mult * 0.80) < 0.01
+
+    def test_gust_25kt_mild_reduction(self):
+        """Gusts 25-35kt should apply milder reduction."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        cm.apply_weather(10.0, 10000, None)
+        base = cm.weather_multiplier
+
+        cm.apply_weather(10.0, 10000, 30)
+        assert cm.weather_multiplier == base * 0.90
+
+    def test_ground_stop_blocks_all_departures(self):
+        """Ground stop should block all departures."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        sim_time = datetime(2026, 1, 1, 12, 0)
+
+        assert cm.can_release_departure(sim_time)
+        cm.set_ground_stop(True)
+        assert not cm.can_release_departure(sim_time)
+        assert cm.get_departure_rate(sim_time) == 0
+
+    def test_ground_stop_allows_arrivals(self):
+        """Ground stop should not affect arrivals."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        sim_time = datetime(2026, 1, 1, 12, 0)
+
+        cm.set_ground_stop(True)
+        assert cm.can_accept_arrival(sim_time)
+        assert cm.get_arrival_rate(sim_time) > 0
+
+    def test_ground_stop_lifecycle(self):
+        """Ground stop should be clearable."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        sim_time = datetime(2026, 1, 1, 12, 0)
+
+        cm.set_ground_stop(True)
+        assert cm.ground_stop
+        cm.set_ground_stop(False)
+        assert not cm.ground_stop
+        assert cm.can_release_departure(sim_time)
+
+    def test_ground_stop_expiry_in_engine(self, tmp_path):
+        """Ground stop with duration should auto-expire."""
+        from src.simulation.engine import SimulationEngine
+
+        scenario_yaml = {
+            "name": "Ground Stop Expiry",
+            "description": "Test ground stop auto-clear",
+            "traffic_modifiers": [
+                {"time": "00:30", "type": "ground_stop", "duration_hours": 1.0}
+            ],
+        }
+        path = tmp_path / "gs_expiry.yaml"
+        path.write_text(yaml.dump(scenario_yaml))
+
+        config = SimulationConfig(
+            airport="SFO", arrivals=10, departures=10, seed=42,
+            duration_hours=3.0, time_step_seconds=5.0,
+            scenario_file=str(path),
+        )
+        engine = SimulationEngine(config)
+        recorder = engine.run()
+
+        # Should see both ground stop activation and lift
+        gs_events = [e for e in recorder.scenario_events
+                     if e.get("event_type") == "traffic"]
+        descriptions = [e.get("description", "") for e in gs_events]
+        assert any("ground_stop" in d.lower() or "Ground stop" in d for d in descriptions)
+        assert any("lifted" in d.lower() for d in descriptions)
+
+    def test_scenario_yaml_with_new_weather_types(self):
+        """Scenario files with new weather types should load correctly."""
+        from src.simulation.scenario import load_scenario
+        import os
+        scenarios_dir = os.path.join(os.path.dirname(__file__), "..", "scenarios")
+        for fname in ["dxb_sandstorm.yaml", "syd_bushfire_smoke.yaml"]:
+            path = os.path.join(scenarios_dir, fname)
+            if os.path.exists(path):
+                scenario = load_scenario(path)
+                assert scenario.name
+                for we in scenario.weather_events:
+                    assert we.type  # All weather events have a type

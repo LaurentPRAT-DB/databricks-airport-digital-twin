@@ -1,0 +1,115 @@
+name: JFK Nor'easter Winter Storm — US Northeast
+description: >
+  Classic nor'easter hits the New York metro area. Snow begins early
+  morning, transitions to heavy snow with freezing rain by midday.
+  Wind gusts exceed 50kt from the northeast. FAA issues ground delay
+  program then ground stop. De-icing queues exceed 90 minutes.
+  Realistic for Dec-Mar northeast winter storms.
+
+weather_events:
+  - time: "05:00"
+    type: snow
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 3.0
+    ceiling_ft: 1500
+    wind_speed_kt: 18
+    wind_gusts_kt: 28
+    wind_direction: 040
+
+  - time: "08:00"
+    type: snow
+    severity: severe
+    duration_hours: 4.0
+    visibility_nm: 0.25
+    ceiling_ft: 200
+    wind_speed_kt: 35
+    wind_gusts_kt: 52
+    wind_direction: 030
+
+  - time: "12:00"
+    type: snow
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 0.75
+    ceiling_ft: 500
+    wind_speed_kt: 28
+    wind_gusts_kt: 42
+    wind_direction: 020
+
+  - time: "15:00"
+    type: snow
+    severity: light
+    duration_hours: 2.0
+    visibility_nm: 2.0
+    ceiling_ft: 1200
+    wind_speed_kt: 20
+    wind_gusts_kt: 32
+    wind_direction: 360
+
+  - time: "17:00"
+    type: clear
+    severity: light
+    duration_hours: 7.0
+    visibility_nm: 8.0
+    ceiling_ft: 4000
+    wind_speed_kt: 15
+    wind_direction: 340
+
+runway_events:
+  - time: "06:00"
+    type: closure
+    runway: "28R"
+    duration_minutes: 60
+    reason: Snow removal operations
+
+  - time: "08:30"
+    type: closure
+    runway: "28L"
+    duration_minutes: 210
+    reason: Heavy snow accumulation — both runways closed
+
+  - time: "09:00"
+    type: closure
+    runway: "28R"
+    duration_minutes: 180
+    reason: Plowing and de-icing treatment
+
+ground_events:
+  - time: "05:00"
+    type: deicing_required
+    duration_hours: 12.0
+    impact:
+      turnaround_multiplier: 1.8
+
+  - time: "08:00"
+    type: gate_failure
+    target: "T4-B8"
+    duration_hours: 6.0
+
+  - time: "10:00"
+    type: gate_failure
+    target: "T1-A3"
+    duration_hours: 4.0
+
+  - time: "09:00"
+    type: taxiway_closure
+    target: "Taxiway A (snow/ice)"
+    duration_hours: 5.0
+    impact:
+      turnaround_multiplier: 1.5
+
+traffic_modifiers:
+  - time: "07:00"
+    type: surge
+    extra_arrivals: 6
+    extra_departures: 4
+
+  - time: "10:00"
+    type: diversion
+    extra_arrivals: 10
+    diversion_origin: EWR
+
+  - time: "11:00"
+    type: ground_stop
+    duration_hours: 3.0

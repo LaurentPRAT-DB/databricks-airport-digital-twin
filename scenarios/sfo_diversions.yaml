@@ -1,0 +1,44 @@
+name: SFO Diversion Surge — OAK Closure
+description: >
+  Oakland (OAK) closes due to runway construction starting 11:00.
+  12 OAK-bound flights divert to SFO over 2 hours.
+  Gate B7 fails at 12:00 for 2 hours. Turnaround times increase
+  due to ground congestion. Tests gate pressure and ground handling.
+
+weather_events:
+  - time: "00:00"
+    type: clear
+    severity: light
+    duration_hours: 24.0
+    visibility_nm: 10.0
+    ceiling_ft: 8000
+    wind_speed_kt: 10
+    wind_direction: 280
+
+traffic_modifiers:
+  - time: "11:00"
+    type: diversion
+    extra_arrivals: 4
+    diversion_origin: OAK
+
+  - time: "11:30"
+    type: diversion
+    extra_arrivals: 4
+    diversion_origin: OAK
+
+  - time: "12:00"
+    type: diversion
+    extra_arrivals: 4
+    diversion_origin: OAK
+
+ground_events:
+  - time: "12:00"
+    type: gate_failure
+    target: "B7"
+    duration_hours: 2.0
+
+  - time: "11:00"
+    type: fuel_shortage
+    duration_hours: 3.0
+    impact:
+      turnaround_multiplier: 1.3

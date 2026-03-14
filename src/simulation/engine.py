@@ -97,7 +97,9 @@ class SimulationEngine:
         self._scenario_event_idx = 0
         self._active_weather_event = None  # currently active weather override
         self._weather_event_expires: datetime | None = None
+        self._ground_stop_expires: datetime | None = None
         self.capacity = CapacityManager(airport=config.airport, runways=["28L", "28R"])
+        self.capacity.configure_runway_reversal()
         self._holding_flights: set[str] = set()  # flights delayed by capacity
         self._spawn_times: dict[int, datetime] = {}  # schedule_idx -> actual spawn time
 
@@ -110,6 +112,18 @@ class SimulationEngine:
                 self.scenario.name,
                 len(self.scenario_timeline),
             )
+
+        # Apply curfews from scenario (static, not time-triggered)
+        if self.scenario:
+            for curfew in self.scenario.curfew_events:
+                self.capacity.add_curfew(
+                    curfew.start, curfew.end, curfew.max_arrivals_per_hour
+                )
+                self.recorder.record_scenario_event(
+                    self.sim_time, "curfew",
+                    f"Curfew active {curfew.start}-{curfew.end} (max {curfew.max_arrivals_per_hour} arr/hr)",
+                    {"start": curfew.start, "end": curfew.end},
+                )
 
         # Flight state — we reuse the global state from fallback.py
         # but reset it first to get a clean simulation
@@ -376,8 +390,11 @@ class SimulationEngine:
             if event.event_type == "weather":
                 we = event.event
                 self.capacity.apply_weather(
-                    we.visibility_nm, we.ceiling_ft, we.wind_gusts_kt
+                    we.visibility_nm, we.ceiling_ft, we.wind_gusts_kt,
+                    weather_type=we.type,
                 )
+                if we.wind_direction is not None:
+                    self.capacity.check_wind_reversal(we.wind_direction)
                 self._active_weather_event = we
                 self._weather_event_expires = event.time + timedelta(hours=we.duration_hours)
                 self.recorder.record_scenario_event(
@@ -426,11 +443,21 @@ class SimulationEngine:
                 tm = event.event
                 if tm.type == "ground_stop":
                     self.capacity.set_ground_stop(True)
+                    if tm.duration_hours:
+                        self._ground_stop_expires = event.time + timedelta(hours=tm.duration_hours)
                     self.recorder.record_scenario_event(
                         self.sim_time, "traffic", event.description,
                     )
 
             logger.info("[%s] Scenario: %s", self.sim_time.strftime("%H:%M"), event.description)
+
+        # Check if ground stop has expired
+        if self._ground_stop_expires and self.sim_time >= self._ground_stop_expires:
+            self.capacity.set_ground_stop(False)
+            self._ground_stop_expires = None
+            self.recorder.record_scenario_event(
+                self.sim_time, "traffic", "Ground stop lifted",
+            )
 
         # Check if active weather has expired
         if self._active_weather_event and self._weather_event_expires:

@@ -15,7 +15,7 @@ class WeatherEvent(BaseModel):
     """A weather disruption event."""
 
     time: str  # "HH:MM" within sim day
-    type: str  # thunderstorm | fog | snow | wind_shift | clear
+    type: str  # thunderstorm | fog | snow | wind_shift | clear | sandstorm | dust | smoke | haze | rain | freezing_rain | ice_pellets
     severity: str  # light | moderate | severe
     duration_hours: float
     visibility_nm: float | None = None
@@ -46,6 +46,19 @@ class GroundEvent(BaseModel):
     impact: dict | None = None
 
 
+class CurfewEvent(BaseModel):
+    """A noise curfew restricting operations during certain hours.
+
+    Real-world examples: SYD 23:00-06:00, NRT 23:00-06:00, FRA 23:00-05:00.
+    During curfew, no departures and severely limited arrivals (emergency only).
+    """
+
+    start: str  # "HH:MM" — curfew begins
+    end: str    # "HH:MM" — curfew ends
+    allow_emergency_arrivals: bool = True  # Allow a trickle of arrivals
+    max_arrivals_per_hour: int = 2  # Emergency-only arrival rate during curfew
+
+
 class TrafficModifier(BaseModel):
     """A traffic injection event (surge, diversion, cancellation, ground stop)."""
 
@@ -55,6 +68,7 @@ class TrafficModifier(BaseModel):
     extra_arrivals: int = 0
     extra_departures: int = 0
     diversion_origin: str | None = None
+    duration_hours: float | None = None  # For ground_stop: how long it lasts
 
 
 class SimulationScenario(BaseModel):
@@ -66,6 +80,7 @@ class SimulationScenario(BaseModel):
     weather_events: list[WeatherEvent] = Field(default_factory=list)
     runway_events: list[RunwayEvent] = Field(default_factory=list)
     ground_events: list[GroundEvent] = Field(default_factory=list)
+    curfew_events: list[CurfewEvent] = Field(default_factory=list)
     traffic_modifiers: list[TrafficModifier] = Field(default_factory=list)
 
 
@@ -87,9 +102,19 @@ def load_scenario(path: str) -> SimulationScenario:
 
 
 def _parse_hhmm(time_str: str, base_date: datetime) -> datetime:
-    """Convert 'HH:MM' to absolute datetime using base_date's date."""
+    """Convert 'HH:MM' to absolute datetime using base_date's date.
+
+    Supports hours >= 24 for multi-day scenarios (e.g. '25:30' = 01:30 next day,
+    '36:00' = 12:00 next day). This follows the aviation convention where
+    schedules extending past midnight use 24+ hour notation.
+    """
     h, m = map(int, time_str.split(":"))
-    return base_date.replace(hour=h, minute=m, second=0, microsecond=0)
+    extra_days = h // 24
+    h = h % 24
+    result = base_date.replace(hour=h, minute=m, second=0, microsecond=0)
+    if extra_days:
+        result += timedelta(days=extra_days)
+    return result
 
 
 def _describe_weather(e: WeatherEvent) -> str:

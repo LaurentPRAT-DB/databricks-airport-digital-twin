@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useFlightContext } from '../../context/FlightContext';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import PlatformLinks from '../PlatformLinks/PlatformLinks';
@@ -7,9 +8,10 @@ import AirportSwitchProgress from '../AirportSelector/AirportSwitchProgress';
 
 interface HeaderProps {
   onShowFIDS?: () => void;
+  simulationControls?: ReactNode;
 }
 
-export default function Header({ onShowFIDS }: HeaderProps) {
+export default function Header({ onShowFIDS, simulationControls }: HeaderProps) {
   const { flights, isLoading, error, lastUpdated, dataSource } = useFlightContext();
   const { currentAirport, isLoading: isLoadingAirport, loadAirport, switchProgress } = useAirportConfigContext();
 
@@ -55,6 +57,9 @@ export default function Header({ onShowFIDS }: HeaderProps) {
       <div className="flex items-center gap-6">
         {/* Weather Widget */}
         <WeatherWidget />
+
+        {/* Simulation Controls */}
+        {simulationControls}
 
         {/* FIDS Button */}
         {onShowFIDS && (

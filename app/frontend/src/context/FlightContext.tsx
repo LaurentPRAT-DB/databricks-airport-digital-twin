@@ -11,13 +11,23 @@ interface FlightContextType {
   isLoading: boolean;
   error: Error | null;
   lastUpdated: string | null;
-  dataSource: 'live' | 'cached' | 'synthetic' | null;
+  dataSource: 'live' | 'cached' | 'synthetic' | 'simulation' | null;
 }
 
 const FlightContext = createContext<FlightContextType | null>(null);
 
-export function FlightProvider({ children }: { children: ReactNode }) {
-  const { flights, isLoading, error, lastUpdated, dataSource } = useFlights();
+export function FlightProvider({
+  children,
+  simulationFlights,
+}: {
+  children: ReactNode;
+  simulationFlights?: Flight[] | null;
+}) {
+  const { flights: liveFlights, isLoading, error, lastUpdated, dataSource: liveDataSource } = useFlights();
+
+  // Use simulation flights when provided, otherwise live
+  const flights = simulationFlights ?? liveFlights;
+  const dataSource = simulationFlights ? 'simulation' as const : liveDataSource;
   // Store selection by icao24 ID so it persists across data refreshes
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   // Trajectory display toggle
