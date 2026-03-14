@@ -91,14 +91,10 @@ async def _background_init(app: FastAPI):
             logger.warning("INIT |   Lakebase: NOT AVAILABLE — synthetic data only")
 
         delta = get_delta_service()
-        try:
-            delta_flights = delta.get_flights(limit=1)
-            if delta_flights:
-                logger.info(f"INIT |   Delta tables (Unity Catalog): CONNECTED, has flight data")
-            else:
-                logger.info(f"INIT |   Delta tables (Unity Catalog): CONNECTED, no flight data yet")
-        except Exception as e:
-            logger.info(f"INIT |   Delta tables (Unity Catalog): NOT AVAILABLE ({type(e).__name__})")
+        if delta.is_available:
+            logger.info(f"INIT |   Delta tables (Unity Catalog): configured (host={os.getenv('DATABRICKS_HOST', 'n/a')})")
+        else:
+            logger.info("INIT |   Delta tables (Unity Catalog): NOT CONFIGURED")
 
         logger.info("-" * 70)
 
