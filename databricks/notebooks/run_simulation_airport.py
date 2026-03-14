@@ -126,6 +126,73 @@ else:
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Upload to Unity Catalog Volume
+
+# COMMAND ----------
+
+UC_CATALOG = "serverless_stable_3n0ihb_catalog"
+UC_SCHEMA = "airport_digital_twin"
+UC_VOLUME = "simulation_data"
+VOLUME_PATH = f"/Volumes/{UC_CATALOG}/{UC_SCHEMA}/{UC_VOLUME}"
+
+if os.path.isfile(output_path):
+    import shutil
+    dest = f"{VOLUME_PATH}/{os.path.basename(output_file)}"
+    # UC Volumes are FUSE-mounted on serverless — use shutil directly
+    os.makedirs(VOLUME_PATH, exist_ok=True)
+    shutil.copy2(output_path, dest)
+    print(f"Uploaded to UC Volume: {dest}")
+
+    # Remove the workspace-local JSON to keep bundle dir under app snapshot size limit
+    os.remove(output_path)
+    print(f"Removed workspace copy: {output_path}")
+
+    # Insert metadata row (MERGE to avoid duplicates on re-runs)
+    # Get size from the Volume copy (local was already removed)
+    size_bytes = os.path.getsize(dest)
+    fname = os.path.basename(output_file)
+    scenario_name = summary.get("scenario_name", "").replace("'", "''")
+
+    merge_sql = f"""
+    MERGE INTO {UC_CATALOG}.{UC_SCHEMA}.simulation_runs AS target
+    USING (SELECT '{fname}' AS filename) AS source
+    ON target.filename = source.filename
+    WHEN MATCHED THEN UPDATE SET
+        airport = '{airport}',
+        scenario_name = '{scenario_name}',
+        total_flights = {summary.get('total_flights', 0)},
+        arrivals = {summary.get('arrivals', 0)},
+        departures = {summary.get('departures', 0)},
+        duration_hours = {config.get('duration_hours', 0)},
+        on_time_pct = {summary.get('on_time_pct', 0)},
+        cancellation_rate_pct = {summary.get('cancellation_rate_pct', 0)},
+        peak_simultaneous_flights = {summary.get('peak_simultaneous_flights', 0)},
+        total_go_arounds = {summary.get('total_go_arounds', 0)},
+        total_diversions = {summary.get('total_diversions', 0)},
+        size_bytes = {size_bytes},
+        created_at = CURRENT_TIMESTAMP(),
+        volume_path = '{dest}'
+    WHEN NOT MATCHED THEN INSERT (
+        filename, airport, scenario_name, total_flights, arrivals, departures,
+        duration_hours, on_time_pct, cancellation_rate_pct, peak_simultaneous_flights,
+        total_go_arounds, total_diversions, size_bytes, created_at, volume_path
+    ) VALUES (
+        '{fname}', '{airport}', '{scenario_name}',
+        {summary.get('total_flights', 0)}, {summary.get('arrivals', 0)},
+        {summary.get('departures', 0)}, {config.get('duration_hours', 0)},
+        {summary.get('on_time_pct', 0)}, {summary.get('cancellation_rate_pct', 0)},
+        {summary.get('peak_simultaneous_flights', 0)}, {summary.get('total_go_arounds', 0)},
+        {summary.get('total_diversions', 0)}, {size_bytes}, CURRENT_TIMESTAMP(), '{dest}'
+    )
+    """
+    spark.sql(merge_sql)
+    print(f"Metadata inserted into {UC_CATALOG}.{UC_SCHEMA}.simulation_runs")
+else:
+    print("Skipping UC upload — no output file")
+
+# COMMAND ----------
+
 # Exit with status
 success = result.returncode == 0
 dbutils.notebook.exit(json.dumps({

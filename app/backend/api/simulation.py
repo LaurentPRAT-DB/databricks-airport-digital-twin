@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -13,11 +14,15 @@ simulation_router = APIRouter(prefix="/api/simulation", tags=["simulation"])
 # Look for simulation output files in the project root
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
+# UC coordinates (read from env, same as DeltaService)
+_UC_CATALOG = os.getenv("DATABRICKS_CATALOG", "serverless_stable_3n0ihb_catalog")
+_UC_SCHEMA = os.getenv("DATABRICKS_SCHEMA", "airport_digital_twin")
+_UC_VOLUME = "simulation_data"
 
-def _find_simulation_files() -> list[dict]:
-    """Scan for simulation JSON files in the project root and simulation_output/ dir."""
+
+def _find_simulation_files_local() -> list[dict]:
+    """Scan for simulation JSON files on the local filesystem."""
     files = []
-    # Look in both project root (simulation_output_*.json) and simulation_output/ dir
     candidates = sorted(PROJECT_ROOT.glob("simulation_output_*.json"))
     sim_output_dir = PROJECT_ROOT / "simulation_output"
     if sim_output_dir.is_dir():
@@ -43,10 +48,110 @@ def _find_simulation_files() -> list[dict]:
     return files
 
 
+def _find_simulation_files_from_catalog() -> list[dict] | None:
+    """Query simulation_runs table in Unity Catalog for file listing."""
+    try:
+        from databricks import sql
+    except ImportError:
+        return None
+
+    host = os.getenv("DATABRICKS_HOST") or os.getenv("DATABRICKS_SERVER_HOSTNAME")
+    http_path = os.getenv("DATABRICKS_HTTP_PATH") or os.getenv("DATABRICKS_WAREHOUSE_HTTP_PATH")
+    use_oauth = os.getenv("DATABRICKS_USE_OAUTH", "false").lower() == "true"
+    token = os.getenv("DATABRICKS_TOKEN") or os.getenv("DATABRICKS_ACCESS_TOKEN")
+
+    if not (host and http_path):
+        return None
+
+    conn_params: dict = {
+        "server_hostname": host,
+        "http_path": http_path,
+        "catalog": _UC_CATALOG,
+        "schema": _UC_SCHEMA,
+    }
+    if use_oauth:
+        conn_params["credentials_provider"] = None
+    elif token:
+        conn_params["access_token"] = token
+
+    try:
+        with sql.connect(**conn_params) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(f"""
+                    SELECT filename, airport, scenario_name, total_flights,
+                           arrivals, departures, duration_hours, size_bytes,
+                           volume_path
+                    FROM {_UC_CATALOG}.{_UC_SCHEMA}.simulation_runs
+                    ORDER BY created_at DESC
+                """)
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+                files = []
+                for row in rows:
+                    r = dict(zip(columns, row))
+                    files.append({
+                        "filename": r["filename"],
+                        "airport": r["airport"],
+                        "total_flights": r["total_flights"] or 0,
+                        "arrivals": r["arrivals"] or 0,
+                        "departures": r["departures"] or 0,
+                        "duration_hours": r["duration_hours"] or 0,
+                        "size_kb": round((r["size_bytes"] or 0) / 1024, 1),
+                        "scenario_name": r["scenario_name"],
+                        "volume_path": r["volume_path"],
+                    })
+                logger.info(f"Catalog returned {len(files)} simulation files")
+                return files
+    except Exception as e:
+        logger.warning(f"Failed to query simulation_runs table: {e}")
+        return None
+
+
+def _load_simulation_from_volume(filename: str) -> dict | None:
+    """Read simulation JSON from UC Volume via the Databricks SDK."""
+    try:
+        from databricks.sdk import WorkspaceClient
+    except ImportError:
+        return None
+
+    volume_path = f"/Volumes/{_UC_CATALOG}/{_UC_SCHEMA}/{_UC_VOLUME}/{filename}"
+    try:
+        w = WorkspaceClient()
+        resp = w.files.download(volume_path)
+        data = json.loads(resp.contents.read())
+        logger.info(f"Loaded {filename} from UC Volume")
+        return data
+    except Exception as e:
+        logger.warning(f"Failed to read {filename} from UC Volume: {e}")
+        return None
+
+
+def _load_simulation_local(filename: str) -> dict | None:
+    """Read simulation JSON from local filesystem."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        return None
+
+    filepath = PROJECT_ROOT / filename
+    if not filepath.exists():
+        filepath = PROJECT_ROOT / "simulation_output" / filename
+    if not filepath.exists() or not filepath.name.startswith("simulation"):
+        return None
+
+    try:
+        with open(filepath) as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning(f"Failed to read local file {filename}: {e}")
+        return None
+
+
 @simulation_router.get("/files")
 async def list_simulation_files() -> dict:
     """List available simulation output files."""
-    files = _find_simulation_files()
+    # Try catalog first (works in deployed app), fall back to local filesystem
+    files = _find_simulation_files_from_catalog()
+    if files is None:
+        files = _find_simulation_files_local()
     return {"files": files, "count": len(files)}
 
 
@@ -66,18 +171,12 @@ async def get_simulation_data(
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    filepath = PROJECT_ROOT / filename
-    # Also check simulation_output/ subdirectory
-    if not filepath.exists():
-        filepath = PROJECT_ROOT / "simulation_output" / filename
-    if not filepath.exists() or not filepath.name.startswith("simulation"):
+    # Try UC Volume first, fall back to local
+    data = _load_simulation_from_volume(filename)
+    if data is None:
+        data = _load_simulation_local(filename)
+    if data is None:
         raise HTTPException(status_code=404, detail=f"Simulation file not found: {filename}")
-
-    try:
-        with open(filepath) as f:
-            data = json.load(f)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read simulation file: {e}")
 
     config = data.get("config", {})
     summary = data.get("summary", {})
