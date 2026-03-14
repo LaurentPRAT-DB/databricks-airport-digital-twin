@@ -609,6 +609,142 @@ DEPARTURE_WAYPOINTS = [
     (-122.10, 37.55, 8000),
 ]
 
+# ============================================================================
+# AIRPORT OFFSET — shift SFO coordinates to target airport
+# ============================================================================
+# In standalone CLI mode (no OSM data), all coordinates are SFO-based.
+# apply_airport_offset() shifts them to center on any target airport.
+
+_SFO_CENTER = (37.6213, -122.379)
+
+# Save originals for reset
+_ORIG_DEFAULT_GATES = dict(_DEFAULT_GATES)
+_ORIG_RUNWAY_28L_THRESHOLD = RUNWAY_28L_THRESHOLD
+_ORIG_RUNWAY_10R_THRESHOLD = RUNWAY_10R_THRESHOLD
+_ORIG_RUNWAY_28R_THRESHOLD = RUNWAY_28R_THRESHOLD
+_ORIG_RUNWAY_10L_THRESHOLD = RUNWAY_10L_THRESHOLD
+_ORIG_RUNWAY_01L_THRESHOLD = RUNWAY_01L_THRESHOLD
+_ORIG_RUNWAY_19R_THRESHOLD = RUNWAY_19R_THRESHOLD
+_ORIG_RUNWAY_01R_THRESHOLD = RUNWAY_01R_THRESHOLD
+_ORIG_RUNWAY_19L_THRESHOLD = RUNWAY_19L_THRESHOLD
+_ORIG_TERMINAL_CENTER = TERMINAL_CENTER
+_ORIG_TAXI_WAYPOINTS_ARRIVAL = list(TAXI_WAYPOINTS_ARRIVAL)
+_ORIG_TAXI_WAYPOINTS_DEPARTURE = list(TAXI_WAYPOINTS_DEPARTURE)
+_ORIG_APPROACH_WAYPOINTS = list(APPROACH_WAYPOINTS)
+_ORIG_DEPARTURE_WAYPOINTS = list(DEPARTURE_WAYPOINTS)
+_ORIG_RWY_28L_LAT = _RWY_28L_LAT
+_ORIG_RWY_28L_LON = _RWY_28L_LON
+_ORIG_RWY_28R_LAT = _RWY_28R_LAT
+_ORIG_RWY_28R_LON = _RWY_28R_LON
+_ORIG_RWY_10R_LAT = _RWY_10R_LAT
+_ORIG_RWY_10R_LON = _RWY_10R_LON
+
+
+def apply_airport_offset(target_lat: float, target_lon: float) -> None:
+    """Offset all hardcoded SFO coordinates to center on the target airport.
+
+    Called by the simulation engine for non-SFO airports in standalone mode
+    (no OSM data available). Preserves the realistic relative layout (gate
+    spacing, runway angles, taxi routing) while centering at the target airport.
+    """
+    global _DEFAULT_GATES, GATES
+    global RUNWAY_28L_THRESHOLD, RUNWAY_10R_THRESHOLD
+    global RUNWAY_28R_THRESHOLD, RUNWAY_10L_THRESHOLD
+    global RUNWAY_01L_THRESHOLD, RUNWAY_19R_THRESHOLD
+    global RUNWAY_01R_THRESHOLD, RUNWAY_19L_THRESHOLD
+    global RUNWAY_28L_WEST, RUNWAY_28L_EAST, RUNWAY_28R_WEST, RUNWAY_28R_EAST
+    global TERMINAL_CENTER
+    global TAXI_WAYPOINTS_ARRIVAL, TAXI_WAYPOINTS_DEPARTURE
+    global APPROACH_WAYPOINTS, DEPARTURE_WAYPOINTS
+    global _RWY_28L_LAT, _RWY_28L_LON, _RWY_28R_LAT, _RWY_28R_LON
+    global _RWY_10R_LAT, _RWY_10R_LON
+
+    lat_off = target_lat - _SFO_CENTER[0]
+    lon_off = target_lon - _SFO_CENTER[1]
+
+    # Gates: {ref: (lat, lon)}
+    _DEFAULT_GATES = {k: (v[0] + lat_off, v[1] + lon_off) for k, v in _ORIG_DEFAULT_GATES.items()}
+    GATES = _DEFAULT_GATES
+
+    # Runways: (lon, lat)
+    RUNWAY_28L_THRESHOLD = (_ORIG_RUNWAY_28L_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_28L_THRESHOLD[1] + lat_off)
+    RUNWAY_10R_THRESHOLD = (_ORIG_RUNWAY_10R_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_10R_THRESHOLD[1] + lat_off)
+    RUNWAY_28R_THRESHOLD = (_ORIG_RUNWAY_28R_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_28R_THRESHOLD[1] + lat_off)
+    RUNWAY_10L_THRESHOLD = (_ORIG_RUNWAY_10L_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_10L_THRESHOLD[1] + lat_off)
+    RUNWAY_01L_THRESHOLD = (_ORIG_RUNWAY_01L_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_01L_THRESHOLD[1] + lat_off)
+    RUNWAY_19R_THRESHOLD = (_ORIG_RUNWAY_19R_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_19R_THRESHOLD[1] + lat_off)
+    RUNWAY_01R_THRESHOLD = (_ORIG_RUNWAY_01R_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_01R_THRESHOLD[1] + lat_off)
+    RUNWAY_19L_THRESHOLD = (_ORIG_RUNWAY_19L_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_19L_THRESHOLD[1] + lat_off)
+
+    # Legacy aliases
+    RUNWAY_28L_WEST = RUNWAY_28L_THRESHOLD
+    RUNWAY_28L_EAST = RUNWAY_10R_THRESHOLD
+    RUNWAY_28R_WEST = RUNWAY_28R_THRESHOLD
+    RUNWAY_28R_EAST = RUNWAY_10L_THRESHOLD
+
+    # Terminal center: (lat, lon)
+    TERMINAL_CENTER = (_ORIG_TERMINAL_CENTER[0] + lat_off, _ORIG_TERMINAL_CENTER[1] + lon_off)
+
+    # Taxi waypoints: [(lon, lat), ...]
+    TAXI_WAYPOINTS_ARRIVAL = [(wp[0] + lon_off, wp[1] + lat_off) for wp in _ORIG_TAXI_WAYPOINTS_ARRIVAL]
+    TAXI_WAYPOINTS_DEPARTURE = [(wp[0] + lon_off, wp[1] + lat_off) for wp in _ORIG_TAXI_WAYPOINTS_DEPARTURE]
+
+    # Approach/departure: [(lon, lat, alt), ...]
+    APPROACH_WAYPOINTS = [(wp[0] + lon_off, wp[1] + lat_off, wp[2]) for wp in _ORIG_APPROACH_WAYPOINTS]
+    DEPARTURE_WAYPOINTS = [(wp[0] + lon_off, wp[1] + lat_off, wp[2]) for wp in _ORIG_DEPARTURE_WAYPOINTS]
+
+    # Individual runway coordinate floats
+    _RWY_28L_LAT = _ORIG_RWY_28L_LAT + lat_off
+    _RWY_28L_LON = _ORIG_RWY_28L_LON + lon_off
+    _RWY_28R_LAT = _ORIG_RWY_28R_LAT + lat_off
+    _RWY_28R_LON = _ORIG_RWY_28R_LON + lon_off
+    _RWY_10R_LAT = _ORIG_RWY_10R_LAT + lat_off
+    _RWY_10R_LON = _ORIG_RWY_10R_LON + lon_off
+
+
+def reset_airport_offset() -> None:
+    """Restore all coordinates to their original SFO values.
+
+    Called for test isolation and when switching back to SFO.
+    """
+    global _DEFAULT_GATES, GATES
+    global RUNWAY_28L_THRESHOLD, RUNWAY_10R_THRESHOLD
+    global RUNWAY_28R_THRESHOLD, RUNWAY_10L_THRESHOLD
+    global RUNWAY_01L_THRESHOLD, RUNWAY_19R_THRESHOLD
+    global RUNWAY_01R_THRESHOLD, RUNWAY_19L_THRESHOLD
+    global RUNWAY_28L_WEST, RUNWAY_28L_EAST, RUNWAY_28R_WEST, RUNWAY_28R_EAST
+    global TERMINAL_CENTER
+    global TAXI_WAYPOINTS_ARRIVAL, TAXI_WAYPOINTS_DEPARTURE
+    global APPROACH_WAYPOINTS, DEPARTURE_WAYPOINTS
+    global _RWY_28L_LAT, _RWY_28L_LON, _RWY_28R_LAT, _RWY_28R_LON
+    global _RWY_10R_LAT, _RWY_10R_LON
+
+    _DEFAULT_GATES = dict(_ORIG_DEFAULT_GATES)
+    GATES = _DEFAULT_GATES
+    RUNWAY_28L_THRESHOLD = _ORIG_RUNWAY_28L_THRESHOLD
+    RUNWAY_10R_THRESHOLD = _ORIG_RUNWAY_10R_THRESHOLD
+    RUNWAY_28R_THRESHOLD = _ORIG_RUNWAY_28R_THRESHOLD
+    RUNWAY_10L_THRESHOLD = _ORIG_RUNWAY_10L_THRESHOLD
+    RUNWAY_01L_THRESHOLD = _ORIG_RUNWAY_01L_THRESHOLD
+    RUNWAY_19R_THRESHOLD = _ORIG_RUNWAY_19R_THRESHOLD
+    RUNWAY_01R_THRESHOLD = _ORIG_RUNWAY_01R_THRESHOLD
+    RUNWAY_19L_THRESHOLD = _ORIG_RUNWAY_19L_THRESHOLD
+    RUNWAY_28L_WEST = RUNWAY_28L_THRESHOLD
+    RUNWAY_28L_EAST = RUNWAY_10R_THRESHOLD
+    RUNWAY_28R_WEST = RUNWAY_28R_THRESHOLD
+    RUNWAY_28R_EAST = RUNWAY_10L_THRESHOLD
+    TERMINAL_CENTER = _ORIG_TERMINAL_CENTER
+    TAXI_WAYPOINTS_ARRIVAL = list(_ORIG_TAXI_WAYPOINTS_ARRIVAL)
+    TAXI_WAYPOINTS_DEPARTURE = list(_ORIG_TAXI_WAYPOINTS_DEPARTURE)
+    APPROACH_WAYPOINTS = list(_ORIG_APPROACH_WAYPOINTS)
+    DEPARTURE_WAYPOINTS = list(_ORIG_DEPARTURE_WAYPOINTS)
+    _RWY_28L_LAT = _ORIG_RWY_28L_LAT
+    _RWY_28L_LON = _ORIG_RWY_28L_LON
+    _RWY_28R_LAT = _ORIG_RWY_28R_LAT
+    _RWY_28R_LON = _ORIG_RWY_28R_LON
+    _RWY_10R_LAT = _ORIG_RWY_10R_LAT
+    _RWY_10R_LON = _ORIG_RWY_10R_LON
+
 
 def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     """Get approach waypoints aligned with the actual runway.

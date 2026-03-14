@@ -44,6 +44,8 @@ from src.ingestion.fallback import (
     _DEFAULT_GATES,
     APPROACH_WAYPOINTS,
     DEPARTURE_WAYPOINTS,
+    apply_airport_offset,
+    reset_airport_offset,
 )
 from src.ingestion.schedule_generator import (
     AIRPORT_COORDINATES,
@@ -56,6 +58,7 @@ from src.ingestion.schedule_generator import (
     _select_aircraft,
     _generate_delay,
     _get_flights_per_hour,
+    set_traffic_airport,
 )
 from src.ingestion.weather_generator import generate_metar
 from src.ingestion.baggage_generator import generate_bags_for_flight
@@ -98,7 +101,9 @@ class SimulationEngine:
         self._active_weather_event = None  # currently active weather override
         self._weather_event_expires: datetime | None = None
         self._ground_stop_expires: datetime | None = None
-        self.capacity = CapacityManager(airport=config.airport, runways=["28L", "28R"])
+        # Derive runway list from scenario if it references specific runways
+        runways = self._derive_runways_from_scenario(config)
+        self.capacity = CapacityManager(airport=config.airport, runways=runways)
         self.capacity.configure_runway_reversal()
         self._holding_flights: set[str] = set()  # flights delayed by capacity
         self._spawn_times: dict[int, datetime] = {}  # schedule_idx -> actual spawn time
@@ -124,6 +129,14 @@ class SimulationEngine:
                     f"Curfew active {curfew.start}-{curfew.end} (max {curfew.max_arrivals_per_hour} arr/hr)",
                     {"start": curfew.start, "end": curfew.end},
                 )
+
+        # Set traffic profile based on airport characteristics (derived, not hardcoded)
+        has_curfew = bool(self.scenario and self.scenario.curfew_events)
+        set_traffic_airport(
+            config.airport,
+            runway_count=len(self.capacity.all_runways),
+            has_curfew=has_curfew,
+        )
 
         # Flight state — we reuse the global state from fallback.py
         # but reset it first to get a clean simulation
@@ -166,6 +179,26 @@ class SimulationEngine:
             "landing": 120.0,         # 2 min max landing
         }
 
+    @staticmethod
+    def _derive_runways_from_scenario(config: SimulationConfig) -> list[str] | None:
+        """Extract runway names from scenario runway_events.
+
+        If the scenario references specific runways (closures, config changes),
+        use those as the airport's runway set. Otherwise return None to let
+        CapacityManager use its default.
+        """
+        if not config.scenario_file:
+            return None
+        try:
+            scenario = load_scenario(config.scenario_file)
+        except Exception:
+            return None
+        rwy_names: set[str] = set()
+        for re_evt in scenario.runway_events:
+            if re_evt.runway:
+                rwy_names.add(re_evt.runway)
+        return sorted(rwy_names) if rwy_names else None
+
     def _setup_airport(self) -> None:
         """Configure airport center coordinates."""
         iata = self.config.airport
@@ -199,21 +232,32 @@ class SimulationEngine:
         # Reset gate cache so simulation uses default gates
         _fb._loaded_gates = None
 
-        # Patch approach/departure waypoint functions to use hardcoded SFO
-        # fallbacks when no OSM runway data is available (standalone sim).
+        # Offset SFO coordinates to target airport (standalone CLI mode)
+        iata = self.config.airport
+        if iata in AIRPORT_COORDINATES:
+            lat, lon = AIRPORT_COORDINATES[iata]
+        else:
+            lat, lon = get_airport_center()
+        if iata != "SFO":
+            apply_airport_offset(lat, lon)
+        else:
+            reset_airport_offset()
+
+        # Patch approach/departure waypoint functions to use hardcoded
+        # (possibly offset) fallbacks when no OSM runway data is available.
         _orig_approach = _fb._get_approach_waypoints
         _orig_departure = _fb._get_departure_waypoints
 
         def _sim_approach_waypoints(origin_iata=None):
             result = _orig_approach(origin_iata)
             if not result:
-                return list(APPROACH_WAYPOINTS)
+                return list(_fb.APPROACH_WAYPOINTS)
             return result
 
         def _sim_departure_waypoints(destination_iata=None):
             result = _orig_departure(destination_iata)
             if not result:
-                return list(DEPARTURE_WAYPOINTS)
+                return list(_fb.DEPARTURE_WAYPOINTS)
             return result
 
         _fb._get_approach_waypoints = _sim_approach_waypoints
@@ -746,6 +790,77 @@ class SimulationEngine:
              "reason": "runway_closure" if not self.capacity.active_runways else "go_around_limit"},
         )
 
+    def _proactive_cancel(self) -> None:
+        """Pre-cancel departures when severe weather is forecast within 2 hours.
+
+        Airlines proactively cancel 10-20% of departures before severe weather
+        to avoid stranding aircraft/passengers. Real-world: airlines start cancelling
+        6-12h before major storms, but in sim timescale we look 2h ahead.
+        """
+        if not self.scenario_timeline:
+            return
+        # Look ahead 2 sim-hours for severe weather
+        lookahead = self.sim_time + timedelta(hours=2)
+        severe_incoming = False
+        for evt in self.scenario_timeline[self._scenario_event_idx:]:
+            if evt.time > lookahead:
+                break
+            if evt.event_type == "weather" and evt.event.severity == "severe":
+                severe_incoming = True
+                break
+
+        if not severe_incoming:
+            return
+
+        # Cancel ~15% of unspawned departures in the next 2 hours
+        cancelled = 0
+        for idx, flight in enumerate(self.flight_schedule):
+            if idx in self._spawned_indices:
+                continue
+            if flight["flight_type"] != "departure":
+                continue
+            sched_time = datetime.fromisoformat(flight["scheduled_time"])
+            if self.sim_time <= sched_time <= lookahead:
+                if random.random() < 0.15:
+                    self._spawned_indices.add(idx)  # mark as handled
+                    flight["cancelled"] = True
+                    cancelled += 1
+                    self.recorder.record_scenario_event(
+                        self.sim_time, "cancellation",
+                        f"{flight['flight_number']} proactively cancelled (severe weather forecast)",
+                        {"callsign": flight["flight_number"], "reason": "proactive_severe_weather"},
+                    )
+        if cancelled:
+            logger.info("Proactive cancellations: %d departures cancelled for severe weather", cancelled)
+
+    def _update_departure_queue(self) -> None:
+        """Count flights in PUSHBACK or TAXI_TO_RUNWAY and update capacity queue metrics."""
+        queue_size = 0
+        for state in _flight_states.values():
+            if state.phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY):
+                queue_size += 1
+        self.capacity.update_departure_queue(queue_size)
+
+    def _apply_temperature(self) -> None:
+        """Extract temperature from current weather and apply de-rating."""
+        if not self._active_weather_event:
+            return
+        we = self._active_weather_event
+        # Estimate temperature from weather type + time of day
+        hour = self.sim_time.hour
+        if we.type in ("sandstorm", "dust", "haze"):
+            # Desert airports: DXB can hit 45-50°C in summer
+            base_temp = 38.0 + (5.0 if 10 <= hour <= 16 else 0.0)
+        elif we.type in ("snow", "freezing_rain", "ice_pellets"):
+            base_temp = -5.0
+        elif we.type == "fog":
+            base_temp = 12.0
+        elif we.type == "thunderstorm":
+            base_temp = 28.0
+        else:
+            base_temp = 22.0
+        self.capacity.set_temperature(base_temp)
+
     def _find_schedule_entry(self, icao24: str) -> Optional[dict]:
         """Find the schedule entry for a given icao24."""
         idx_str = icao24.replace("sim", "")
@@ -895,8 +1010,11 @@ class SimulationEngine:
             # 0. Process scenario events at current sim_time
             if self.scenario:
                 self._process_scenario_events()
+                self._apply_temperature()
+                self._proactive_cancel()
 
-            # 1. Spawn scheduled flights
+            # 1. Update departure queue metrics and spawn scheduled flights
+            self._update_departure_queue()
             self._spawn_scheduled_flights()
 
             # 2. Update all active flights
