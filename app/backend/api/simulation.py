@@ -73,6 +73,7 @@ def _find_simulation_files_from_catalog() -> list[dict] | None:
         conn_params["credentials_provider"] = None
     elif token:
         conn_params["access_token"] = token
+    conn_params["_socket_timeout"] = 10
 
     try:
         with sql.connect(**conn_params) as conn:
@@ -108,22 +109,42 @@ def _find_simulation_files_from_catalog() -> list[dict] | None:
 
 
 def _load_simulation_from_volume(filename: str) -> dict | None:
-    """Read simulation JSON from UC Volume via the Databricks SDK."""
+    """Read simulation JSON from UC Volume via the Databricks SDK.
+
+    Uses a threaded timeout to prevent WorkspaceClient() from hanging on
+    U2M browser-based OAuth in headless environments (Databricks Apps).
+    """
     try:
         from databricks.sdk import WorkspaceClient
     except ImportError:
         return None
 
+    import threading
+
     volume_path = f"/Volumes/{_UC_CATALOG}/{_UC_SCHEMA}/{_UC_VOLUME}/{filename}"
-    try:
-        w = WorkspaceClient()
-        resp = w.files.download(volume_path)
-        data = json.loads(resp.contents.read())
+    result: list = []
+    error: list = []
+
+    def _try_load():
+        try:
+            w = WorkspaceClient()
+            resp = w.files.download(volume_path)
+            result.append(json.loads(resp.contents.read()))
+        except Exception as e:
+            error.append(e)
+
+    thread = threading.Thread(target=_try_load, daemon=True)
+    thread.start()
+    thread.join(timeout=15)  # 15s max to prevent U2M hang
+
+    if result:
         logger.info(f"Loaded {filename} from UC Volume")
-        return data
-    except Exception as e:
-        logger.warning(f"Failed to read {filename} from UC Volume: {e}")
-        return None
+        return result[0]
+    if error:
+        logger.warning(f"Failed to read {filename} from UC Volume: {error[0]}")
+    else:
+        logger.warning(f"Timed out loading {filename} from UC Volume (possible U2M auth flow)")
+    return None
 
 
 def _load_simulation_local(filename: str) -> dict | None:

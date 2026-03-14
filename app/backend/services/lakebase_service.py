@@ -35,18 +35,33 @@ def _get_oauth_token(endpoint_name: str) -> Optional[tuple[str, str]]:
     """
     try:
         from databricks.sdk import WorkspaceClient
+        import threading
 
-        w = WorkspaceClient()
+        # Use a timeout to prevent WorkspaceClient() from hanging on U2M
+        # browser-based OAuth flow in headless environments (Databricks Apps).
+        result: list = []
+        error: list = []
 
-        # Generate database credential for Lakebase Autoscaling
-        cred = w.postgres.generate_database_credential(endpoint=endpoint_name)
-        token = cred.token
+        def _try_get_token():
+            try:
+                w = WorkspaceClient()
+                cred = w.postgres.generate_database_credential(endpoint=endpoint_name)
+                me = w.current_user.me()
+                result.append((cred.token, me.user_name))
+            except Exception as e:
+                error.append(e)
 
-        # Get current user email
-        me = w.current_user.me()
-        user_email = me.user_name
+        thread = threading.Thread(target=_try_get_token, daemon=True)
+        thread.start()
+        thread.join(timeout=10)  # 10s max — if U2M kicks in it will hang
 
-        return (token, user_email)
+        if result:
+            return result[0]
+        if error:
+            logger.debug(f"OAuth token generation failed: {error[0]}")
+        else:
+            logger.warning("OAuth token generation timed out (possible U2M flow in headless env)")
+        return None
 
     except Exception as e:
         logger.debug(f"OAuth token generation failed: {e}")

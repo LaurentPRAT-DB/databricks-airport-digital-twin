@@ -47,9 +47,30 @@ class AirportRepository:
 
     @property
     def client(self) -> WorkspaceClient:
-        """Get or create workspace client."""
+        """Get or create workspace client.
+
+        Uses a threaded timeout to prevent WorkspaceClient() from hanging
+        on U2M browser-based OAuth in headless environments (Databricks Apps).
+        """
         if self._client is None:
-            self._client = WorkspaceClient()
+            import threading
+
+            result: list = []
+
+            def _try_create():
+                try:
+                    result.append(WorkspaceClient())
+                except Exception:
+                    pass
+
+            thread = threading.Thread(target=_try_create, daemon=True)
+            thread.start()
+            thread.join(timeout=10)
+
+            if result:
+                self._client = result[0]
+            else:
+                raise RuntimeError("WorkspaceClient creation timed out (headless env)")
         return self._client
 
     def _ensure_tables(self) -> None:

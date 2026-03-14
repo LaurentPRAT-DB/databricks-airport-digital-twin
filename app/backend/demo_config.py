@@ -13,7 +13,10 @@ import os
 
 DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "yes")
 DEFAULT_AIRPORT_ICAO: str = os.getenv("DEMO_DEFAULT_AIRPORT", "KSFO")
-DEFAULT_FLIGHT_COUNT: int = int(os.getenv("DEMO_FLIGHT_COUNT", "50"))
+try:
+    DEFAULT_FLIGHT_COUNT: int = int(os.getenv("DEMO_FLIGHT_COUNT", "50"))
+except (ValueError, TypeError):
+    DEFAULT_FLIGHT_COUNT: int = 50
 
 # Derive IATA from ICAO for convenience
 _ICAO_TO_IATA = {

@@ -58,6 +58,9 @@ class DeltaService:
         elif self._token:
             connection_params["access_token"] = self._token
 
+        # Prevent indefinite hang if warehouse is stopped or unreachable
+        connection_params["_socket_timeout"] = 10
+
         return sql.connect(**connection_params)
 
     def get_flights(self, limit: int = 100) -> Optional[list[dict]]:
