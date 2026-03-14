@@ -63,7 +63,7 @@ async def _background_init(app: FastAPI):
     t_start = time.monotonic()
 
     logger.info("=" * 70)
-    logger.info("INIT | Airport Digital Twin — Background Initialization")
+    logger.info(f"INIT | Airport Digital Twin — Build {BUILD_NUMBER}")
     logger.info("=" * 70)
     logger.info(f"INIT | Demo mode: {DEMO_MODE}")
     logger.info(f"INIT | Default airport: {airport_icao} ({airport_iata})")
@@ -256,10 +256,13 @@ async def readiness():
     }
 
 
+BUILD_NUMBER = "2026-03-15-001"
+
 @app.get("/api/config")
 async def get_demo_config():
     """Return current demo configuration."""
     return {
+        "build_number": BUILD_NUMBER,
         "demo_mode": DEMO_MODE,
         "default_airport_icao": DEFAULT_AIRPORT_ICAO,
         "default_airport_iata": DEFAULT_AIRPORT_IATA,

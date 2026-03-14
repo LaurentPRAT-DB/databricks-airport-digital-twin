@@ -90,7 +90,7 @@ class TestLakebaseWeatherOperations:
             result = service.get_weather("KSFO")
             assert result is None
 
-    @patch("app.backend.services.lakebase_service.psycopg2")
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_upsert_weather_success(self, mock_psycopg2):
         """Test successful weather upsert."""
         # Setup mock
@@ -135,8 +135,9 @@ class TestLakebaseWeatherOperations:
                 mock_cursor.execute.assert_called_once()
                 mock_conn.commit.assert_called_once()
 
-    @patch("app.backend.services.lakebase_service.psycopg2")
-    def test_get_weather_success(self, mock_psycopg2):
+    @patch("app.backend.services.lakebase_service.RealDictCursor", create=True)
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_get_weather_success(self, mock_psycopg2, mock_rdc):
         """Test successful weather retrieval."""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
@@ -209,7 +210,7 @@ class TestLakebaseScheduleOperations:
             result = service.get_schedule(flight_type="arrival")
             assert result is None
 
-    @patch("app.backend.services.lakebase_service.psycopg2")
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_upsert_schedule_success(self, mock_psycopg2):
         """Test successful schedule upsert."""
         mock_conn = MagicMock()
@@ -282,7 +283,7 @@ class TestLakebaseBaggageOperations:
             result = service.get_baggage_stats("UA123")
             assert result is None
 
-    @patch("app.backend.services.lakebase_service.psycopg2")
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_upsert_baggage_stats_success(self, mock_psycopg2):
         """Test successful baggage stats upsert."""
         mock_conn = MagicMock()
@@ -346,7 +347,7 @@ class TestLakebaseGSEFleetOperations:
             result = service.get_gse_fleet()
             assert result is None
 
-    @patch("app.backend.services.lakebase_service.psycopg2")
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_upsert_gse_fleet_success(self, mock_psycopg2):
         """Test successful GSE fleet upsert."""
         mock_conn = MagicMock()
@@ -420,7 +421,7 @@ class TestLakebaseTurnaroundOperations:
             result = service.delete_turnaround("abc123")
             assert result is False
 
-    @patch("app.backend.services.lakebase_service.psycopg2")
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_upsert_turnaround_success(self, mock_psycopg2):
         """Test successful turnaround upsert."""
         mock_conn = MagicMock()
@@ -455,7 +456,7 @@ class TestLakebaseTurnaroundOperations:
                 result = service.upsert_turnaround(turnaround)
                 assert result is True
 
-    @patch("app.backend.services.lakebase_service.psycopg2")
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_delete_turnaround_success(self, mock_psycopg2):
         """Test successful turnaround deletion."""
         mock_conn = MagicMock()
@@ -505,7 +506,7 @@ class TestLakebaseServiceSingleton:
 class TestLakebaseConnectionErrorHandling:
     """Tests for connection error handling."""
 
-    @patch("app.backend.services.lakebase_service.psycopg2")
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_connection_error_clears_cached_credentials(self, mock_psycopg2):
         """Test that connection errors clear cached OAuth credentials."""
         mock_psycopg2.connect.side_effect = Exception("Connection failed")
@@ -527,7 +528,7 @@ class TestLakebaseConnectionErrorHandling:
                 assert result is None
                 assert service._cached_credentials is None  # Should be cleared
 
-    @patch("app.backend.services.lakebase_service.psycopg2")
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_health_check_handles_errors(self, mock_psycopg2):
         """Test health_check gracefully handles errors."""
         mock_psycopg2.connect.side_effect = Exception("Connection refused")

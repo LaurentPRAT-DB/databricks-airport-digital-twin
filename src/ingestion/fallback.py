@@ -165,6 +165,85 @@ def get_current_flight_states() -> List[Dict[str, Any]]:
         })
     return snapshots
 
+
+# Callsign prefix → airline name mapping (must match AIRLINE_FLEET keys)
+_AIRLINE_NAMES = {
+    "UAL": "United Airlines",
+    "DAL": "Delta Air Lines",
+    "AAL": "American Airlines",
+    "SWA": "Southwest Airlines",
+    "JBU": "JetBlue Airways",
+    "ASA": "Alaska Airlines",
+    "UAE": "Emirates",
+    "AFR": "Air France",
+    "CPA": "Cathay Pacific",
+}
+
+
+def get_flights_as_schedule() -> List[Dict[str, Any]]:
+    """Convert current synthetic flight states into FIDS schedule entries.
+
+    This ensures the FIDS display shows the same flights that are visible
+    on the map, rather than independently generated schedule data.
+
+    Returns:
+        List of schedule-format dicts compatible with ScheduleService.
+    """
+    now = datetime.now(timezone.utc)
+    schedule = []
+
+    for icao24, state in _flight_states.items():
+        callsign = state.callsign.strip() if state.callsign else ""
+        airline_code = callsign[:3].upper() if len(callsign) >= 3 else "UAL"
+        airline_name = _AIRLINE_NAMES.get(airline_code, airline_code)
+
+        local_iata = get_current_airport_iata()
+        origin = state.origin_airport or "???"
+        destination = state.destination_airport or local_iata
+
+        # Determine flight type: arrival if destination is local airport
+        is_arrival = (destination == local_iata)
+        flight_type = "arrival" if is_arrival else "departure"
+
+        # Map flight phase to FIDS status
+        phase = state.phase
+        if phase in (FlightPhase.PARKED,):
+            status = "arrived" if is_arrival else "boarding"
+        elif phase in (FlightPhase.APPROACHING, FlightPhase.LANDING, FlightPhase.TAXI_TO_GATE):
+            status = "on_time"
+        elif phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY, FlightPhase.TAKEOFF):
+            status = "boarding" if is_arrival else "on_time"
+        elif phase == FlightPhase.DEPARTING:
+            status = "departed"
+        elif phase == FlightPhase.ENROUTE:
+            status = "on_time" if is_arrival else "departed"
+        else:
+            status = "on_time"
+
+        # Use current time as approximate scheduled time
+        # (synthetic flights don't have real schedule times)
+        scheduled_time = now.isoformat()
+
+        schedule.append({
+            "flight_number": callsign,
+            "airline": airline_name,
+            "airline_code": airline_code,
+            "origin": origin,
+            "destination": destination,
+            "scheduled_time": scheduled_time,
+            "estimated_time": None,
+            "actual_time": now.isoformat() if status in ("arrived", "departed") else None,
+            "gate": state.assigned_gate,
+            "status": status,
+            "delay_minutes": 0,
+            "delay_reason": None,
+            "aircraft_type": state.aircraft_type,
+            "flight_type": flight_type,
+        })
+
+    return schedule
+
+
 # ============================================================================
 # SEPARATION CONSTANTS (FAA/ICAO Standards)
 # ============================================================================

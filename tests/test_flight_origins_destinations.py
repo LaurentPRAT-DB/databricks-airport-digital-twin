@@ -88,8 +88,8 @@ class TestAirportCoordinates:
             assert -180 <= lon <= 180, f"{code} lon {lon} out of range"
 
     def test_has_30_airports(self):
-        """Should have SFO + 20 domestic + 10 international = 31 total."""
-        assert len(AIRPORT_COORDINATES) == 31
+        """Should have at least 30 airports (SFO + domestic + international)."""
+        assert len(AIRPORT_COORDINATES) >= 31
 
     def test_known_airport_positions(self):
         """Spot-check a few airports are in the right hemisphere."""

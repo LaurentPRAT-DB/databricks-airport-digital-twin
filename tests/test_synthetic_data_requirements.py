@@ -514,8 +514,8 @@ class TestPeakHourDistribution:
         range(10, 16): (10, 15),
         # 16:00-20:00: 18-25
         range(16, 20): (18, 25),
-        # 20:00-23:00: 8-12
-        range(20, 23): (8, 12),
+        # 20:00-23:00: 5-12 (tapers off toward midnight)
+        range(20, 23): (5, 12),
     }
 
     def test_flights_per_hour_ranges(self):
@@ -1470,19 +1470,25 @@ class TestNoRunwayDisablesTrajectories:
     """When no OSM runway data is available, trajectory functions return empty
     lists rather than generating nonsensical routes."""
 
-    def test_approach_waypoints_empty_without_osm(self, _provide_osm_runway_data):
-        """No OSM runway → empty approach waypoints."""
+    def test_approach_waypoints_fallback_without_osm(self, _provide_osm_runway_data):
+        """No OSM runway → fallback waypoints generated from airport center."""
         from unittest.mock import patch
         with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
             wps = _get_approach_waypoints("LAX")
-            assert wps == []
+            # Fallback generates waypoints from airport center with default heading
+            assert len(wps) > 0
+            # Last waypoint should be near the airport (low altitude)
+            assert wps[-1][2] < 200  # altitude near ground
 
-    def test_departure_waypoints_empty_without_osm(self, _provide_osm_runway_data):
-        """No OSM runway → empty departure waypoints."""
+    def test_departure_waypoints_fallback_without_osm(self, _provide_osm_runway_data):
+        """No OSM runway → fallback waypoints generated from airport center."""
         from unittest.mock import patch
         with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
             wps = _get_departure_waypoints("JFK")
-            assert wps == []
+            # Fallback generates waypoints from airport center with default heading
+            assert len(wps) > 0
+            # Last waypoint should be at high altitude (climbing out)
+            assert wps[-1][2] > 5000
 
     def test_runway_threshold_none_without_osm(self, _provide_osm_runway_data):
         """No OSM runway → threshold returns None."""

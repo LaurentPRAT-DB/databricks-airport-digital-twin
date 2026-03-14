@@ -109,7 +109,7 @@ class TestDeltaServiceIsAvailable:
 class TestDeltaServiceGetConnection:
     """Tests for DeltaService._get_connection method."""
 
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_get_connection_with_token(self, mock_sql):
         """Test connection uses token authentication."""
         with patch.dict(os.environ, {
@@ -127,7 +127,7 @@ class TestDeltaServiceGetConnection:
             assert call_kwargs["http_path"] == "/sql/path"
             assert call_kwargs["access_token"] == "test-token"
 
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_get_connection_with_oauth(self, mock_sql):
         """Test connection uses OAuth when configured."""
         with patch.dict(os.environ, {
@@ -155,7 +155,7 @@ class TestDeltaServiceGetFlights:
             assert result is None
 
     @patch('app.backend.services.delta_service.DATABRICKS_SQL_AVAILABLE', True)
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_get_flights_success(self, mock_sql):
         """Test get_flights returns flight data on success."""
         # Mock cursor and connection
@@ -192,7 +192,7 @@ class TestDeltaServiceGetFlights:
             assert result[1]["icao24"] == "def456"
 
     @patch('app.backend.services.delta_service.DATABRICKS_SQL_AVAILABLE', True)
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_get_flights_query_exception(self, mock_sql):
         """Test get_flights returns None on query exception."""
         mock_sql.connect.side_effect = Exception("Connection failed")
@@ -217,7 +217,7 @@ class TestDeltaServiceGetFlightByIcao24:
             assert result is None
 
     @patch('app.backend.services.delta_service.DATABRICKS_SQL_AVAILABLE', True)
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_get_flight_by_icao24_found(self, mock_sql):
         """Test get_flight_by_icao24 returns flight when found."""
         mock_cursor = MagicMock()
@@ -250,7 +250,7 @@ class TestDeltaServiceGetFlightByIcao24:
             assert result["callsign"] == "UAL123"
 
     @patch('app.backend.services.delta_service.DATABRICKS_SQL_AVAILABLE', True)
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_get_flight_by_icao24_not_found(self, mock_sql):
         """Test get_flight_by_icao24 returns None when not found."""
         mock_cursor = MagicMock()
@@ -274,7 +274,7 @@ class TestDeltaServiceGetFlightByIcao24:
             assert result is None
 
     @patch('app.backend.services.delta_service.DATABRICKS_SQL_AVAILABLE', True)
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_get_flight_by_icao24_exception(self, mock_sql):
         """Test get_flight_by_icao24 handles exceptions."""
         mock_sql.connect.side_effect = Exception("Query failed")
@@ -299,7 +299,7 @@ class TestDeltaServiceGetTrajectory:
             assert result is None
 
     @patch('app.backend.services.delta_service.DATABRICKS_SQL_AVAILABLE', True)
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_get_trajectory_success(self, mock_sql):
         """Test get_trajectory returns position history."""
         mock_cursor = MagicMock()
@@ -335,7 +335,7 @@ class TestDeltaServiceGetTrajectory:
             assert result[2]["latitude"] == 37.62
 
     @patch('app.backend.services.delta_service.DATABRICKS_SQL_AVAILABLE', True)
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_get_trajectory_validates_minutes(self, mock_sql):
         """Test get_trajectory validates minutes parameter."""
         mock_cursor = MagicMock()
@@ -364,7 +364,7 @@ class TestDeltaServiceGetTrajectory:
             assert result is not None  # Should not raise
 
     @patch('app.backend.services.delta_service.DATABRICKS_SQL_AVAILABLE', True)
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_get_trajectory_exception(self, mock_sql):
         """Test get_trajectory handles exceptions."""
         mock_sql.connect.side_effect = Exception("Query failed")
@@ -389,7 +389,7 @@ class TestDeltaServiceHealthCheck:
             assert result is False
 
     @patch('app.backend.services.delta_service.DATABRICKS_SQL_AVAILABLE', True)
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_health_check_success(self, mock_sql):
         """Test health_check returns True when connection healthy."""
         mock_cursor = MagicMock()
@@ -413,7 +413,7 @@ class TestDeltaServiceHealthCheck:
             mock_cursor.execute.assert_called_with("SELECT 1")
 
     @patch('app.backend.services.delta_service.DATABRICKS_SQL_AVAILABLE', True)
-    @patch('app.backend.services.delta_service.sql')
+    @patch('app.backend.services.delta_service.sql', create=True)
     def test_health_check_failure(self, mock_sql):
         """Test health_check returns False on connection failure."""
         mock_sql.connect.side_effect = Exception("Connection refused")

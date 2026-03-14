@@ -11,4 +11,4 @@ Faker>=22.0
 # Data serving layer
 databricks-sql-connector>=3.0.0
 psycopg2-binary>=2.9.9
-databricks-sdk>=0.30.0
+databricks-sdk>=0.75.0

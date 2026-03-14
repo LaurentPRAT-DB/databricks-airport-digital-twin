@@ -182,7 +182,7 @@ class TestLakebaseBatchInserts:
         service._ml_tables_ensured = True  # Skip DDL
         return service
 
-    @patch("app.backend.services.lakebase_service.execute_values")
+    @patch("app.backend.services.lakebase_service.execute_values", create=True)
     def test_insert_flight_snapshots(self, mock_exec_values):
         """insert_flight_snapshots calls execute_values with correct data."""
         from app.backend.services.lakebase_service import LakebaseService
@@ -212,7 +212,7 @@ class TestLakebaseBatchInserts:
         assert count == 1
         mock_exec_values.assert_called_once()
 
-    @patch("app.backend.services.lakebase_service.execute_values")
+    @patch("app.backend.services.lakebase_service.execute_values", create=True)
     def test_insert_phase_transitions(self, mock_exec_values):
         """insert_phase_transitions handles batch correctly."""
         from app.backend.services.lakebase_service import LakebaseService

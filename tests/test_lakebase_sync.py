@@ -5,9 +5,28 @@ from Lakebase PostgreSQL to Unity Catalog Delta tables.
 """
 
 import os
+import sys
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch, call
+
+# Ensure psycopg2 and databricks.sql are available as mocks when not installed
+_mock_psycopg2 = None
+_mock_databricks_sql = None
+
+if "psycopg2" not in sys.modules:
+    _mock_psycopg2 = MagicMock()
+    _mock_psycopg2.extras = MagicMock()
+    _mock_psycopg2.extras.RealDictCursor = MagicMock()
+    sys.modules["psycopg2"] = _mock_psycopg2
+    sys.modules["psycopg2.extras"] = _mock_psycopg2.extras
+
+if "databricks" not in sys.modules or not hasattr(sys.modules.get("databricks", None), "sql"):
+    _mock_databricks = sys.modules.get("databricks", MagicMock())
+    _mock_databricks_sql = MagicMock()
+    _mock_databricks.sql = _mock_databricks_sql
+    sys.modules.setdefault("databricks", _mock_databricks)
+    sys.modules["databricks.sql"] = _mock_databricks_sql
 
 
 class TestQuoteValue:
@@ -71,12 +90,10 @@ class TestLakebaseConnection:
 
     def test_get_lakebase_connection_with_connection_string(self):
         """Test connection with connection string."""
-        import psycopg2
-
         mock_connect = MagicMock()
 
         with patch.dict(os.environ, {"LAKEBASE_CONNECTION_STRING": "postgresql://test:test@localhost/db"}, clear=True):
-            with patch.object(psycopg2, "connect", mock_connect):
+            with patch("psycopg2.connect", mock_connect):
                 from scripts.sync_all_to_unity_catalog import get_lakebase_connection
                 get_lakebase_connection()
 
@@ -84,8 +101,6 @@ class TestLakebaseConnection:
 
     def test_get_lakebase_connection_with_credentials(self):
         """Test connection with direct credentials."""
-        import psycopg2
-
         mock_connect = MagicMock()
 
         env_vars = {
@@ -96,7 +111,7 @@ class TestLakebaseConnection:
             "LAKEBASE_PASSWORD": "testpass",
         }
         with patch.dict(os.environ, env_vars, clear=True):
-            with patch.object(psycopg2, "connect", mock_connect):
+            with patch("psycopg2.connect", mock_connect):
                 from scripts.sync_all_to_unity_catalog import get_lakebase_connection
                 get_lakebase_connection()
 
@@ -115,8 +130,6 @@ class TestDeltaConnection:
 
     def test_get_delta_connection(self):
         """Test Delta SQL connection."""
-        from databricks import sql
-
         mock_connect = MagicMock()
 
         env_vars = {
@@ -125,7 +138,7 @@ class TestDeltaConnection:
             "DATABRICKS_TOKEN": "dapi12345",
         }
         with patch.dict(os.environ, env_vars):
-            with patch.object(sql, "connect", mock_connect):
+            with patch("databricks.sql.connect", mock_connect):
                 from scripts.sync_all_to_unity_catalog import get_delta_connection
                 get_delta_connection()
 

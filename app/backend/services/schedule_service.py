@@ -1,7 +1,8 @@
 """Schedule service for FIDS (Flight Information Display System).
 
 Provides arrivals and departures schedule data.
-Reads from Lakebase first for persistence, falls back to generator.
+Reads from Lakebase first, falls back to live synthetic flight states,
+then to the independent schedule generator as a last resort.
 """
 
 import logging
@@ -13,6 +14,7 @@ from src.ingestion.schedule_generator import (
     get_arrivals,
     get_departures,
 )
+from src.ingestion.fallback import get_flights_as_schedule
 from app.backend.models.schedule import (
     ScheduledFlight,
     FlightStatus,
@@ -91,7 +93,14 @@ class ScheduleService:
             if raw_arrivals:
                 logger.debug(f"Schedule arrivals from Lakebase: {len(raw_arrivals)}")
 
-        # Fallback to generator
+        # Fallback to live synthetic flights (same data as map)
+        if not raw_arrivals:
+            live_schedule = get_flights_as_schedule()
+            raw_arrivals = [f for f in live_schedule if f["flight_type"] == "arrival"]
+            if raw_arrivals:
+                logger.debug(f"Schedule arrivals from live synthetic flights: {len(raw_arrivals)}")
+
+        # Last resort: independent schedule generator
         if not raw_arrivals:
             logger.debug("Schedule arrivals from generator")
             raw_arrivals = get_arrivals(
@@ -100,7 +109,7 @@ class ScheduleService:
                 hours_behind=hours_behind,
             )[:limit]
 
-        flights = [_dict_to_scheduled_flight(f) for f in raw_arrivals]
+        flights = [_dict_to_scheduled_flight(f) for f in raw_arrivals[:limit]]
 
         logger.info(f"Schedule service returning {len(flights)} arrivals")
 
@@ -145,7 +154,14 @@ class ScheduleService:
             if raw_departures:
                 logger.debug(f"Schedule departures from Lakebase: {len(raw_departures)}")
 
-        # Fallback to generator
+        # Fallback to live synthetic flights (same data as map)
+        if not raw_departures:
+            live_schedule = get_flights_as_schedule()
+            raw_departures = [f for f in live_schedule if f["flight_type"] == "departure"]
+            if raw_departures:
+                logger.debug(f"Schedule departures from live synthetic flights: {len(raw_departures)}")
+
+        # Last resort: independent schedule generator
         if not raw_departures:
             logger.debug("Schedule departures from generator")
             raw_departures = get_departures(
@@ -154,7 +170,7 @@ class ScheduleService:
                 hours_behind=hours_behind,
             )[:limit]
 
-        flights = [_dict_to_scheduled_flight(f) for f in raw_departures]
+        flights = [_dict_to_scheduled_flight(f) for f in raw_departures[:limit]]
 
         logger.info(f"Schedule service returning {len(flights)} departures")
 
