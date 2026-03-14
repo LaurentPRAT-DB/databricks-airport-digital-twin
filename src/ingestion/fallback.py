@@ -753,14 +753,18 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     airport, so a flight from SEA appears from the north, one from LAX from the
     south, etc.  When origin is ``None`` a default entry from the east is used.
 
-    Returns an empty list when no OSM runway data is available, which disables
-    the approach trajectory line rather than producing a nonsensical route.
+    When no OSM runway data is available, generates fallback waypoints using the
+    airport center with a default heading of 280 (westbound approach, typical for
+    most US airports).
     """
-    # Require real runway data — no runway, no trajectory
     rwy_threshold = _get_runway_threshold()  # (lon, lat) or None
     rwy_heading = _get_runway_heading()       # float or None
     if rwy_threshold is None or rwy_heading is None:
-        return []
+        # Fallback: generate approach waypoints from airport center with default heading
+        center = get_airport_center()
+        rwy_lat, rwy_lon = center[0], center[1]
+        rwy_heading = 280.0  # Default westbound approach
+        rwy_threshold = (rwy_lon, rwy_lat)  # (lon, lat)
 
     rwy_lat, rwy_lon = rwy_threshold[1], rwy_threshold[0]
     approach_course = (rwy_heading + 180) % 360
@@ -821,13 +825,16 @@ def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
     When *destination_iata* is provided the departure curves toward that
     airport's bearing so the trajectory visually heads in the right direction.
 
-    Returns an empty list when no OSM runway data is available.
+    When no OSM runway data is available, generates fallback waypoints using
+    the airport center with a default heading of 280.
     """
-    # Require real runway data — no runway, no trajectory
     rwy_threshold = _get_runway_threshold()  # (lon, lat) — approach end
     rwy_heading = _get_runway_heading()  # float or None
     if rwy_threshold is None or rwy_heading is None:
-        return []
+        # Fallback: use airport center with default heading
+        center = get_airport_center()
+        rwy_threshold = (center[1], center[0])  # (lon, lat)
+        rwy_heading = 280.0
 
     # Departure climb-out starts at the threshold (liftoff point) and extends
     # in the same direction as the runway heading.
