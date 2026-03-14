@@ -199,7 +199,10 @@ class SimulationRecorder:
 
         # Scenario-specific metrics
         total_go_arounds = sum(
-            1 for e in self.scenario_events if "go-around" in e.get("description", "").lower()
+            1 for e in self.scenario_events if e.get("event_type") == "go_around"
+        )
+        total_diversions = sum(
+            1 for e in self.scenario_events if e.get("event_type") == "diversion"
         )
         total_holdings = sum(
             1 for e in self.scenario_events if "hold" in e.get("description", "").lower()
@@ -229,6 +232,7 @@ class SimulationRecorder:
             "total_weather_snapshots": len(self.weather_snapshots),
             "total_scenario_events": len(self.scenario_events),
             "total_go_arounds": total_go_arounds,
+            "total_diversions": total_diversions,
             "total_holdings": total_holdings,
             "scenario_name": self.scenario_name,
         }

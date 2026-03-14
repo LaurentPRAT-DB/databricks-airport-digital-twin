@@ -953,6 +953,7 @@ class FlightState:
     takeoff_roll_dist_ft: float = 0.0          # Accumulated ground roll distance in feet
     holding_phase_time: float = 0.0            # Elapsed time in current holding leg (seconds)
     holding_inbound: bool = True               # True = inbound leg, False = outbound leg
+    go_around_count: int = 0                   # Number of go-arounds for this approach
 
 
 # Global state storage
@@ -1902,10 +1903,31 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.waypoint_index = 0
                 _occupy_runway(state.icao24, "28R")
             else:
-                # Hold - orbit or slow down significantly
-                state.velocity = max(130, state.velocity - 5 * dt)
-                # Slight orbit pattern
-                state.heading = (state.heading + 5 * dt) % 360
+                # Runway busy — FAA standard racetrack holding pattern
+                HOLDING_LEG_SECONDS = 60.0
+                STANDARD_RATE_DEG_S = 3.0
+                state.holding_phase_time += dt
+                if state.holding_inbound:
+                    center = get_airport_center()
+                    state.heading = _calculate_heading(
+                        (state.latitude, state.longitude), center
+                    )
+                    if state.holding_phase_time >= HOLDING_LEG_SECONDS:
+                        state.holding_phase_time = 0.0
+                        state.holding_inbound = False
+                else:
+                    if state.holding_phase_time < 30.0:
+                        state.heading = (state.heading + STANDARD_RATE_DEG_S * dt) % 360
+                    elif state.holding_phase_time < 30.0 + HOLDING_LEG_SECONDS:
+                        pass  # Straight outbound leg
+                    else:
+                        state.holding_phase_time = 0.0
+                        state.holding_inbound = True
+                state.velocity = max(180, state.velocity)  # Maintain approach speed
+                # Move along current heading (not toward waypoint)
+                speed_deg = 0.001  # ~0.06 NM per tick
+                state.latitude += speed_deg * math.cos(math.radians(state.heading))
+                state.longitude += speed_deg * math.sin(math.radians(state.heading))
 
     elif state.phase == FlightPhase.LANDING:
         # Final touchdown sequence - land on runway 28R

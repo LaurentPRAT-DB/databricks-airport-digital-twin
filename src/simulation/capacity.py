@@ -97,6 +97,9 @@ class CapacityManager:
             self.current_category = "VFR"
             self.weather_multiplier = 1.0
 
+        # Store gusts for go-around probability
+        self._wind_gusts_kt = wind_gusts_kt
+
         # Wind gusts further reduce capacity
         if wind_gusts_kt and wind_gusts_kt > 35:
             self.weather_multiplier *= 0.80
@@ -111,6 +114,20 @@ class CapacityManager:
             ceil,
             f", gusts={wind_gusts_kt}kt" if wind_gusts_kt else "",
         )
+
+    def go_around_probability(self) -> float:
+        """Weather-dependent go-around probability per approach attempt."""
+        base = {"VFR": 0.005, "MVFR": 0.015, "IFR": 0.03, "LIFR": 0.05}
+        prob = base.get(self.current_category, 0.005)
+        gusts = getattr(self, '_wind_gusts_kt', None)
+        if gusts:
+            if gusts > 50:
+                prob += 0.05
+            elif gusts > 35:
+                prob += 0.03
+        if not self.active_runways:
+            prob = 1.0
+        return min(prob, 1.0)
 
     def close_runway(self, runway: str, until: datetime) -> None:
         """Close a runway until the specified time."""

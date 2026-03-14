@@ -62,6 +62,16 @@ from src.ingestion.baggage_generator import generate_bags_for_flight
 
 logger = logging.getLogger(__name__)
 
+ALTERNATE_AIRPORTS: dict[str, list[str]] = {
+    "SFO": ["OAK", "SJC"],
+    "JFK": ["EWR", "LGA"],
+    "LHR": ["LGW", "STN"],
+    "NRT": ["HND"],
+    "DXB": ["AUH"],
+    "GRU": ["VCP"],
+    "SYD": ["MEL", "BNE"],
+}
+
 
 class SimulationEngine:
     """Runs a deterministic, accelerated airport simulation."""
@@ -574,6 +584,39 @@ class SimulationEngine:
                                 "parked_time": self.sim_time,
                             })
 
+                    # Go-around check: APPROACHING → LANDING transition
+                    if (old_phase == FlightPhase.APPROACHING
+                            and new_phase == FlightPhase.LANDING
+                            and random.random() < self.capacity.go_around_probability()):
+                        from src.ingestion.fallback import _release_runway
+                        _release_runway(icao24, "28R")
+                        new_state.phase = FlightPhase.APPROACHING
+                        new_state.waypoint_index = 0
+                        new_state.altitude = 2000
+                        new_state.velocity = 200
+                        new_state.vertical_rate = 1500
+                        new_state.go_around_count += 1
+                        new_state.holding_phase_time = 0.0
+                        new_state.holding_inbound = True
+                        self.recorder.record_scenario_event(
+                            self.sim_time, "go_around",
+                            f"{state.callsign} go-around #{new_state.go_around_count} ({self.capacity.current_category})",
+                            {"callsign": state.callsign, "icao24": icao24,
+                             "attempt": new_state.go_around_count, "weather": self.capacity.current_category},
+                        )
+                        if new_state.go_around_count >= 2:
+                            self._divert_flight(icao24, new_state)
+
+            # Divert airborne flights if all runways closed
+            if not self.capacity.active_runways:
+                for icao24 in list(_flight_states.keys()):
+                    state = _flight_states[icao24]
+                    if state.phase == FlightPhase.APPROACHING:
+                        self._divert_flight(icao24, state)
+                    elif (state.phase == FlightPhase.ENROUTE
+                          and state.origin_airport and not state.destination_airport):
+                        self._divert_flight(icao24, state)
+
             # Remove completed departures (enroute with exit signal)
             for icao24 in list(_flight_states.keys()):
                 state = _flight_states[icao24]
@@ -628,10 +671,15 @@ class SimulationEngine:
             self._phase_time[icao24] = ("taxi_to_runway", 0.0)
 
         elif state.phase == FlightPhase.APPROACHING:
-            # Force landing
-            state.phase = FlightPhase.LANDING
-            state.waypoint_index = 0
-            self._phase_time[icao24] = ("landing", 0.0)
+            from src.ingestion.fallback import _is_runway_clear, _occupy_runway
+            if _is_runway_clear("28R"):
+                state.phase = FlightPhase.LANDING
+                state.waypoint_index = 0
+                _occupy_runway(icao24, "28R")
+                self._phase_time[icao24] = ("landing", 0.0)
+            else:
+                # Runway still blocked — reset timer to check again in 5 min
+                self._phase_time[icao24] = ("approaching", 600.0)
 
         elif state.phase == FlightPhase.LANDING:
             # Force taxi
@@ -646,6 +694,30 @@ class SimulationEngine:
                     state.assigned_gate = gate
                     _occupy_gate(icao24, gate)
             self._phase_time[icao24] = ("taxi_to_gate", 0.0)
+
+    def _divert_flight(self, icao24: str, state: FlightState) -> None:
+        """Divert flight to an alternate airport."""
+        alternates = ALTERNATE_AIRPORTS.get(self.config.airport, [])
+        alt_name = random.choice(alternates) if alternates else "alternate"
+        if state.assigned_gate:
+            _release_gate(icao24, state.assigned_gate)
+            state.assigned_gate = None
+        state.phase = FlightPhase.ENROUTE
+        state.destination_airport = alt_name
+        state.origin_airport = None
+        state.altitude = max(state.altitude, 3000)
+        state.velocity = 250
+        state.vertical_rate = 1500
+        state.go_around_count = 0
+        if alt_name in AIRPORT_COORDINATES:
+            from src.ingestion.fallback import _bearing_to_airport
+            state.heading = _bearing_to_airport(alt_name)
+        self.recorder.record_scenario_event(
+            self.sim_time, "diversion",
+            f"{state.callsign} diverted to {alt_name}",
+            {"callsign": state.callsign, "icao24": icao24, "alternate": alt_name,
+             "reason": "runway_closure" if not self.capacity.active_runways else "go_around_limit"},
+        )
 
     def _find_schedule_entry(self, icao24: str) -> Optional[dict]:
         """Find the schedule entry for a given icao24."""

@@ -95,8 +95,9 @@ def main() -> None:
     if summary.get("scenario_name"):
         print(f"  Scenario:               {summary['scenario_name']}")
         print(f"  Scenario events:        {summary.get('total_scenario_events', 0)}")
-        print(f"  Total go-arounds:       {summary.get('total_go_arounds', 0)}")
-        print(f"  Total holdings:         {summary.get('total_holdings', 0)}")
+        print(f"  Go-arounds:             {summary.get('total_go_arounds', 0)}")
+        print(f"  Diversions:             {summary.get('total_diversions', 0)}")
+        print(f"  Holdings:               {summary.get('total_holdings', 0)}")
     print(f"\n  Output: {config.output_file}")
 
 

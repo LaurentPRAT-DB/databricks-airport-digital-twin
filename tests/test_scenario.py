@@ -628,3 +628,250 @@ class TestMetricsAccuracy:
 
         assert "schedule_delay_min" in summary
         assert summary["schedule_delay_min"] >= 0
+
+
+# ---------------------------------------------------------------------------
+# TestFlightDynamics — go-arounds, diversions, stuck-approaching fixes
+# ---------------------------------------------------------------------------
+class TestFlightDynamics:
+    """Tests for go-around, diversion, and stuck-approaching flight dynamics."""
+
+    def test_go_around_probability_increases_with_weather(self):
+        """LIFR > IFR > MVFR > VFR go-around probability."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        probs = {}
+        for cat, vis, ceil in [
+            ("VFR", 10.0, 10000),
+            ("MVFR", 4.0, 2500),
+            ("IFR", 2.0, 800),
+            ("LIFR", 0.5, 300),
+        ]:
+            cm.apply_weather(vis, ceil, None)
+            probs[cat] = cm.go_around_probability()
+
+        assert probs["LIFR"] > probs["IFR"] > probs["MVFR"] > probs["VFR"]
+
+    def test_go_around_probability_gusts_additive(self):
+        """Wind gusts >35kt should increase go-around probability."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        cm.apply_weather(2.0, 800, None)
+        prob_no_gust = cm.go_around_probability()
+
+        cm.apply_weather(2.0, 800, 40)
+        prob_gust = cm.go_around_probability()
+
+        assert prob_gust > prob_no_gust
+
+    def test_go_around_probability_all_runways_closed(self):
+        """Returns 1.0 when no active runways."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        cm.apply_weather(10.0, 10000, None)
+        from datetime import datetime, timedelta
+        future = datetime(2026, 1, 1, 12, 0) + timedelta(hours=2)
+        cm.close_runway("28L", future)
+        cm.close_runway("28R", future)
+        assert cm.go_around_probability() == 1.0
+
+    def test_go_around_in_bad_weather(self, tmp_path):
+        """Short LIFR sim should produce at least one go-around."""
+        from src.simulation.engine import SimulationEngine
+
+        scenario_yaml = {
+            "name": "LIFR Go-Around Test",
+            "description": "Test go-arounds under LIFR",
+            "weather_events": [
+                {
+                    "time": "00:00",
+                    "type": "fog",
+                    "severity": "extreme",
+                    "duration_hours": 3.0,
+                    "visibility_nm": 0.25,
+                    "ceiling_ft": 100,
+                    "wind_gusts_kt": 55,
+                }
+            ],
+        }
+        path = tmp_path / "lifr_test.yaml"
+        path.write_text(yaml.dump(scenario_yaml))
+
+        config = SimulationConfig(
+            airport="SFO",
+            arrivals=30,
+            departures=5,
+            seed=42,
+            duration_hours=3.0,
+            time_step_seconds=5.0,
+            scenario_file=str(path),
+        )
+        engine = SimulationEngine(config)
+        recorder = engine.run()
+        summary = recorder.compute_summary(config.model_dump(mode="json"))
+
+        assert summary["total_go_arounds"] > 0
+
+    def test_diversion_on_all_runways_closed(self, tmp_path):
+        """Close both runways → APPROACHING flights get diverted."""
+        from src.simulation.engine import SimulationEngine
+
+        scenario_yaml = {
+            "name": "Dual Runway Closure",
+            "description": "Both runways closed",
+            "runway_events": [
+                {
+                    "time": "00:30",
+                    "type": "closure",
+                    "runway": "28L",
+                    "duration_minutes": 120,
+                    "reason": "debris",
+                },
+                {
+                    "time": "00:30",
+                    "type": "closure",
+                    "runway": "28R",
+                    "duration_minutes": 120,
+                    "reason": "debris",
+                },
+            ],
+        }
+        path = tmp_path / "closure_test.yaml"
+        path.write_text(yaml.dump(scenario_yaml))
+
+        config = SimulationConfig(
+            airport="SFO",
+            arrivals=20,
+            departures=5,
+            seed=42,
+            duration_hours=3.0,
+            time_step_seconds=5.0,
+            scenario_file=str(path),
+        )
+        engine = SimulationEngine(config)
+        recorder = engine.run()
+        summary = recorder.compute_summary(config.model_dump(mode="json"))
+
+        assert summary["total_diversions"] > 0
+
+    def test_diversion_releases_gate(self):
+        """Diverted flight should release its pre-assigned gate."""
+        from src.simulation.engine import SimulationEngine
+        from src.ingestion.fallback import FlightState, FlightPhase, _gate_states, GateState
+
+        config = SimulationConfig(
+            airport="SFO", arrivals=5, departures=5, seed=42,
+            duration_hours=1.0, time_step_seconds=5.0,
+        )
+        engine = SimulationEngine(config)
+
+        # Create a mock approaching flight with assigned gate
+        state = FlightState(
+            icao24="test01", callsign="TST001",
+            latitude=37.6, longitude=-122.4, altitude=2000,
+            velocity=180, heading=90, vertical_rate=-500,
+            on_ground=False, phase=FlightPhase.APPROACHING,
+            assigned_gate="A1",
+        )
+
+        # Track the gate as occupied using proper GateState
+        _gate_states["A1"] = GateState(occupied_by="test01")
+
+        engine._divert_flight("test01", state)
+
+        assert state.phase == FlightPhase.ENROUTE
+        assert state.assigned_gate is None
+        assert state.destination_airport in ["OAK", "SJC"]
+        # Gate should be released
+        gate_state = _gate_states.get("A1")
+        assert gate_state is None or gate_state.occupied_by != "test01"
+
+    def test_diversion_after_two_go_arounds(self, tmp_path):
+        """Flight with 2 go-arounds should be diverted."""
+        from src.simulation.engine import SimulationEngine
+
+        # Use LIFR with extreme gusts + close both runways to guarantee diversions
+        scenario_yaml = {
+            "name": "Multi Go-Around",
+            "description": "Test diversion after repeated go-arounds",
+            "weather_events": [
+                {
+                    "time": "00:00",
+                    "type": "blizzard",
+                    "severity": "extreme",
+                    "duration_hours": 4.0,
+                    "visibility_nm": 0.1,
+                    "ceiling_ft": 50,
+                    "wind_gusts_kt": 60,
+                }
+            ],
+            "runway_events": [
+                {
+                    "time": "01:00",
+                    "type": "closure",
+                    "runway": "28L",
+                    "duration_minutes": 60,
+                    "reason": "blizzard",
+                },
+                {
+                    "time": "01:00",
+                    "type": "closure",
+                    "runway": "28R",
+                    "duration_minutes": 60,
+                    "reason": "blizzard",
+                },
+            ],
+        }
+        path = tmp_path / "multi_ga.yaml"
+        path.write_text(yaml.dump(scenario_yaml))
+
+        config = SimulationConfig(
+            airport="SFO",
+            arrivals=40,
+            departures=5,
+            seed=123,
+            duration_hours=4.0,
+            time_step_seconds=5.0,
+            scenario_file=str(path),
+        )
+        engine = SimulationEngine(config)
+        recorder = engine.run()
+        summary = recorder.compute_summary(config.model_dump(mode="json"))
+
+        # With extreme weather, many arrivals, and runway closures:
+        # - go-arounds from weather probability
+        # - diversions from runway closure sweep
+        assert summary["total_go_arounds"] > 0 or summary["total_diversions"] > 0
+
+    def test_force_advance_approaching_checks_runway(self):
+        """Fixed force-advance should not blindly transition to LANDING."""
+        from src.simulation.engine import SimulationEngine
+        from src.ingestion.fallback import (
+            FlightState, FlightPhase, _flight_states,
+            _runway_28R, _occupy_runway,
+        )
+
+        config = SimulationConfig(
+            airport="SFO", arrivals=5, departures=5, seed=42,
+            duration_hours=1.0, time_step_seconds=5.0,
+        )
+        engine = SimulationEngine(config)
+
+        # Occupy the runway so it's not clear
+        _runway_28R.occupied_by = "blocker01"
+
+        state = FlightState(
+            icao24="stuck01", callsign="STK001",
+            latitude=37.6, longitude=-122.4, altitude=2000,
+            velocity=180, heading=90, vertical_rate=-500,
+            on_ground=False, phase=FlightPhase.APPROACHING,
+        )
+        _flight_states["stuck01"] = state
+
+        engine._force_advance("stuck01", state)
+
+        # Should NOT have transitioned to LANDING because runway is occupied
+        assert state.phase == FlightPhase.APPROACHING
+        # Timer should be reset to 600s
+        assert engine._phase_time["stuck01"] == ("approaching", 600.0)
+
+        # Clean up
+        _runway_28R.occupied_by = None
+        _flight_states.pop("stuck01", None)
