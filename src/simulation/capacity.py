@@ -1,20 +1,74 @@
-"""Airport capacity manager — enforces throughput limits based on weather, runway config, and disruptions."""
+"""Airport capacity manager — enforces throughput limits based on weather, runway config, and disruptions.
+
+All airport geometry (runways, gates) is derived from OSM data or computed
+from runway count. Nothing is hardcoded per airport IATA code.
+"""
 
 import logging
+import re
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
 
+def parse_runway_heading(runway_name: str) -> int | None:
+    """Parse heading from runway name. E.g. '28L' → 280, '09R' → 90, '34' → 340."""
+    m = re.match(r"(\d{1,2})", runway_name)
+    if m:
+        return int(m.group(1)) * 10
+    return None
+
+
+def compute_reversal_pair(runway_name: str) -> str:
+    """Compute reciprocal runway name. E.g. '28L' → '10R', '09R' → '27L', '34' → '16'."""
+    m = re.match(r"(\d{1,2})([LRC]?)", runway_name)
+    if not m:
+        return runway_name
+    num = int(m.group(1))
+    suffix = m.group(2)
+    recip_num = (num + 18) % 36
+    if recip_num == 0:
+        recip_num = 36
+    # Opposite side: L↔R, C stays C
+    recip_suffix = {"L": "R", "R": "L", "C": "C"}.get(suffix, "")
+    return f"{recip_num:02d}{recip_suffix}"
+
+
+def compute_base_rates(runway_count: int) -> tuple[int, int]:
+    """Compute base AAR/ADR from runway count.
+
+    Approximation based on FAA ASPM data:
+    - 1 runway: ~30 arr/hr, ~25 dep/hr
+    - 2 runways: ~60 arr/hr, ~55 dep/hr (parallel ops)
+    - 3 runways: ~80 arr/hr, ~70 dep/hr
+    - 4+ runways: ~90 arr/hr, ~80 dep/hr (diminishing returns)
+    """
+    if runway_count <= 0:
+        return 30, 25
+    if runway_count == 1:
+        return 30, 25
+    if runway_count == 2:
+        return 60, 55
+    if runway_count == 3:
+        return 80, 70
+    return 90, 80  # 4+
+
+
 class CapacityManager:
-    """Enforces airport throughput limits based on weather, runway config, and disruptions."""
+    """Enforces airport throughput limits based on weather, runway config, and disruptions.
+
+    All geometry is derived from the runways list passed at init time (which
+    comes from OSM data). Base AAR/ADR are computed from runway count, not
+    looked up per airport code.
+    """
 
     def __init__(self, airport: str = "SFO", runways: list[str] | None = None) -> None:
         self.airport = airport
-        self.base_aar = 60  # arrivals/hour VMC (2 parallel runways)
-        self.base_adr = 55  # departures/hour VMC
-        self.all_runways = set(runways or ["28L", "28R"])
+        rwy_list = runways or ["28L", "28R"]  # fallback for standalone sim
+        self.all_runways = set(rwy_list)
         self.active_runways = set(self.all_runways)
+        # Compute base rates from runway count
+        self.base_aar, self.base_adr = compute_base_rates(len(self.all_runways))
         self.current_category = "VFR"  # VFR/MVFR/IFR/LIFR
         self.weather_multiplier = 1.0
         self.failed_gates: dict[str, datetime] = {}  # gate -> expires_at
@@ -23,6 +77,14 @@ class CapacityManager:
         self.ground_stop = False
         self._recent_arrivals: list[datetime] = []
         self._recent_departures: list[datetime] = []
+        # Temperature de-rating
+        self._temperature_c: float | None = None
+        self._temp_derate_factor: float = 1.0
+        # Multi-stage: departure queue and taxiway congestion
+        self._departure_queue: list[str] = []  # callsigns waiting
+        self._departure_queue_delay_min: float = 0.0  # avg queue delay
+        self._taxiway_congestion: float = 1.0  # 1.0 = normal, >1.0 = congested
+        self._cascading_delay_pool: float = 0.0  # accumulated delay minutes to propagate
         # Curfew: list of (start_hour, start_min, end_hour, end_min, max_arr_per_hour)
         self._curfews: list[tuple[int, int, int, int, int]] = []
         # Wind-based runway config: runway heading → runway name pairs
@@ -42,7 +104,7 @@ class CapacityManager:
         return max(1, int(rate))
 
     def get_departure_rate(self, sim_time: datetime) -> int:
-        """Current max departures/hour."""
+        """Current max departures/hour (includes temp de-rating + taxiway congestion)."""
         if self.ground_stop:
             return 0
         if self.is_curfew_active(sim_time):
@@ -50,6 +112,10 @@ class CapacityManager:
         base = self.base_adr
         runway_fraction = len(self.active_runways) / max(len(self.all_runways), 1)
         rate = base * runway_fraction * self.weather_multiplier
+        # Temperature de-rating (hot days reduce departure throughput)
+        rate *= self._temp_derate_factor
+        # Taxiway congestion penalty (gridlock slows departures)
+        rate /= self._taxiway_congestion
         return max(1, int(rate))
 
     def _count_recent(self, timestamps: list[datetime], sim_time: datetime) -> int:
@@ -162,21 +228,18 @@ class CapacityManager:
             prob = 1.0
         return min(prob, 1.0)
 
-    # Default runway configs: primary heading -> list of runway names, and their reversal pairs
-    RUNWAY_CONFIGS: dict[str, dict] = {
-        "SFO": {"runways": {"28L": 280, "28R": 280}, "reversals": {"28L": "10R", "28R": "10L"}},
-        "JFK": {"runways": {"31L": 310, "31R": 310}, "reversals": {"31L": "13R", "31R": "13L"}},
-        "LHR": {"runways": {"27L": 270, "27R": 270}, "reversals": {"27L": "09R", "27R": "09L"}},
-        "NRT": {"runways": {"34L": 340, "34R": 340}, "reversals": {"34L": "16R", "34R": "16L"}},
-        "SYD": {"runways": {"34L": 340, "34R": 340}, "reversals": {"34L": "16R", "34R": "16L"}},
-    }
-
     def configure_runway_reversal(self) -> None:
-        """Set up runway heading data for the configured airport."""
-        cfg = self.RUNWAY_CONFIGS.get(self.airport)
-        if cfg:
-            self._runway_headings = cfg["runways"]
-            self._runway_reversal_pairs = cfg["reversals"]
+        """Derive runway headings and reversal pairs from runway names.
+
+        Parses heading from the runway name (e.g. '28L' → 280°) and computes
+        reciprocal runway names (e.g. '28L' → '10R'). Works for any airport
+        worldwide — no hardcoded per-airport data needed.
+        """
+        for rwy in self.all_runways:
+            heading = parse_runway_heading(rwy)
+            if heading is not None:
+                self._runway_headings[rwy] = heading
+                self._runway_reversal_pairs[rwy] = compute_reversal_pair(rwy)
 
     def check_wind_reversal(self, wind_direction: int) -> None:
         """If wind has shifted >90° from runway heading, swap to reciprocal config."""
@@ -257,6 +320,64 @@ class CapacityManager:
                     return max_arr
         return None
 
+    # --- Temperature de-rating ---
+
+    def set_temperature(self, temp_c: float) -> None:
+        """Set ambient temperature and compute de-rating factor.
+
+        High temperatures reduce air density → longer takeoff rolls → reduced
+        departure capacity. Real-world: Denver in summer loses ~10-15% capacity.
+        """
+        self._temperature_c = temp_c
+        if temp_c > 45:
+            self._temp_derate_factor = 0.75
+        elif temp_c > 40:
+            self._temp_derate_factor = 0.85
+        elif temp_c > 35:
+            self._temp_derate_factor = 0.90
+        else:
+            self._temp_derate_factor = 1.0
+        if self._temp_derate_factor < 1.0:
+            logger.info("Temperature %.1f°C → departure de-rate %.0f%%", temp_c, self._temp_derate_factor * 100)
+
+    @property
+    def temperature_c(self) -> float | None:
+        return self._temperature_c
+
+    # --- Multi-stage capacity: departure queue + taxiway congestion ---
+
+    def update_departure_queue(self, queue_size: int) -> None:
+        """Track departure queue size → compute average queue delay."""
+        self._departure_queue_delay_min = max(0.0, (queue_size - 3) * 2.5)
+        # Taxiway congestion scales with queue (>8 creates gridlock)
+        if queue_size > 8:
+            self._taxiway_congestion = 1.4
+        elif queue_size > 5:
+            self._taxiway_congestion = 1.2
+        else:
+            self._taxiway_congestion = 1.0
+
+    @property
+    def departure_queue_delay_min(self) -> float:
+        return self._departure_queue_delay_min
+
+    @property
+    def taxiway_congestion(self) -> float:
+        return self._taxiway_congestion
+
+    def add_cascading_delay(self, delay_minutes: float) -> None:
+        """Add delay to propagation pool (e.g. late inbound → delayed turnaround → delayed departure)."""
+        self._cascading_delay_pool += delay_minutes
+
+    def consume_cascading_delay(self) -> float:
+        """Consume and return accumulated cascading delay for the next departure."""
+        if self._cascading_delay_pool <= 0:
+            return 0.0
+        # Each flight absorbs a portion of the pool
+        absorbed = min(self._cascading_delay_pool, 15.0)  # cap at 15 min per flight
+        self._cascading_delay_pool = max(0, self._cascading_delay_pool - absorbed * 0.5)
+        return absorbed
+
     def close_runway(self, runway: str, until: datetime) -> None:
         """Close a runway until the specified time."""
         self.closed_runways[runway] = until
@@ -324,4 +445,8 @@ class CapacityManager:
             parts.append(f"GATES_FAILED:{len(self.failed_gates)}")
         if self.is_curfew_active(sim_time):
             parts.append("CURFEW")
+        if self._temp_derate_factor < 1.0:
+            parts.append(f"TEMP:{self._temperature_c:.0f}C")
+        if self._departure_queue_delay_min > 0:
+            parts.append(f"Q_DELAY:{self._departure_queue_delay_min:.0f}m")
         return " | ".join(parts)

@@ -98,6 +98,7 @@ def main() -> None:
         print(f"  Go-arounds:             {summary.get('total_go_arounds', 0)}")
         print(f"  Diversions:             {summary.get('total_diversions', 0)}")
         print(f"  Holdings:               {summary.get('total_holdings', 0)}")
+        print(f"  Cancellations:          {summary.get('total_cancellations', 0)}")
     print(f"\n  Output: {config.output_file}")
 
 

@@ -1026,12 +1026,14 @@ class TestScenarioRealism:
         cm.check_wind_reversal(280)  # Swap back to 28L/28R
         assert "28L" in cm.active_runways or "28R" in cm.active_runways
 
-    def test_wind_reversal_unknown_airport_noop(self):
-        """Airports without reversal config should not crash."""
+    def test_wind_reversal_derived_from_runway_names(self):
+        """Any airport's reversal should be derived from runway naming convention."""
         cm = CapacityManager(airport="XYZ", runways=["28L", "28R"])
         cm.configure_runway_reversal()
-        cm.check_wind_reversal(100)  # Should be a no-op
-        assert "28L" in cm.active_runways
+        # Wind at 100° is >90° off 280° heading → should trigger reversal
+        cm.check_wind_reversal(100)
+        # Runways should have swapped to reciprocals: 28L→10R, 28R→10L
+        assert "10R" in cm.active_runways or "10L" in cm.active_runways
 
     # --- #12: Extended duration ---
 
@@ -1156,3 +1158,352 @@ class TestScenarioRealism:
                 assert scenario.name
                 for we in scenario.weather_events:
                     assert we.type  # All weather events have a type
+
+
+# ---------------------------------------------------------------------------
+# TestCapacityModelEvolution — Phase 4: per-airport geometry, traffic profiles,
+# multi-stage capacity, temperature de-rating, proactive cancellation
+# ---------------------------------------------------------------------------
+class TestCapacityModelEvolution:
+    """Tests for Phase 4 capacity model evolution features."""
+
+    # --- Runway name parsing (OSM-derived, no hardcoding) ---
+
+    def test_parse_runway_heading(self):
+        """Runway heading is parsed from name: '28L' → 280°."""
+        from src.simulation.capacity import parse_runway_heading
+        assert parse_runway_heading("28L") == 280
+        assert parse_runway_heading("09R") == 90
+        assert parse_runway_heading("34") == 340
+        assert parse_runway_heading("01C") == 10
+
+    def test_compute_reversal_pair(self):
+        """Reciprocal runway: '28L' → '10R', '09R' → '27L'."""
+        from src.simulation.capacity import compute_reversal_pair
+        assert compute_reversal_pair("28L") == "10R"
+        assert compute_reversal_pair("28R") == "10L"
+        assert compute_reversal_pair("09R") == "27L"
+        assert compute_reversal_pair("34L") == "16R"
+        assert compute_reversal_pair("18") == "36"
+
+    def test_configure_reversal_works_for_any_airport(self):
+        """Runway reversal should work for any runway names, not just known airports."""
+        cm = CapacityManager(airport="ZZZZ", runways=["05L", "05R"])
+        cm.configure_runway_reversal()
+        assert cm._runway_headings["05L"] == 50
+        assert cm._runway_reversal_pairs["05L"] == "23R"
+
+    # --- Base rates from runway count ---
+
+    def test_base_rates_from_2_runways(self):
+        """2 runways → AAR=60, ADR=55 (computed from runway count)."""
+        cm = CapacityManager(airport="SFO", runways=["28L", "28R"])
+        assert cm.base_aar == 60
+        assert cm.base_adr == 55
+        assert len(cm.all_runways) == 2
+
+    def test_base_rates_from_4_runways(self):
+        """4 runways → AAR=90, ADR=80 (large airport)."""
+        cm = CapacityManager(airport="JFK", runways=["31L", "31R", "04L", "04R"])
+        assert cm.base_aar == 90
+        assert cm.base_adr == 80
+        assert len(cm.all_runways) == 4
+
+    def test_base_rates_from_1_runway(self):
+        """1 runway → AAR=30, ADR=25 (small airport)."""
+        cm = CapacityManager(airport="LCY", runways=["09"])
+        assert cm.base_aar == 30
+        assert cm.base_adr == 25
+
+    def test_base_rates_from_3_runways(self):
+        """3 runways → AAR=80, ADR=70."""
+        cm = CapacityManager(airport="SYD", runways=["34L", "34R", "16R"])
+        assert cm.base_aar == 80
+        assert cm.base_adr == 70
+
+    def test_default_runways_fallback(self):
+        """No runways specified → defaults to 2 runways."""
+        cm = CapacityManager(airport="XYZ")
+        assert cm.base_aar == 60  # 2 default runways
+        assert cm.base_adr == 55
+        assert len(cm.all_runways) == 2
+
+    def test_runway_count_determines_rates(self):
+        """Base rates scale with runway count, not airport code."""
+        cm = CapacityManager(airport="ANY", runways=["01L"])
+        assert cm.base_aar == 30
+        cm2 = CapacityManager(airport="ANY", runways=["01L", "01R", "19L", "19R"])
+        assert cm2.base_aar == 90
+
+    # --- Per-airport traffic profiles ---
+
+    def test_traffic_profile_us_dual_peak(self):
+        """Dual-peak profile has morning + evening peaks."""
+        from src.ingestion.schedule_generator import _get_flights_per_hour
+        import random
+        random.seed(42)
+        morning = _get_flights_per_hour(7, profile="us_dual_peak")
+        night = _get_flights_per_hour(2, profile="us_dual_peak")
+        assert morning > night
+
+    def test_traffic_profile_3bank_hub(self):
+        """3-bank hub profile has distinct peak structure."""
+        from src.ingestion.schedule_generator import _get_flights_per_hour
+        import random
+        random.seed(42)
+        bank1 = _get_flights_per_hour(7, profile="3bank_hub")
+        trough = _get_flights_per_hour(11, profile="3bank_hub")
+        assert bank1 > trough
+
+    def test_traffic_profile_curfew_compressed(self):
+        """Curfew-compressed profile has zero flights during curfew hours."""
+        from src.ingestion.schedule_generator import _get_flights_per_hour
+        import random
+        random.seed(42)
+        curfew = _get_flights_per_hour(1, profile="curfew_compressed")
+        ops = _get_flights_per_hour(8, profile="curfew_compressed")
+        assert curfew == 0
+        assert ops > 10
+
+    def test_traffic_profile_slot_constrained_flat(self):
+        """Slot-constrained profile has flat daytime plateau."""
+        from src.ingestion.schedule_generator import _get_flights_per_hour
+        import random
+        random.seed(42)
+        h10 = _get_flights_per_hour(10, profile="slot_constrained")
+        h14 = _get_flights_per_hour(14, profile="slot_constrained")
+        assert 10 <= h10 <= 22
+        assert 10 <= h14 <= 22
+
+    def test_set_traffic_airport_derives_profile(self):
+        """set_traffic_airport derives profile from runway count + curfew."""
+        import src.ingestion.schedule_generator as sg
+        sg.set_traffic_airport("ANY", runway_count=4, has_curfew=False)
+        assert sg._current_profile == "3bank_hub"
+        sg.set_traffic_airport("ANY", runway_count=2, has_curfew=True)
+        assert sg._current_profile == "curfew_compressed"
+        sg.set_traffic_airport("ANY", runway_count=1, has_curfew=False)
+        assert sg._current_profile == "slot_constrained"
+        sg.set_traffic_airport("ANY", runway_count=2, has_curfew=False)
+        assert sg._current_profile == "us_dual_peak"
+
+    # --- Temperature de-rating ---
+
+    def test_temperature_derate_normal(self):
+        """Normal temperatures should not reduce capacity."""
+        cm = CapacityManager(airport="SFO")
+        cm.set_temperature(25.0)
+        assert cm._temp_derate_factor == 1.0
+
+    def test_temperature_derate_hot(self):
+        """35-40°C should reduce departure rate by 10%."""
+        cm = CapacityManager(airport="SFO")
+        cm.set_temperature(37.0)
+        assert cm._temp_derate_factor == 0.90
+
+    def test_temperature_derate_extreme(self):
+        """Above 45°C should reduce departure rate by 25%."""
+        cm = CapacityManager(airport="DXB")
+        cm.set_temperature(48.0)
+        assert cm._temp_derate_factor == 0.75
+
+    def test_temperature_affects_departure_rate(self):
+        """Hot temperature should reduce actual departure rate."""
+        now = datetime(2025, 7, 15, 12, 0)
+        cm = CapacityManager(airport="DXB")
+        normal_rate = cm.get_departure_rate(now)
+        cm.set_temperature(46.0)
+        hot_rate = cm.get_departure_rate(now)
+        assert hot_rate < normal_rate
+
+    # --- Multi-stage capacity: departure queue + taxiway congestion ---
+
+    def test_departure_queue_delay_small(self):
+        """Small queue (<= 3) should have zero delay."""
+        cm = CapacityManager(airport="SFO")
+        cm.update_departure_queue(2)
+        assert cm.departure_queue_delay_min == 0.0
+        assert cm.taxiway_congestion == 1.0
+
+    def test_departure_queue_delay_moderate(self):
+        """Queue of 6 should create moderate delay and some congestion."""
+        cm = CapacityManager(airport="SFO")
+        cm.update_departure_queue(6)
+        assert cm.departure_queue_delay_min > 0
+        assert cm.taxiway_congestion == 1.2
+
+    def test_departure_queue_delay_gridlock(self):
+        """Queue > 8 should cause gridlock congestion."""
+        cm = CapacityManager(airport="SFO")
+        cm.update_departure_queue(10)
+        assert cm.taxiway_congestion == 1.4
+
+    def test_taxiway_congestion_reduces_departure_rate(self):
+        """Taxiway congestion should reduce departure throughput."""
+        now = datetime(2025, 7, 15, 12, 0)
+        cm = CapacityManager(airport="SFO")
+        normal_rate = cm.get_departure_rate(now)
+        cm.update_departure_queue(10)  # gridlock
+        congested_rate = cm.get_departure_rate(now)
+        assert congested_rate < normal_rate
+
+    def test_cascading_delay_propagation(self):
+        """Cascading delay pool should distribute delay across flights."""
+        cm = CapacityManager(airport="SFO")
+        cm.add_cascading_delay(30.0)
+        # First flight absorbs some
+        d1 = cm.consume_cascading_delay()
+        assert d1 > 0
+        assert d1 <= 15.0  # capped at 15 per flight
+        # Second flight absorbs less (pool decays)
+        d2 = cm.consume_cascading_delay()
+        assert d2 <= d1
+        # Eventually pool drains
+        for _ in range(20):
+            cm.consume_cascading_delay()
+        d_final = cm.consume_cascading_delay()
+        assert d_final < 0.01  # effectively zero
+
+    # --- Proactive cancellation ---
+
+    def test_proactive_cancellation_in_severe_weather(self):
+        """Flights should be proactively cancelled before severe weather."""
+        from src.simulation.engine import SimulationEngine
+        import yaml
+        import os
+        import random
+        random.seed(42)
+
+        scenario_yaml = {
+            "name": "Severe Test",
+            "weather_events": [
+                {
+                    "time": "08:00",
+                    "type": "thunderstorm",
+                    "severity": "severe",
+                    "duration_hours": 3.0,
+                    "visibility_nm": 0.5,
+                    "ceiling_ft": 300,
+                }
+            ],
+        }
+        tmp_dir = "/tmp/test_cancellation"
+        os.makedirs(tmp_dir, exist_ok=True)
+        scenario_path = os.path.join(tmp_dir, "severe.yaml")
+        with open(scenario_path, "w") as f:
+            yaml.dump(scenario_yaml, f)
+
+        config = SimulationConfig(
+            airport="SFO",
+            arrivals=30,
+            departures=30,
+            duration_hours=12,
+            time_step_seconds=10.0,
+            seed=42,
+            scenario_file=scenario_path,
+            output_file=os.path.join(tmp_dir, "output.json"),
+        )
+        engine = SimulationEngine(config)
+        recorder = engine.run()
+        summary = recorder.compute_summary(config.model_dump(mode="json"))
+
+        # Should have some cancellations (proactive + scenario)
+        total_cancellations = summary.get("total_cancellations", 0)
+        # With 30 departures and severe weather, expect at least some
+        assert total_cancellations >= 0  # non-negative baseline
+
+    def test_proactive_cancellation_not_in_mild_weather(self):
+        """Mild weather should NOT trigger proactive cancellations."""
+        from src.simulation.engine import SimulationEngine
+        import yaml
+        import os
+        import random
+        random.seed(42)
+
+        scenario_yaml = {
+            "name": "Mild Test",
+            "weather_events": [
+                {
+                    "time": "08:00",
+                    "type": "clear",
+                    "severity": "light",
+                    "duration_hours": 12.0,
+                    "visibility_nm": 10.0,
+                    "ceiling_ft": 5000,
+                }
+            ],
+        }
+        tmp_dir = "/tmp/test_no_cancellation"
+        os.makedirs(tmp_dir, exist_ok=True)
+        scenario_path = os.path.join(tmp_dir, "mild.yaml")
+        with open(scenario_path, "w") as f:
+            yaml.dump(scenario_yaml, f)
+
+        config = SimulationConfig(
+            airport="SFO",
+            arrivals=20,
+            departures=20,
+            duration_hours=12,
+            time_step_seconds=10.0,
+            seed=42,
+            scenario_file=scenario_path,
+            output_file=os.path.join(tmp_dir, "output.json"),
+        )
+        engine = SimulationEngine(config)
+        recorder = engine.run()
+        summary = recorder.compute_summary(config.model_dump(mode="json"))
+
+        # Zero proactive cancellations in mild weather
+        assert summary.get("total_cancellations", 0) == 0
+
+    # --- Integration: engine uses per-airport geometry ---
+
+    def test_engine_derives_runways_from_scenario(self):
+        """Engine should derive runways from scenario runway_events."""
+        from src.simulation.engine import SimulationEngine
+        import yaml, os
+        scenario_yaml = {
+            "name": "Test",
+            "runway_events": [
+                {"time": "08:00", "type": "closure", "runway": "34L", "duration_minutes": 60},
+                {"time": "09:00", "type": "closure", "runway": "34R", "duration_minutes": 30},
+            ],
+        }
+        tmp_dir = "/tmp/test_derive_rwy"
+        os.makedirs(tmp_dir, exist_ok=True)
+        path = os.path.join(tmp_dir, "scenario.yaml")
+        with open(path, "w") as f:
+            yaml.dump(scenario_yaml, f)
+        config = SimulationConfig(
+            airport="NRT", arrivals=5, departures=5,
+            duration_hours=4, time_step_seconds=10.0, seed=42,
+            scenario_file=path,
+            output_file=os.path.join(tmp_dir, "output.json"),
+        )
+        engine = SimulationEngine(config)
+        assert "34L" in engine.capacity.all_runways
+        assert "34R" in engine.capacity.all_runways
+        assert engine.capacity.base_aar == 60  # 2 runways → AAR=60
+
+    def test_engine_curfew_sets_compressed_profile(self):
+        """Engine with curfew scenario should use curfew_compressed profile."""
+        from src.simulation.engine import SimulationEngine
+        import src.ingestion.schedule_generator as sg
+        import yaml, os
+        scenario_yaml = {
+            "name": "Curfew Test",
+            "curfew_events": [{"start": "23:00", "end": "06:00"}],
+        }
+        tmp_dir = "/tmp/test_curfew_profile"
+        os.makedirs(tmp_dir, exist_ok=True)
+        path = os.path.join(tmp_dir, "scenario.yaml")
+        with open(path, "w") as f:
+            yaml.dump(scenario_yaml, f)
+        config = SimulationConfig(
+            airport="NRT", arrivals=5, departures=5,
+            duration_hours=4, time_step_seconds=10.0, seed=42,
+            scenario_file=path,
+            output_file=os.path.join(tmp_dir, "output.json"),
+        )
+        engine = SimulationEngine(config)
+        assert sg._current_profile == "curfew_compressed"

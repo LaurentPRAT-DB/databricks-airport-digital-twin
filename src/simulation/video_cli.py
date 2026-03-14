@@ -2,13 +2,18 @@
 
 Usage:
     python -m src.simulation.video_cli \
-        --simulation-file simulation_output_sfo_50.json \
-        --output video_output/sfo_50_replay.mp4
+        --simulation-file simulation_output_sfo_100.json \
+        --output video_output/sfo_100_replay.mp4
 
     python -m src.simulation.video_cli \
-        --simulation-file simulation_output_sfo_50.json \
-        --output video_output/sfo_50_replay.mp4 \
+        --simulation-file simulation_output_sfo_100.json \
+        --output video_output/sfo_morning.mp4 \
         --fps 30 --resolution 1920x1080 --start-hour 6 --end-hour 10
+
+    # Estimate only (no rendering):
+    python -m src.simulation.video_cli \
+        --simulation-file simulation_output_sfo_100.json \
+        --output /dev/null --estimate-only
 """
 
 import argparse
@@ -35,7 +40,7 @@ def main() -> None:
     parser.add_argument(
         "--simulation-file",
         required=True,
-        help="Simulation output filename (e.g., simulation_output_sfo_50.json)",
+        help="Simulation output filename (e.g., simulation_output_sfo_100.json)",
     )
     parser.add_argument(
         "--output",
@@ -81,7 +86,23 @@ def main() -> None:
     parser.add_argument(
         "--no-crop",
         action="store_true",
-        help="Include full UI (header, sidebars) instead of cropping to 3D canvas",
+        help="Include full UI (header, sidebars) instead of cropping to map area",
+    )
+    parser.add_argument(
+        "--view-mode",
+        choices=["2d", "3d"],
+        default="2d",
+        help="Map view mode: 2d (Leaflet bird's eye) or 3d (Three.js). Default: 2d",
+    )
+    parser.add_argument(
+        "--estimate-only",
+        action="store_true",
+        help="Print size estimate and exit without rendering",
+    )
+    parser.add_argument(
+        "--yes", "-y",
+        action="store_true",
+        help="Skip confirmation prompt and render immediately",
     )
     parser.add_argument(
         "--verbose",
@@ -111,11 +132,46 @@ def main() -> None:
         start_hour=args.start_hour,
         end_hour=args.end_hour,
         crop_to_canvas=not args.no_crop,
+        view_mode=args.view_mode,
     )
 
+    # Always compute and show the estimate first
     try:
-        output = asyncio.run(renderer.render())
-        print(f"\nVideo saved: {output}")
+        est = renderer.estimate()
+    except FileNotFoundError as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print("\n" + "=" * 56)
+    print("  VIDEO RENDER ESTIMATE")
+    print("=" * 56)
+    print(est.summary())
+    print("=" * 56)
+    print(f"  Output: {args.output}")
+    print("=" * 56)
+
+    if est.captured_frames == 0:
+        print("\nNo frames in the requested time window. Nothing to render.")
+        sys.exit(0)
+
+    if args.estimate_only:
+        sys.exit(0)
+
+    # Confirmation (unless --yes)
+    if not args.yes:
+        try:
+            answer = input("\nProceed with rendering? [y/N] ").strip().lower()
+        except EOFError:
+            answer = ""
+        if answer not in ("y", "yes"):
+            print("Cancelled.")
+            sys.exit(0)
+
+    try:
+        # skip_confirmation=True because we already confirmed above
+        output = asyncio.run(renderer.render(skip_confirmation=True))
+        size_mb = output.stat().st_size / (1024 * 1024)
+        print(f"\nVideo saved: {output} ({size_mb:.1f} MB)")
     except RuntimeError as e:
         print(f"\nError: {e}", file=sys.stderr)
         sys.exit(1)

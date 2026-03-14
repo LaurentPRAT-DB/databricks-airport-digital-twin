@@ -207,6 +207,9 @@ class SimulationRecorder:
         total_holdings = sum(
             1 for e in self.scenario_events if "hold" in e.get("description", "").lower()
         )
+        total_cancellations = sum(
+            1 for e in self.scenario_events if e.get("event_type") == "cancellation"
+        )
 
         result = {
             "total_flights": total_flights,
@@ -234,6 +237,7 @@ class SimulationRecorder:
             "total_go_arounds": total_go_arounds,
             "total_diversions": total_diversions,
             "total_holdings": total_holdings,
+            "total_cancellations": total_cancellations,
             "scenario_name": self.scenario_name,
         }
         return result

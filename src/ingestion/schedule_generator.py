@@ -144,25 +144,74 @@ def _generate_delay() -> tuple[int, Optional[str], Optional[str]]:
     return delay_minutes, code, reason
 
 
-def _get_flights_per_hour(hour: int) -> int:
-    """Get number of flights for a given hour based on peak patterns."""
-    # Morning peak: 6-10am (higher volume)
-    if 6 <= hour < 10:
-        return random.randint(18, 25)
-    # Evening peak: 4-8pm (higher volume)
-    if 16 <= hour < 20:
-        return random.randint(18, 25)
-    # Midday moderate
-    if 10 <= hour < 16:
-        return random.randint(10, 15)
-    # Early morning
-    if 5 <= hour < 6:
-        return random.randint(5, 10)
-    # Late evening
-    if 20 <= hour < 23:
-        return random.randint(8, 12)
-    # Night (minimal)
-    return random.randint(0, 3)
+# Per-airport traffic profiles
+# Each profile is a 24-element list of (min, max) flights per hour.
+# "us_dual_peak": US domestic — morning + evening peaks (SFO, JFK, etc.)
+# "3bank_hub": Gulf hub — 3 connect banks per day (DXB)
+# "slot_constrained": European slot-limited — flat plateau (LHR)
+# "curfew_compressed": Curfew airport — compressed into 06:00-22:00 (NRT, SYD)
+TRAFFIC_PROFILES: dict[str, list[tuple[int, int]]] = {
+    "us_dual_peak": [
+        (0, 2), (0, 2), (0, 1), (0, 1), (1, 3), (5, 10),    # 00-05
+        (18, 25), (18, 25), (18, 25), (18, 25), (10, 15), (10, 15),  # 06-11
+        (10, 15), (10, 15), (10, 15), (10, 15), (18, 25), (18, 25),  # 12-17
+        (18, 25), (18, 25), (8, 12), (8, 12), (5, 8), (0, 3),       # 18-23
+    ],
+    "3bank_hub": [
+        (0, 2), (2, 5), (5, 10), (8, 12), (8, 12), (5, 8),    # 00-05: Bank 1 prep
+        (20, 28), (22, 30), (22, 30), (10, 15), (8, 12), (5, 8),  # 06-11: Bank 1
+        (8, 12), (20, 28), (22, 30), (22, 30), (10, 15), (8, 12),  # 12-17: Bank 2
+        (5, 8), (18, 25), (20, 28), (22, 30), (15, 20), (8, 12),  # 18-23: Bank 3
+    ],
+    "slot_constrained": [
+        (0, 2), (0, 1), (0, 1), (0, 1), (2, 5), (8, 12),     # 00-05
+        (14, 18), (14, 18), (14, 18), (14, 18), (14, 18), (14, 18),  # 06-11: flat plateau
+        (14, 18), (14, 18), (14, 18), (14, 18), (14, 18), (14, 18),  # 12-17: flat plateau
+        (14, 18), (14, 18), (10, 14), (8, 12), (5, 8), (2, 5),      # 18-23
+    ],
+    "curfew_compressed": [
+        (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 1),       # 00-05: curfew
+        (15, 22), (20, 28), (20, 28), (15, 20), (12, 18), (12, 18),  # 06-11: morning rush
+        (12, 18), (12, 18), (15, 20), (18, 25), (20, 28), (20, 28),  # 12-17: evening rush
+        (15, 22), (12, 18), (8, 12), (5, 8), (2, 5), (0, 0),        # 18-23: wind down
+    ],
+}
+
+# Current traffic profile (set by simulation engine based on airport characteristics)
+_current_profile: str = "us_dual_peak"
+
+
+def set_traffic_profile(profile: str) -> None:
+    """Set the traffic profile directly (e.g. 'us_dual_peak', '3bank_hub')."""
+    global _current_profile
+    if profile in TRAFFIC_PROFILES:
+        _current_profile = profile
+
+
+def set_traffic_airport(airport: str, runway_count: int = 2, has_curfew: bool = False) -> None:
+    """Derive and set the traffic profile from airport characteristics.
+
+    Instead of hardcoding per IATA code, the profile is selected based on
+    observable airport properties (runway count as a size proxy, curfew presence).
+    """
+    global _current_profile
+    if has_curfew:
+        _current_profile = "curfew_compressed"
+    elif runway_count >= 4:
+        _current_profile = "3bank_hub"  # large hub pattern
+    elif runway_count == 2:
+        _current_profile = "us_dual_peak"
+    else:
+        _current_profile = "slot_constrained"  # small single-runway → flat
+
+
+def _get_flights_per_hour(hour: int, profile: str | None = None) -> int:
+    """Get number of flights for a given hour based on traffic profile."""
+    p = profile or _current_profile
+    if p not in TRAFFIC_PROFILES:
+        p = "us_dual_peak"
+    lo, hi = TRAFFIC_PROFILES[p][hour % 24]
+    return random.randint(lo, hi)
 
 
 def generate_daily_schedule(

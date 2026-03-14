@@ -136,12 +136,16 @@ function ViewToggle({
   );
 }
 
-// TypeScript declaration for the headless video renderer view control API
+// TypeScript declarations for headless video renderer control APIs
 declare global {
   interface Window {
     __viewControl?: {
       setViewMode: (mode: '2d' | '3d') => void;
       getViewMode: () => '2d' | '3d';
+    };
+    __airportControl?: {
+      loadAirport: (icaoCode: string) => Promise<void>;
+      getCurrentAirport: () => string | null;
     };
   }
 }
@@ -172,7 +176,18 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
     return () => clearTimeout(timer);
   }, []);
   const { flights, selectedFlight, setSelectedFlight } = useFlightContext();
-  const { currentAirport, refresh: refreshConfig } = useAirportConfigContext();
+  const { currentAirport, refresh: refreshConfig, loadAirport } = useAirportConfigContext();
+
+  // Expose airport control API on window for headless video renderer (Playwright)
+  useEffect(() => {
+    window.__airportControl = {
+      loadAirport,
+      getCurrentAirport: () => currentAirport,
+    };
+    return () => {
+      delete window.__airportControl;
+    };
+  }, [loadAirport, currentAirport]);
   const { viewport, setViewport, setLastSource } = useViewportState();
 
   // Clear shared viewport when airport changes so map recenters on new airport
