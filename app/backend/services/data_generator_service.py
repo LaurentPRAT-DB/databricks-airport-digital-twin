@@ -21,28 +21,12 @@ from src.ingestion.schedule_generator import generate_daily_schedule
 from src.ingestion.baggage_generator import get_flight_baggage_stats
 from src.ml.gse_model import get_fleet_status, generate_gse_positions
 
+from app.backend.demo_config import (
+    DEFAULT_AIRPORT_ICAO, DEFAULT_AIRPORT_IATA, icao_to_iata,
+)
 from app.backend.services.lakebase_service import get_lakebase_service
 
 logger = logging.getLogger(__name__)
-
-# ICAO → IATA mapping for common airports
-_ICAO_TO_IATA = {
-    "KSFO": "SFO", "KJFK": "JFK", "KLAX": "LAX", "KORD": "ORD",
-    "KATL": "ATL", "KDEN": "DEN", "KDFW": "DFW", "KMIA": "MIA",
-    "KBOS": "BOS", "KSEA": "SEA", "KIAH": "IAH", "KLAS": "LAS",
-    "KMSP": "MSP", "KPHX": "PHX", "KEWR": "EWR", "KDTW": "DTW",
-    "EGLL": "LHR", "LFPG": "CDG", "EDDF": "FRA", "EHAM": "AMS",
-    "RJTT": "HND", "VHHH": "HKG", "WSSS": "SIN", "YSSY": "SYD",
-}
-
-
-def _icao_to_iata(icao_code: str) -> str:
-    """Convert ICAO code to IATA. Falls back to stripping leading 'K'."""
-    if icao_code in _ICAO_TO_IATA:
-        return _ICAO_TO_IATA[icao_code]
-    if icao_code.startswith("K") and len(icao_code) == 4:
-        return icao_code[1:]
-    return icao_code
 
 
 class DataGeneratorService:
@@ -50,8 +34,8 @@ class DataGeneratorService:
 
     def __init__(
         self,
-        airport: str = "SFO",
-        weather_station: str = "KSFO",
+        airport: str = DEFAULT_AIRPORT_IATA,
+        weather_station: str = DEFAULT_AIRPORT_ICAO,
         weather_interval_seconds: int = 600,    # 10 minutes
         schedule_interval_seconds: int = 60,    # 1 minute
         baggage_interval_seconds: int = 30,     # 30 seconds
@@ -101,7 +85,7 @@ class DataGeneratorService:
 
         # Update current airport context
         self._current_airport_icao = airport_icao
-        self._airport = _icao_to_iata(airport_icao)
+        self._airport = icao_to_iata(airport_icao)
         self._weather_station = airport_icao
 
         lakebase = get_lakebase_service()
@@ -167,7 +151,7 @@ class DataGeneratorService:
         """
         # Update current airport context
         self._current_airport_icao = icao_code
-        self._airport = _icao_to_iata(icao_code)
+        self._airport = icao_to_iata(icao_code)
         self._weather_station = icao_code
 
         # Skip if already initialized in this session

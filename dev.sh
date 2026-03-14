@@ -22,6 +22,13 @@ else
     UVICORN_LOG_LEVEL="info"
 fi
 
+# Demo defaults — override via environment variables
+export DEMO_MODE="${DEMO_MODE:-true}"
+export DEMO_DEFAULT_AIRPORT="${DEMO_DEFAULT_AIRPORT:-KSFO}"
+export DEMO_FLIGHT_COUNT="${DEMO_FLIGHT_COUNT:-50}"
+
+echo "Demo config: airport=${DEMO_DEFAULT_AIRPORT}, flights=${DEMO_FLIGHT_COUNT}, demo_mode=${DEMO_MODE}"
+
 echo "Starting backend on http://localhost:8000..."
 uv run uvicorn app.backend.main:app --reload --port 8000 --log-level "$UVICORN_LOG_LEVEL" &
 BACKEND_PID=$!

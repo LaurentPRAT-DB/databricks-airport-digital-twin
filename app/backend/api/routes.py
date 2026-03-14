@@ -24,6 +24,7 @@ from app.backend.models.baggage import (
     BaggageStatsResponse,
     BaggageAlertsResponse,
 )
+from app.backend.demo_config import DEFAULT_FLIGHT_COUNT
 from app.backend.services.flight_service import FlightService, get_flight_service
 from app.backend.services.delta_service import get_delta_service
 from app.backend.services.schedule_service import get_schedule_service
@@ -87,7 +88,7 @@ WELL_KNOWN_AIRPORT_INFO: dict[str, dict] = {
 
 @router.get("/flights", response_model=FlightListResponse)
 async def get_flights(
-    count: int = Query(default=50, ge=1, le=500, description="Number of flights"),
+    count: int = Query(default=DEFAULT_FLIGHT_COUNT, ge=1, le=500, description="Number of flights"),
     service: FlightService = Depends(get_flight_service),
 ) -> FlightListResponse:
     """
@@ -149,7 +150,8 @@ async def get_flight_trajectory(
     Raises:
         404: If no trajectory data found for this flight.
     """
-    use_mock = os.getenv("USE_MOCK_BACKEND", "true").lower() == "true"
+    from app.backend.demo_config import DEMO_MODE
+    use_mock = DEMO_MODE or os.getenv("USE_MOCK_BACKEND", "true").lower() == "true"
     trajectory_data = None
 
     # Try Delta tables first if not in mock mode

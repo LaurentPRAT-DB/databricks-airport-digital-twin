@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from src.ingestion.fallback import generate_synthetic_flights
+from app.backend.demo_config import DEMO_MODE, DEFAULT_FLIGHT_COUNT
 from app.backend.models.flight import FlightPosition, FlightListResponse
 from app.backend.services.lakebase_service import get_lakebase_service
 from app.backend.services.delta_service import get_delta_service
@@ -69,9 +70,9 @@ class FlightService:
         self._lakebase = get_lakebase_service()
         self._delta = get_delta_service()
         self._cache: Optional[FlightListResponse] = None
-        self._use_mock = os.getenv("USE_MOCK_BACKEND", "true").lower() == "true"
+        self._use_mock = DEMO_MODE or os.getenv("USE_MOCK_BACKEND", "true").lower() == "true"
 
-    async def get_flights(self, count: int = 50) -> FlightListResponse:
+    async def get_flights(self, count: int = DEFAULT_FLIGHT_COUNT) -> FlightListResponse:
         """
         Get current flight positions using cascading data sources.
 

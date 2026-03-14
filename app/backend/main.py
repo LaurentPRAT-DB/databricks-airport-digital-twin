@@ -17,6 +17,9 @@ from app.backend.api.websocket import websocket_router
 from app.backend.api.predictions import prediction_router
 from app.backend.api.data_ops import router as data_ops_router
 from app.backend.api.simulation import simulation_router
+from app.backend.demo_config import (
+    DEMO_MODE, DEFAULT_AIRPORT_ICAO, DEFAULT_AIRPORT_IATA, DEFAULT_FLIGHT_COUNT,
+)
 from app.backend.services.data_generator_service import get_data_generator_service
 from app.backend.services.airport_config_service import get_airport_config_service
 from app.backend.services.prediction_service import get_prediction_service
@@ -52,16 +55,61 @@ _SOURCE_LABELS = {
 async def _background_init(app: FastAPI):
     """Run heavy initialization in the background so the app accepts requests immediately."""
     import time
+    from app.backend.services.lakebase_service import get_lakebase_service
+    from app.backend.services.delta_service import get_delta_service
+
+    airport_icao = DEFAULT_AIRPORT_ICAO
+    airport_iata = DEFAULT_AIRPORT_IATA
+    t_start = time.monotonic()
+
+    logger.info("=" * 70)
+    logger.info("INIT | Airport Digital Twin — Background Initialization")
+    logger.info("=" * 70)
+    logger.info(f"INIT | Demo mode: {DEMO_MODE}")
+    logger.info(f"INIT | Default airport: {airport_icao} ({airport_iata})")
+    logger.info(f"INIT | Default flight count: {DEFAULT_FLIGHT_COUNT}")
+    logger.info(f"INIT | Debug mode: {DEBUG_MODE}")
+    logger.info("-" * 70)
 
     try:
-        # Phase 1: Load airport configuration (3-tier: Lakebase cache → Unity Catalog → OSM)
-        app.state.startup_status = "Loading airport config (trying Lakebase cache → Unity Catalog → OSM)..."
-        logger.info(app.state.startup_status)
+        # ── Phase 0: Test database connections ────────────────────────────
+        app.state.startup_status = "Testing database connections..."
+        logger.info("INIT | Phase 0: Testing database connections")
+
+        lakebase = get_lakebase_service()
+        if lakebase.is_available:
+            logger.info(f"INIT |   Lakebase: CONNECTED (host={os.getenv('LAKEBASE_HOST', 'n/a')})")
+            # Check existing record counts
+            try:
+                flight_records = lakebase.get_flights(limit=1)
+                schedule_records = lakebase.get_schedule(hours_behind=24, hours_ahead=24, limit=1, airport_icao=airport_icao)
+                logger.info(f"INIT |   Lakebase flight_status table: {'has data' if flight_records else 'empty'}")
+                logger.info(f"INIT |   Lakebase schedule table: {'has data' if schedule_records else 'empty'}")
+            except Exception as e:
+                logger.info(f"INIT |   Lakebase record check: skipped ({e})")
+        else:
+            logger.warning("INIT |   Lakebase: NOT AVAILABLE — synthetic data only")
+
+        delta = get_delta_service()
+        try:
+            delta_flights = delta.get_flights(limit=1)
+            if delta_flights:
+                logger.info(f"INIT |   Delta tables (Unity Catalog): CONNECTED, has flight data")
+            else:
+                logger.info(f"INIT |   Delta tables (Unity Catalog): CONNECTED, no flight data yet")
+        except Exception as e:
+            logger.info(f"INIT |   Delta tables (Unity Catalog): NOT AVAILABLE ({type(e).__name__})")
+
+        logger.info("-" * 70)
+
+        # ── Phase 1: Load airport configuration ──────────────────────────
+        app.state.startup_status = f"Loading airport config for {airport_icao}..."
+        logger.info(f"INIT | Phase 1: Loading airport configuration for {airport_icao}")
 
         airport_config = get_airport_config_service()
         t0 = time.monotonic()
         source = airport_config.initialize_from_lakehouse(
-            icao_code="KSFO",
+            icao_code=airport_icao,
             fallback_to_osm=True,
         )
         load_ms = (time.monotonic() - t0) * 1000
@@ -69,78 +117,93 @@ async def _background_init(app: FastAPI):
         if source:
             source_label = _SOURCE_LABELS.get(source, source)
             config = airport_config.get_config()
-            counts = (
-                f"{len(config.get('terminals', []))} terminals, "
-                f"{len(config.get('gates', []))} gates, "
-                f"{len(config.get('osmTaxiways', []))} taxiways, "
-                f"{len(config.get('osmAprons', []))} aprons"
-            )
-            app.state.startup_status = f"Airport data loaded from {source_label} in {load_ms:.0f}ms — {counts}"
-            logger.info(app.state.startup_status)
+            n_terminals = len(config.get('terminals', []))
+            n_gates = len(config.get('gates', []))
+            n_taxiways = len(config.get('osmTaxiways', []))
+            n_aprons = len(config.get('osmAprons', []))
+            logger.info(f"INIT |   Source: {source_label}")
+            logger.info(f"INIT |   Load time: {load_ms:.0f}ms")
+            logger.info(f"INIT |   Elements: {n_terminals} terminals, {n_gates} gates, {n_taxiways} taxiways, {n_aprons} aprons")
+            app.state.startup_status = f"Airport data loaded from {source_label} in {load_ms:.0f}ms"
 
-            # Ensure airport center is set to SFO default on startup
-            set_airport_center(AIRPORT_CENTER[0], AIRPORT_CENTER[1], "SFO")
+            # Set airport center for synthetic data generation
+            set_airport_center(AIRPORT_CENTER[0], AIRPORT_CENTER[1], airport_iata)
             gates = reload_gates()
-            logger.info(f"Reloaded {len(gates)} gates for synthetic data generation")
+            logger.info(f"INIT |   Reloaded {len(gates)} gates for synthetic data generation")
 
             gate_count = reload_gate_recommender()
-            logger.info(f"Gate recommender initialized with {gate_count} OSM gates")
+            logger.info(f"INIT |   Gate recommender initialized with {gate_count} OSM gates")
 
             # Refresh the AirportModelRegistry so PredictionService uses OSM gates too
+            logger.info("INIT |   Retraining ML models with airport data...")
             app.state.startup_status = "Retraining ML models with airport data..."
-            logger.info(app.state.startup_status)
             registry = get_model_registry()
-            registry.retrain("KSFO")
-            logger.info("AirportModelRegistry retrained with fresh OSM gate data")
+            t_ml = time.monotonic()
+            registry.retrain(airport_icao)
+            ml_ms = (time.monotonic() - t_ml) * 1000
+            logger.info(f"INIT |   ML models retrained in {ml_ms:.0f}ms")
         else:
-            logger.warning("Failed to load airport config from any source (tried all 3 tiers)")
+            logger.warning("INIT |   FAILED to load airport config from any source (tried all 3 tiers)")
             app.state.startup_status = "Warning: airport config failed to load from all sources"
 
         if not airport_config.config_ready:
             logger.warning(
-                "Airport config not ready before data generation — "
+                "INIT |   Airport config not ready — "
                 "synthetic data will use default 9-gate fallback until config loads"
             )
 
-        # Phase 2: Generate synthetic data
-        app.state.startup_status = "Generating synthetic flight data..."
-        logger.info(app.state.startup_status)
+        logger.info("-" * 70)
+
+        # ── Phase 2: Generate synthetic data ─────────────────────────────
+        app.state.startup_status = f"Generating synthetic flight data ({DEFAULT_FLIGHT_COUNT} flights)..."
+        logger.info(f"INIT | Phase 2: Generating synthetic data ({DEFAULT_FLIGHT_COUNT} flights for {airport_icao})")
 
         data_generator = get_data_generator_service()
         t1 = time.monotonic()
-        init_success = await data_generator.initialize_all_data(airport_icao="KSFO")
+        init_success = await data_generator.initialize_all_data(airport_icao=airport_icao)
         gen_ms = (time.monotonic() - t1) * 1000
         if init_success:
+            logger.info(f"INIT |   Synthetic data generated in {gen_ms:.0f}ms")
             await data_generator.start_periodic_refresh()
-            app.state.startup_status = f"Synthetic data generated in {gen_ms:.0f}ms — starting periodic refresh"
-            logger.info(app.state.startup_status)
+            logger.info("INIT |   Periodic refresh started (weather=10m, schedule=1m, baggage=30s, GSE=30s, snapshots=15s)")
+            app.state.startup_status = f"Synthetic data generated in {gen_ms:.0f}ms — periodic refresh active"
         else:
-            logger.warning("Data initialization failed - using fallback generators only")
+            logger.warning("INIT |   Data initialization FAILED — using fallback generators only")
             app.state.startup_status = "Warning: data init failed, using fallback generators"
 
-        # Phase 3: Pre-warm weather cache so first visitor gets instant weather
+        logger.info("-" * 70)
+
+        # ── Phase 3: Pre-warm weather cache ──────────────────────────────
+        logger.info(f"INIT | Phase 3: Pre-warming weather cache for {airport_icao}")
         try:
             weather_svc = get_weather_service()
             weather_svc.get_current_weather()
-            logger.info("Weather cache pre-warmed for KSFO")
+            logger.info(f"INIT |   Weather cache pre-warmed for {airport_icao}")
         except Exception as e:
-            logger.warning(f"Weather pre-warm failed (non-critical): {e}")
+            logger.warning(f"INIT |   Weather pre-warm failed (non-critical): {e}")
 
+        total_ms = (time.monotonic() - t_start) * 1000
         app.state.ready = True
         app.state.startup_status = "Ready"
-        logger.info("Background initialization complete — app ready")
+        logger.info("=" * 70)
+        logger.info(f"INIT | Initialization COMPLETE in {total_ms:.0f}ms — app ready")
+        logger.info(f"INIT | Serving {airport_icao} ({airport_iata}) with {DEFAULT_FLIGHT_COUNT} flights in {'demo' if DEMO_MODE else 'live'} mode")
+        logger.info("=" * 70)
 
     except Exception as e:
-        logger.error(f"Background initialization failed: {e}", exc_info=DEBUG_MODE)
+        total_ms = (time.monotonic() - t_start) * 1000
+        logger.error(f"INIT | Initialization FAILED after {total_ms:.0f}ms: {e}", exc_info=DEBUG_MODE)
         app.state.startup_status = f"Initialization error: {e}"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown events."""
-    logger.info("=" * 60)
+    logger.info("=" * 70)
     logger.info("Starting Airport Digital Twin API")
-    logger.info("=" * 60)
+    logger.info(f"  Python PID: {os.getpid()}")
+    logger.info(f"  Working directory: {os.getcwd()}")
+    logger.info("=" * 70)
 
     # Mark app as not ready, then kick off heavy init in background
     app.state.ready = False
@@ -194,6 +257,17 @@ async def readiness():
     return {
         "ready": getattr(app.state, "ready", False),
         "status": getattr(app.state, "startup_status", "Initializing..."),
+    }
+
+
+@app.get("/api/config")
+async def get_demo_config():
+    """Return current demo configuration."""
+    return {
+        "demo_mode": DEMO_MODE,
+        "default_airport_icao": DEFAULT_AIRPORT_ICAO,
+        "default_airport_iata": DEFAULT_AIRPORT_IATA,
+        "default_flight_count": DEFAULT_FLIGHT_COUNT,
     }
 
 

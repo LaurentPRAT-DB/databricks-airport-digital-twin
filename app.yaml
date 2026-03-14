@@ -13,7 +13,15 @@ env:
   - name: DEBUG_MODE
     value: "true"
 
-  # Data source configuration
+  # Demo mode configuration
+  - name: DEMO_MODE
+    value: "true"
+  - name: DEMO_DEFAULT_AIRPORT
+    value: "KSFO"
+  - name: DEMO_FLIGHT_COUNT
+    value: "50"
+
+  # Data source configuration (USE_MOCK_BACKEND is implied by DEMO_MODE)
   - name: USE_MOCK_BACKEND
     value: "true"
 
