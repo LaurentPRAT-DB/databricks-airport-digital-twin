@@ -334,7 +334,7 @@ class TestDeltaTableDDLs:
         from src.persistence.airport_tables import ALL_TABLES
 
         table_names = [name for name, _ in ALL_TABLES]
-        assert "flight_position_history" in table_names
+        assert "flight_positions_history" in table_names
         assert "flight_phase_transition_history" in table_names
         assert "gate_assignment_history" in table_names
         assert "ml_prediction_history" in table_names

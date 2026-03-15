@@ -322,7 +322,7 @@ COMMENT 'Runway geometry from OSM (polylines)'
 """
 
 FLIGHT_POSITION_HISTORY_DDL = """
-CREATE TABLE IF NOT EXISTS {catalog}.{schema}.flight_position_history (
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.flight_positions_history (
   session_id STRING NOT NULL COMMENT 'UUID of the app session that generated this data',
   airport_icao STRING NOT NULL COMMENT 'ICAO code of the airport',
   icao24 STRING NOT NULL,
@@ -447,7 +447,7 @@ ALL_TABLES = [
     ("helipads", HELIPADS_DDL),
     ("parking_positions", PARKING_POSITIONS_DDL),
     ("osm_runways", OSM_RUNWAYS_DDL),
-    ("flight_position_history", FLIGHT_POSITION_HISTORY_DDL),
+    ("flight_positions_history", FLIGHT_POSITION_HISTORY_DDL),
     ("flight_phase_transition_history", FLIGHT_PHASE_TRANSITION_HISTORY_DDL),
     ("gate_assignment_history", GATE_ASSIGNMENT_HISTORY_DDL),
     ("ml_prediction_history", ML_PREDICTION_HISTORY_DDL),

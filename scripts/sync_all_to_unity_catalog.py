@@ -546,7 +546,7 @@ def append_flight_snapshots_history(snapshots: list[dict], catalog: str, schema:
     if not snapshots:
         return 0
 
-    table_name = f"{catalog}.{schema}.flight_position_history"
+    table_name = f"{catalog}.{schema}.flight_positions_history"
     logger.info(f"Appending {len(snapshots)} flight snapshots to {table_name}")
 
     now = datetime.now(timezone.utc)
