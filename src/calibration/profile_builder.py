@@ -119,5 +119,11 @@ def _build_single_profile(
         except Exception as e:
             logger.warning("OpenSky failed for %s: %s, falling back", iata, e)
 
+    # Try known hand-researched profiles (between raw data and generic fallback)
+    from src.calibration.known_profiles import get_known_profile
+    known = get_known_profile(iata)
+    if known is not None:
+        return known
+
     # Fallback to hardcoded distributions
     return _build_fallback_profile(iata)

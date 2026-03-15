@@ -1472,17 +1472,30 @@ def _interpolate_altitude(current_alt: float, target_alt: float, rate: float) ->
 
 
 def _get_aircraft_type_for_airline(callsign: str, is_international: bool = False) -> str:
-    """Get a random aircraft type based on airline callsign and route type."""
-    if callsign and len(callsign) >= 3:
-        airline_code = callsign[:3].upper()
-        if airline_code in AIRLINE_FLEET:
-            fleet = AIRLINE_FLEET[airline_code]
-            if is_international:
-                # Prefer wide-body for international routes
-                wide_body = [a for a in fleet if a in ("B777", "B787", "A330", "A350", "A380", "A345")]
-                if wide_body:
-                    return random.choice(wide_body)
-            return random.choice(fleet)
+    """Get a random aircraft type based on airline callsign and route type.
+
+    Uses calibrated fleet mix from the airport profile when available.
+    """
+    airline_code = callsign[:3].upper() if callsign and len(callsign) >= 3 else None
+
+    # Try calibrated fleet mix first
+    if airline_code:
+        profile = _get_current_airport_profile()
+        if profile and airline_code in profile.fleet_mix:
+            fleet = profile.fleet_mix[airline_code]
+            if fleet:
+                types = list(fleet.keys())
+                weights = list(fleet.values())
+                return random.choices(types, weights=weights, k=1)[0]
+
+    # Fall back to hardcoded AIRLINE_FLEET
+    if airline_code and airline_code in AIRLINE_FLEET:
+        fleet = AIRLINE_FLEET[airline_code]
+        if is_international:
+            wide_body = [a for a in fleet if a in ("B777", "B787", "A330", "A350", "A380", "A345")]
+            if wide_body:
+                return random.choice(wide_body)
+        return random.choice(fleet)
     if is_international:
         return random.choice(["B777", "B787", "A350", "A330"])
     return random.choice(["A320", "B738", "A321", "B737"])
@@ -1751,8 +1764,30 @@ def _get_origin_country(origin_iata: Optional[str]) -> str:
     return "United States"
 
 
+def _get_current_airport_profile():
+    """Get the calibrated profile for the current airport (cached, lazy-loaded)."""
+    from src.ingestion.schedule_generator import _get_profile_loader
+    return _get_profile_loader().get_profile(get_current_airport_iata())
+
+
 def _pick_random_airport(exclude: Optional[str] = None) -> str:
-    """Pick a random airport, excluding the specified one (typically the local airport)."""
+    """Pick a random airport, excluding the specified one (typically the local airport).
+
+    Uses calibrated route shares from the airport profile when available.
+    """
+    profile = _get_current_airport_profile()
+
+    if profile and (profile.domestic_route_shares or profile.international_route_shares):
+        is_domestic = random.random() < profile.domestic_ratio
+        if is_domestic and profile.domestic_route_shares:
+            routes = {k: v for k, v in profile.domestic_route_shares.items() if k != exclude}
+            if routes:
+                return random.choices(list(routes.keys()), weights=list(routes.values()), k=1)[0]
+        if profile.international_route_shares:
+            routes = {k: v for k, v in profile.international_route_shares.items() if k != exclude}
+            if routes:
+                return random.choices(list(routes.keys()), weights=list(routes.values()), k=1)[0]
+
     from src.ingestion.schedule_generator import DOMESTIC_AIRPORTS, INTERNATIONAL_AIRPORTS
     if random.random() < 0.7:
         pool = [a for a in DOMESTIC_AIRPORTS if a != exclude] or DOMESTIC_AIRPORTS
@@ -2733,7 +2768,14 @@ def generate_synthetic_flights(
             if icao24 in _flight_states:
                 continue
 
-            prefix = random.choice(CALLSIGN_PREFIXES)
+            # Select airline from calibrated profile if available
+            _profile = _get_current_airport_profile()
+            if _profile and _profile.airline_shares:
+                _codes = list(_profile.airline_shares.keys())
+                _weights = list(_profile.airline_shares.values())
+                prefix = random.choices(_codes, weights=_weights, k=1)[0]
+            else:
+                prefix = random.choice(CALLSIGN_PREFIXES)
             flight_num = random.randint(100, 9999)
             callsign = f"{prefix}{flight_num}"
 

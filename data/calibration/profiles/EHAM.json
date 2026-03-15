@@ -1,44 +1,43 @@
 {
-  "icao_code": "EDDF",
-  "iata_code": "FRA",
+  "icao_code": "EHAM",
+  "iata_code": "AMS",
   "airline_shares": {
-    "DLH": 0.55,
-    "EWG": 0.05,
+    "KLM": 0.5,
+    "TRA": 0.08,
+    "EZY": 0.05,
+    "DAL": 0.03,
     "UAL": 0.03,
-    "SIA": 0.03,
-    "BAW": 0.02,
-    "UAE": 0.02,
-    "ANA": 0.02,
+    "BAW": 0.03,
+    "DLH": 0.02,
+    "SIA": 0.02,
     "CPA": 0.02,
-    "AAL": 0.02,
-    "DAL": 0.02,
-    "KAL": 0.02,
-    "THY": 0.02
+    "UAE": 0.02,
+    "ANA": 0.02
   },
   "domestic_route_shares": {},
   "international_route_shares": {
-    "LHR": 0.06,
+    "LHR": 0.07,
     "JFK": 0.05,
     "CDG": 0.05,
-    "AMS": 0.05,
+    "FRA": 0.05,
     "NRT": 0.04,
     "SIN": 0.04,
     "DXB": 0.04,
-    "HKG": 0.04,
+    "HKG": 0.03,
     "ICN": 0.03,
     "SFO": 0.03,
-    "ORD": 0.03,
-    "LAX": 0.03
+    "LAX": 0.03,
+    "ORD": 0.03
   },
-  "domestic_ratio": 0.1,
+  "domestic_ratio": 0.05,
   "fleet_mix": {
-    "DLH": {
-      "A320": 0.25,
-      "A321": 0.2,
-      "B747": 0.1,
-      "A350": 0.15,
+    "KLM": {
+      "B738": 0.25,
+      "A321": 0.15,
+      "B777": 0.2,
+      "B787": 0.15,
       "A330": 0.15,
-      "B777": 0.15
+      "E190": 0.1
     }
   },
   "hourly_profile": [
@@ -47,13 +46,13 @@
     0.001,
     0.001,
     0.005,
-    0.018,
-    0.058,
+    0.015,
+    0.055,
+    0.062,
     0.065,
-    0.068,
     0.06,
     0.055,
-    0.052,
+    0.05,
     0.05,
     0.05,
     0.055,
@@ -64,10 +63,10 @@
     0.052,
     0.045,
     0.035,
-    0.02,
+    0.022,
     0.008
   ],
-  "delay_rate": 0.18,
+  "delay_rate": 0.16,
   "delay_distribution": {
     "81": 0.2,
     "68": 0.18,
@@ -79,8 +78,8 @@
     "61": 0.04,
     "41": 0.04
   },
-  "mean_delay_minutes": 22.0,
+  "mean_delay_minutes": 20.0,
   "data_source": "known_stats",
   "profile_date": "2026-03-15",
-  "sample_size": 210000
+  "sample_size": 200000
 }

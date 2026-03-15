@@ -66,9 +66,15 @@ env/
 .env.local
 
 # Data directories (for local development)
-data/
+data/*
 # Exception: keep fallback sample data for offline mode
 !data/fallback/
+# Exception: keep calibration profile JSONs (small, ~2KB each)
+!data/calibration/
+data/calibration/*
+!data/calibration/profiles/
+data/calibration/profiles/*
+!data/calibration/profiles/*.json
 
 # Node modules (both root and frontend)
 node_modules/

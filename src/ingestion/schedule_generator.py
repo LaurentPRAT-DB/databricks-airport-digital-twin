@@ -18,7 +18,7 @@ from typing import Optional, TYPE_CHECKING
 from src.ingestion.fallback import get_gates
 
 if TYPE_CHECKING:
-    from src.calibration.profile import AirportProfile
+    from src.calibration.profile import AirportProfile, AirportProfileLoader
 
 # Airline data with ICAO codes, names, and hub weighting
 AIRLINES = {
@@ -450,14 +450,33 @@ def get_departures(
 _schedule_cache: dict = {}
 _cache_minute: Optional[int] = None
 
+# Lazy-loaded profile loader singleton
+_profile_loader: Optional["AirportProfileLoader"] = None
+
+
+def _get_profile_loader() -> "AirportProfileLoader":
+    """Get or create the singleton profile loader."""
+    global _profile_loader
+    if _profile_loader is None:
+        from src.calibration.profile import AirportProfileLoader
+        _profile_loader = AirportProfileLoader()
+    return _profile_loader
+
 
 def get_cached_schedule(airport: str = "SFO") -> list[dict]:
-    """Get cached schedule (regenerates every minute for freshness)."""
+    """Get cached schedule (regenerates every minute for freshness).
+
+    Automatically loads the calibrated AirportProfile for the requested
+    airport, falling back gracefully if no profile is available.
+    """
     global _schedule_cache, _cache_minute
     current_minute = datetime.now(timezone.utc).minute
 
     if _cache_minute != current_minute or airport not in _schedule_cache:
-        _schedule_cache[airport] = generate_daily_schedule(airport=airport)
+        profile = _get_profile_loader().get_profile(airport)
+        _schedule_cache[airport] = generate_daily_schedule(
+            airport=airport, profile=profile,
+        )
         _cache_minute = current_minute
 
     return _schedule_cache[airport]
