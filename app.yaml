@@ -34,6 +34,8 @@ env:
     value: "serverless_stable_3n0ihb_catalog"
   - name: DATABRICKS_SCHEMA
     value: "airport_digital_twin"
+  - name: DATABRICKS_WAREHOUSE_ID
+    value: "b868e84cedeb4262"
   - name: DATABRICKS_USE_OAUTH
     value: "true"
 

@@ -59,6 +59,7 @@ def _find_simulation_files_from_catalog() -> list[dict] | None:
         from databricks.sdk import WorkspaceClient
         from databricks.sdk.service.sql import StatementState
     except ImportError:
+        logger.warning("databricks-sdk not installed, cannot query simulation_runs")
         return None
 
     warehouse_id = os.getenv("DATABRICKS_WAREHOUSE_ID", "")
@@ -68,7 +69,10 @@ def _find_simulation_files_from_catalog() -> list[dict] | None:
         if "/warehouses/" in http_path:
             warehouse_id = http_path.rsplit("/warehouses/", 1)[-1]
     if not warehouse_id:
+        logger.warning("No warehouse ID available for simulation_runs query")
         return None
+
+    logger.info(f"Querying simulation_runs with warehouse_id={warehouse_id}")
 
     import threading
 
