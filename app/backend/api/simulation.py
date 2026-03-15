@@ -135,6 +135,7 @@ def _load_simulation_from_volume(filename: str) -> dict | None:
 
     Uses a threaded timeout to prevent WorkspaceClient() from hanging on
     U2M browser-based OAuth in headless environments (Databricks Apps).
+    Files are 23-50 MB so we allow up to 60s for the download.
     """
     try:
         from databricks.sdk import WorkspaceClient
@@ -144,6 +145,7 @@ def _load_simulation_from_volume(filename: str) -> dict | None:
     import threading
 
     volume_path = f"/Volumes/{_UC_CATALOG}/{_UC_SCHEMA}/{_UC_VOLUME}/{filename}"
+    logger.info(f"Loading simulation from UC Volume: {volume_path}")
     result: list = []
     error: list = []
 
@@ -157,15 +159,15 @@ def _load_simulation_from_volume(filename: str) -> dict | None:
 
     thread = threading.Thread(target=_try_load, daemon=True)
     thread.start()
-    thread.join(timeout=15)  # 15s max to prevent U2M hang
+    thread.join(timeout=60)  # 60s — files are 23-50 MB
 
     if result:
-        logger.info(f"Loaded {filename} from UC Volume")
+        logger.info(f"Loaded {filename} from UC Volume ({len(json.dumps(result[0])) // 1024} KB)")
         return result[0]
     if error:
         logger.warning(f"Failed to read {filename} from UC Volume: {error[0]}")
     else:
-        logger.warning(f"Timed out loading {filename} from UC Volume (possible U2M auth flow)")
+        logger.warning(f"Timed out loading {filename} from UC Volume (60s)")
     return None
 
 
