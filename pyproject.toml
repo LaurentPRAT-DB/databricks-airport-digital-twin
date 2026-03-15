@@ -28,6 +28,7 @@ dependencies = [
     # Simulation config
     "pyyaml>=6.0",
     "matplotlib>=3.10.8",
+    "scikit-learn>=1.4",
 ]
 
 [project.optional-dependencies]

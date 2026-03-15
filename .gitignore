@@ -119,6 +119,7 @@ app/frontend/test-results/
 
 # Simulation output data (large JSON files and screenshots)
 simulation_output/*.json
+simulation_output/calibrated/
 simulation_output/screenshots/
 simulation_output_*.json
 

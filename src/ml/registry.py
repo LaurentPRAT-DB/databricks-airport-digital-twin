@@ -18,6 +18,23 @@ from src.calibration.profile import AirportProfileLoader
 
 logger = logging.getLogger(__name__)
 
+# Lazy import — OBTPredictor requires scikit-learn which may not be
+# installed in the lightweight Databricks App runtime.
+_obt_import_attempted = False
+_OBTPredictor = None
+
+
+def _get_obt_predictor_class():
+    global _obt_import_attempted, _OBTPredictor
+    if not _obt_import_attempted:
+        _obt_import_attempted = True
+        try:
+            from src.ml.obt_model import OBTPredictor
+            _OBTPredictor = OBTPredictor
+        except ImportError:
+            logger.warning("scikit-learn not available — OBT model disabled")
+    return _OBTPredictor
+
 # Try mlflow for UC registration
 try:
     import mlflow
@@ -31,7 +48,7 @@ class AirportModelRegistry:
     """Cache of ML model instances keyed by airport ICAO code."""
 
     def __init__(self):
-        # {icao: {"delay": DelayPredictor, "gate": GateRecommender, "congestion": CongestionPredictor}}
+        # {icao: {"delay": DelayPredictor, "gate": GateRecommender, "congestion": CongestionPredictor, "obt": OBTPredictor}}
         self._instances: Dict[str, Dict[str, Any]] = {}
         self._profile_loader = AirportProfileLoader()
 
@@ -50,11 +67,15 @@ class AirportModelRegistry:
         if airport_code not in self._instances:
             logger.info(f"Creating model set for {airport_code}")
             profile = self._profile_loader.get_profile(airport_code)
-            self._instances[airport_code] = {
+            models = {
                 "delay": DelayPredictor(airport_code=airport_code, airport_profile=profile),
                 "gate": GateRecommender(airport_code=airport_code, airport_profile=profile),
                 "congestion": CongestionPredictor(airport_code=airport_code, airport_profile=profile),
             }
+            OBT = _get_obt_predictor_class()
+            if OBT is not None:
+                models["obt"] = OBT(airport_code=airport_code, airport_profile=profile)
+            self._instances[airport_code] = models
         return self._instances[airport_code]
 
     def retrain(self, airport_code: str) -> Dict[str, Any]:
@@ -64,15 +85,19 @@ class AirportModelRegistry:
         OSM config (runway coords, gate layout, etc.) and calibration profile.
 
         Returns:
-            Dict with keys "delay", "gate", "congestion" (fresh instances).
+            Dict with keys "delay", "gate", "congestion" and optionally "obt" (fresh instances).
         """
         logger.info(f"Retraining models for {airport_code}")
         profile = self._profile_loader.get_profile(airport_code)
-        self._instances[airport_code] = {
+        models = {
             "delay": DelayPredictor(airport_code=airport_code, airport_profile=profile),
             "gate": GateRecommender(airport_code=airport_code, airport_profile=profile),
             "congestion": CongestionPredictor(airport_code=airport_code, airport_profile=profile),
         }
+        OBT = _get_obt_predictor_class()
+        if OBT is not None:
+            models["obt"] = OBT(airport_code=airport_code, airport_profile=profile)
+        self._instances[airport_code] = models
         return self._instances[airport_code]
 
     def register_to_unity_catalog(
@@ -95,7 +120,10 @@ class AirportModelRegistry:
             return {"status": "catalog_or_schema_not_configured"}
 
         results = {}
-        for model_key in ("delay", "gate", "congestion"):
+        model_keys = ["delay", "gate", "congestion"]
+        if _get_obt_predictor_class() is not None:
+            model_keys.append("obt")
+        for model_key in model_keys:
             model_name = f"{catalog}.{schema}.{model_key}_model_{airport_code}"
             try:
                 results[model_key] = f"registered:{model_name}"

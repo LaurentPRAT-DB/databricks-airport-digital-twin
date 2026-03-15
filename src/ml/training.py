@@ -215,6 +215,76 @@ def load_training_data_from_file(file_path: str) -> List[Dict[str, Any]]:
     return []
 
 
+def train_obt_model(
+    sim_json_path: str,
+    airport_code: str = "KSFO",
+    experiment_name: Optional[str] = None,
+    model_output_path: Optional[str] = None,
+    airport_profile: Optional["AirportProfile"] = None,
+) -> Dict[str, Any]:
+    """Train the OBT turnaround prediction model from simulation data.
+
+    Args:
+        sim_json_path: Path to simulation JSON file.
+        airport_code: ICAO airport code.
+        experiment_name: MLflow experiment name (auto-generated if None).
+        model_output_path: Path to save model pickle.
+        airport_profile: Optional calibrated profile.
+
+    Returns:
+        Dict with training metadata and metrics.
+    """
+    from src.ml.obt_features import extract_training_data, OBTFeatureSet
+    from src.ml.obt_model import OBTPredictor, _dict_to_feature_set
+
+    if experiment_name is None:
+        experiment_name = f"airport_models/{airport_code}/obt_model"
+
+    # Extract training data
+    samples = extract_training_data(sim_json_path)
+    if not samples:
+        return {"status": "no_data", "n_samples": 0}
+
+    features = [_dict_to_feature_set(s["features"]) for s in samples]
+    targets = [s["target"] for s in samples]
+
+    # Train
+    predictor = OBTPredictor(airport_code=airport_code, airport_profile=airport_profile)
+    train_result = predictor.train(features, targets)
+
+    # Save model
+    if model_output_path is None:
+        model_dir = Path(tempfile.gettempdir()) / "airport_ml_models" / airport_code
+        model_dir.mkdir(parents=True, exist_ok=True)
+        model_output_path = str(
+            model_dir / f"obt_model_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+        )
+
+    predictor.save(model_output_path)
+
+    result = {
+        "status": train_result.get("status", "unknown"),
+        "n_samples": len(samples),
+        "model_path": model_output_path,
+        "mlflow_enabled": MLFLOW_AVAILABLE,
+    }
+
+    # MLflow tracking
+    if MLFLOW_AVAILABLE:
+        try:
+            mlflow.set_experiment(experiment_name)
+            with mlflow.start_run() as run:
+                result["run_id"] = run.info.run_id
+                mlflow.log_param("model_type", "HistGradientBoostingRegressor")
+                mlflow.log_param("airport_code", airport_code)
+                mlflow.log_param("training_samples", len(samples))
+                mlflow.log_artifact(model_output_path, "model")
+        except Exception as e:
+            print(f"MLflow tracking failed: {e}")
+
+    return result
+
+
 if __name__ == "__main__":
     # Demo: train on sample data
     sample_data_path = "data/fallback/sample_flights.json"

@@ -1,0 +1,27 @@
+resources:
+  jobs:
+    obt_model_training:
+      name: "[${bundle.target}] Airport DT - OBT Model Training"
+      description: "Trains the two-stage OBT forecasting model on calibrated simulation data from UC Volume. Registers models in Unity Catalog."
+
+      environments:
+        - environment_key: ml_env
+          spec:
+            client: "1"
+            dependencies:
+              - scikit-learn
+              - pyyaml
+              - pydantic
+
+      tasks:
+        - task_key: train_obt_model
+          notebook_task:
+            notebook_path: ../databricks/notebooks/train_obt_model.py
+          environment_key: ml_env
+
+      tags:
+        project: airport-digital-twin
+        component: ml-training
+        target: ${bundle.target}
+
+      timeout_seconds: 1800

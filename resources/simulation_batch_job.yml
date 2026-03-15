@@ -2,7 +2,16 @@ resources:
   jobs:
     simulation_batch:
       name: "[${bundle.target}] Airport DT - Multi-Airport Simulation Batch"
-      description: "Runs 10 airport simulations in parallel (1000 flights each) with region-appropriate weather, then analyzes results"
+      description: "Runs 10 airport simulations in parallel (1000 flights each) with region-appropriate weather, then analyzes results and trains OBT model"
+
+      environments:
+        - environment_key: sim_env
+          spec:
+            client: "1"
+            dependencies:
+              - scikit-learn
+              - pyyaml
+              - pydantic
 
       tasks:
         # ── 10 parallel simulation tasks (one per airport) ──────────────
@@ -80,6 +89,23 @@ resources:
         - task_key: analyze_results
           notebook_task:
             notebook_path: ../databricks/notebooks/analyze_simulations.py
+          depends_on:
+            - task_key: sim_sfo
+            - task_key: sim_jfk
+            - task_key: sim_lhr
+            - task_key: sim_fra
+            - task_key: sim_dxb
+            - task_key: sim_nrt
+            - task_key: sim_sin
+            - task_key: sim_gru
+            - task_key: sim_syd
+            - task_key: sim_jnb
+
+        # ── OBT model training (depends on all simulations) ──────────────
+        - task_key: train_obt_model
+          notebook_task:
+            notebook_path: ../databricks/notebooks/train_obt_model.py
+          environment_key: sim_env
           depends_on:
             - task_key: sim_sfo
             - task_key: sim_jfk
