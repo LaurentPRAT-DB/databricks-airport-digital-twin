@@ -49,63 +49,81 @@ def _find_simulation_files_local() -> list[dict]:
 
 
 def _find_simulation_files_from_catalog() -> list[dict] | None:
-    """Query simulation_runs table in Unity Catalog for file listing."""
+    """Query simulation_runs table in Unity Catalog for file listing.
+
+    Uses the Databricks SDK StatementExecution API with a threaded timeout
+    to prevent WorkspaceClient() from hanging on U2M browser-based OAuth
+    in headless environments (Databricks Apps).
+    """
     try:
-        from databricks import sql
+        from databricks.sdk import WorkspaceClient
+        from databricks.sdk.service.sql import StatementState
     except ImportError:
         return None
 
-    host = os.getenv("DATABRICKS_HOST") or os.getenv("DATABRICKS_SERVER_HOSTNAME")
-    http_path = os.getenv("DATABRICKS_HTTP_PATH") or os.getenv("DATABRICKS_WAREHOUSE_HTTP_PATH")
-    use_oauth = os.getenv("DATABRICKS_USE_OAUTH", "false").lower() == "true"
-    token = os.getenv("DATABRICKS_TOKEN") or os.getenv("DATABRICKS_ACCESS_TOKEN")
-
-    if not (host and http_path):
+    warehouse_id = os.getenv("DATABRICKS_WAREHOUSE_ID", "")
+    if not warehouse_id:
+        # Extract from HTTP_PATH: /sql/1.0/warehouses/<id>
+        http_path = os.getenv("DATABRICKS_HTTP_PATH", "")
+        if "/warehouses/" in http_path:
+            warehouse_id = http_path.rsplit("/warehouses/", 1)[-1]
+    if not warehouse_id:
         return None
 
-    conn_params: dict = {
-        "server_hostname": host,
-        "http_path": http_path,
-        "catalog": _UC_CATALOG,
-        "schema": _UC_SCHEMA,
-    }
-    if use_oauth:
-        conn_params["credentials_provider"] = None
-    elif token:
-        conn_params["access_token"] = token
-    conn_params["_socket_timeout"] = 10
+    import threading
 
-    try:
-        with sql.connect(**conn_params) as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(f"""
+    result: list = []
+    error: list = []
+
+    def _try_query():
+        try:
+            w = WorkspaceClient()
+            resp = w.statement_execution.execute_statement(
+                warehouse_id=warehouse_id,
+                statement=f"""
                     SELECT filename, airport, scenario_name, total_flights,
                            arrivals, departures, duration_hours, size_bytes,
                            volume_path
                     FROM {_UC_CATALOG}.{_UC_SCHEMA}.simulation_runs
                     ORDER BY created_at DESC
-                """)
-                columns = [desc[0] for desc in cursor.description]
-                rows = cursor.fetchall()
-                files = []
-                for row in rows:
-                    r = dict(zip(columns, row))
-                    files.append({
-                        "filename": r["filename"],
-                        "airport": r["airport"],
-                        "total_flights": r["total_flights"] or 0,
-                        "arrivals": r["arrivals"] or 0,
-                        "departures": r["departures"] or 0,
-                        "duration_hours": r["duration_hours"] or 0,
-                        "size_kb": round((r["size_bytes"] or 0) / 1024, 1),
-                        "scenario_name": r["scenario_name"],
-                        "volume_path": r["volume_path"],
-                    })
-                logger.info(f"Catalog returned {len(files)} simulation files")
-                return files
-    except Exception as e:
-        logger.warning(f"Failed to query simulation_runs table: {e}")
-        return None
+                """,
+                wait_timeout="15s",
+            )
+            if not (resp.status and resp.status.state == StatementState.SUCCEEDED):
+                error.append(f"Statement failed: {resp.status}")
+                return
+
+            files = []
+            columns = [c.name for c in resp.manifest.schema.columns]
+            for row in (resp.result.data_array or []):
+                r = dict(zip(columns, row))
+                files.append({
+                    "filename": r["filename"],
+                    "airport": r["airport"],
+                    "total_flights": int(r["total_flights"] or 0),
+                    "arrivals": int(r["arrivals"] or 0),
+                    "departures": int(r["departures"] or 0),
+                    "duration_hours": float(r["duration_hours"] or 0),
+                    "size_kb": round(int(r["size_bytes"] or 0) / 1024, 1),
+                    "scenario_name": r["scenario_name"],
+                    "volume_path": r["volume_path"],
+                })
+            result.append(files)
+        except Exception as e:
+            error.append(e)
+
+    thread = threading.Thread(target=_try_query, daemon=True)
+    thread.start()
+    thread.join(timeout=15)  # 15s max to prevent U2M hang
+
+    if result:
+        logger.info(f"Catalog returned {len(result[0])} simulation files")
+        return result[0]
+    if error:
+        logger.warning(f"Failed to query simulation_runs table: {error[0]}")
+    else:
+        logger.warning("Timed out querying simulation_runs (possible U2M auth flow)")
+    return None
 
 
 def _load_simulation_from_volume(filename: str) -> dict | None:
