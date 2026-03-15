@@ -333,12 +333,25 @@ class GateRecommender:
             else:
                 score += 0.05  # Small penalty for non-matching operator
 
+        elif self._profile and airline_code:
+            # No OSM operator, but profile has airline shares — use affinity
+            # Dominant airlines get a slight bonus (they'd occupy more gates)
+            share = self._profile.airline_shares.get(airline_code, 0.0)
+            # Scale: 0% share → 0.08, 50% share → 0.16
+            score += 0.08 + min(share, 0.5) * 0.16
         else:
             # No operator assigned - neutral score
             score += 0.10
 
         # 3. Terminal type matching (15% weight)
+        # If profile has domestic routes, check against known domestic destinations
         is_international = self._is_international_flight(callsign)
+        if self._profile and not is_international:
+            # Double-check: if airline is not in domestic shares at all,
+            # it might be international
+            intl_airlines = set(self._profile.international_route_shares.keys()) if self._profile.international_route_shares else set()
+            if airline_code and airline_code not in self._profile.airline_shares and intl_airlines:
+                is_international = True
 
         if is_international and gate.is_international:
             score += 0.15

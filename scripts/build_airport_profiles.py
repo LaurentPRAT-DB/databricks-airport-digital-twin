@@ -37,6 +37,63 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _persist_to_unity_catalog(profiles: list, args) -> None:
+    """Persist profiles to Unity Catalog airport_profiles table."""
+    import os
+
+    try:
+        from databricks.sdk import WorkspaceClient
+        from databricks.sdk.service.sql import StatementState
+    except ImportError:
+        logger.error("databricks-sdk not installed — cannot persist to UC")
+        return
+
+    catalog = args.catalog or os.environ.get("DATABRICKS_CATALOG", "serverless_stable_3n0ihb_catalog")
+    schema = args.schema or os.environ.get("DATABRICKS_SCHEMA", "airport_digital_twin")
+    warehouse_id = args.warehouse_id or os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
+
+    if not warehouse_id:
+        logger.error("No warehouse ID — set --warehouse-id or DATABRICKS_WAREHOUSE_ID")
+        return
+
+    client = WorkspaceClient()
+    logger.info("Persisting %d profiles to %s.%s.airport_profiles", len(profiles), catalog, schema)
+
+    for p in profiles:
+        # Escape single quotes in JSON
+        profile_json = p.to_json().replace("'", "''")
+        sql = (
+            f"MERGE INTO {catalog}.{schema}.airport_profiles AS target "
+            f"USING (SELECT '{p.icao_code}' AS icao_code) AS source "
+            f"ON target.icao_code = source.icao_code "
+            f"WHEN MATCHED THEN UPDATE SET "
+            f"  iata_code = '{p.iata_code}', "
+            f"  profile_json = '{profile_json}', "
+            f"  data_source = '{p.data_source}', "
+            f"  sample_size = {p.sample_size}, "
+            f"  profile_date = current_timestamp(), "
+            f"  updated_at = current_timestamp() "
+            f"WHEN NOT MATCHED THEN INSERT "
+            f"  (icao_code, iata_code, profile_json, data_source, sample_size, profile_date, created_at, updated_at) "
+            f"VALUES ('{p.icao_code}', '{p.iata_code}', '{profile_json}', '{p.data_source}', "
+            f"  {p.sample_size}, current_timestamp(), current_timestamp(), current_timestamp())"
+        )
+        try:
+            response = client.statement_execution.execute_statement(
+                warehouse_id=warehouse_id,
+                statement=sql,
+                wait_timeout="30s",
+            )
+            if response.status and response.status.state == StatementState.SUCCEEDED:
+                logger.info("  Persisted %s (%s) to UC", p.icao_code, p.iata_code)
+            else:
+                logger.warning("  Failed to persist %s: %s", p.icao_code, response.status)
+        except Exception as e:
+            logger.error("  Error persisting %s: %s", p.icao_code, e)
+
+    logger.info("UC persistence complete")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build airport calibration profiles")
     parser.add_argument(
@@ -61,6 +118,13 @@ def main():
         "--fallback-only", action="store_true",
         help="Build fallback profiles only (no external data needed)",
     )
+    parser.add_argument(
+        "--persist-to-uc", action="store_true",
+        help="Persist built profiles to Unity Catalog airport_profiles table",
+    )
+    parser.add_argument("--catalog", default=None, help="UC catalog name (default: from env or serverless_stable_3n0ihb_catalog)")
+    parser.add_argument("--schema", default=None, help="UC schema name (default: airport_digital_twin)")
+    parser.add_argument("--warehouse-id", default=None, help="SQL warehouse ID (default: from env DATABRICKS_WAREHOUSE_ID)")
     args = parser.parse_args()
 
     airports = args.airports or (US_AIRPORTS + INTERNATIONAL_AIRPORTS)
@@ -69,11 +133,15 @@ def main():
     if args.fallback_only:
         logger.info("Building fallback-only profiles for %d airports", len(airports))
         output_dir.mkdir(parents=True, exist_ok=True)
+        built = []
         for iata in airports:
             profile = _build_fallback_profile(iata)
             path = profile.save(output_dir / f"{profile.icao_code}.json")
+            built.append(profile)
             logger.info("  %s → %s", iata, path)
         logger.info("Done. %d fallback profiles written to %s", len(airports), output_dir)
+        if args.persist_to_uc:
+            _persist_to_unity_catalog(built, args)
         return
 
     opensky_auth = None
@@ -98,6 +166,9 @@ def main():
               f"delay_rate={p.delay_rate:.1%}, "
               f"samples={p.sample_size}")
     print(f"\nProfiles saved to: {output_dir}")
+
+    if args.persist_to_uc:
+        _persist_to_unity_catalog(profiles, args)
 
 
 if __name__ == "__main__":

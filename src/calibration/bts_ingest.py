@@ -338,6 +338,233 @@ BTS_AIRCRAFT_MAP: dict[str, str] = {
     "636": "A388",
 }
 
+# 2-letter DOT carrier code → 3-letter ICAO code
+DOT_TO_ICAO: dict[str, str] = {
+    "UA": "UAL", "DL": "DAL", "AA": "AAL", "WN": "SWA",
+    "AS": "ASA", "B6": "JBU", "NK": "NKS", "F9": "FFT",
+    "HA": "HAL", "G4": "AAY", "SY": "SCX", "MX": "MXA",
+    # Regional carriers → parent airline ICAO
+    "OO": "SKW", "QX": "QXE", "YV": "MSA", "MQ": "ENY",
+    "YX": "RPA", "OH": "PSA", "9E": "EDV", "PT": "SWQ",
+    "ZW": "AWI", "CP": "CPZ", "C5": "UCA", "KS": "PEN",
+    # International carriers seen in T-100
+    "BA": "BAW", "LH": "DLH", "AF": "AFR", "KL": "KLM",
+    "EK": "UAE", "NH": "ANA", "JL": "JAL", "SQ": "SIA",
+    "QF": "QFA", "CX": "CPA", "KE": "KAL", "OZ": "AAR",
+    "BR": "EVA", "CI": "CAL", "TK": "THY", "EY": "ETD",
+    "SA": "SAA", "LA": "TAM", "AC": "ACA", "AM": "AMX",
+    "VS": "VIR", "LX": "SWR", "OS": "AUA", "SK": "SAS",
+    "AY": "FIN", "IB": "IBE", "TP": "TAP", "EI": "EIN",
+    "LY": "ELY", "MS": "MSR", "RJ": "RJA",
+}
+
+# Regional carrier → mainline parent (for consolidation)
+REGIONAL_TO_MAINLINE: dict[str, str] = {
+    "SKW": "UAL",  # SkyWest primarily operates as United Express
+    "QXE": "ASA",  # Horizon Air → Alaska
+    "ENY": "AAL",  # Envoy → American Eagle
+    "RPA": "DAL",  # Republic → Delta Connection
+    "PSA": "AAL",  # PSA Airlines → American Eagle
+    "EDV": "DAL",  # Endeavor → Delta Connection
+    "MSA": "UAL",  # Mesa → United Express
+    "SWQ": "DAL",  # SkyWest DL connection
+    "AWI": "AAL",  # Air Wisconsin → AA
+    "CPZ": "AAL",  # Compass → AA
+    "UCA": "UAL",  # CommutAir → UA
+}
+
+
+def parse_db28_segment_zips(
+    zip_dir: Path,
+    target_airport: str,
+    consolidate_regionals: bool = True,
+) -> dict:
+    """Parse BTS DB28 pipe-delimited segment zip files for a specific airport.
+
+    DB28 format (pipe-delimited .asc files):
+    [0]=YEAR [1]=MONTH [2]=ORIGIN [6]=DEST [10]=CARRIER(2-letter)
+    [11]=AIRCRAFT_TYPE [14]=SERVICE_CLASS [17]=DEPARTURES_PERFORMED
+    [18]=SEATS [19]=PASSENGERS
+
+    Args:
+        zip_dir: Directory containing DB28SEG.DD.WAC.*.zip files
+        target_airport: IATA code (e.g., "SFO")
+        consolidate_regionals: If True, merge regional carriers into mainline parents
+
+    Returns:
+        Dict with airline_departures, route_volumes, fleet_usage, total_departures
+    """
+    import zipfile
+
+    airline_departures: Counter = Counter()
+    route_volumes: Counter = Counter()
+    fleet_usage: dict[str, Counter] = defaultdict(Counter)
+    total_departures = 0
+
+    zip_files = sorted(
+        p for p in zip_dir.iterdir()
+        if p.suffix == ".zip" and p.name.startswith("DB28SEG")
+    )
+
+    if not zip_files:
+        logger.warning("No DB28SEG zip files found in %s", zip_dir)
+        return {
+            "airline_departures": {},
+            "route_volumes": {},
+            "fleet_usage": {},
+            "total_departures": 0,
+        }
+
+    logger.info("Parsing %d DB28 zip files for %s...", len(zip_files), target_airport)
+
+    for zpath in zip_files:
+        with zipfile.ZipFile(zpath) as zf:
+            for fname in zf.namelist():
+                with zf.open(fname) as f:
+                    for raw in f:
+                        line = raw.decode("utf-8-sig", errors="replace").strip()
+                        fields = line.split("|")
+                        if len(fields) < 20:
+                            continue
+
+                        origin = fields[2]
+                        if origin != target_airport:
+                            continue
+
+                        service_class = fields[14]
+                        if service_class != "F":  # Scheduled only
+                            continue
+
+                        deps = _safe_int(fields[17])
+                        if deps <= 0:
+                            continue
+
+                        carrier_dot = fields[10]
+                        carrier = DOT_TO_ICAO.get(carrier_dot, carrier_dot)
+                        if consolidate_regionals:
+                            carrier = REGIONAL_TO_MAINLINE.get(carrier, carrier)
+
+                        dest = fields[6]
+                        aircraft_code = fields[11]
+
+                        airline_departures[carrier] += deps
+                        route_volumes[dest] += deps
+                        fleet_usage[carrier][aircraft_code] += deps
+                        total_departures += deps
+
+    logger.info(
+        "DB28 for %s: %d departures, %d carriers, %d routes from %d files",
+        target_airport, total_departures, len(airline_departures),
+        len(route_volumes), len(zip_files),
+    )
+
+    return {
+        "airline_departures": dict(airline_departures),
+        "route_volumes": dict(route_volumes),
+        "fleet_usage": {k: dict(v) for k, v in fleet_usage.items()},
+        "total_departures": total_departures,
+    }
+
+
+def build_profile_from_db28(
+    target_airport: str,
+    zip_dir: Path,
+    consolidate_regionals: bool = True,
+) -> Optional[AirportProfile]:
+    """Build an AirportProfile from DB28 pipe-delimited segment zip files.
+
+    Args:
+        target_airport: IATA code (e.g., "SFO")
+        zip_dir: Directory containing DB28SEG.DD.WAC.*.zip files
+        consolidate_regionals: Merge regional carriers into mainline parents
+
+    Returns:
+        AirportProfile, or None if no data found
+    """
+    data = parse_db28_segment_zips(zip_dir, target_airport, consolidate_regionals)
+    if data["total_departures"] == 0:
+        return None
+
+    icao = _iata_to_icao(target_airport)
+    total = data["total_departures"]
+
+    # Airline shares
+    airline_shares = {k: v / total for k, v in data["airline_departures"].items()}
+    # Keep top 20 airlines, consolidate rest
+    top_airlines = dict(sorted(airline_shares.items(), key=lambda x: -x[1])[:20])
+    remainder = 1.0 - sum(top_airlines.values())
+    if remainder > 0.001:
+        top_airlines["OTH"] = remainder
+
+    # Route shares — split domestic vs international
+    # US domestic = 3-letter code that maps to K-prefixed ICAO
+    domestic_route_shares: dict[str, float] = {}
+    international_route_shares: dict[str, float] = {}
+    dom_total = 0
+    intl_total = 0
+
+    for dest, count in data["route_volumes"].items():
+        dest_icao = _iata_to_icao(dest)
+        if dest_icao.startswith("K") or dest in _US_IATA_CODES:
+            domestic_route_shares[dest] = count
+            dom_total += count
+        else:
+            international_route_shares[dest] = count
+            intl_total += count
+
+    # Normalize
+    if dom_total > 0:
+        domestic_route_shares = {
+            k: v / dom_total
+            for k, v in sorted(domestic_route_shares.items(), key=lambda x: -x[1])[:25]
+        }
+    if intl_total > 0:
+        international_route_shares = {
+            k: v / intl_total
+            for k, v in sorted(international_route_shares.items(), key=lambda x: -x[1])[:20]
+        }
+
+    domestic_ratio = dom_total / total if total > 0 else 0.7
+
+    # Fleet mix per airline (top 5 airlines only, top 5 types each)
+    fleet_mix: dict[str, dict[str, float]] = {}
+    for carrier, types in data["fleet_usage"].items():
+        if carrier not in top_airlines or airline_shares.get(carrier, 0) < 0.02:
+            continue
+        carrier_total = sum(types.values())
+        if carrier_total > 0:
+            top_types = sorted(types.items(), key=lambda x: -x[1])[:6]
+            fleet_mix[carrier] = {t: c / carrier_total for t, c in top_types}
+
+    return AirportProfile(
+        icao_code=icao,
+        iata_code=target_airport,
+        airline_shares=top_airlines,
+        domestic_route_shares=domestic_route_shares,
+        international_route_shares=international_route_shares,
+        domestic_ratio=round(domestic_ratio, 2),
+        fleet_mix=fleet_mix,
+        hourly_profile=[],  # DB28 doesn't have hourly data
+        delay_rate=0.0,  # DB28 doesn't have delay data
+        delay_distribution={},
+        mean_delay_minutes=0.0,
+        data_source="BTS_DB28",
+        sample_size=total,
+    )
+
+
+# Common US IATA codes for domestic/international classification
+_US_IATA_CODES = {
+    "SFO", "LAX", "ORD", "DFW", "JFK", "ATL", "DEN", "SEA", "BOS", "PHX",
+    "LAS", "MCO", "MIA", "CLT", "MSP", "DTW", "EWR", "PHL", "IAH", "SAN",
+    "PDX", "SLC", "AUS", "BNA", "SJC", "SMF", "OAK", "RDU", "MCI", "IND",
+    "MKE", "CLE", "CMH", "PIT", "STL", "TPA", "FLL", "RSW", "DAL", "HOU",
+    "IAD", "DCA", "LGA", "BWI", "MDW", "HNL", "OGG", "ANC", "FAI",
+    "BDL", "JAX", "SNA", "ONT", "BUR", "ABQ", "TUS", "ELP", "OKC", "SAT",
+    "RNO", "BHM", "ORF", "RIC", "CHS", "SDF", "GRR", "DSM", "LIT", "TUL",
+    "PBI", "SRQ", "SYR", "ROC", "BUF", "ALB", "PWM", "PVD",
+}
+
 
 def _safe_int(val: str) -> int:
     """Parse an int from a string, returning 0 on failure."""

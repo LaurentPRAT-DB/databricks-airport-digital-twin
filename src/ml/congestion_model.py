@@ -310,9 +310,39 @@ class CongestionPredictor:
 
         return min(1.0, base_confidence + count_factor)
 
+    def _get_hourly_capacity_scale(self) -> float:
+        """Scale capacity based on profile's hourly traffic pattern.
+
+        During peak hours airports handle more traffic, so effective capacity
+        is higher.  During off-peak, capacity stays at the baseline.
+
+        Returns:
+            Multiplier >= 1.0 (peak hours get up to 1.5× capacity).
+        """
+        if not self._profile or not self._profile.hourly_profile:
+            return 1.0
+
+        from datetime import datetime
+        hour = datetime.now().hour
+        profile = self._profile.hourly_profile
+
+        # Normalize: peak weight → 1.0, trough weight → ~0
+        max_weight = max(profile) if profile else 1.0
+        if max_weight <= 0:
+            return 1.0
+
+        relative = profile[hour] / max_weight  # 0..1
+
+        # Scale capacity: off-peak (relative~0) → 1.0×, peak (relative~1) → 1.5×
+        return 1.0 + relative * 0.5
+
     def predict(self, flights: List[dict]) -> List[AreaCongestion]:
         """
         Predict congestion levels for all airport areas.
+
+        When a calibrated profile is available, area capacities are scaled
+        by the hourly traffic pattern — peak hours tolerate higher counts
+        before flagging congestion.
 
         Args:
             flights: List of flight dicts with position and status info.
@@ -321,10 +351,12 @@ class CongestionPredictor:
             List of AreaCongestion for all areas.
         """
         results = []
+        capacity_scale = self._get_hourly_capacity_scale()
 
         for area in self.areas.values():
             count = self._count_flights_in_area(flights, area)
-            level = self._compute_congestion_level(count, area.capacity)
+            effective_capacity = max(1, int(area.capacity * capacity_scale))
+            level = self._compute_congestion_level(count, effective_capacity)
             wait_time = self._estimate_wait_time(level, area.area_type)
             confidence = self._compute_confidence(count, area.area_type)
 

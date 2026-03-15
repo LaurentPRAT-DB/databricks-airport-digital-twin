@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # Default raw data directory
 _RAW_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "calibration" / "raw"
 _PROFILES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "calibration" / "profiles"
+_DB28_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "calibration" / "download_manual"
 
 # Well-known US airports (covered by BTS)
 US_AIRPORTS = [
@@ -93,7 +94,18 @@ def _build_single_profile(
 ) -> AirportProfile:
     """Build profile for a single airport, trying data sources in priority order."""
 
-    # Try BTS data (US airports)
+    # 1. Try DB28 pipe-delimited zips (real BTS T-100 data, highest priority for US)
+    if iata in US_AIRPORTS and _DB28_DIR.exists():
+        db28_zips = list(_DB28_DIR.glob("DB28SEG*.zip"))
+        if db28_zips:
+            from src.calibration.bts_ingest import build_profile_from_db28
+            profile = build_profile_from_db28(iata, _DB28_DIR)
+            if profile is not None:
+                # DB28 lacks hourly/delay data — merge from known_stats
+                _enrich_with_known_stats(profile, iata)
+                return profile
+
+    # 2. Try BTS CSV data (field-selector format)
     t100_dom = raw_dir / "T_T100_SEGMENT_ALL_CARRIER.csv"
     t100_intl = raw_dir / "T_T100_INTERNATIONAL_SEGMENT.csv"
     ontime = raw_dir / "On_Time_Reporting_Carrier_On_Time_Performance.csv"
@@ -109,7 +121,7 @@ def _build_single_profile(
             ontime_path=ontime if ontime.exists() else None,
         )
 
-    # Try OpenSky (international airports)
+    # 3. Try OpenSky (international airports)
     if use_opensky:
         try:
             from src.calibration.opensky_ingest import build_profile_from_opensky
@@ -119,11 +131,35 @@ def _build_single_profile(
         except Exception as e:
             logger.warning("OpenSky failed for %s: %s, falling back", iata, e)
 
-    # Try known hand-researched profiles (between raw data and generic fallback)
+    # 4. Try known hand-researched profiles
     from src.calibration.known_profiles import get_known_profile
     known = get_known_profile(iata)
     if known is not None:
         return known
 
-    # Fallback to hardcoded distributions
+    # 5. Fallback to hardcoded distributions
     return _build_fallback_profile(iata)
+
+
+def _enrich_with_known_stats(profile: AirportProfile, iata: str) -> None:
+    """Fill in fields that DB28 doesn't provide using known_stats data."""
+    from src.calibration.known_profiles import get_known_profile
+    known = get_known_profile(iata)
+    if known is None:
+        return
+
+    # DB28 has no hourly profile
+    if not profile.hourly_profile and known.hourly_profile:
+        profile.hourly_profile = known.hourly_profile
+
+    # DB28 has no delay data
+    if profile.delay_rate == 0.0 and known.delay_rate > 0:
+        profile.delay_rate = known.delay_rate
+    if not profile.delay_distribution and known.delay_distribution:
+        profile.delay_distribution = known.delay_distribution
+    if profile.mean_delay_minutes == 0.0 and known.mean_delay_minutes > 0:
+        profile.mean_delay_minutes = known.mean_delay_minutes
+
+    # Update data source to reflect the merge
+    if "BTS_DB28" in profile.data_source:
+        profile.data_source = "BTS_DB28+known_stats"

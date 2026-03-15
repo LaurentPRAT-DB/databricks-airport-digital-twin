@@ -86,7 +86,8 @@ class AirportProfileLoader:
         Loading order:
         1. In-memory cache
         2. Local JSON file (data/calibration/profiles/{ICAO}.json)
-        3. Hardcoded fallback (current distributions, always works)
+        3. Unity Catalog table (when running on Databricks)
+        4. Hardcoded fallback (current distributions, always works)
         """
         # Normalize to ICAO
         icao = _iata_to_icao(airport_code)
@@ -105,11 +106,65 @@ class AirportProfileLoader:
             except Exception as e:
                 logger.warning("Failed to load profile %s: %s", json_path, e)
 
+        # Try Unity Catalog
+        uc_profile = self._load_from_unity_catalog(icao)
+        if uc_profile is not None:
+            self._cache[icao] = uc_profile
+            return uc_profile
+
         # Fallback to hardcoded
         profile = _build_fallback_profile(airport_code)
         self._cache[icao] = profile
         logger.info("Using fallback profile for %s", icao)
         return profile
+
+    def _load_from_unity_catalog(self, icao: str) -> Optional[AirportProfile]:
+        """Try to load profile from Unity Catalog airport_profiles table.
+
+        Returns None if not running on Databricks or table is not available.
+        """
+        try:
+            import os
+            warehouse_id = os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
+            if not warehouse_id:
+                return None
+
+            from databricks.sdk import WorkspaceClient
+            from databricks.sdk.service.sql import StatementState
+
+            catalog = os.environ.get("DATABRICKS_CATALOG", "serverless_stable_3n0ihb_catalog")
+            schema = os.environ.get("DATABRICKS_SCHEMA", "airport_digital_twin")
+
+            client = WorkspaceClient()
+            sql = (
+                f"SELECT profile_json FROM {catalog}.{schema}.airport_profiles "
+                f"WHERE icao_code = '{icao}' LIMIT 1"
+            )
+            response = client.statement_execution.execute_statement(
+                warehouse_id=warehouse_id,
+                statement=sql,
+                wait_timeout="30s",
+            )
+
+            if (
+                response.status
+                and response.status.state == StatementState.SUCCEEDED
+                and response.result
+                and response.result.data_array
+            ):
+                row = response.result.data_array[0]
+                profile_json = row[0]
+                data = json.loads(profile_json)
+                profile = AirportProfile.from_json(data)
+                logger.info("Loaded profile for %s from Unity Catalog", icao)
+                return profile
+
+        except ImportError:
+            logger.debug("Databricks SDK not available, skipping UC lookup")
+        except Exception as e:
+            logger.debug("UC profile lookup for %s failed: %s", icao, e)
+
+        return None
 
     def clear_cache(self) -> None:
         """Clear cached profiles."""
