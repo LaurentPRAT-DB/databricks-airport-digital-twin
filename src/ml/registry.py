@@ -3,6 +3,9 @@
 Manages model instances keyed by ICAO airport code, replacing the
 previous singleton pattern.  Models are created on first access and
 cached for the lifetime of the process.
+
+When a calibrated AirportProfile is available, it is passed to model
+constructors so predictions are calibrated with real-data priors.
 """
 
 import logging
@@ -11,6 +14,7 @@ from typing import Any, Dict, Optional
 from src.ml.congestion_model import CongestionPredictor
 from src.ml.delay_model import DelayPredictor
 from src.ml.gate_model import GateRecommender
+from src.calibration.profile import AirportProfileLoader
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +33,13 @@ class AirportModelRegistry:
     def __init__(self):
         # {icao: {"delay": DelayPredictor, "gate": GateRecommender, "congestion": CongestionPredictor}}
         self._instances: Dict[str, Dict[str, Any]] = {}
+        self._profile_loader = AirportProfileLoader()
 
     def get_models(self, airport_code: str) -> Dict[str, Any]:
         """Get or create model set for an airport.
+
+        When a calibrated AirportProfile is available, it is passed to
+        model constructors for data-driven priors.
 
         Args:
             airport_code: ICAO code (e.g. "KSFO", "OMAA").
@@ -41,10 +49,11 @@ class AirportModelRegistry:
         """
         if airport_code not in self._instances:
             logger.info(f"Creating model set for {airport_code}")
+            profile = self._profile_loader.get_profile(airport_code)
             self._instances[airport_code] = {
-                "delay": DelayPredictor(airport_code=airport_code),
-                "gate": GateRecommender(airport_code=airport_code),
-                "congestion": CongestionPredictor(airport_code=airport_code),
+                "delay": DelayPredictor(airport_code=airport_code, airport_profile=profile),
+                "gate": GateRecommender(airport_code=airport_code, airport_profile=profile),
+                "congestion": CongestionPredictor(airport_code=airport_code, airport_profile=profile),
             }
         return self._instances[airport_code]
 
@@ -52,16 +61,17 @@ class AirportModelRegistry:
         """Retrain all models for an airport using current synthetic data.
 
         Forces recreation of model instances so they pick up latest
-        OSM config (runway coords, gate layout, etc.).
+        OSM config (runway coords, gate layout, etc.) and calibration profile.
 
         Returns:
             Dict with keys "delay", "gate", "congestion" (fresh instances).
         """
         logger.info(f"Retraining models for {airport_code}")
+        profile = self._profile_loader.get_profile(airport_code)
         self._instances[airport_code] = {
-            "delay": DelayPredictor(airport_code=airport_code),
-            "gate": GateRecommender(airport_code=airport_code),
-            "congestion": CongestionPredictor(airport_code=airport_code),
+            "delay": DelayPredictor(airport_code=airport_code, airport_profile=profile),
+            "gate": GateRecommender(airport_code=airport_code, airport_profile=profile),
+            "congestion": CongestionPredictor(airport_code=airport_code, airport_profile=profile),
         }
         return self._instances[airport_code]
 

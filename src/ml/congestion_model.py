@@ -1,8 +1,17 @@
-"""Congestion prediction model for airport areas."""
+"""Congestion prediction model for airport areas.
+
+When an AirportProfile is provided, capacity thresholds are adjusted
+based on the airport's calibrated hourly traffic patterns.
+"""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.calibration.profile import AirportProfile
 
 
 class CongestionLevel(Enum):
@@ -37,14 +46,20 @@ class AirportArea:
 class CongestionPredictor:
     """Predicts congestion levels for airport areas."""
 
-    def __init__(self, airport_code: str = "KSFO"):
+    def __init__(
+        self,
+        airport_code: str = "KSFO",
+        airport_profile: Optional[AirportProfile] = None,
+    ):
         """Initialize the congestion predictor with airport area definitions.
 
         Args:
             airport_code: ICAO airport code. Areas are built dynamically from
                 OSM config when available, falling back to hardcoded SFO areas.
+            airport_profile: Optional calibrated profile for traffic-aware thresholds
         """
         self.airport_code = airport_code
+        self._profile = airport_profile
         self.areas = self._build_areas_from_config() or self._define_sfo_fallback_areas()
 
     def _build_areas_from_config(self) -> Optional[Dict[str, AirportArea]]:

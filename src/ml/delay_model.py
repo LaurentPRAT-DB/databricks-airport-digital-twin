@@ -1,14 +1,20 @@
 """Delay prediction model for the Airport Digital Twin.
 
 This module provides delay prediction capabilities using rule-based
-logic with realistic variation.
+logic with realistic variation. When an AirportProfile is provided,
+delay rates and distributions are calibrated from real data.
 """
+
+from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from src.ml.features import FeatureSet, extract_features
+
+if TYPE_CHECKING:
+    from src.calibration.profile import AirportProfile
 
 
 @dataclass
@@ -35,17 +41,31 @@ class DelayPredictor:
     - Historical patterns (random factor for realism)
     """
 
-    def __init__(self, airport_code: str = "KSFO", model_path: Optional[str] = None):
+    def __init__(
+        self,
+        airport_code: str = "KSFO",
+        model_path: Optional[str] = None,
+        airport_profile: Optional[AirportProfile] = None,
+    ):
         """Initialize the delay predictor.
 
         Args:
             airport_code: ICAO airport code for this predictor instance
             model_path: Optional path to a saved model (ignored for demo)
+            airport_profile: Optional calibrated profile for delay priors
         """
         self.airport_code = airport_code
         self.model_path = model_path
+        self._profile = airport_profile
         # Seed for reproducibility in tests (but still random per instance)
         self._random = random.Random()
+
+        # Calibrated base delay rate (from profile or default)
+        self._base_delay_rate = 0.15
+        self._mean_delay = 20.0
+        if airport_profile:
+            self._base_delay_rate = airport_profile.delay_rate
+            self._mean_delay = airport_profile.mean_delay_minutes
 
     def predict(self, features: FeatureSet) -> DelayPrediction:
         """Predict delay for a single flight.
@@ -56,15 +76,18 @@ class DelayPredictor:
         Returns:
             DelayPrediction with delay estimate and confidence
         """
+        # Scale base delay from calibrated mean (default 0 for non-delayed prediction)
+        # The profile's mean_delay adjusts the overall delay magnitude
+        delay_scale = self._mean_delay / 20.0  # 20.0 is the default mean
         base_delay = 0.0
         confidence = 0.7  # Default confidence
 
-        # Peak hours (7-9am, 5-7pm) add 10-20 minutes base delay
+        # Peak hours (7-9am, 5-7pm) add delay scaled by airport profile
         if features.hour_of_day in [7, 8, 9]:
-            base_delay += 15.0
+            base_delay += 15.0 * delay_scale
             confidence -= 0.1
         elif features.hour_of_day in [17, 18, 19]:
-            base_delay += 12.0
+            base_delay += 12.0 * delay_scale
             confidence -= 0.1
 
         # Weekend flights typically have fewer delays

@@ -416,6 +416,25 @@ TBLPROPERTIES (
 COMMENT 'ML prediction results for model evaluation and retraining feedback'
 """
 
+AIRPORT_PROFILES_DDL = """
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.airport_profiles (
+  icao_code STRING NOT NULL COMMENT 'ICAO airport code (e.g., KSFO)',
+  iata_code STRING COMMENT 'IATA airport code (e.g., SFO)',
+  profile_json STRING NOT NULL COMMENT 'Full AirportProfile as JSON',
+  data_source STRING COMMENT 'Origin of profile data (BTS_T100, OpenSky, fallback)',
+  sample_size INT COMMENT 'Number of flights used to build profile',
+  profile_date TIMESTAMP COMMENT 'When profile was built',
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT airport_profiles_pk PRIMARY KEY (icao_code)
+) USING DELTA
+TBLPROPERTIES (
+  'delta.enableChangeDataFeed' = 'true',
+  'delta.columnMapping.mode' = 'name'
+)
+COMMENT 'Calibration profiles for synthetic flight generation — learned distributions per airport'
+"""
+
 ALL_TABLES = [
     ("airport_metadata", AIRPORT_METADATA_DDL),
     ("gates", GATES_DDL),
@@ -432,6 +451,7 @@ ALL_TABLES = [
     ("flight_phase_transition_history", FLIGHT_PHASE_TRANSITION_HISTORY_DDL),
     ("gate_assignment_history", GATE_ASSIGNMENT_HISTORY_DDL),
     ("ml_prediction_history", ML_PREDICTION_HISTORY_DDL),
+    ("airport_profiles", AIRPORT_PROFILES_DDL),
 ]
 
 

@@ -5,13 +5,22 @@ Uses OSM gate data for real airport configurations including:
 - Airline operator assignments
 - Multi-level terminal support
 - Aircraft size compatibility (wide-body vs narrow-body gates)
+
+When an AirportProfile is provided, airline market share data is used
+to improve operator matching for airports where gate-airline affinity
+is known from real data.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import logging
+
+if TYPE_CHECKING:
+    from src.calibration.profile import AirportProfile
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +149,12 @@ class GateRecommender:
     based on real airport layout, terminal assignments, and airline operators.
     """
 
-    def __init__(self, airport_code: str = "KSFO", gates: Optional[List[Gate]] = None):
+    def __init__(
+        self,
+        airport_code: str = "KSFO",
+        gates: Optional[List[Gate]] = None,
+        airport_profile: Optional[AirportProfile] = None,
+    ):
         """
         Initialize the gate recommender.
 
@@ -148,8 +162,10 @@ class GateRecommender:
             airport_code: ICAO airport code for this recommender instance.
             gates: List of available gates. If None, attempts to load from
                    airport config service (OSM data), falling back to defaults.
+            airport_profile: Optional calibrated profile for airline-gate affinity
         """
         self.airport_code = airport_code
+        self._profile = airport_profile
         self._runway_coords = self._load_runway_coords()
         if gates is not None:
             self.gates = {g.gate_id: g for g in gates}

@@ -62,6 +62,7 @@ from src.ingestion.schedule_generator import (
 )
 from src.ingestion.weather_generator import generate_metar
 from src.ingestion.baggage_generator import generate_bags_for_flight
+from src.calibration.profile import AirportProfileLoader
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +133,10 @@ class SimulationEngine:
                     f"Curfew active {curfew.start}-{curfew.end} (max {curfew.max_arrivals_per_hour} arr/hr)",
                     {"start": curfew.start, "end": curfew.end},
                 )
+
+        # Load calibration profile for this airport
+        self._profile_loader = AirportProfileLoader()
+        self.airport_profile = self._profile_loader.get_profile(config.airport)
 
         # Set traffic profile based on airport characteristics (derived, not hardcoded)
         has_curfew = bool(self.scenario and self.scenario.curfew_events)
@@ -279,12 +284,13 @@ class SimulationEngine:
         """Pre-generate the full flight schedule distributed across the duration."""
         start = self.config.effective_start_time()
         duration_h = self.config.effective_duration_hours()
+        profile = self.airport_profile
 
         # Get hourly distribution weights
         hour_weights: list[float] = []
         for h in range(24):
             if h < int(duration_h) or (h == int(duration_h) and duration_h % 1 > 0):
-                hour_weights.append(max(_get_flights_per_hour(h), 1))
+                hour_weights.append(max(_get_flights_per_hour(h, airport_profile=profile), 1))
             else:
                 break
 
@@ -312,20 +318,21 @@ class SimulationEngine:
                     if sum(1 for f in schedule if f["flight_type"] == flight_type) >= count:
                         break
 
-                    airline_code, airline_name = _select_airline()
+                    airline_code, airline_name = _select_airline(profile=profile)
                     flight_number = _generate_flight_number(airline_code)
 
                     if flight_type == "arrival":
-                        origin = _select_destination("arrival", airline_code)
+                        origin = _select_destination("arrival", airline_code, profile=profile)
                         destination = local_iata
                     else:
                         origin = local_iata
-                        destination = _select_destination("departure", airline_code)
+                        destination = _select_destination("departure", airline_code, profile=profile)
 
                     # Select aircraft based on REMOTE airport (not local)
-                    # Arrivals: remote = origin, Departures: remote = destination
                     remote_airport = origin if flight_type == "arrival" else destination
-                    aircraft = _select_aircraft(remote_airport)
+                    aircraft = _select_aircraft(
+                        remote_airport, airline_code=airline_code, profile=profile,
+                    )
 
                     # Schedule within this hour
                     hour = start.hour + h_idx
@@ -334,7 +341,7 @@ class SimulationEngine:
                     minute = random.randint(0, 59)
                     scheduled_time = start + timedelta(hours=h_idx, minutes=minute)
 
-                    delay_minutes, delay_code, delay_reason = _generate_delay()
+                    delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
 
                     schedule.append({
                         "flight_number": flight_number,
@@ -367,6 +374,7 @@ class SimulationEngine:
         if not self.scenario:
             return
         start = self.config.effective_start_time()
+        profile = self.airport_profile
         for mod in self.scenario.traffic_modifiers:
             if mod.type == "ground_stop":
                 continue  # handled in _process_scenario_events
@@ -379,9 +387,9 @@ class SimulationEngine:
             for i in range(mod.extra_arrivals):
                 offset_min = random.randint(0, 20)
                 sched_time = base_time + timedelta(minutes=offset_min + i * 3)
-                airline_code, airline_name = _select_airline()
-                origin = mod.diversion_origin or _select_destination("arrival", airline_code)
-                aircraft = _select_aircraft(origin)
+                airline_code, airline_name = _select_airline(profile=profile)
+                origin = mod.diversion_origin or _select_destination("arrival", airline_code, profile=profile)
+                aircraft = _select_aircraft(origin, airline_code=airline_code, profile=profile)
                 self.flight_schedule.append({
                     "flight_number": _generate_flight_number(airline_code),
                     "airline": airline_name,
@@ -400,9 +408,9 @@ class SimulationEngine:
             for i in range(mod.extra_departures):
                 offset_min = random.randint(0, 20)
                 sched_time = base_time + timedelta(minutes=offset_min + i * 3)
-                airline_code, airline_name = _select_airline()
-                dest = _select_destination("departure", airline_code)
-                aircraft = _select_aircraft(dest)
+                airline_code, airline_name = _select_airline(profile=profile)
+                dest = _select_destination("departure", airline_code, profile=profile)
+                aircraft = _select_aircraft(dest, airline_code=airline_code, profile=profile)
                 self.flight_schedule.append({
                     "flight_number": _generate_flight_number(airline_code),
                     "airline": airline_name,

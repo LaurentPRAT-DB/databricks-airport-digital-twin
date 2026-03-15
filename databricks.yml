@@ -10,6 +10,7 @@ sync:
     - scenarios/**
     - scripts/**
     - simulation_output/report/**
+    - data/calibration/profiles/**
     - app.yaml
     - requirements.txt
     - pyproject.toml

@@ -4,13 +4,21 @@ Generates realistic daily flight schedules with:
 - Peak hour distribution (6-9am, 4-7pm = 60%)
 - Airline mix based on hub status
 - Realistic delay patterns (15% delayed)
+
+When an AirportProfile is provided, distributions are sampled from
+real-data-calibrated profiles instead of hardcoded constants.
 """
+
+from __future__ import annotations
 
 import random
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from src.ingestion.fallback import get_gates
+
+if TYPE_CHECKING:
+    from src.calibration.profile import AirportProfile
 
 # Airline data with ICAO codes, names, and hub weighting
 AIRLINES = {
@@ -95,8 +103,20 @@ DELAY_CODES = {
 }
 
 
-def _select_airline() -> tuple[str, str]:
-    """Select an airline based on weighted distribution."""
+def _select_airline(profile: AirportProfile | None = None) -> tuple[str, str]:
+    """Select an airline based on weighted distribution.
+
+    If a calibrated profile is provided, sample from its airline_shares.
+    Otherwise fall back to the hardcoded AIRLINES dict.
+    """
+    if profile and profile.airline_shares:
+        codes = list(profile.airline_shares.keys())
+        weights = list(profile.airline_shares.values())
+        code = random.choices(codes, weights=weights, k=1)[0]
+        # Look up full name from AIRLINES dict, fall back to code
+        name = AIRLINES[code]["name"] if code in AIRLINES else code
+        return code, name
+
     codes = list(AIRLINES.keys())
     weights = [AIRLINES[code]["weight"] for code in codes]
     code = random.choices(codes, weights=weights, k=1)[0]
@@ -110,38 +130,87 @@ def _generate_flight_number(airline_code: str) -> str:
     return f"{airline_code}{num}"
 
 
-def _select_destination(flight_type: str, airline_code: str) -> str:
-    """Select destination based on airline and flight type."""
-    # 70% domestic, 30% international
+def _select_destination(
+    flight_type: str, airline_code: str, profile: AirportProfile | None = None,
+) -> str:
+    """Select destination based on airline and flight type.
+
+    If a calibrated profile is provided, sample from its route shares
+    and domestic_ratio. Otherwise fall back to uniform random choice.
+    """
+    if profile and (profile.domestic_route_shares or profile.international_route_shares):
+        is_domestic = random.random() < profile.domestic_ratio
+        if is_domestic and profile.domestic_route_shares:
+            routes = list(profile.domestic_route_shares.keys())
+            weights = list(profile.domestic_route_shares.values())
+            return random.choices(routes, weights=weights, k=1)[0]
+        elif profile.international_route_shares:
+            routes = list(profile.international_route_shares.keys())
+            weights = list(profile.international_route_shares.values())
+            return random.choices(routes, weights=weights, k=1)[0]
+
+    # Fallback: 70% domestic, 30% international, uniform random
     if random.random() < 0.7:
         return random.choice(DOMESTIC_AIRPORTS)
     return random.choice(INTERNATIONAL_AIRPORTS)
 
 
-def _select_aircraft(destination: str) -> str:
-    """Select aircraft type based on route."""
+def _select_aircraft(
+    destination: str,
+    airline_code: str | None = None,
+    profile: AirportProfile | None = None,
+) -> str:
+    """Select aircraft type based on route and optional profile fleet mix.
+
+    If a calibrated profile is provided with fleet_mix for this airline,
+    sample from the fleet distribution. Otherwise fall back to narrow/wide
+    body selection based on route type.
+    """
+    if profile and airline_code and airline_code in profile.fleet_mix:
+        fleet = profile.fleet_mix[airline_code]
+        if fleet:
+            types = list(fleet.keys())
+            weights = list(fleet.values())
+            return random.choices(types, weights=weights, k=1)[0]
+
+    # Fallback: wide body for international, narrow body for domestic
     if destination in INTERNATIONAL_AIRPORTS:
         return random.choice(WIDE_BODY)
     return random.choice(NARROW_BODY)
 
 
-def _generate_delay() -> tuple[int, Optional[str], Optional[str]]:
-    """Generate realistic delay if applicable."""
-    # 15% of flights delayed
-    if random.random() > 0.15:
+def _generate_delay(
+    profile: AirportProfile | None = None,
+) -> tuple[int, Optional[str], Optional[str]]:
+    """Generate realistic delay if applicable.
+
+    If a calibrated profile is provided, use its delay_rate and
+    delay_distribution instead of the hardcoded 15% rate.
+    """
+    delay_rate = profile.delay_rate if profile else 0.15
+
+    if random.random() > delay_rate:
         return 0, None, None
 
     # Select delay code based on weights
-    codes = list(DELAY_CODES.keys())
-    weights = [DELAY_CODES[code][1] for code in codes]
-    code = random.choices(codes, weights=weights, k=1)[0]
-    reason = DELAY_CODES[code][0]
-
-    # Delay duration: most 5-30 min, some longer
-    if random.random() < 0.8:
-        delay_minutes = random.randint(5, 30)
+    if profile and profile.delay_distribution:
+        codes = list(profile.delay_distribution.keys())
+        weights = list(profile.delay_distribution.values())
     else:
-        delay_minutes = random.randint(30, 120)
+        codes = list(DELAY_CODES.keys())
+        weights = [DELAY_CODES[code][1] for code in codes]
+
+    code = random.choices(codes, weights=weights, k=1)[0]
+    reason = DELAY_CODES[code][0] if code in DELAY_CODES else f"Delay code {code}"
+
+    # Delay duration based on profile mean or default
+    mean_delay = profile.mean_delay_minutes if profile else 20.0
+    if random.random() < 0.8:
+        # Short delay: 5 to mean
+        delay_minutes = random.randint(5, max(6, int(mean_delay)))
+    else:
+        # Long delay: mean to 2x mean (capped at 180)
+        delay_minutes = random.randint(int(mean_delay), min(180, int(mean_delay * 2)))
 
     return delay_minutes, code, reason
 
@@ -207,8 +276,27 @@ def set_traffic_airport(airport: str, runway_count: int = 2, has_curfew: bool = 
         _current_profile = "slot_constrained"  # small single-runway → flat
 
 
-def _get_flights_per_hour(hour: int, profile: str | None = None) -> int:
-    """Get number of flights for a given hour based on traffic profile."""
+def _get_flights_per_hour(
+    hour: int,
+    profile: str | None = None,
+    airport_profile: AirportProfile | None = None,
+) -> int:
+    """Get number of flights for a given hour based on traffic profile.
+
+    If an AirportProfile with hourly_profile is given, use it as relative
+    weights to distribute flights. Otherwise fall back to TRAFFIC_PROFILES.
+    """
+    # If we have a calibrated hourly profile, return a relative weight
+    # (caller uses this as a weight for distributing total flights)
+    if airport_profile and airport_profile.hourly_profile and len(airport_profile.hourly_profile) == 24:
+        # Return weight scaled to approximate flight count range (0-30)
+        weight = airport_profile.hourly_profile[hour % 24]
+        max_weight = max(airport_profile.hourly_profile)
+        if max_weight > 0:
+            scaled = weight / max_weight * 25  # scale to ~25 max
+            return max(0, int(scaled + random.uniform(-2, 2)))
+        return 0
+
     p = profile or _current_profile
     if p not in TRAFFIC_PROFILES:
         p = "us_dual_peak"
@@ -220,6 +308,7 @@ def generate_daily_schedule(
     airport: str = "SFO",
     date: Optional[datetime] = None,
     include_past_hours: int = 2,
+    profile: AirportProfile | None = None,
 ) -> list[dict]:
     """
     Generate a synthetic daily flight schedule.
@@ -228,6 +317,7 @@ def generate_daily_schedule(
         airport: Airport IATA code (used as origin for departures, destination for arrivals)
         date: Date for schedule (defaults to today)
         include_past_hours: Include flights from past N hours (for realistic display)
+        profile: Optional calibrated AirportProfile for realistic distributions
 
     Returns:
         List of scheduled flight dictionaries
@@ -241,23 +331,26 @@ def generate_daily_schedule(
 
     # Generate flights for each hour
     for hour in range(start_hour, 24):
-        flights_this_hour = _get_flights_per_hour(hour)
+        flights_this_hour = _get_flights_per_hour(hour, airport_profile=profile)
 
         for _ in range(flights_this_hour):
             # 50% arrivals, 50% departures
             is_arrival = random.random() < 0.5
 
-            airline_code, airline_name = _select_airline()
+            airline_code, airline_name = _select_airline(profile=profile)
             flight_number = _generate_flight_number(airline_code)
 
             if is_arrival:
-                origin = _select_destination("arrival", airline_code)
+                origin = _select_destination("arrival", airline_code, profile=profile)
                 destination = airport
             else:
                 origin = airport
-                destination = _select_destination("departure", airline_code)
+                destination = _select_destination("departure", airline_code, profile=profile)
 
-            aircraft = _select_aircraft(destination if is_arrival else origin)
+            remote_airport = origin if is_arrival else destination
+            aircraft = _select_aircraft(
+                remote_airport, airline_code=airline_code, profile=profile,
+            )
 
             # Generate scheduled time within the hour
             minute = random.randint(0, 59)
@@ -266,7 +359,7 @@ def generate_daily_schedule(
             )
 
             # Generate delay
-            delay_minutes, delay_code, delay_reason = _generate_delay()
+            delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
             estimated_time = None
             if delay_minutes > 0:
                 estimated_time = scheduled_time + timedelta(minutes=delay_minutes)

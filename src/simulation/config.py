@@ -30,6 +30,10 @@ class SimulationConfig(BaseModel):
     scenario_file: Optional[str] = Field(
         default=None, description="Path to scenario YAML file for disruption injection"
     )
+    calibration_profile: Optional[str] = Field(
+        default=None,
+        description="Path to calibration profile JSON (auto-loaded by airport code if not set)",
+    )
 
     def effective_start_time(self) -> datetime:
         """Return start_time or midnight UTC today."""

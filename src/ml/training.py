@@ -1,7 +1,11 @@
 """MLflow training script for delay prediction model.
 
 This module provides training functionality with MLflow experiment tracking.
+When an AirportProfile is available, the trained model uses calibrated
+delay priors from real data.
 """
+
+from __future__ import annotations
 
 import json
 import os
@@ -10,10 +14,13 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 from statistics import mean, stdev
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from src.ml.delay_model import DelayPredictor
 from src.ml.features import extract_features
+
+if TYPE_CHECKING:
+    from src.calibration.profile import AirportProfile
 
 # Try to import mlflow, but make it optional for demo purposes
 try:
@@ -31,6 +38,7 @@ def train_delay_model(
     model_output_path: Optional[str] = None,
     catalog: str = "",
     schema: str = "",
+    airport_profile: Optional[AirportProfile] = None,
 ) -> Dict[str, Any]:
     """Train and evaluate the delay prediction model.
 
@@ -60,8 +68,8 @@ def train_delay_model(
     metrics: Dict[str, float] = {}
     model_path = model_output_path
 
-    # Create predictor instance for the airport
-    predictor = DelayPredictor(airport_code=airport_code)
+    # Create predictor instance for the airport (with calibrated profile if available)
+    predictor = DelayPredictor(airport_code=airport_code, airport_profile=airport_profile)
 
     # Run predictions on training data
     predictions = predictor.predict_batch(training_data)
