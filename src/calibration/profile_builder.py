@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _RAW_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "calibration" / "raw"
 _PROFILES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "calibration" / "profiles"
 _DB28_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "calibration" / "download_manual"
+_OTP_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "calibration" / "raw" / "otp"
 
 # Well-known US airports (covered by BTS)
 US_AIRPORTS = [
@@ -101,8 +102,8 @@ def _build_single_profile(
             from src.calibration.bts_ingest import build_profile_from_db28
             profile = build_profile_from_db28(iata, _DB28_DIR)
             if profile is not None:
-                # DB28 lacks hourly/delay data — merge from known_stats
-                _enrich_with_known_stats(profile, iata)
+                # DB28 lacks hourly/delay data — enrich from OTP PREZIP or known_stats
+                _enrich_with_otp(profile, iata)
                 return profile
 
     # 2. Try BTS CSV data (field-selector format)
@@ -141,6 +142,64 @@ def _build_single_profile(
     return _build_fallback_profile(iata)
 
 
+def _enrich_with_otp(profile: AirportProfile, iata: str) -> None:
+    """Fill in hourly/delay fields that DB28 doesn't provide.
+
+    Priority: real OTP PREZIP data > known_stats approximations.
+    """
+    otp_used = False
+
+    # Try real OTP PREZIP data first
+    if _OTP_DIR.exists():
+        otp_zips = list(_OTP_DIR.glob("otp_*.zip"))
+        if otp_zips:
+            from src.calibration.bts_ingest import parse_otp_prezip
+            otp = parse_otp_prezip(_OTP_DIR, iata)
+            if otp["total_flights"] > 0:
+                otp_used = True
+
+                # Hourly profile from real data
+                from collections import Counter
+                combined: Counter = Counter(otp["hourly_departures"])
+                combined.update(otp["hourly_arrivals"])
+                if combined:
+                    total_hourly = sum(combined.values()) or 1
+                    profile.hourly_profile = [
+                        combined.get(h, 0) / total_hourly for h in range(24)
+                    ]
+
+                # Real delay stats
+                profile.delay_rate = otp["delay_rate"]
+                profile.mean_delay_minutes = otp["mean_delay_minutes"]
+
+                # Map BTS delay causes to IATA delay codes
+                cause_total = sum(otp["delay_causes"].values()) or 1
+                cause_map = {
+                    "carrier": {"62": 0.4, "67": 0.3, "63": 0.3},
+                    "weather": {"71": 0.6, "72": 0.4},
+                    "nas": {"81": 1.0},
+                    "security": {"41": 1.0},
+                    "late_aircraft": {"68": 1.0},
+                }
+                delay_dist: dict[str, float] = {}
+                for cause, count in otp["delay_causes"].items():
+                    weight = count / cause_total
+                    for code, frac in cause_map.get(cause, {}).items():
+                        delay_dist[code] = delay_dist.get(code, 0) + weight * frac
+                profile.delay_distribution = delay_dist
+
+                profile.data_source = "BTS_DB28+OTP"
+                logger.info(
+                    "  Enriched %s with real OTP: %.1f%% delayed, %.1f min avg, %d flights",
+                    iata, otp["delay_rate"] * 100, otp["mean_delay_minutes"],
+                    otp["total_flights"],
+                )
+
+    # Fall back to known_stats if OTP not available
+    if not otp_used:
+        _enrich_with_known_stats(profile, iata)
+
+
 def _enrich_with_known_stats(profile: AirportProfile, iata: str) -> None:
     """Fill in fields that DB28 doesn't provide using known_stats data."""
     from src.calibration.known_profiles import get_known_profile
@@ -148,11 +207,9 @@ def _enrich_with_known_stats(profile: AirportProfile, iata: str) -> None:
     if known is None:
         return
 
-    # DB28 has no hourly profile
     if not profile.hourly_profile and known.hourly_profile:
         profile.hourly_profile = known.hourly_profile
 
-    # DB28 has no delay data
     if profile.delay_rate == 0.0 and known.delay_rate > 0:
         profile.delay_rate = known.delay_rate
     if not profile.delay_distribution and known.delay_distribution:
@@ -160,6 +217,5 @@ def _enrich_with_known_stats(profile: AirportProfile, iata: str) -> None:
     if profile.mean_delay_minutes == 0.0 and known.mean_delay_minutes > 0:
         profile.mean_delay_minutes = known.mean_delay_minutes
 
-    # Update data source to reflect the merge
     if "BTS_DB28" in profile.data_source:
         profile.data_source = "BTS_DB28+known_stats"

@@ -7,12 +7,15 @@ Data sources:
 - T-100 Domestic Segment: airline market share, route frequencies, fleet mix
 - T-100 International Segment: international route frequencies
 - On-Time Performance: delay rates, delay cause breakdown, hourly patterns
+- On-Time Performance PREZIP: monthly zip archives from BTS data library
 """
 
 from __future__ import annotations
 
 import csv
+import io
 import logging
+import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Optional
@@ -551,6 +554,114 @@ def build_profile_from_db28(
         data_source="BTS_DB28",
         sample_size=total,
     )
+
+
+def parse_otp_prezip(
+    otp_dir: Path,
+    target_airport: str,
+) -> dict:
+    """Parse BTS On-Time Performance PREZIP monthly zip files for a specific airport.
+
+    Each zip contains a single CSV with 110 columns. We extract delay stats and
+    hourly patterns the same way as parse_ontime_performance() but from the
+    PREZIP monthly archives downloaded from:
+    https://transtats.bts.gov/PREZIP/On_Time_Reporting_Carrier_On_Time_Performance_...
+
+    Args:
+        otp_dir: Directory containing otp_YYYY_M.zip files
+        target_airport: IATA code (e.g., "SFO")
+
+    Returns:
+        Dict with delay_rate, delay_causes, hourly_departures, hourly_arrivals,
+        mean_delay_minutes, total_flights, delayed_flights
+    """
+    total_flights = 0
+    delayed_flights = 0
+    total_delay_minutes = 0.0
+    delay_causes: Counter = Counter()
+    hourly_departures: Counter = Counter()
+    hourly_arrivals: Counter = Counter()
+
+    zip_files = sorted(p for p in otp_dir.iterdir() if p.suffix == ".zip" and p.name.startswith("otp_"))
+    if not zip_files:
+        logger.warning("No OTP PREZIP files found in %s", otp_dir)
+        return {
+            "delay_rate": 0.15,
+            "delay_causes": {},
+            "hourly_departures": {},
+            "hourly_arrivals": {},
+            "mean_delay_minutes": 20.0,
+            "total_flights": 0,
+            "delayed_flights": 0,
+        }
+
+    logger.info("Parsing %d OTP PREZIP files for %s...", len(zip_files), target_airport)
+
+    for zpath in zip_files:
+        with zipfile.ZipFile(zpath) as zf:
+            csv_names = [n for n in zf.namelist() if n.endswith(".csv")]
+            if not csv_names:
+                continue
+            with zf.open(csv_names[0]) as raw_f:
+                text = io.TextIOWrapper(raw_f, encoding="utf-8-sig")
+                reader = csv.DictReader(text)
+                for row in reader:
+                    origin = row.get("Origin", "").strip()
+                    dest = row.get("Dest", "").strip()
+
+                    is_departure = origin == target_airport
+                    is_arrival = dest == target_airport
+
+                    if not (is_departure or is_arrival):
+                        continue
+
+                    total_flights += 1
+
+                    # Hourly pattern
+                    dep_time = row.get("CRSDepTime", "").strip()
+                    arr_time = row.get("CRSArrTime", "").strip()
+                    if is_departure and dep_time and len(dep_time) >= 3:
+                        hour = int(dep_time[:-2]) if len(dep_time) > 2 else 0
+                        hourly_departures[hour % 24] += 1
+                    if is_arrival and arr_time and len(arr_time) >= 3:
+                        hour = int(arr_time[:-2]) if len(arr_time) > 2 else 0
+                        hourly_arrivals[hour % 24] += 1
+
+                    # Delay stats (only count departures for delay rate)
+                    if is_departure:
+                        dep_delay = _safe_float(row.get("DepDelay", "0"))
+                        if dep_delay > 15:
+                            delayed_flights += 1
+                            total_delay_minutes += dep_delay
+
+                            if _safe_float(row.get("CarrierDelay", "0")) > 0:
+                                delay_causes["carrier"] += 1
+                            if _safe_float(row.get("WeatherDelay", "0")) > 0:
+                                delay_causes["weather"] += 1
+                            if _safe_float(row.get("NASDelay", "0")) > 0:
+                                delay_causes["nas"] += 1
+                            if _safe_float(row.get("SecurityDelay", "0")) > 0:
+                                delay_causes["security"] += 1
+                            if _safe_float(row.get("LateAircraftDelay", "0")) > 0:
+                                delay_causes["late_aircraft"] += 1
+
+    delay_rate = delayed_flights / total_flights if total_flights > 0 else 0.15
+    mean_delay = total_delay_minutes / delayed_flights if delayed_flights > 0 else 20.0
+
+    logger.info(
+        "OTP PREZIP for %s: %d flights, %.1f%% delayed, %.1f min avg delay",
+        target_airport, total_flights, delay_rate * 100, mean_delay,
+    )
+
+    return {
+        "delay_rate": delay_rate,
+        "delay_causes": dict(delay_causes),
+        "hourly_departures": dict(hourly_departures),
+        "hourly_arrivals": dict(hourly_arrivals),
+        "mean_delay_minutes": mean_delay,
+        "total_flights": total_flights,
+        "delayed_flights": delayed_flights,
+    }
 
 
 # Common US IATA codes for domestic/international classification
