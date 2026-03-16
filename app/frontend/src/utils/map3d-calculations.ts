@@ -72,8 +72,9 @@ export function latLonTo3D(
   // Altitude from feet to scene units (exaggerated for visibility)
   const altFeet = altitude || 0;
   let y: number;
-  if (altFeet === 0) {
-    // Ground aircraft sit just above the surface
+  if (altFeet <= 50) {
+    // Ground aircraft sit just above the surface.
+    // Treat anything ≤50 ft as ground to avoid "jumping" during landing/taxi.
     y = 0.5;
   } else {
     const altitudeMeters = altFeet * 0.3048;
@@ -95,8 +96,8 @@ export function position3DToLatLon(
   const lat = centerLat - pos.z / scale;
   const lon = centerLon + pos.x / (scale * Math.cos(centerLat * Math.PI / 180));
   let altitude: number;
-  if (pos.y <= 0.5) {
-    // Ground level
+  if (pos.y <= 1.0) {
+    // Ground level (matches forward transform threshold of ≤50 ft → y=0.5)
     altitude = 0;
   } else {
     const altitudeMeters = (pos.y - 5) / ALTITUDE_SCALE;

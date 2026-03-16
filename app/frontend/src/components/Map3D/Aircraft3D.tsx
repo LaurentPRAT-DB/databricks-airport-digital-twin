@@ -45,9 +45,13 @@ export function Aircraft3D({ flight, selected = false, onClick, airportCenter }:
   const [hovered, setHovered] = useState(false);
 
   // Calculate target position from flight data
+  // Ground-phase aircraft (taxi, parked, pushback) must stay at ground level —
+  // their altitude field may contain airport elevation which would make them float.
+  const isGroundPhase = flight.flight_phase === 'ground';
+  const effectiveAltitude = isGroundPhase ? 0 : flight.altitude;
   const targetPosition = useMemo(() =>
-    latLonTo3D(flight.latitude, flight.longitude, flight.altitude, airportCenter?.lat, airportCenter?.lon),
-    [flight.latitude, flight.longitude, flight.altitude, airportCenter?.lat, airportCenter?.lon]
+    latLonTo3D(flight.latitude, flight.longitude, effectiveAltitude, airportCenter?.lat, airportCenter?.lon),
+    [flight.latitude, flight.longitude, effectiveAltitude, airportCenter?.lat, airportCenter?.lon]
   );
 
   // Calculate target rotation from heading
