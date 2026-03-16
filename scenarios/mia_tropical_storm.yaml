@@ -1,0 +1,106 @@
+name: MIA Tropical Storm Passage — South Florida
+description: >
+  Tropical storm tracks across South Florida with sustained winds
+  45-55kt and heavy rain bands. Storm surge floods low-lying access
+  roads. Extended ramp closures and cancellations. Airlines activate
+  hurricane contingency plans. Realistic for Jun-Nov.
+
+weather_events:
+  - time: "04:00"
+    type: rain
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 2.0
+    ceiling_ft: 800
+    wind_speed_kt: 30
+    wind_gusts_kt: 45
+    wind_direction: 090
+
+  - time: "07:00"
+    type: rain
+    severity: severe
+    duration_hours: 5.0
+    visibility_nm: 0.5
+    ceiling_ft: 200
+    wind_speed_kt: 48
+    wind_gusts_kt: 65
+    wind_direction: 100
+
+  - time: "12:00"
+    type: thunderstorm
+    severity: severe
+    duration_hours: 3.0
+    visibility_nm: 0.25
+    ceiling_ft: 200
+    wind_speed_kt: 55
+    wind_gusts_kt: 72
+    wind_direction: 120
+
+  - time: "15:00"
+    type: rain
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 1.5
+    ceiling_ft: 600
+    wind_speed_kt: 35
+    wind_gusts_kt: 50
+    wind_direction: 150
+
+  - time: "18:00"
+    type: rain
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 4.0
+    ceiling_ft: 2000
+    wind_speed_kt: 20
+    wind_direction: 180
+
+  - time: "21:00"
+    type: clear
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 8.0
+    ceiling_ft: 4000
+    wind_speed_kt: 12
+    wind_direction: 200
+
+runway_events:
+  - time: "07:00"
+    type: closure
+    runway: "8R"
+    duration_minutes: 360
+    reason: Tropical storm — wind exceeds limits
+
+  - time: "08:00"
+    type: closure
+    runway: "8L"
+    duration_minutes: 300
+    reason: Flooding on taxiways and runway
+
+ground_events:
+  - time: "06:00"
+    type: taxiway_closure
+    target: "Taxiway J (flooding)"
+    duration_hours: 10.0
+    impact:
+      turnaround_multiplier: 1.8
+
+  - time: "08:00"
+    type: gate_failure
+    target: "North Terminal-D22"
+    duration_hours: 6.0
+
+  - time: "10:00"
+    type: gate_failure
+    target: "South Terminal-H14"
+    duration_hours: 5.0
+
+traffic_modifiers:
+  - time: "06:00"
+    type: ground_stop
+    duration_hours: 8.0
+
+  - time: "16:00"
+    type: diversion
+    extra_arrivals: 10
+    diversion_origin: FLL

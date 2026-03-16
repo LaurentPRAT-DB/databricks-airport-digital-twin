@@ -1,0 +1,96 @@
+name: DTW Lake-Effect Blizzard — Great Lakes
+description: >
+  Arctic air mass crosses Lake Erie, dumping lake-effect snow bands
+  on metro Detroit. Narrow intense bands produce localized whiteout.
+  Temperatures plunge to -15F with wind chill -35F. Equipment
+  freezes and de-icing fluid runs short. Realistic for Dec-Feb.
+
+weather_events:
+  - time: "06:00"
+    type: snow
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 1.0
+    ceiling_ft: 600
+    wind_speed_kt: 22
+    wind_gusts_kt: 35
+    wind_direction: 350
+
+  - time: "09:00"
+    type: snow
+    severity: severe
+    duration_hours: 5.0
+    visibility_nm: 0.12
+    ceiling_ft: 100
+    wind_speed_kt: 30
+    wind_gusts_kt: 45
+    wind_direction: 340
+
+  - time: "14:00"
+    type: snow
+    severity: moderate
+    duration_hours: 4.0
+    visibility_nm: 0.5
+    ceiling_ft: 400
+    wind_speed_kt: 25
+    wind_gusts_kt: 38
+    wind_direction: 330
+
+  - time: "18:00"
+    type: snow
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 2.0
+    ceiling_ft: 1500
+    wind_speed_kt: 18
+    wind_direction: 320
+
+  - time: "21:00"
+    type: clear
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 8.0
+    ceiling_ft: 4000
+    wind_speed_kt: 12
+    wind_direction: 310
+
+runway_events:
+  - time: "09:00"
+    type: closure
+    runway: "21L"
+    duration_minutes: 240
+    reason: Lake-effect whiteout band stalled over field
+
+  - time: "10:00"
+    type: closure
+    runway: "21R"
+    duration_minutes: 180
+    reason: Snow accumulation rate exceeds plowing
+
+ground_events:
+  - time: "07:00"
+    type: deicing_required
+    duration_hours: 14.0
+    impact:
+      turnaround_multiplier: 1.9
+
+  - time: "09:00"
+    type: gate_failure
+    target: "McNamara A-42"
+    duration_hours: 5.0
+
+  - time: "11:00"
+    type: fuel_shortage
+    duration_hours: 4.0
+    impact:
+      turnaround_multiplier: 1.3
+
+traffic_modifiers:
+  - time: "09:00"
+    type: ground_stop
+    duration_hours: 4.0
+
+  - time: "14:00"
+    type: diversion
+    extra_arrivals: 6
+    diversion_origin: CLE

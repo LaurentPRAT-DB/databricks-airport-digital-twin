@@ -1,0 +1,7 @@
+airport: SFO
+arrivals: 500
+departures: 500
+duration_hours: 36
+time_step_seconds: 2.0
+seed: 200
+output_file: simulation_output/calibrated/cal_sfo_normal_d2.json

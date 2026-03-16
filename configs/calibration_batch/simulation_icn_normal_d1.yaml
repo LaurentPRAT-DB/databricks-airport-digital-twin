@@ -1,0 +1,7 @@
+airport: ICN
+arrivals: 500
+departures: 500
+duration_hours: 36
+time_step_seconds: 2.0
+seed: 100
+output_file: simulation_output/calibrated/cal_icn_normal_d1.json

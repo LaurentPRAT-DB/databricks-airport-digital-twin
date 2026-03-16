@@ -1,0 +1,95 @@
+name: EWR Winter Ice Storm — US Mid-Atlantic
+description: >
+  Warm front overruns arctic air producing freezing rain across
+  northern New Jersey. Ice accumulation up to 0.75 inches on
+  surfaces. EWR's notoriously tight taxi geometry compounds delays.
+  De-icing fluid consumption surges. Realistic for Dec-Feb.
+
+weather_events:
+  - time: "03:00"
+    type: freezing_rain
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 2.0
+    ceiling_ft: 800
+    wind_speed_kt: 15
+    wind_direction: 060
+
+  - time: "06:00"
+    type: freezing_rain
+    severity: severe
+    duration_hours: 4.0
+    visibility_nm: 0.5
+    ceiling_ft: 300
+    wind_speed_kt: 20
+    wind_gusts_kt: 32
+    wind_direction: 050
+
+  - time: "10:00"
+    type: rain
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 2.0
+    ceiling_ft: 1000
+    wind_speed_kt: 18
+    wind_direction: 080
+
+  - time: "13:00"
+    type: rain
+    severity: light
+    duration_hours: 2.0
+    visibility_nm: 4.0
+    ceiling_ft: 2000
+    wind_speed_kt: 12
+    wind_direction: 100
+
+  - time: "15:00"
+    type: clear
+    severity: light
+    duration_hours: 9.0
+    visibility_nm: 10.0
+    ceiling_ft: 5000
+    wind_speed_kt: 8
+    wind_direction: 120
+
+runway_events:
+  - time: "06:00"
+    type: closure
+    runway: "22L"
+    duration_minutes: 240
+    reason: Ice accumulation — chemical treatment required
+
+  - time: "07:00"
+    type: closure
+    runway: "22R"
+    duration_minutes: 180
+    reason: Freezing rain — braking action nil
+
+ground_events:
+  - time: "04:00"
+    type: deicing_required
+    duration_hours: 10.0
+    impact:
+      turnaround_multiplier: 1.9
+
+  - time: "06:00"
+    type: gate_failure
+    target: "Terminal C-124"
+    duration_hours: 5.0
+
+  - time: "07:00"
+    type: taxiway_closure
+    target: "Taxiway Z (ice)"
+    duration_hours: 6.0
+    impact:
+      turnaround_multiplier: 1.6
+
+traffic_modifiers:
+  - time: "06:00"
+    type: ground_stop
+    duration_hours: 3.0
+
+  - time: "10:00"
+    type: diversion
+    extra_arrivals: 8
+    diversion_origin: LGA

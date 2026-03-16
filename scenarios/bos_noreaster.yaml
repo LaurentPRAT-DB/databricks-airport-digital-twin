@@ -1,0 +1,98 @@
+name: BOS Winter Nor'easter — US Northeast
+description: >
+  Classic New England nor'easter slams Boston Logan. Heavy snow begins
+  overnight with freezing rain mixing in. Sustained northeast winds
+  exceed 40kt with gusts to 55kt. The airport faces prolonged de-icing
+  and periodic runway closures. Realistic for Dec-Mar.
+
+weather_events:
+  - time: "02:00"
+    type: snow
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 1.5
+    ceiling_ft: 800
+    wind_speed_kt: 25
+    wind_gusts_kt: 38
+    wind_direction: 040
+
+  - time: "05:00"
+    type: snow
+    severity: severe
+    duration_hours: 5.0
+    visibility_nm: 0.25
+    ceiling_ft: 200
+    wind_speed_kt: 40
+    wind_gusts_kt: 55
+    wind_direction: 030
+
+  - time: "10:00"
+    type: freezing_rain
+    severity: moderate
+    duration_hours: 2.0
+    visibility_nm: 1.0
+    ceiling_ft: 400
+    wind_speed_kt: 30
+    wind_gusts_kt: 45
+    wind_direction: 020
+
+  - time: "12:00"
+    type: snow
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 2.0
+    ceiling_ft: 1200
+    wind_speed_kt: 22
+    wind_gusts_kt: 35
+    wind_direction: 010
+
+  - time: "15:00"
+    type: clear
+    severity: light
+    duration_hours: 9.0
+    visibility_nm: 8.0
+    ceiling_ft: 4000
+    wind_speed_kt: 15
+    wind_direction: 350
+
+runway_events:
+  - time: "05:00"
+    type: closure
+    runway: "27"
+    duration_minutes: 180
+    reason: Heavy snow accumulation — plowing operations
+
+  - time: "06:00"
+    type: closure
+    runway: "22L"
+    duration_minutes: 240
+    reason: Snow and ice — single runway ops
+
+ground_events:
+  - time: "03:00"
+    type: deicing_required
+    duration_hours: 12.0
+    impact:
+      turnaround_multiplier: 1.8
+
+  - time: "06:00"
+    type: gate_failure
+    target: "Terminal B-24"
+    duration_hours: 4.0
+
+  - time: "08:00"
+    type: taxiway_closure
+    target: "Taxiway N (snow drifts)"
+    duration_hours: 6.0
+    impact:
+      turnaround_multiplier: 1.4
+
+traffic_modifiers:
+  - time: "06:00"
+    type: ground_stop
+    duration_hours: 3.0
+
+  - time: "10:00"
+    type: diversion
+    extra_arrivals: 8
+    diversion_origin: EWR

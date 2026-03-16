@@ -1,0 +1,96 @@
+name: MSP Winter Arctic Blast — Upper Midwest
+description: >
+  Polar vortex dip brings extreme cold to Minneapolis. Temperatures
+  drop to -25F with wind chill -50F. Equipment malfunctions, jet
+  bridges freeze, and de-icing holdover times shorten dramatically.
+  Blowing snow reduces visibility. Realistic for Dec-Feb.
+
+weather_events:
+  - time: "00:00"
+    type: snow
+    severity: moderate
+    duration_hours: 4.0
+    visibility_nm: 1.0
+    ceiling_ft: 600
+    wind_speed_kt: 20
+    wind_gusts_kt: 35
+    wind_direction: 320
+
+  - time: "04:00"
+    type: snow
+    severity: severe
+    duration_hours: 4.0
+    visibility_nm: 0.25
+    ceiling_ft: 200
+    wind_speed_kt: 30
+    wind_gusts_kt: 48
+    wind_direction: 330
+
+  - time: "08:00"
+    type: snow
+    severity: moderate
+    duration_hours: 4.0
+    visibility_nm: 0.75
+    ceiling_ft: 500
+    wind_speed_kt: 25
+    wind_gusts_kt: 40
+    wind_direction: 340
+
+  - time: "12:00"
+    type: snow
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 2.0
+    ceiling_ft: 1500
+    wind_speed_kt: 18
+    wind_direction: 350
+
+  - time: "15:00"
+    type: clear
+    severity: light
+    duration_hours: 9.0
+    visibility_nm: 6.0
+    ceiling_ft: 3000
+    wind_speed_kt: 15
+    wind_direction: 360
+
+runway_events:
+  - time: "04:00"
+    type: closure
+    runway: "30L"
+    duration_minutes: 240
+    reason: Blowing snow — near-zero visibility
+
+  - time: "05:00"
+    type: closure
+    runway: "30R"
+    duration_minutes: 180
+    reason: Snow accumulation and ice
+
+ground_events:
+  - time: "01:00"
+    type: deicing_required
+    duration_hours: 16.0
+    impact:
+      turnaround_multiplier: 2.0
+
+  - time: "04:00"
+    type: gate_failure
+    target: "Terminal 1-F12"
+    duration_hours: 6.0
+
+  - time: "06:00"
+    type: fuel_shortage
+    duration_hours: 4.0
+    impact:
+      turnaround_multiplier: 1.3
+
+traffic_modifiers:
+  - time: "04:00"
+    type: ground_stop
+    duration_hours: 4.0
+
+  - time: "09:00"
+    type: diversion
+    extra_arrivals: 6
+    diversion_origin: MKE

@@ -1,0 +1,97 @@
+name: DEN Spring Blizzard — Colorado Front Range
+description: >
+  Late-season upslope blizzard hits the Front Range. Heavy wet snow
+  accumulates rapidly with near-whiteout conditions. Wind gusts to
+  50kt create zero-visibility in blowing snow. Denver's high altitude
+  compounds de-icing challenges. Realistic for Mar-Apr.
+
+weather_events:
+  - time: "04:00"
+    type: snow
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 1.0
+    ceiling_ft: 600
+    wind_speed_kt: 25
+    wind_gusts_kt: 40
+    wind_direction: 020
+
+  - time: "07:00"
+    type: snow
+    severity: severe
+    duration_hours: 6.0
+    visibility_nm: 0.12
+    ceiling_ft: 100
+    wind_speed_kt: 40
+    wind_gusts_kt: 55
+    wind_direction: 030
+
+  - time: "13:00"
+    type: snow
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 0.5
+    ceiling_ft: 400
+    wind_speed_kt: 30
+    wind_gusts_kt: 45
+    wind_direction: 040
+
+  - time: "16:00"
+    type: snow
+    severity: light
+    duration_hours: 2.0
+    visibility_nm: 2.0
+    ceiling_ft: 1500
+    wind_speed_kt: 18
+    wind_direction: 350
+
+  - time: "18:00"
+    type: clear
+    severity: light
+    duration_hours: 6.0
+    visibility_nm: 10.0
+    ceiling_ft: 6000
+    wind_speed_kt: 10
+    wind_direction: 330
+
+runway_events:
+  - time: "07:00"
+    type: closure
+    runway: "16R"
+    duration_minutes: 300
+    reason: Blizzard conditions — whiteout
+
+  - time: "08:00"
+    type: closure
+    runway: "16L"
+    duration_minutes: 240
+    reason: Snow accumulation exceeds plowing capacity
+
+ground_events:
+  - time: "05:00"
+    type: deicing_required
+    duration_hours: 14.0
+    impact:
+      turnaround_multiplier: 2.0
+
+  - time: "07:00"
+    type: gate_failure
+    target: "Concourse B-45"
+    duration_hours: 6.0
+
+  - time: "09:00"
+    type: taxiway_closure
+    target: "Taxiway EE (snow drifts 3ft+)"
+    duration_hours: 8.0
+    impact:
+      turnaround_multiplier: 1.5
+
+traffic_modifiers:
+  - time: "07:00"
+    type: ground_stop
+    duration_hours: 5.0
+
+  - time: "14:00"
+    type: diversion
+    extra_arrivals: 10
+    diversion_origin: COS

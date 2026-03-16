@@ -1,0 +1,8 @@
+airport: HKG
+arrivals: 500
+departures: 500
+duration_hours: 36
+time_step_seconds: 2.0
+seed: 42
+output_file: simulation_output/calibrated/cal_hkg_weather.json
+scenario_file: scenarios/hkg_typhoon_signal8.yaml

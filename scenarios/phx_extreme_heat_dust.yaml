@@ -1,0 +1,90 @@
+name: PHX Extreme Heat + Dust Storm — Arizona Desert
+description: >
+  Record heat wave (120F+) combined with monsoon-triggered haboob.
+  Density altitude severely limits takeoff performance. Dust storm
+  drops visibility to near zero. Microbursts on approach. Airport
+  surface too hot for ground crews. Realistic for Jun-Sep.
+
+weather_events:
+  - time: "10:00"
+    type: clear
+    severity: moderate
+    duration_hours: 5.0
+    visibility_nm: 6.0
+    ceiling_ft: 8000
+    wind_speed_kt: 8
+    wind_direction: 200
+
+  - time: "15:00"
+    type: dust
+    severity: moderate
+    duration_hours: 1.5
+    visibility_nm: 2.0
+    ceiling_ft: 2000
+    wind_speed_kt: 22
+    wind_direction: 210
+
+  - time: "16:30"
+    type: sandstorm
+    severity: severe
+    duration_hours: 2.0
+    visibility_nm: 0.12
+    ceiling_ft: 100
+    wind_speed_kt: 45
+    wind_gusts_kt: 60
+    wind_direction: 220
+
+  - time: "18:30"
+    type: thunderstorm
+    severity: moderate
+    duration_hours: 2.0
+    visibility_nm: 1.5
+    ceiling_ft: 1000
+    wind_speed_kt: 30
+    wind_gusts_kt: 50
+    wind_direction: 240
+
+  - time: "20:30"
+    type: clear
+    severity: light
+    duration_hours: 3.5
+    visibility_nm: 8.0
+    ceiling_ft: 6000
+    wind_speed_kt: 10
+    wind_direction: 260
+
+runway_events:
+  - time: "16:30"
+    type: closure
+    runway: "25L"
+    duration_minutes: 120
+    reason: Haboob — zero visibility
+
+  - time: "17:00"
+    type: closure
+    runway: "25R"
+    duration_minutes: 90
+    reason: Microburst wind shear on approach
+
+ground_events:
+  - time: "12:00"
+    type: gate_failure
+    target: "Terminal 4-B8"
+    duration_hours: 5.0
+
+  - time: "16:30"
+    type: taxiway_closure
+    target: "Taxiway A (dust accumulation)"
+    duration_hours: 3.0
+    impact:
+      turnaround_multiplier: 1.5
+
+traffic_modifiers:
+  - time: "16:00"
+    type: ground_stop
+    duration_hours: 2.5
+
+  - time: "19:00"
+    type: diversion
+    extra_arrivals: 6
+    diversion_origin: TUS

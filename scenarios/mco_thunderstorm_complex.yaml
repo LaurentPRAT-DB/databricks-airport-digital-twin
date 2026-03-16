@@ -1,0 +1,91 @@
+name: MCO Afternoon Thunderstorm Complex — Central Florida
+description: >
+  Classic Florida summer afternoon convection. Sea breeze convergence
+  spawns a complex of thunderstorms with frequent lightning, heavy rain,
+  and wind shear. Storms build rapidly and stall over the airport.
+  Ramp closures impact the busy tourist traffic. Realistic for Jun-Sep.
+
+weather_events:
+  - time: "14:00"
+    type: thunderstorm
+    severity: moderate
+    duration_hours: 1.0
+    visibility_nm: 3.0
+    ceiling_ft: 2500
+    wind_speed_kt: 18
+    wind_gusts_kt: 30
+    wind_direction: 180
+
+  - time: "15:00"
+    type: thunderstorm
+    severity: severe
+    duration_hours: 2.5
+    visibility_nm: 0.5
+    ceiling_ft: 400
+    wind_speed_kt: 35
+    wind_gusts_kt: 55
+    wind_direction: 200
+
+  - time: "17:30"
+    type: thunderstorm
+    severity: moderate
+    duration_hours: 2.0
+    visibility_nm: 1.5
+    ceiling_ft: 1200
+    wind_speed_kt: 22
+    wind_gusts_kt: 38
+    wind_direction: 220
+
+  - time: "19:30"
+    type: rain
+    severity: light
+    duration_hours: 1.5
+    visibility_nm: 4.0
+    ceiling_ft: 2500
+    wind_speed_kt: 12
+    wind_direction: 240
+
+  - time: "21:00"
+    type: clear
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 10.0
+    ceiling_ft: 5000
+    wind_speed_kt: 6
+    wind_direction: 260
+
+runway_events:
+  - time: "15:00"
+    type: closure
+    runway: "17R"
+    duration_minutes: 120
+    reason: Lightning within 3nm — ramp closure
+
+  - time: "15:30"
+    type: closure
+    runway: "17L"
+    duration_minutes: 90
+    reason: Wind shear alerts on approach
+
+ground_events:
+  - time: "15:00"
+    type: gate_failure
+    target: "Terminal B-62"
+    duration_hours: 3.0
+
+  - time: "16:00"
+    type: taxiway_closure
+    target: "Taxiway E (flooding)"
+    duration_hours: 2.5
+    impact:
+      turnaround_multiplier: 1.4
+
+traffic_modifiers:
+  - time: "14:30"
+    type: ground_stop
+    duration_hours: 2.0
+
+  - time: "17:00"
+    type: diversion
+    extra_arrivals: 6
+    diversion_origin: TPA

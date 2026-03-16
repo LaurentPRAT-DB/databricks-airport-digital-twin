@@ -244,6 +244,7 @@ class SimulationRecorder:
 
     def write_output(self, path: str, config_dict: dict[str, Any]) -> None:
         """Write all recorded events to a JSON file."""
+        import os
         summary = self.compute_summary(config_dict)
         output = {
             "config": config_dict,
@@ -256,5 +257,12 @@ class SimulationRecorder:
             "weather_snapshots": self.weather_snapshots,
             "scenario_events": self.scenario_events,
         }
-        with open(path, "w") as f:
-            json.dump(output, f, indent=2, default=str)
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        # Write to temp file first, then atomic rename for crash safety.
+        # Compact JSON (no indent) to reduce size and memory pressure.
+        tmp_path = path + ".tmp"
+        with open(tmp_path, "w") as f:
+            json.dump(output, f, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)

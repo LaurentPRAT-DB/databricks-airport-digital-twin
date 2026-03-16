@@ -1,0 +1,7 @@
+airport: PHL
+arrivals: 500
+departures: 500
+duration_hours: 36
+time_step_seconds: 2.0
+seed: 300
+output_file: simulation_output/calibrated/cal_phl_normal_d3.json

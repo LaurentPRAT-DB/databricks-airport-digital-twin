@@ -1,0 +1,98 @@
+name: AMS North Sea Winter Storm — Netherlands
+description: >
+  Deep low-pressure system over the North Sea drives gale-force
+  winds and heavy rain across Schiphol. Gusts exceed 55kt on the
+  exposed polder airfield. Crosswind limits reached on multiple
+  runway pairs. Water accumulation on the flat terrain. Realistic for Oct-Mar.
+
+weather_events:
+  - time: "06:00"
+    type: rain
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 3.0
+    ceiling_ft: 1000
+    wind_speed_kt: 30
+    wind_gusts_kt: 45
+    wind_direction: 260
+
+  - time: "09:00"
+    type: rain
+    severity: severe
+    duration_hours: 4.0
+    visibility_nm: 1.0
+    ceiling_ft: 400
+    wind_speed_kt: 42
+    wind_gusts_kt: 58
+    wind_direction: 270
+
+  - time: "13:00"
+    type: rain
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 2.0
+    ceiling_ft: 800
+    wind_speed_kt: 35
+    wind_gusts_kt: 50
+    wind_direction: 280
+
+  - time: "16:00"
+    type: rain
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 4.0
+    ceiling_ft: 2000
+    wind_speed_kt: 25
+    wind_gusts_kt: 38
+    wind_direction: 290
+
+  - time: "19:00"
+    type: clear
+    severity: light
+    duration_hours: 5.0
+    visibility_nm: 8.0
+    ceiling_ft: 4000
+    wind_speed_kt: 18
+    wind_direction: 300
+
+runway_events:
+  - time: "09:00"
+    type: closure
+    runway: "18R"
+    duration_minutes: 180
+    reason: Crosswind exceeds limits
+
+  - time: "10:00"
+    type: closure
+    runway: "27"
+    duration_minutes: 120
+    reason: Standing water — hydroplaning risk
+
+ground_events:
+  - time: "09:00"
+    type: gate_failure
+    target: "Pier D-52"
+    duration_hours: 4.0
+
+  - time: "10:00"
+    type: taxiway_closure
+    target: "Taxiway V (flooding)"
+    duration_hours: 5.0
+    impact:
+      turnaround_multiplier: 1.4
+
+  - time: "12:00"
+    type: gate_failure
+    target: "Pier E-18"
+    duration_hours: 3.0
+
+traffic_modifiers:
+  - time: "09:00"
+    type: surge
+    extra_arrivals: 6
+    extra_departures: 4
+
+  - time: "11:00"
+    type: diversion
+    extra_arrivals: 10
+    diversion_origin: BRU

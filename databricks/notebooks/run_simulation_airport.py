@@ -17,49 +17,93 @@ dbutils.library.restartPython()
 
 # Parameters passed from the job
 dbutils.widgets.text("airport", "SFO")
-dbutils.widgets.text("config_file", "configs/simulation_sfo_1000.yaml")
+dbutils.widgets.text("config_file", "")
+# Inline parameters (used when config_file is empty)
+dbutils.widgets.text("arrivals", "")
+dbutils.widgets.text("departures", "")
+dbutils.widgets.text("duration_hours", "")
+dbutils.widgets.text("time_step_seconds", "")
+dbutils.widgets.text("seed", "")
+dbutils.widgets.text("output_file", "")
+dbutils.widgets.text("scenario_file", "")
 
 airport = dbutils.widgets.get("airport")
 config_file = dbutils.widgets.get("config_file")
 
 print(f"Airport: {airport}")
-print(f"Config:  {config_file}")
+print(f"Config:  {config_file or '(inline parameters)'}")
 
 # COMMAND ----------
 
 import os, sys, subprocess, json, time
 
 # Derive bundle root from notebook path in workspace
-# Notebook is at: .../files/databricks/notebooks/run_simulation_airport.py
-# Bundle root is: .../files/
 nb_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 print(f"Notebook path: {nb_path}")
 
-# Convert workspace path to filesystem path
-# /Users/x/.bundle/y/dev/files/databricks/notebooks/run_simulation_airport
-# -> /Workspace/Users/x/.bundle/y/dev/files
 ws_path = "/Workspace" + nb_path
 bundle_root = os.path.dirname(os.path.dirname(os.path.dirname(ws_path)))
 print(f"Bundle root: {bundle_root}")
 print(f"Contents: {os.listdir(bundle_root)}")
 
-# Verify config exists
-config_path = os.path.join(bundle_root, config_file)
-assert os.path.isfile(config_path), f"Config not found: {config_path}"
+# UC Volume for simulation output (FUSE-mounted on serverless)
+UC_CATALOG = "serverless_stable_3n0ihb_catalog"
+UC_SCHEMA = "airport_digital_twin"
+UC_VOLUME = "simulation_data"
+VOLUME_PATH = f"/Volumes/{UC_CATALOG}/{UC_SCHEMA}/{UC_VOLUME}"
 
-# Verify scenario exists
 import yaml
-with open(config_path) as f:
-    config = yaml.safe_load(f)
+
+if config_file:
+    # ── Mode 1: Config file on workspace ─────────────────────────────
+    config_path = os.path.join(bundle_root, config_file)
+    assert os.path.isfile(config_path), f"Config not found: {config_path}"
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+else:
+    # ── Mode 2: Inline parameters (no config file needed) ────────────
+    config = {
+        "airport": airport,
+        "arrivals": int(dbutils.widgets.get("arrivals") or "500"),
+        "departures": int(dbutils.widgets.get("departures") or "500"),
+        "duration_hours": int(dbutils.widgets.get("duration_hours") or "24"),
+        "time_step_seconds": float(dbutils.widgets.get("time_step_seconds") or "2.0"),
+        "seed": int(dbutils.widgets.get("seed") or "42"),
+        "output_file": dbutils.widgets.get("output_file") or f"simulation_output/sim_{airport.lower()}.json",
+    }
+    sf = dbutils.widgets.get("scenario_file")
+    if sf:
+        config["scenario_file"] = sf
+
+# Write to local /tmp first (reliable), then copy to UC Volume
+# Add timestamp to filename so re-runs don't overwrite previous results
+from datetime import datetime
+timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+original_output = config.get("output_file", f"simulation_output/sim_{airport.lower()}.json")
+base, ext = os.path.splitext(os.path.basename(original_output))
+output_basename = f"{base}_{timestamp}{ext}"
+local_output = f"/tmp/{output_basename}"
+volume_output = f"{VOLUME_PATH}/{output_basename}"
+config["output_file"] = local_output
+print(f"Local output:  {local_output}")
+print(f"Volume target: {volume_output}")
+
+# Write a temporary config file for the CLI to read
+config_file = f"configs/_run_{airport.lower()}.yaml"
+config_path = os.path.join(bundle_root, config_file)
+os.makedirs(os.path.dirname(config_path), exist_ok=True)
+with open(config_path, "w") as f:
+    yaml.dump(config, f, default_flow_style=False)
+print(f"Generated config: {config_path}")
+
 scenario_file = config.get("scenario_file")
 if scenario_file:
     scenario_path = os.path.join(bundle_root, scenario_file)
     assert os.path.isfile(scenario_path), f"Scenario not found: {scenario_path}"
     print(f"Scenario: {scenario_file}")
 
-# Create output directory
-sim_output = os.path.join(bundle_root, "simulation_output")
-os.makedirs(sim_output, exist_ok=True)
+# Ensure local output directory exists
+os.makedirs(os.path.dirname(local_output) or "/tmp", exist_ok=True)
 
 # COMMAND ----------
 
@@ -94,65 +138,68 @@ if result.stderr:
 
 # COMMAND ----------
 
-output_file = config.get("output_file", "")
-output_path = os.path.join(bundle_root, output_file)
+import re, shutil
 
-summary = {}
-if os.path.isfile(output_path):
-    size_mb = os.path.getsize(output_path) / (1024 * 1024)
-    print(f"Output file: {output_file} ({size_mb:.1f} MB)")
+def parse_summary_from_stdout(stdout: str) -> dict:
+    """Extract summary values from CLI stdout lines like '  Total flights:  123'."""
+    mapping = {
+        "Total flights": "total_flights",
+        "Arrivals": "arrivals",
+        "Departures": "departures",
+        "On-time": "on_time_pct",
+        "Cancellation rate": "cancellation_rate_pct",
+        "Capacity hold (avg)": "avg_capacity_hold_min",
+        "Capacity hold (max)": "max_capacity_hold_min",
+        "Peak simultaneous": "peak_simultaneous_flights",
+        "Gates used": "gate_utilization_gates_used",
+        "Position snapshots": "total_position_snapshots",
+        "Go-arounds": "total_go_arounds",
+        "Diversions": "total_diversions",
+        "Spawned": "spawned_count",
+        "Scenario": "scenario_name",
+    }
+    result = {}
+    for line in stdout.splitlines():
+        for label, key in mapping.items():
+            if label + ":" in line:
+                val = line.split(":", 1)[1].strip().rstrip("%").replace(",", "")
+                if key == "scenario_name":
+                    result[key] = val
+                elif "/" in val:  # "450/500" for spawned
+                    result[key] = int(val.split("/")[0])
+                else:
+                    try:
+                        result[key] = int(val) if "." not in val else float(val)
+                    except ValueError:
+                        result[key] = val
+                break
+    return result
 
-    with open(output_path) as f:
-        data = json.load(f)
+summary = parse_summary_from_stdout(result.stdout)
+print(f"\nParsed summary from CLI stdout: {json.dumps(summary, indent=2)}")
 
-    summary = data.get("summary", {})
-    print(f"\nSummary for {airport}:")
-    print(f"  Total flights:       {summary.get('total_flights', 0)}")
-    print(f"  Arrivals:            {summary.get('arrivals', 0)}")
-    print(f"  Departures:          {summary.get('departures', 0)}")
-    print(f"  Spawned:             {summary.get('spawned_count', 0)}")
-    print(f"  On-time %:           {summary.get('on_time_pct', 0):.1f}%")
-    print(f"  Cancellation rate:   {summary.get('cancellation_rate_pct', 0):.1f}%")
-    print(f"  Avg capacity hold:   {summary.get('avg_capacity_hold_min', 0):.1f} min")
-    print(f"  Max capacity hold:   {summary.get('max_capacity_hold_min', 0):.1f} min")
-    print(f"  Peak simultaneous:   {summary.get('peak_simultaneous_flights', 0)}")
-    print(f"  Gates used:          {summary.get('gate_utilization_gates_used', 0)}")
-    print(f"  Position snapshots:  {summary.get('total_position_snapshots', 0):,}")
-    print(f"  Go-arounds:          {summary.get('total_go_arounds', 0)}")
-    print(f"  Diversions:          {summary.get('total_diversions', 0)}")
-    print(f"  Scenario:            {summary.get('scenario_name', 'N/A')}")
+if os.path.isfile(local_output):
+    size_mb = os.path.getsize(local_output) / (1024 * 1024)
+    print(f"\nLocal output: {local_output} ({size_mb:.1f} MB)")
+
+    # Copy to UC Volume (don't parse the large JSON — use stdout summary)
+    os.makedirs(VOLUME_PATH, exist_ok=True)
+    shutil.copy2(local_output, volume_output)
+    print(f"Copied to UC Volume: {volume_output}")
 else:
-    print(f"ERROR: Output file not found at {output_path}")
+    print(f"WARNING: Output file not found at {local_output}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Upload to Unity Catalog Volume
+# MAGIC ## Register in Metadata Table
 
 # COMMAND ----------
 
-UC_CATALOG = "serverless_stable_3n0ihb_catalog"
-UC_SCHEMA = "airport_digital_twin"
-UC_VOLUME = "simulation_data"
-VOLUME_PATH = f"/Volumes/{UC_CATALOG}/{UC_SCHEMA}/{UC_VOLUME}"
-
-if os.path.isfile(output_path):
-    import shutil
-    dest = f"{VOLUME_PATH}/{os.path.basename(output_file)}"
-    # UC Volumes are FUSE-mounted on serverless — use shutil directly
-    os.makedirs(VOLUME_PATH, exist_ok=True)
-    shutil.copy2(output_path, dest)
-    print(f"Uploaded to UC Volume: {dest}")
-
-    # Remove the workspace-local JSON to keep bundle dir under app snapshot size limit
-    os.remove(output_path)
-    print(f"Removed workspace copy: {output_path}")
-
-    # Insert metadata row (MERGE to avoid duplicates on re-runs)
-    # Get size from the Volume copy (local was already removed)
-    size_bytes = os.path.getsize(dest)
-    fname = os.path.basename(output_file)
-    scenario_name = summary.get("scenario_name", "").replace("'", "''")
+if os.path.isfile(local_output):
+    size_bytes = os.path.getsize(local_output)
+    fname = output_basename
+    scenario_name = (summary.get("scenario_name") or "").replace("'", "''")
 
     merge_sql = f"""
     MERGE INTO {UC_CATALOG}.{UC_SCHEMA}.simulation_runs AS target
@@ -172,7 +219,7 @@ if os.path.isfile(output_path):
         total_diversions = {summary.get('total_diversions', 0)},
         size_bytes = {size_bytes},
         created_at = CURRENT_TIMESTAMP(),
-        volume_path = '{dest}'
+        volume_path = '{volume_output}'
     WHEN NOT MATCHED THEN INSERT (
         filename, airport, scenario_name, total_flights, arrivals, departures,
         duration_hours, on_time_pct, cancellation_rate_pct, peak_simultaneous_flights,
@@ -183,13 +230,20 @@ if os.path.isfile(output_path):
         {summary.get('departures', 0)}, {config.get('duration_hours', 0)},
         {summary.get('on_time_pct', 0)}, {summary.get('cancellation_rate_pct', 0)},
         {summary.get('peak_simultaneous_flights', 0)}, {summary.get('total_go_arounds', 0)},
-        {summary.get('total_diversions', 0)}, {size_bytes}, CURRENT_TIMESTAMP(), '{dest}'
+        {summary.get('total_diversions', 0)}, {size_bytes}, CURRENT_TIMESTAMP(), '{volume_output}'
     )
     """
     spark.sql(merge_sql)
     print(f"Metadata inserted into {UC_CATALOG}.{UC_SCHEMA}.simulation_runs")
 else:
-    print("Skipping UC upload — no output file")
+    print("Skipping metadata insert — no output file")
+
+# Clean up temporary files
+for f in [config_path, local_output]:
+    try:
+        os.remove(f)
+    except OSError:
+        pass
 
 # COMMAND ----------
 
@@ -199,7 +253,7 @@ dbutils.notebook.exit(json.dumps({
     "status": "PASS" if success else "FAIL",
     "airport": airport,
     "elapsed_sec": round(elapsed, 1),
-    "output_file": output_file,
+    "output_file": volume_output,
     "total_flights": summary.get("total_flights", 0) if success else 0,
     "on_time_pct": summary.get("on_time_pct", 0) if success else 0,
 }))

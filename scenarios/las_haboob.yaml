@@ -1,0 +1,90 @@
+name: LAS Summer Haboob — Mojave Desert
+description: >
+  Monsoon outflow boundary generates a massive haboob (dust wall)
+  across the Las Vegas valley. Visibility drops to near zero.
+  Extreme heat (115F) causes density altitude issues. Microburst
+  wind shear on approach. Realistic for Jul-Sep monsoon season.
+
+weather_events:
+  - time: "16:00"
+    type: dust
+    severity: moderate
+    duration_hours: 1.0
+    visibility_nm: 2.0
+    ceiling_ft: 2000
+    wind_speed_kt: 20
+    wind_direction: 200
+
+  - time: "17:00"
+    type: sandstorm
+    severity: severe
+    duration_hours: 2.0
+    visibility_nm: 0.12
+    ceiling_ft: 100
+    wind_speed_kt: 45
+    wind_gusts_kt: 65
+    wind_direction: 210
+
+  - time: "19:00"
+    type: dust
+    severity: moderate
+    duration_hours: 2.0
+    visibility_nm: 1.0
+    ceiling_ft: 800
+    wind_speed_kt: 25
+    wind_gusts_kt: 40
+    wind_direction: 220
+
+  - time: "21:00"
+    type: haze
+    severity: light
+    duration_hours: 2.0
+    visibility_nm: 4.0
+    ceiling_ft: 3000
+    wind_speed_kt: 15
+    wind_direction: 230
+
+  - time: "23:00"
+    type: clear
+    severity: light
+    duration_hours: 7.0
+    visibility_nm: 10.0
+    ceiling_ft: 8000
+    wind_speed_kt: 8
+    wind_direction: 240
+
+runway_events:
+  - time: "17:00"
+    type: closure
+    runway: "26L"
+    duration_minutes: 120
+    reason: Haboob — zero visibility
+
+  - time: "17:30"
+    type: closure
+    runway: "26R"
+    duration_minutes: 90
+    reason: Dust and wind shear
+
+ground_events:
+  - time: "17:00"
+    type: gate_failure
+    target: "Terminal 1-D8"
+    duration_hours: 3.0
+
+  - time: "17:00"
+    type: taxiway_closure
+    target: "Taxiway A (dust accumulation)"
+    duration_hours: 4.0
+    impact:
+      turnaround_multiplier: 1.5
+
+traffic_modifiers:
+  - time: "16:30"
+    type: ground_stop
+    duration_hours: 2.5
+
+  - time: "19:30"
+    type: diversion
+    extra_arrivals: 6
+    diversion_origin: PHX

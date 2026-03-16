@@ -1,0 +1,8 @@
+airport: DEN
+arrivals: 500
+departures: 500
+duration_hours: 36
+time_step_seconds: 2.0
+seed: 42
+output_file: simulation_output/calibrated/cal_den_weather.json
+scenario_file: scenarios/den_spring_blizzard.yaml

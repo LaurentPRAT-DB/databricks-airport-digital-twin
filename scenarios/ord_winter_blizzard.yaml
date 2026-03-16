@@ -1,0 +1,97 @@
+name: ORD Winter Blizzard — Great Lakes
+description: >
+  Major winter storm buries Chicago with 12+ inches of snow.
+  O'Hare is the nation's busiest hub and delays cascade nationally.
+  Extended ground stops, de-icing queues over 2 hours, and
+  hundreds of cancellations. Realistic for Nov-Mar.
+
+weather_events:
+  - time: "03:00"
+    type: snow
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 1.5
+    ceiling_ft: 800
+    wind_speed_kt: 22
+    wind_gusts_kt: 35
+    wind_direction: 020
+
+  - time: "06:00"
+    type: snow
+    severity: severe
+    duration_hours: 6.0
+    visibility_nm: 0.12
+    ceiling_ft: 100
+    wind_speed_kt: 35
+    wind_gusts_kt: 52
+    wind_direction: 030
+
+  - time: "12:00"
+    type: snow
+    severity: moderate
+    duration_hours: 4.0
+    visibility_nm: 0.5
+    ceiling_ft: 400
+    wind_speed_kt: 28
+    wind_gusts_kt: 42
+    wind_direction: 340
+
+  - time: "16:00"
+    type: snow
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 2.0
+    ceiling_ft: 1500
+    wind_speed_kt: 18
+    wind_direction: 330
+
+  - time: "19:00"
+    type: clear
+    severity: light
+    duration_hours: 5.0
+    visibility_nm: 8.0
+    ceiling_ft: 4000
+    wind_speed_kt: 12
+    wind_direction: 310
+
+runway_events:
+  - time: "06:00"
+    type: closure
+    runway: "10C"
+    duration_minutes: 300
+    reason: Blizzard — continuous plowing required
+
+  - time: "07:00"
+    type: closure
+    runway: "10L"
+    duration_minutes: 240
+    reason: Heavy snow — braking action nil
+
+ground_events:
+  - time: "04:00"
+    type: deicing_required
+    duration_hours: 15.0
+    impact:
+      turnaround_multiplier: 2.0
+
+  - time: "06:00"
+    type: gate_failure
+    target: "Terminal 1-C18"
+    duration_hours: 6.0
+
+  - time: "08:00"
+    type: taxiway_closure
+    target: "Taxiway M (snow drifts)"
+    duration_hours: 8.0
+    impact:
+      turnaround_multiplier: 1.5
+
+traffic_modifiers:
+  - time: "06:00"
+    type: ground_stop
+    duration_hours: 5.0
+
+  - time: "13:00"
+    type: diversion
+    extra_arrivals: 12
+    diversion_origin: MDW

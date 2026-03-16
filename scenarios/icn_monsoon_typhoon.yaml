@@ -1,0 +1,106 @@
+name: ICN Summer Monsoon + Typhoon — Korean Peninsula
+description: >
+  Changma monsoon season brings persistent heavy rain, then a
+  weakening typhoon tracks up the Yellow Sea adding gusty winds.
+  Low ceilings and visibility persist for hours. Incheon's exposed
+  island location amplifies wind effects. Realistic for Jun-Sep.
+
+weather_events:
+  - time: "04:00"
+    type: rain
+    severity: moderate
+    duration_hours: 4.0
+    visibility_nm: 2.0
+    ceiling_ft: 600
+    wind_speed_kt: 20
+    wind_gusts_kt: 32
+    wind_direction: 200
+
+  - time: "08:00"
+    type: rain
+    severity: severe
+    duration_hours: 5.0
+    visibility_nm: 0.5
+    ceiling_ft: 200
+    wind_speed_kt: 40
+    wind_gusts_kt: 58
+    wind_direction: 210
+
+  - time: "13:00"
+    type: thunderstorm
+    severity: severe
+    duration_hours: 3.0
+    visibility_nm: 0.25
+    ceiling_ft: 200
+    wind_speed_kt: 50
+    wind_gusts_kt: 70
+    wind_direction: 230
+
+  - time: "16:00"
+    type: rain
+    severity: moderate
+    duration_hours: 3.0
+    visibility_nm: 1.5
+    ceiling_ft: 600
+    wind_speed_kt: 30
+    wind_gusts_kt: 45
+    wind_direction: 250
+
+  - time: "19:00"
+    type: rain
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 4.0
+    ceiling_ft: 2000
+    wind_speed_kt: 18
+    wind_direction: 270
+
+  - time: "22:00"
+    type: clear
+    severity: light
+    duration_hours: 2.0
+    visibility_nm: 8.0
+    ceiling_ft: 4000
+    wind_speed_kt: 10
+    wind_direction: 280
+
+runway_events:
+  - time: "08:00"
+    type: closure
+    runway: "15L"
+    duration_minutes: 300
+    reason: Typhoon approach — wind exceeds limits
+
+  - time: "09:00"
+    type: closure
+    runway: "15R"
+    duration_minutes: 240
+    reason: Standing water and poor visibility
+
+ground_events:
+  - time: "06:00"
+    type: taxiway_closure
+    target: "Taxiway A (flooding)"
+    duration_hours: 10.0
+    impact:
+      turnaround_multiplier: 1.7
+
+  - time: "08:00"
+    type: gate_failure
+    target: "Terminal 2-248"
+    duration_hours: 6.0
+
+  - time: "13:00"
+    type: gate_failure
+    target: "Terminal 1-118"
+    duration_hours: 4.0
+
+traffic_modifiers:
+  - time: "08:00"
+    type: ground_stop
+    duration_hours: 6.0
+
+  - time: "15:00"
+    type: diversion
+    extra_arrivals: 10
+    diversion_origin: GMP

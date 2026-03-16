@@ -1,0 +1,87 @@
+name: DFW Spring Tornado Outbreak — North Texas
+description: >
+  A supercell cluster moves through the DFW metroplex. Large hail,
+  tornado warnings, and severe wind gusts hammer the airport.
+  FAA issues ground stop. Tornado sirens force terminal evacuations.
+  Realistic for Mar-Jun tornado season in Tornado Alley.
+
+weather_events:
+  - time: "15:00"
+    type: thunderstorm
+    severity: moderate
+    duration_hours: 1.0
+    visibility_nm: 3.0
+    ceiling_ft: 2000
+    wind_speed_kt: 25
+    wind_gusts_kt: 40
+    wind_direction: 230
+
+  - time: "16:00"
+    type: thunderstorm
+    severity: severe
+    duration_hours: 3.0
+    visibility_nm: 0.25
+    ceiling_ft: 200
+    wind_speed_kt: 50
+    wind_gusts_kt: 72
+    wind_direction: 250
+
+  - time: "19:00"
+    type: thunderstorm
+    severity: moderate
+    duration_hours: 2.0
+    visibility_nm: 1.5
+    ceiling_ft: 1000
+    wind_speed_kt: 30
+    wind_gusts_kt: 48
+    wind_direction: 270
+
+  - time: "21:00"
+    type: clear
+    severity: light
+    duration_hours: 3.0
+    visibility_nm: 10.0
+    ceiling_ft: 5000
+    wind_speed_kt: 12
+    wind_direction: 290
+
+runway_events:
+  - time: "16:00"
+    type: closure
+    runway: "17L"
+    duration_minutes: 180
+    reason: Tornado warning — all ops suspended
+
+  - time: "16:30"
+    type: closure
+    runway: "17R"
+    duration_minutes: 150
+    reason: Hail damage inspection required
+
+ground_events:
+  - time: "16:00"
+    type: gate_failure
+    target: "Terminal D-28"
+    duration_hours: 4.0
+
+  - time: "16:00"
+    type: taxiway_closure
+    target: "Taxiway P (hail accumulation)"
+    duration_hours: 3.0
+    impact:
+      turnaround_multiplier: 1.5
+
+  - time: "17:00"
+    type: gate_failure
+    target: "Terminal A-14"
+    duration_hours: 3.0
+
+traffic_modifiers:
+  - time: "15:30"
+    type: ground_stop
+    duration_hours: 3.5
+
+  - time: "19:30"
+    type: diversion
+    extra_arrivals: 10
+    diversion_origin: DAL

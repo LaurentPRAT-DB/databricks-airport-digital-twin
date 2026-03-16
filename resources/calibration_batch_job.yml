@@ -1,0 +1,1630 @@
+resources:
+  jobs:
+    calibration_batch:
+      name: "[${bundle.target}] Airport DT - Calibration Batch (132 sims)"
+      description: "33 airports x 4 runs each (3 normal + 1 weather), 36h duration, calibrated profiles"
+
+      tasks:
+        - task_key: cal_sfo_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SFO"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_sfo_normal_d1.json"
+
+        - task_key: cal_sfo_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SFO"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_sfo_normal_d2.json"
+
+        - task_key: cal_sfo_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SFO"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_sfo_normal_d3.json"
+
+        - task_key: cal_jfk_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "JFK"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_jfk_normal_d1.json"
+
+        - task_key: cal_jfk_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "JFK"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_jfk_normal_d2.json"
+
+        - task_key: cal_jfk_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "JFK"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_jfk_normal_d3.json"
+
+        - task_key: cal_atl_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ATL"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_atl_normal_d1.json"
+
+        - task_key: cal_atl_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ATL"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_atl_normal_d2.json"
+
+        - task_key: cal_atl_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ATL"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_atl_normal_d3.json"
+
+        - task_key: cal_ord_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ORD"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_ord_normal_d1.json"
+
+        - task_key: cal_ord_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ORD"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_ord_normal_d2.json"
+
+        - task_key: cal_ord_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ORD"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_ord_normal_d3.json"
+
+        - task_key: cal_lax_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LAX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_lax_normal_d1.json"
+
+        - task_key: cal_lax_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LAX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_lax_normal_d2.json"
+
+        - task_key: cal_lax_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LAX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_lax_normal_d3.json"
+
+        - task_key: cal_dfw_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DFW"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_dfw_normal_d1.json"
+
+        - task_key: cal_dfw_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DFW"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_dfw_normal_d2.json"
+
+        - task_key: cal_dfw_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DFW"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_dfw_normal_d3.json"
+
+        - task_key: cal_den_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DEN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_den_normal_d1.json"
+
+        - task_key: cal_den_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DEN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_den_normal_d2.json"
+
+        - task_key: cal_den_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DEN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_den_normal_d3.json"
+
+        - task_key: cal_sea_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SEA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_sea_normal_d1.json"
+
+        - task_key: cal_sea_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SEA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_sea_normal_d2.json"
+
+        - task_key: cal_sea_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SEA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_sea_normal_d3.json"
+
+        - task_key: cal_mia_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MIA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_mia_normal_d1.json"
+
+        - task_key: cal_mia_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MIA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_mia_normal_d2.json"
+
+        - task_key: cal_mia_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MIA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_mia_normal_d3.json"
+
+        - task_key: cal_ewr_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "EWR"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_ewr_normal_d1.json"
+
+        - task_key: cal_ewr_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "EWR"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_ewr_normal_d2.json"
+
+        - task_key: cal_ewr_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "EWR"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_ewr_normal_d3.json"
+
+        - task_key: cal_bos_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "BOS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_bos_normal_d1.json"
+
+        - task_key: cal_bos_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "BOS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_bos_normal_d2.json"
+
+        - task_key: cal_bos_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "BOS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_bos_normal_d3.json"
+
+        - task_key: cal_phx_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PHX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_phx_normal_d1.json"
+
+        - task_key: cal_phx_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PHX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_phx_normal_d2.json"
+
+        - task_key: cal_phx_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PHX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_phx_normal_d3.json"
+
+        - task_key: cal_las_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LAS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_las_normal_d1.json"
+
+        - task_key: cal_las_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LAS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_las_normal_d2.json"
+
+        - task_key: cal_las_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LAS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_las_normal_d3.json"
+
+        - task_key: cal_mco_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MCO"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_mco_normal_d1.json"
+
+        - task_key: cal_mco_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MCO"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_mco_normal_d2.json"
+
+        - task_key: cal_mco_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MCO"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_mco_normal_d3.json"
+
+        - task_key: cal_clt_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "CLT"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_clt_normal_d1.json"
+
+        - task_key: cal_clt_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "CLT"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_clt_normal_d2.json"
+
+        - task_key: cal_clt_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "CLT"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_clt_normal_d3.json"
+
+        - task_key: cal_msp_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MSP"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_msp_normal_d1.json"
+
+        - task_key: cal_msp_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MSP"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_msp_normal_d2.json"
+
+        - task_key: cal_msp_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MSP"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_msp_normal_d3.json"
+
+        - task_key: cal_dtw_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DTW"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_dtw_normal_d1.json"
+
+        - task_key: cal_dtw_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DTW"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_dtw_normal_d2.json"
+
+        - task_key: cal_dtw_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DTW"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_dtw_normal_d3.json"
+
+        - task_key: cal_phl_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PHL"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_phl_normal_d1.json"
+
+        - task_key: cal_phl_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PHL"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_phl_normal_d2.json"
+
+        - task_key: cal_phl_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PHL"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_phl_normal_d3.json"
+
+        - task_key: cal_iah_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "IAH"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_iah_normal_d1.json"
+
+        - task_key: cal_iah_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "IAH"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_iah_normal_d2.json"
+
+        - task_key: cal_iah_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "IAH"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_iah_normal_d3.json"
+
+        - task_key: cal_san_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SAN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_san_normal_d1.json"
+
+        - task_key: cal_san_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SAN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_san_normal_d2.json"
+
+        - task_key: cal_san_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SAN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_san_normal_d3.json"
+
+        - task_key: cal_pdx_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PDX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_pdx_normal_d1.json"
+
+        - task_key: cal_pdx_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PDX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_pdx_normal_d2.json"
+
+        - task_key: cal_pdx_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PDX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_pdx_normal_d3.json"
+
+        - task_key: cal_lhr_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LHR"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_lhr_normal_d1.json"
+
+        - task_key: cal_lhr_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LHR"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_lhr_normal_d2.json"
+
+        - task_key: cal_lhr_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LHR"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_lhr_normal_d3.json"
+
+        - task_key: cal_dxb_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DXB"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_dxb_normal_d1.json"
+
+        - task_key: cal_dxb_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DXB"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_dxb_normal_d2.json"
+
+        - task_key: cal_dxb_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DXB"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_dxb_normal_d3.json"
+
+        - task_key: cal_nrt_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "NRT"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_nrt_normal_d1.json"
+
+        - task_key: cal_nrt_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "NRT"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_nrt_normal_d2.json"
+
+        - task_key: cal_nrt_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "NRT"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_nrt_normal_d3.json"
+
+        - task_key: cal_sin_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SIN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_sin_normal_d1.json"
+
+        - task_key: cal_sin_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SIN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_sin_normal_d2.json"
+
+        - task_key: cal_sin_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SIN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_sin_normal_d3.json"
+
+        - task_key: cal_hkg_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "HKG"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_hkg_normal_d1.json"
+
+        - task_key: cal_hkg_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "HKG"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_hkg_normal_d2.json"
+
+        - task_key: cal_hkg_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "HKG"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_hkg_normal_d3.json"
+
+        - task_key: cal_cdg_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "CDG"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_cdg_normal_d1.json"
+
+        - task_key: cal_cdg_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "CDG"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_cdg_normal_d2.json"
+
+        - task_key: cal_cdg_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "CDG"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_cdg_normal_d3.json"
+
+        - task_key: cal_fra_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "FRA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_fra_normal_d1.json"
+
+        - task_key: cal_fra_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "FRA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_fra_normal_d2.json"
+
+        - task_key: cal_fra_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "FRA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_fra_normal_d3.json"
+
+        - task_key: cal_ams_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "AMS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_ams_normal_d1.json"
+
+        - task_key: cal_ams_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "AMS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_ams_normal_d2.json"
+
+        - task_key: cal_ams_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "AMS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_ams_normal_d3.json"
+
+        - task_key: cal_syd_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SYD"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_syd_normal_d1.json"
+
+        - task_key: cal_syd_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SYD"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_syd_normal_d2.json"
+
+        - task_key: cal_syd_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SYD"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_syd_normal_d3.json"
+
+        - task_key: cal_icn_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ICN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_icn_normal_d1.json"
+
+        - task_key: cal_icn_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ICN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_icn_normal_d2.json"
+
+        - task_key: cal_icn_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ICN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_icn_normal_d3.json"
+
+        - task_key: cal_gru_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "GRU"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_gru_normal_d1.json"
+
+        - task_key: cal_gru_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "GRU"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_gru_normal_d2.json"
+
+        - task_key: cal_gru_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "GRU"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_gru_normal_d3.json"
+
+        - task_key: cal_jnb_normal_d1
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "JNB"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "100"
+              output_file: "simulation_output/calibrated/cal_jnb_normal_d1.json"
+
+        - task_key: cal_jnb_normal_d2
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "JNB"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "200"
+              output_file: "simulation_output/calibrated/cal_jnb_normal_d2.json"
+
+        - task_key: cal_jnb_normal_d3
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "JNB"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "300"
+              output_file: "simulation_output/calibrated/cal_jnb_normal_d3.json"
+
+        - task_key: cal_sfo_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SFO"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_sfo_weather.json"
+              scenario_file: "scenarios/sfo_summer_thunderstorm.yaml"
+
+        - task_key: cal_jfk_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "JFK"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_jfk_weather.json"
+              scenario_file: "scenarios/jfk_winter_storm.yaml"
+
+        - task_key: cal_atl_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ATL"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_atl_weather.json"
+              scenario_file: "scenarios/atl_summer_thunderstorm.yaml"
+
+        - task_key: cal_ord_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ORD"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_ord_weather.json"
+              scenario_file: "scenarios/ord_winter_blizzard.yaml"
+
+        - task_key: cal_lax_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LAX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_lax_weather.json"
+              scenario_file: "scenarios/lax_santa_ana_winds.yaml"
+
+        - task_key: cal_dfw_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DFW"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_dfw_weather.json"
+              scenario_file: "scenarios/dfw_tornado_outbreak.yaml"
+
+        - task_key: cal_den_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DEN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_den_weather.json"
+              scenario_file: "scenarios/den_spring_blizzard.yaml"
+
+        - task_key: cal_sea_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SEA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_sea_weather.json"
+              scenario_file: "scenarios/sea_atmospheric_river_windstorm.yaml"
+
+        - task_key: cal_mia_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MIA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_mia_weather.json"
+              scenario_file: "scenarios/mia_tropical_storm.yaml"
+
+        - task_key: cal_ewr_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "EWR"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_ewr_weather.json"
+              scenario_file: "scenarios/ewr_ice_storm.yaml"
+
+        - task_key: cal_bos_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "BOS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_bos_weather.json"
+              scenario_file: "scenarios/bos_noreaster.yaml"
+
+        - task_key: cal_phx_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PHX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_phx_weather.json"
+              scenario_file: "scenarios/phx_extreme_heat_dust.yaml"
+
+        - task_key: cal_las_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LAS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_las_weather.json"
+              scenario_file: "scenarios/las_haboob.yaml"
+
+        - task_key: cal_mco_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MCO"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_mco_weather.json"
+              scenario_file: "scenarios/mco_thunderstorm_complex.yaml"
+
+        - task_key: cal_clt_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "CLT"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_clt_weather.json"
+              scenario_file: "scenarios/clt_derecho.yaml"
+
+        - task_key: cal_msp_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MSP"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_msp_weather.json"
+              scenario_file: "scenarios/msp_arctic_blast.yaml"
+
+        - task_key: cal_dtw_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DTW"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_dtw_weather.json"
+              scenario_file: "scenarios/dtw_lake_effect_blizzard.yaml"
+
+        - task_key: cal_phl_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PHL"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_phl_weather.json"
+              scenario_file: "scenarios/phl_summer_thunderstorm.yaml"
+
+        - task_key: cal_iah_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "IAH"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_iah_weather.json"
+              scenario_file: "scenarios/iah_hurricane_approach.yaml"
+
+        - task_key: cal_san_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SAN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_san_weather.json"
+              scenario_file: "scenarios/san_marine_santa_ana.yaml"
+
+        - task_key: cal_pdx_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PDX"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_pdx_weather.json"
+              scenario_file: "scenarios/pdx_atmospheric_river.yaml"
+
+        - task_key: cal_lhr_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LHR"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_lhr_weather.json"
+              scenario_file: "scenarios/lhr_winter_fog.yaml"
+
+        - task_key: cal_dxb_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DXB"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_dxb_weather.json"
+              scenario_file: "scenarios/dxb_sandstorm.yaml"
+
+        - task_key: cal_nrt_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "NRT"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_nrt_weather.json"
+              scenario_file: "scenarios/nrt_typhoon.yaml"
+
+        - task_key: cal_sin_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SIN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_sin_weather.json"
+              scenario_file: "scenarios/sin_monsoon.yaml"
+
+        - task_key: cal_hkg_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "HKG"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_hkg_weather.json"
+              scenario_file: "scenarios/hkg_typhoon_signal8.yaml"
+
+        - task_key: cal_cdg_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "CDG"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_cdg_weather.json"
+              scenario_file: "scenarios/cdg_winter_fog_freezing.yaml"
+
+        - task_key: cal_fra_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "FRA"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_fra_weather.json"
+              scenario_file: "scenarios/fra_winter_crosswind.yaml"
+
+        - task_key: cal_ams_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "AMS"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_ams_weather.json"
+              scenario_file: "scenarios/ams_north_sea_storm.yaml"
+
+        - task_key: cal_syd_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SYD"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_syd_weather.json"
+              scenario_file: "scenarios/syd_bushfire_smoke.yaml"
+
+        - task_key: cal_icn_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ICN"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_icn_weather.json"
+              scenario_file: "scenarios/icn_monsoon_typhoon.yaml"
+
+        - task_key: cal_gru_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "GRU"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_gru_weather.json"
+              scenario_file: "scenarios/gru_tropical_storm.yaml"
+
+        - task_key: cal_jnb_weather
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "JNB"
+              arrivals: "500"
+              departures: "500"
+              duration_hours: "36"
+              time_step_seconds: "2.0"
+              seed: "42"
+              output_file: "simulation_output/calibrated/cal_jnb_weather.json"
+              scenario_file: "scenarios/jnb_summer_thunderstorm.yaml"
+
+      tags:
+        project: airport-digital-twin
+        component: calibration-batch
+        target: ${bundle.target}
+
+      timeout_seconds: 7200

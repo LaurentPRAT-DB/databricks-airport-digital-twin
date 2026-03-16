@@ -1,0 +1,8 @@
+airport: CDG
+arrivals: 500
+departures: 500
+duration_hours: 36
+time_step_seconds: 2.0
+seed: 42
+output_file: simulation_output/calibrated/cal_cdg_weather.json
+scenario_file: scenarios/cdg_winter_fog_freezing.yaml
