@@ -31,6 +31,96 @@ from src.ml.gse_model import get_turnaround_timing
 fake = Faker()
 
 # ============================================================================
+# AIRLINE TURNAROUND SPEED FACTORS
+# ============================================================================
+# 1.0 = standard, <1.0 = faster turnaround, >1.0 = slower turnaround.
+# Based on industry data: LCCs target 25-30 min turns, full-service 45-90 min,
+# Gulf/Asian premium carriers add 5-15% for extra catering/cleaning.
+
+AIRLINE_TURNAROUND_FACTOR: Dict[str, float] = {
+    # US low-cost carriers — fast turns
+    "SWA": 0.72,   # Southwest: 25-min target, industry fastest
+    "FFT": 0.78,   # Frontier: ULCC, minimal service
+    "NKS": 0.78,   # Spirit: ULCC
+    "JBU": 0.88,   # JetBlue: midway LCC/legacy
+    # US legacy carriers — standard
+    "UAL": 1.0, "DAL": 1.0, "AAL": 1.0,
+    # US regional — slightly faster
+    "ASA": 0.92, "SKW": 0.90, "RPA": 0.90, "ENY": 0.90,
+    # European LCCs — very fast
+    "RYR": 0.70,   # Ryanair: 25-min target
+    "EZY": 0.75,   # easyJet: 30-min target
+    # European legacy
+    "BAW": 1.05, "DLH": 1.05, "AFR": 1.05, "KLM": 1.0,
+    # Gulf carriers — premium service, longer turns
+    "UAE": 1.15, "QTR": 1.12, "ETD": 1.10,
+    # Asian carriers — premium service
+    "SIA": 1.10, "CPA": 1.08, "ANA": 1.05, "JAL": 1.05, "KAL": 1.05,
+    "CZ": 1.0,     # China Southern
+    # Latin American
+    "AMX": 1.0, "MXA": 1.0,
+    # Hawaiian
+    "HAL": 0.95,
+}
+_DEFAULT_AIRLINE_FACTOR = 1.0
+
+# ============================================================================
+# WEATHER STATE — updated by simulation engine each weather tick
+# ============================================================================
+
+_current_weather: Dict[str, float] = {"wind_speed_kts": 0.0, "visibility_sm": 10.0}
+
+
+def set_current_weather(wind_speed_kts: float, visibility_sm: float) -> None:
+    """Called by simulation engine after each weather update."""
+    _current_weather["wind_speed_kts"] = wind_speed_kts
+    _current_weather["visibility_sm"] = visibility_sm
+
+
+def _get_turnaround_weather_factor() -> float:
+    """Weather impact on ground handling operations.
+
+    High winds slow fueling/cargo; low visibility slows ramp movement.
+    """
+    factor = 1.0
+    wind = _current_weather.get("wind_speed_kts", 0.0)
+    vis = _current_weather.get("visibility_sm", 10.0)
+
+    if wind > 50:
+        factor += 0.25
+    elif wind > 35:
+        factor += 0.15
+    elif wind > 25:
+        factor += 0.05
+
+    if vis < 0.5:
+        factor += 0.15
+    elif vis < 1.0:
+        factor += 0.10
+    elif vis < 3.0:
+        factor += 0.05
+
+    return factor
+
+
+def _get_turnaround_congestion_factor() -> float:
+    """More concurrent gate ops = longer turnaround due to crew contention."""
+    _init_gate_states()
+    occupied = sum(1 for gs in _gate_states.values() if gs.occupied_by is not None)
+    return 1.0 + 0.01 * max(0, occupied - 10)
+
+
+def _get_turnaround_international_factor(state: "FlightState") -> float:
+    """International flights have longer turnarounds (+25%)."""
+    origin = state.origin_airport or ""
+    dest = state.destination_airport or ""
+    local = get_current_airport_iata()
+    other = dest if origin == local else origin
+    if _is_international_airport(other):
+        return 1.25
+    return 1.0
+
+# ============================================================================
 # EVENT BUFFERS for ML training data persistence
 # ============================================================================
 # Thread-safe buffers that collect events during state machine updates.
@@ -2336,7 +2426,15 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                         + timing["phases"].get("departure_taxi", 0))
         gate_minutes = total_min - non_gate_min
         gate_seconds = gate_minutes * 60
-        target = gate_seconds * random.uniform(0.8, 1.2)
+        # Feature-dependent turnaround: airline + weather + congestion + international
+        airline_code = state.callsign[:3] if state.callsign and len(state.callsign) >= 3 else ""
+        airline_factor = AIRLINE_TURNAROUND_FACTOR.get(airline_code, _DEFAULT_AIRLINE_FACTOR)
+        weather_factor = _get_turnaround_weather_factor()
+        congestion_factor = _get_turnaround_congestion_factor()
+        intl_factor = _get_turnaround_international_factor(state)
+        combined_factor = airline_factor * weather_factor * congestion_factor * intl_factor
+        # +/-10% jitter (reduced from 20% since factors explain more variance)
+        target = gate_seconds * combined_factor * random.uniform(0.9, 1.1)
         if state.time_at_gate > target:
             # Ensure correct origin/dest for departure: origin=local, dest=new airport
             local_iata = get_current_airport_iata()

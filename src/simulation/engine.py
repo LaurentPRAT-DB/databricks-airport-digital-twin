@@ -956,6 +956,13 @@ class SimulationEngine:
 
             self.recorder.record_weather(self.sim_time, metar)
 
+            # Update weather state in fallback module for turnaround factor calculations
+            from src.ingestion.fallback import set_current_weather
+            set_current_weather(
+                float(metar.get("wind_speed_kts", 0) or 0),
+                float(metar.get("visibility_sm", 10.0) or 10.0),
+            )
+
     def _generate_baggage(self) -> None:
         """Generate baggage data for flights that reached PARKED."""
         for completed in self._completed_flights:

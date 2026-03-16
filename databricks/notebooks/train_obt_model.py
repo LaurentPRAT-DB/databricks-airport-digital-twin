@@ -47,7 +47,7 @@ COARSE_MODEL_NAME = f"{UC_CATALOG}.{UC_SCHEMA}.obt_coarse_model"
 REFINED_MODEL_NAME = f"{UC_CATALOG}.{UC_SCHEMA}.obt_refined_model"
 
 # MLflow experiment (workspace-scoped)
-EXPERIMENT_NAME = f"/Users/{dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()}/airport-digital-twin/obt_two_stage_model"
+EXPERIMENT_NAME = f"/Users/{dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()}/airport_dt_obt_two_stage_model"
 
 MIN_SIMULATION_FILES = 3  # Minimum files to proceed (soft threshold)
 
@@ -61,7 +61,7 @@ MIN_SIMULATION_FILES = 3  # Minimum files to proceed (soft threshold)
 # List simulation files in the volume
 sim_files = sorted([
     f for f in os.listdir(VOLUME_PATH)
-    if f.startswith("simulation_") and f.endswith(".json")
+    if f.endswith(".json") and (f.startswith("simulation_") or f.startswith("cal_"))
 ])
 print(f"Found {len(sim_files)} simulation files in UC Volume:")
 for f in sim_files:
@@ -102,6 +102,14 @@ print(f"Airports: {sorted(airports)}")
 print(f"Categories: {categories}")
 print(f"Target range: {min(d['target'] for d in all_data):.1f} - {max(d['target'] for d in all_data):.1f} min")
 
+# New features summary
+airlines = set(d["features"]["airline_code"] for d in all_data)
+intl_count = sum(1 for d in all_data if d["features"]["is_international"])
+weather_count = sum(1 for d in all_data if d["features"]["is_weather_scenario"])
+print(f"Unique airlines: {len(airlines)}")
+print(f"International flights: {intl_count} ({100*intl_count/len(all_data):.1f}%)")
+print(f"Weather scenario samples: {weather_count} ({100*weather_count/len(all_data):.1f}%)")
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -126,10 +134,11 @@ print(f"Train: {len(train_data)}, Test: {len(test_data)}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Train Two-Stage Model
+# MAGIC ## Cross-Validation (5-Fold)
 
 # COMMAND ----------
 
+from sklearn.model_selection import StratifiedKFold
 from src.ml.obt_model import (
     TwoStageOBTPredictor,
     OBTPredictor,
@@ -137,6 +146,54 @@ from src.ml.obt_model import (
     _dict_to_feature_set,
     _dict_to_coarse_feature_set,
 )
+
+# 5-fold CV stratified by airport for evaluation
+all_airports = [d["airport"] for d in all_data]
+all_features_list = [_dict_to_feature_set(d["features"]) for d in all_data]
+all_targets_arr = np.array([d["target"] for d in all_data])
+
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+cv_tpark_maes = []
+cv_t90_maes = []
+
+print("Running 5-fold cross-validation...")
+for fold, (train_idx, val_idx) in enumerate(skf.split(range(len(all_data)), all_airports)):
+    fold_train_f = [all_features_list[i] for i in train_idx]
+    fold_train_t = all_targets_arr[train_idx].tolist()
+
+    fold_predictor = TwoStageOBTPredictor(airport_code="CV")
+    fold_predictor.train(fold_train_f, fold_train_t)
+
+    # T-park MAE
+    fold_tpark_errors = []
+    fold_t90_errors = []
+    for i in val_idx:
+        fs = all_features_list[i]
+        target = all_targets_arr[i]
+        tpark_pred = fold_predictor.predict_tpark(fs)
+        t90_pred = fold_predictor.predict_t90(fs.to_coarse())
+        fold_tpark_errors.append(abs(target - tpark_pred.turnaround_minutes))
+        fold_t90_errors.append(abs(target - t90_pred.turnaround_minutes))
+
+    fold_tpark_mae = float(np.mean(fold_tpark_errors))
+    fold_t90_mae = float(np.mean(fold_t90_errors))
+    cv_tpark_maes.append(fold_tpark_mae)
+    cv_t90_maes.append(fold_t90_mae)
+    print(f"  Fold {fold+1}: T-park MAE={fold_tpark_mae:.2f}, T-90 MAE={fold_t90_mae:.2f}")
+
+cv_tpark_mean = float(np.mean(cv_tpark_maes))
+cv_tpark_std = float(np.std(cv_tpark_maes))
+cv_t90_mean = float(np.mean(cv_t90_maes))
+cv_t90_std = float(np.std(cv_t90_maes))
+print(f"\nCV T-park MAE: {cv_tpark_mean:.2f} +/- {cv_tpark_std:.2f}")
+print(f"CV T-90 MAE:   {cv_t90_mean:.2f} +/- {cv_t90_std:.2f}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Train Final Two-Stage Model (All Training Data)
+
+# COMMAND ----------
 
 two_stage = TwoStageOBTPredictor(airport_code="GLOBAL")
 train_features = [_dict_to_feature_set(d["features"]) for d in train_data]
@@ -169,11 +226,14 @@ def compute_metrics(targets, preds, data):
 
     airport_mae = {}
     cat_mae = {}
+    airline_mae = {}
     for s, t, p in zip(data, targets, preds):
         a = s.get("airport", "UNK")
         c = s["features"]["aircraft_category"]
+        al = s["features"]["airline_code"]
         airport_mae.setdefault(a, []).append(abs(t - p))
         cat_mae.setdefault(c, []).append(abs(t - p))
+        airline_mae.setdefault(al, []).append(abs(t - p))
 
     return {
         "mae": round(mae, 2),
@@ -181,6 +241,7 @@ def compute_metrics(targets, preds, data):
         "r2": round(r2, 4),
         "per_airport_mae": {a: round(float(np.mean(e)), 2) for a, e in airport_mae.items()},
         "per_category_mae": {c: round(float(np.mean(e)), 2) for c, e in cat_mae.items()},
+        "per_airline_mae": {al: round(float(np.mean(e)), 2) for al, e in airline_mae.items()},
     }
 
 # Baseline (GSE constants)
@@ -201,16 +262,28 @@ print(f"\nT-90 (coarse):  MAE={t90_metrics['mae']:.2f}  RMSE={t90_metrics['rmse'
 
 # T-park refined
 tpark_targets, tpark_preds = [], []
+tpark_intervals = []
 for s in test_data:
     fs = _dict_to_feature_set(s["features"])
     pred = two_stage.refined.predict(fs)
     tpark_targets.append(s["target"])
     tpark_preds.append(pred.turnaround_minutes)
+    tpark_intervals.append((pred.lower_bound_minutes, pred.upper_bound_minutes))
 tpark_metrics = compute_metrics(tpark_targets, tpark_preds, test_data)
 print(f"T-park (refined): MAE={tpark_metrics['mae']:.2f}  RMSE={tpark_metrics['rmse']:.2f}  R²={tpark_metrics['r2']:.4f}")
 
 improvement = t90_metrics["mae"] - tpark_metrics["mae"]
 print(f"\nT-park refines T-90 by {improvement:.2f} min MAE")
+
+# Prediction interval coverage
+if tpark_intervals:
+    in_interval = sum(
+        1 for t, (lo, hi) in zip(tpark_targets, tpark_intervals) if lo <= t <= hi
+    )
+    coverage = in_interval / len(tpark_targets) * 100
+    avg_width = float(np.mean([hi - lo for lo, hi in tpark_intervals]))
+    print(f"\nPrediction interval coverage (P10-P90): {coverage:.1f}% (target: ~80%)")
+    print(f"Average interval width: {avg_width:.1f} min")
 
 # Per-airport breakdown
 print(f"\n{'Airport':<8} {'T-90 MAE':>10} {'T-park MAE':>12}")
@@ -219,6 +292,46 @@ for airport in sorted(t90_metrics["per_airport_mae"]):
     t90 = t90_metrics["per_airport_mae"].get(airport, 0)
     tpark = tpark_metrics["per_airport_mae"].get(airport, 0)
     print(f"{airport:<8} {t90:>10.2f} {tpark:>12.2f}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Feature Importance Analysis
+
+# COMMAND ----------
+
+print("=" * 60)
+print("T-PARK (REFINED) FEATURE IMPORTANCES")
+print("=" * 60)
+refined_imp = two_stage.refined.get_feature_importances() or {}
+for name, imp in sorted(refined_imp.items(), key=lambda x: -x[1]):
+    bar = "█" * int(imp * 200)
+    print(f"  {name:<30} {imp:.4f} {bar}")
+
+print()
+print("=" * 60)
+print("T-90 (COARSE) FEATURE IMPORTANCES")
+print("=" * 60)
+coarse_imp = two_stage.coarse.get_feature_importances() or {}
+for name, imp in sorted(coarse_imp.items(), key=lambda x: -x[1]):
+    bar = "█" * int(imp * 200)
+    print(f"  {name:<30} {imp:.4f} {bar}")
+
+# Sanity check: aircraft_category should be in top 3
+if refined_imp:
+    sorted_features = sorted(refined_imp.items(), key=lambda x: -x[1])
+    top_3_names = [name for name, _ in sorted_features[:3]]
+    if "aircraft_category" in top_3_names:
+        print("\n✓ Sanity check PASSED: aircraft_category is in top 3 features")
+    else:
+        print(f"\n⚠ Sanity check: aircraft_category not in top 3 (top 3: {top_3_names})")
+
+    # Check feature spread — no single feature should dominate >50%
+    max_imp = sorted_features[0][1]
+    if max_imp < 0.50:
+        print(f"✓ Feature spread GOOD: max importance = {max_imp:.2%} (<50%)")
+    else:
+        print(f"⚠ Feature concentration: {sorted_features[0][0]} = {max_imp:.2%} (>50%)")
 
 # COMMAND ----------
 
@@ -235,21 +348,19 @@ mlflow.set_registry_uri("databricks-uc")
 mlflow.set_experiment(EXPERIMENT_NAME)
 
 # Prepare sample input/output for model signature
+from src.ml.obt_model import ALL_FEATURE_NAMES, ALL_COARSE_FEATURE_NAMES, _features_to_row, _coarse_features_to_row
+
 sample_input = np.array(
-    [[_dict_to_feature_set(train_data[0]["features"]).__dict__[k] for k in [
-        "hour_of_day", "arrival_delay_min", "concurrent_gate_ops",
-        "wind_speed_kt", "visibility_sm", "scheduled_departure_hour",
-        "aircraft_category", "airline_code", "gate_id_prefix",
-        "is_international", "is_remote_stand", "has_active_ground_stop",
-    ]]],
+    [_features_to_row(_dict_to_feature_set(train_data[0]["features"]))],
     dtype=object,
 )
 
-with mlflow.start_run(run_name="obt_two_stage_calibrated") as run:
+with mlflow.start_run(run_name="obt_two_stage_v2_feature_dependent") as run:
     run_id = run.info.run_id
 
     # Parameters
     mlflow.log_param("model_type", "TwoStage_HistGBT")
+    mlflow.log_param("model_version", "v2_feature_dependent")
     mlflow.log_param("data_source", "calibrated_simulations")
     mlflow.log_param("uc_catalog", UC_CATALOG)
     mlflow.log_param("uc_schema", UC_SCHEMA)
@@ -257,6 +368,8 @@ with mlflow.start_run(run_name="obt_two_stage_calibrated") as run:
     mlflow.log_param("n_test", len(test_data))
     mlflow.log_param("n_airports", len(airports))
     mlflow.log_param("n_simulation_files", len(sim_files))
+    mlflow.log_param("n_features_tpark", len(ALL_FEATURE_NAMES))
+    mlflow.log_param("n_features_t90", len(ALL_COARSE_FEATURE_NAMES))
 
     # Baseline
     mlflow.log_metric("baseline_mae", baseline_mae)
@@ -271,6 +384,17 @@ with mlflow.start_run(run_name="obt_two_stage_calibrated") as run:
     mlflow.log_metric("tpark_rmse", tpark_metrics["rmse"])
     mlflow.log_metric("tpark_r2", tpark_metrics["r2"])
 
+    # Cross-validation metrics
+    mlflow.log_metric("cv_tpark_mae_mean", cv_tpark_mean)
+    mlflow.log_metric("cv_tpark_mae_std", cv_tpark_std)
+    mlflow.log_metric("cv_t90_mae_mean", cv_t90_mean)
+    mlflow.log_metric("cv_t90_mae_std", cv_t90_std)
+
+    # Prediction interval coverage
+    if tpark_intervals:
+        mlflow.log_metric("tpark_pi_coverage_pct", coverage)
+        mlflow.log_metric("tpark_pi_avg_width_min", avg_width)
+
     # Per-airport T-park MAE
     for airport, mae in tpark_metrics["per_airport_mae"].items():
         mlflow.log_metric(f"tpark_mae_{airport}", mae)
@@ -280,13 +404,10 @@ with mlflow.start_run(run_name="obt_two_stage_calibrated") as run:
         mlflow.log_metric(f"tpark_mae_{cat}", mae)
 
     # Feature importances as artifacts
-    coarse_imp = two_stage.coarse.get_feature_importances() or {}
-    refined_imp = two_stage.refined.get_feature_importances() or {}
     mlflow.log_dict(coarse_imp, "coarse_feature_importances.json")
     mlflow.log_dict(refined_imp, "refined_feature_importances.json")
 
     # ── Register T-park (refined) model in UC Model Registry ──
-    # Log the sklearn pipeline directly so it can be served
     mlflow.sklearn.log_model(
         sk_model=two_stage.refined._pipeline,
         artifact_path="obt_refined_model",
@@ -297,11 +418,7 @@ with mlflow.start_run(run_name="obt_two_stage_calibrated") as run:
 
     # ── Register T-90 (coarse) model in UC Model Registry ──
     coarse_sample = np.array(
-        [[_dict_to_coarse_feature_set(train_data[0]["features"]).__dict__[k] for k in [
-            "arrival_delay_min", "wind_speed_kt", "visibility_sm",
-            "scheduled_departure_hour", "aircraft_category", "airline_code",
-            "is_international", "has_active_ground_stop",
-        ]]],
+        [_coarse_features_to_row(_dict_to_coarse_feature_set(train_data[0]["features"]))],
         dtype=object,
     )
     mlflow.sklearn.log_model(
@@ -313,16 +430,23 @@ with mlflow.start_run(run_name="obt_two_stage_calibrated") as run:
     print(f"Registered coarse model: {COARSE_MODEL_NAME}")
 
     # Log comparison summary
-    summary_text = f"""OBT Two-Stage Model Training Summary
-=====================================
+    summary_text = f"""OBT Two-Stage Model Training Summary (v2 — Feature-Dependent Turnarounds)
+=========================================================================
 Data: {len(all_data)} samples from {len(sim_files)} calibrated simulations
 Train/Test: {len(train_data)}/{len(test_data)}
 Airports: {sorted(airports)}
+Unique airlines: {len(airlines)}
+International flights: {intl_count} ({100*intl_count/len(all_data):.1f}%)
+Weather scenario samples: {weather_count} ({100*weather_count/len(all_data):.1f}%)
 
 Baseline MAE (GSE constants): {baseline_mae:.2f} min
 T-90  (coarse):  MAE={t90_metrics['mae']:.2f}  RMSE={t90_metrics['rmse']:.2f}  R²={t90_metrics['r2']:.4f}
 T-park (refined): MAE={tpark_metrics['mae']:.2f}  RMSE={tpark_metrics['rmse']:.2f}  R²={tpark_metrics['r2']:.4f}
 T-park refines T-90 by {improvement:.2f} min MAE
+
+Cross-Validation (5-fold):
+  T-park: {cv_tpark_mean:.2f} +/- {cv_tpark_std:.2f} min
+  T-90:   {cv_t90_mean:.2f} +/- {cv_t90_std:.2f} min
 
 Models registered in Unity Catalog:
   Coarse:  {COARSE_MODEL_NAME}
@@ -345,12 +469,14 @@ os.makedirs(model_dir, exist_ok=True)
 
 metadata = {
     "trained_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "model_version": "v2_feature_dependent",
     "mlflow_run_id": run_id,
     "uc_coarse_model": COARSE_MODEL_NAME,
     "uc_refined_model": REFINED_MODEL_NAME,
     "n_train": len(train_data),
     "n_test": len(test_data),
     "n_airports": len(airports),
+    "n_airlines": len(airlines),
     "baseline_mae": baseline_mae,
     "t90_mae": t90_metrics["mae"],
     "t90_rmse": t90_metrics["rmse"],
@@ -358,8 +484,14 @@ metadata = {
     "tpark_mae": tpark_metrics["mae"],
     "tpark_rmse": tpark_metrics["rmse"],
     "tpark_r2": tpark_metrics["r2"],
+    "cv_tpark_mae_mean": cv_tpark_mean,
+    "cv_tpark_mae_std": cv_tpark_std,
+    "cv_t90_mae_mean": cv_t90_mean,
+    "cv_t90_mae_std": cv_t90_std,
     "per_airport_tpark_mae": tpark_metrics["per_airport_mae"],
     "per_category_tpark_mae": tpark_metrics["per_category_mae"],
+    "refined_feature_importances": refined_imp,
+    "coarse_feature_importances": coarse_imp,
 }
 metadata_path = os.path.join(model_dir, "obt_training_metadata.json")
 with open(metadata_path, "w") as f:
@@ -371,11 +503,13 @@ print(f"Metadata saved: {metadata_path}")
 # Exit with summary
 dbutils.notebook.exit(json.dumps({
     "status": "PASS",
+    "model_version": "v2_feature_dependent",
     "n_samples": len(all_data),
     "baseline_mae": baseline_mae,
     "t90_mae": t90_metrics["mae"],
     "tpark_mae": tpark_metrics["mae"],
     "tpark_r2": tpark_metrics["r2"],
+    "cv_tpark_mae": f"{cv_tpark_mean:.2f}+/-{cv_tpark_std:.2f}",
     "mlflow_run_id": run_id,
     "uc_coarse_model": COARSE_MODEL_NAME,
     "uc_refined_model": REFINED_MODEL_NAME,

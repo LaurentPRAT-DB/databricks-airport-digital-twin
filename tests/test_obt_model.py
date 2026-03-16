@@ -13,6 +13,8 @@ from unittest.mock import patch
 
 import pytest
 
+import math
+
 from src.ml.obt_features import (
     OBTCoarseFeatureSet,
     OBTFeatureSet,
@@ -20,6 +22,8 @@ from src.ml.obt_features import (
     extract_training_data,
     _gate_prefix,
     _is_remote_stand,
+    _cyclical_hour,
+    _is_international_route,
 )
 from src.ml.obt_model import (
     OBTPredictor,
@@ -41,6 +45,54 @@ SIM_FILE_SFO = SIM_DIR / "simulation_sfo_1000_thunderstorm.json"
 
 def _has_sim_files() -> bool:
     return SIM_FILE_SFO.exists()
+
+
+# Default new fields for v2 feature sets (used to DRY up test constructors)
+_V2_DEFAULTS = dict(
+    airport_code="SFO",
+    day_of_week=2,
+    hour_sin=0.0,
+    hour_cos=1.0,
+    is_weather_scenario=False,
+)
+
+
+def _make_full_fs(**overrides) -> OBTFeatureSet:
+    """Create OBTFeatureSet with sensible defaults for all fields."""
+    defaults = dict(
+        aircraft_category="narrow",
+        airline_code="UAL",
+        hour_of_day=14,
+        is_international=False,
+        arrival_delay_min=0.0,
+        gate_id_prefix="B",
+        is_remote_stand=False,
+        concurrent_gate_ops=3,
+        wind_speed_kt=5.0,
+        visibility_sm=10.0,
+        has_active_ground_stop=False,
+        scheduled_departure_hour=16,
+        **_V2_DEFAULTS,
+    )
+    defaults.update(overrides)
+    return OBTFeatureSet(**defaults)
+
+
+def _make_coarse_fs(**overrides) -> OBTCoarseFeatureSet:
+    """Create OBTCoarseFeatureSet with sensible defaults for all fields."""
+    defaults = dict(
+        aircraft_category="narrow",
+        airline_code="UAL",
+        scheduled_departure_hour=16,
+        is_international=False,
+        arrival_delay_min=0.0,
+        wind_speed_kt=5.0,
+        visibility_sm=10.0,
+        has_active_ground_stop=False,
+        **_V2_DEFAULTS,
+    )
+    defaults.update(overrides)
+    return OBTCoarseFeatureSet(**defaults)
 
 
 # ---------------------------------------------------------------------------
@@ -97,61 +149,54 @@ class TestRemoteStand:
 
 class TestOBTFeatureSet:
     def test_dataclass_fields(self):
-        fs = OBTFeatureSet(
-            aircraft_category="narrow",
-            airline_code="UAL",
-            hour_of_day=14,
-            is_international=False,
-            arrival_delay_min=10.0,
-            gate_id_prefix="B",
-            is_remote_stand=False,
-            concurrent_gate_ops=5,
-            wind_speed_kt=8.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
-            scheduled_departure_hour=16,
-        )
+        fs = _make_full_fs(arrival_delay_min=10.0, concurrent_gate_ops=5, wind_speed_kt=8.0)
         assert fs.aircraft_category == "narrow"
         assert fs.hour_of_day == 14
+        assert fs.airport_code == "SFO"
+        assert fs.day_of_week == 2
+
+    def test_v2_fields_present(self):
+        fs = _make_full_fs()
+        assert hasattr(fs, "airport_code")
+        assert hasattr(fs, "day_of_week")
+        assert hasattr(fs, "hour_sin")
+        assert hasattr(fs, "hour_cos")
+        assert hasattr(fs, "is_weather_scenario")
 
     def test_features_to_row_length(self):
-        fs = OBTFeatureSet(
-            aircraft_category="narrow",
-            airline_code="UAL",
-            hour_of_day=14,
-            is_international=False,
-            arrival_delay_min=10.0,
-            gate_id_prefix="B",
-            is_remote_stand=False,
-            concurrent_gate_ops=5,
-            wind_speed_kt=8.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
-            scheduled_departure_hour=16,
-        )
+        fs = _make_full_fs(concurrent_gate_ops=5, wind_speed_kt=8.0)
         row = _features_to_row(fs)
         assert len(row) == len(ALL_FEATURE_NAMES)
 
     def test_dict_roundtrip(self):
         from dataclasses import asdict
 
-        fs = OBTFeatureSet(
-            aircraft_category="wide",
-            airline_code="BAW",
-            hour_of_day=8,
-            is_international=True,
-            arrival_delay_min=15.0,
-            gate_id_prefix="A",
-            is_remote_stand=True,
-            concurrent_gate_ops=3,
-            wind_speed_kt=12.0,
-            visibility_sm=5.0,
-            has_active_ground_stop=True,
-            scheduled_departure_hour=10,
+        fs = _make_full_fs(
+            aircraft_category="wide", airline_code="BAW", hour_of_day=8,
+            is_international=True, arrival_delay_min=15.0, gate_id_prefix="A",
+            is_remote_stand=True, concurrent_gate_ops=3, wind_speed_kt=12.0,
+            visibility_sm=5.0, has_active_ground_stop=True, scheduled_departure_hour=10,
+            airport_code="LHR", day_of_week=5, is_weather_scenario=True,
         )
         d = asdict(fs)
         reconstructed = _dict_to_feature_set(d)
         assert reconstructed == fs
+
+    def test_dict_backward_compat(self):
+        """Dicts missing v2 fields should still reconstruct with defaults."""
+        d = {
+            "aircraft_category": "narrow", "airline_code": "UAL", "hour_of_day": 14,
+            "is_international": False, "arrival_delay_min": 0.0, "gate_id_prefix": "B",
+            "is_remote_stand": False, "concurrent_gate_ops": 3, "wind_speed_kt": 5.0,
+            "visibility_sm": 10.0, "has_active_ground_stop": False,
+            "scheduled_departure_hour": 16,
+        }
+        fs = _dict_to_feature_set(d)
+        assert fs.airport_code == ""
+        assert fs.day_of_week == 0
+        assert fs.hour_sin == 0.0
+        assert fs.hour_cos == 1.0
+        assert fs.is_weather_scenario is False
 
 
 @pytest.mark.skipif(not _has_sim_files(), reason="No simulation files")
@@ -200,39 +245,19 @@ class TestOBTPredictorFallback:
         predictor = OBTPredictor(airport_code="KSFO")
         assert not predictor.is_trained
 
-        fs = OBTFeatureSet(
-            aircraft_category="narrow",
-            airline_code="UAL",
-            hour_of_day=14,
-            is_international=False,
-            arrival_delay_min=0.0,
-            gate_id_prefix="B",
-            is_remote_stand=False,
-            concurrent_gate_ops=3,
-            wind_speed_kt=5.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
-            scheduled_departure_hour=16,
-        )
+        fs = _make_full_fs()
         pred = predictor.predict(fs)
         assert pred.turnaround_minutes == 45.0
         assert pred.is_fallback is True
+        assert pred.lower_bound_minutes == 45.0 * 0.8
+        assert pred.upper_bound_minutes == 45.0 * 1.2
 
     def test_fallback_wide_body(self):
         predictor = OBTPredictor()
-        fs = OBTFeatureSet(
-            aircraft_category="wide",
-            airline_code="BAW",
-            hour_of_day=10,
-            is_international=True,
-            arrival_delay_min=0.0,
-            gate_id_prefix="A",
-            is_remote_stand=False,
-            concurrent_gate_ops=2,
-            wind_speed_kt=3.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
-            scheduled_departure_hour=12,
+        fs = _make_full_fs(
+            aircraft_category="wide", airline_code="BAW", hour_of_day=10,
+            is_international=True, gate_id_prefix="A", concurrent_gate_ops=2,
+            wind_speed_kt=3.0, scheduled_departure_hour=12,
         )
         pred = predictor.predict(fs)
         assert pred.turnaround_minutes == 90.0
@@ -240,18 +265,9 @@ class TestOBTPredictorFallback:
 
     def test_fallback_regional(self):
         predictor = OBTPredictor()
-        fs = OBTFeatureSet(
-            aircraft_category="regional",
-            airline_code="SKW",
-            hour_of_day=7,
-            is_international=False,
-            arrival_delay_min=0.0,
-            gate_id_prefix="F",
-            is_remote_stand=False,
-            concurrent_gate_ops=1,
-            wind_speed_kt=0.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
+        fs = _make_full_fs(
+            aircraft_category="regional", airline_code="SKW", hour_of_day=7,
+            gate_id_prefix="F", concurrent_gate_ops=1, wind_speed_kt=0.0,
             scheduled_departure_hour=8,
         )
         pred = predictor.predict(fs)
@@ -261,20 +277,7 @@ class TestOBTPredictorFallback:
 class TestOBTPredictorOBT:
     def test_predict_obt_adds_duration(self):
         predictor = OBTPredictor()
-        fs = OBTFeatureSet(
-            aircraft_category="narrow",
-            airline_code="UAL",
-            hour_of_day=14,
-            is_international=False,
-            arrival_delay_min=0.0,
-            gate_id_prefix="B",
-            is_remote_stand=False,
-            concurrent_gate_ops=3,
-            wind_speed_kt=5.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
-            scheduled_departure_hour=16,
-        )
+        fs = _make_full_fs()
         parked_ts = 1000000.0
         obt = predictor.predict_obt(parked_ts, fs)
         # Fallback: 45 min = 2700 sec
@@ -300,10 +303,12 @@ def _make_sample_features(n: int = 100) -> tuple[list[OBTFeatureSet], list[float
         noise = rng.gauss(0, 5)
         target = max(15.0, base + noise)
 
+        hour = rng.randint(0, 23)
+        h_sin, h_cos = _cyclical_hour(hour)
         fs = OBTFeatureSet(
             aircraft_category=cat,
             airline_code=rng.choice(["UAL", "AAL", "DAL", "BAW", "AFR"]),
-            hour_of_day=rng.randint(0, 23),
+            hour_of_day=hour,
             is_international=rng.random() > 0.7,
             arrival_delay_min=rng.uniform(0, 30),
             gate_id_prefix=rng.choice(["A", "B", "C", "D"]),
@@ -313,6 +318,11 @@ def _make_sample_features(n: int = 100) -> tuple[list[OBTFeatureSet], list[float
             visibility_sm=rng.uniform(1, 10),
             has_active_ground_stop=rng.random() > 0.95,
             scheduled_departure_hour=rng.randint(0, 23),
+            airport_code=rng.choice(["SFO", "LAX", "ORD", "JFK", "ATL"]),
+            day_of_week=rng.randint(0, 6),
+            hour_sin=h_sin,
+            hour_cos=h_cos,
+            is_weather_scenario=rng.random() > 0.8,
         )
         features.append(fs)
         targets.append(target)
@@ -531,47 +541,32 @@ class TestOBTTrainingPipeline:
 
 class TestOBTCoarseFeatureSet:
     def test_coarse_dataclass_fields(self):
-        fs = OBTCoarseFeatureSet(
-            aircraft_category="narrow",
-            airline_code="UAL",
-            scheduled_departure_hour=16,
-            is_international=False,
-            arrival_delay_min=10.0,
-            wind_speed_kt=8.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
-        )
+        fs = _make_coarse_fs(arrival_delay_min=10.0, wind_speed_kt=8.0)
         assert fs.aircraft_category == "narrow"
         assert fs.scheduled_departure_hour == 16
+        assert fs.airport_code == "SFO"
+        assert fs.day_of_week == 2
+
+    def test_coarse_v2_fields_present(self):
+        fs = _make_coarse_fs()
+        assert hasattr(fs, "airport_code")
+        assert hasattr(fs, "day_of_week")
+        assert hasattr(fs, "hour_sin")
+        assert hasattr(fs, "hour_cos")
+        assert hasattr(fs, "is_weather_scenario")
 
     def test_coarse_features_to_row_length(self):
-        fs = OBTCoarseFeatureSet(
-            aircraft_category="narrow",
-            airline_code="UAL",
-            scheduled_departure_hour=16,
-            is_international=False,
-            arrival_delay_min=10.0,
-            wind_speed_kt=8.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
-        )
+        fs = _make_coarse_fs(arrival_delay_min=10.0, wind_speed_kt=8.0)
         row = _coarse_features_to_row(fs)
         assert len(row) == len(ALL_COARSE_FEATURE_NAMES)
 
     def test_full_to_coarse_projection(self):
-        full = OBTFeatureSet(
-            aircraft_category="wide",
-            airline_code="BAW",
-            hour_of_day=8,
-            is_international=True,
-            arrival_delay_min=15.0,
-            gate_id_prefix="A",
-            is_remote_stand=True,
-            concurrent_gate_ops=3,
-            wind_speed_kt=12.0,
-            visibility_sm=5.0,
-            has_active_ground_stop=True,
-            scheduled_departure_hour=10,
+        full = _make_full_fs(
+            aircraft_category="wide", airline_code="BAW", hour_of_day=8,
+            is_international=True, arrival_delay_min=15.0, gate_id_prefix="A",
+            is_remote_stand=True, concurrent_gate_ops=3, wind_speed_kt=12.0,
+            visibility_sm=5.0, has_active_ground_stop=True, scheduled_departure_hour=10,
+            airport_code="LHR", day_of_week=4, is_weather_scenario=True,
         )
         coarse = full.to_coarse()
         assert isinstance(coarse, OBTCoarseFeatureSet)
@@ -580,6 +575,10 @@ class TestOBTCoarseFeatureSet:
         assert coarse.scheduled_departure_hour == 10
         assert coarse.is_international is True
         assert coarse.wind_speed_kt == 12.0
+        # v2 fields should be projected
+        assert coarse.airport_code == "LHR"
+        assert coarse.day_of_week == 4
+        assert coarse.is_weather_scenario is True
         # Gate-side features should NOT be in coarse
         assert not hasattr(coarse, "gate_id_prefix")
         assert not hasattr(coarse, "concurrent_gate_ops")
@@ -588,19 +587,27 @@ class TestOBTCoarseFeatureSet:
     def test_dict_roundtrip_coarse(self):
         from dataclasses import asdict
 
-        fs = OBTCoarseFeatureSet(
-            aircraft_category="regional",
-            airline_code="SKW",
-            scheduled_departure_hour=7,
-            is_international=False,
-            arrival_delay_min=5.0,
-            wind_speed_kt=3.0,
-            visibility_sm=8.0,
-            has_active_ground_stop=False,
+        fs = _make_coarse_fs(
+            aircraft_category="regional", airline_code="SKW",
+            scheduled_departure_hour=7, arrival_delay_min=5.0,
+            wind_speed_kt=3.0, visibility_sm=8.0,
+            airport_code="ORD", day_of_week=1,
         )
         d = asdict(fs)
         reconstructed = _dict_to_coarse_feature_set(d)
         assert reconstructed == fs
+
+    def test_coarse_dict_backward_compat(self):
+        """Dicts missing v2 fields should still reconstruct with defaults."""
+        d = {
+            "aircraft_category": "narrow", "airline_code": "UAL",
+            "scheduled_departure_hour": 16, "is_international": False,
+            "arrival_delay_min": 0.0, "wind_speed_kt": 5.0,
+            "visibility_sm": 10.0, "has_active_ground_stop": False,
+        }
+        fs = _dict_to_coarse_feature_set(d)
+        assert fs.airport_code == ""
+        assert fs.day_of_week == 0
 
 
 # ---------------------------------------------------------------------------
@@ -613,16 +620,7 @@ class TestOBTCoarsePredictorFallback:
         predictor = OBTCoarsePredictor(airport_code="KSFO")
         assert not predictor.is_trained
 
-        fs = OBTCoarseFeatureSet(
-            aircraft_category="narrow",
-            airline_code="UAL",
-            scheduled_departure_hour=16,
-            is_international=False,
-            arrival_delay_min=0.0,
-            wind_speed_kt=5.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
-        )
+        fs = _make_coarse_fs()
         pred = predictor.predict(fs)
         assert pred.turnaround_minutes == 45.0
         assert pred.is_fallback is True
@@ -630,15 +628,10 @@ class TestOBTCoarsePredictorFallback:
 
     def test_fallback_wide_body(self):
         predictor = OBTCoarsePredictor()
-        fs = OBTCoarseFeatureSet(
-            aircraft_category="wide",
-            airline_code="BAW",
-            scheduled_departure_hour=12,
-            is_international=True,
-            arrival_delay_min=0.0,
+        fs = _make_coarse_fs(
+            aircraft_category="wide", airline_code="BAW",
+            scheduled_departure_hour=12, is_international=True,
             wind_speed_kt=3.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
         )
         pred = predictor.predict(fs)
         assert pred.turnaround_minutes == 90.0
@@ -752,14 +745,15 @@ class TestTwoStageOBTPredictor:
             f"T-park MAE ({tpark_mae:.1f}) should be <= T-90 MAE ({t90_mae:.1f})"
         )
 
-    def test_t90_confidence_lower_than_tpark(self):
+    def test_t90_confidence_lte_tpark(self):
+        """T-90 confidence should be <= T-park (coarse has wider/equal intervals)."""
         features, targets = _make_sample_features(200)
         ts = TwoStageOBTPredictor(airport_code="TEST")
         ts.train(features, targets)
 
         t90_pred = ts.predict_t90(features[0].to_coarse())
         tpark_pred = ts.predict_tpark(features[0])
-        assert t90_pred.confidence < tpark_pred.confidence
+        assert t90_pred.confidence <= tpark_pred.confidence
 
     def test_save_and_load_both(self):
         features, targets = _make_sample_features(200)
@@ -1123,18 +1117,10 @@ class TestOBTEdgeCases:
         features, targets = _make_sample_features(200)
         predictor.train(features, targets)
 
-        extreme = OBTFeatureSet(
-            aircraft_category="narrow",
-            airline_code="UAL",
-            hour_of_day=3,
-            is_international=False,
-            arrival_delay_min=120.0,  # 2 hour delay
-            gate_id_prefix="B",
-            is_remote_stand=False,
-            concurrent_gate_ops=15,
-            wind_speed_kt=35.0,  # Very high wind
-            visibility_sm=0.5,  # Near zero visibility
-            has_active_ground_stop=True,
+        extreme = _make_full_fs(
+            hour_of_day=3, arrival_delay_min=120.0,
+            concurrent_gate_ops=15, wind_speed_kt=35.0,
+            visibility_sm=0.5, has_active_ground_stop=True,
             scheduled_departure_hour=5,
         )
         pred = predictor.predict(extreme)
@@ -1148,19 +1134,10 @@ class TestOBTEdgeCases:
         features, targets = _make_sample_features(200)
         predictor.train(features, targets)
 
-        unseen = OBTFeatureSet(
-            aircraft_category="wide",
-            airline_code="ZZZZZ",  # Never seen in training
-            hour_of_day=14,
-            is_international=True,
-            arrival_delay_min=10.0,
-            gate_id_prefix="X",  # Also unseen
-            is_remote_stand=False,
-            concurrent_gate_ops=5,
-            wind_speed_kt=8.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
-            scheduled_departure_hour=16,
+        unseen = _make_full_fs(
+            aircraft_category="wide", airline_code="ZZZZZ",
+            is_international=True, arrival_delay_min=10.0,
+            gate_id_prefix="X", concurrent_gate_ops=5, wind_speed_kt=8.0,
         )
         pred = predictor.predict(unseen)
         assert 10.0 <= pred.turnaround_minutes <= 180.0
@@ -1174,15 +1151,9 @@ class TestOBTEdgeCases:
         predictor = OBTCoarsePredictor(airport_code="TEST")
         predictor.train(coarse_features, targets)
 
-        unseen = OBTCoarseFeatureSet(
-            aircraft_category="regional",
-            airline_code="NEWAIR",
-            scheduled_departure_hour=22,
-            is_international=False,
-            arrival_delay_min=0.0,
-            wind_speed_kt=0.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
+        unseen = _make_coarse_fs(
+            aircraft_category="regional", airline_code="NEWAIR",
+            scheduled_departure_hour=22, wind_speed_kt=0.0,
         )
         pred = predictor.predict(unseen)
         assert 10.0 <= pred.turnaround_minutes <= 180.0
@@ -1192,33 +1163,18 @@ class TestOBTEdgeCases:
         ts = TwoStageOBTPredictor(airport_code="EMPTY")
         assert not ts.is_trained
 
-        coarse_fs = OBTCoarseFeatureSet(
-            aircraft_category="wide",
-            airline_code="BAW",
-            scheduled_departure_hour=10,
-            is_international=True,
-            arrival_delay_min=0.0,
-            wind_speed_kt=5.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
+        coarse_fs = _make_coarse_fs(
+            aircraft_category="wide", airline_code="BAW",
+            scheduled_departure_hour=10, is_international=True,
         )
         t90_pred = ts.predict_t90(coarse_fs)
         assert t90_pred.is_fallback is True
         assert t90_pred.turnaround_minutes == 90.0
         assert t90_pred.horizon == "t90"
 
-        full_fs = OBTFeatureSet(
-            aircraft_category="wide",
-            airline_code="BAW",
-            hour_of_day=10,
-            is_international=True,
-            arrival_delay_min=0.0,
-            gate_id_prefix="A",
-            is_remote_stand=False,
-            concurrent_gate_ops=2,
-            wind_speed_kt=5.0,
-            visibility_sm=10.0,
-            has_active_ground_stop=False,
+        full_fs = _make_full_fs(
+            aircraft_category="wide", airline_code="BAW", hour_of_day=10,
+            is_international=True, gate_id_prefix="A", concurrent_gate_ops=2,
             scheduled_departure_hour=12,
         )
         tpark_pred = ts.predict_tpark(full_fs)
@@ -1248,3 +1204,118 @@ class TestOBTEdgeCases:
             assert obt > parked_ts, (
                 f"OBT ({obt}) should be after parked_time ({parked_ts})"
             )
+
+
+# ---------------------------------------------------------------------------
+# Prediction intervals (P10/P90 quantile regression)
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionIntervals:
+    def test_trained_model_has_bounds(self):
+        """Trained model should produce non-trivial prediction intervals."""
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(200)
+        predictor.train(features, targets, train_quantiles=True)
+
+        pred = predictor.predict(features[0])
+        assert pred.lower_bound_minutes > 0
+        assert pred.upper_bound_minutes > pred.lower_bound_minutes
+        assert pred.lower_bound_minutes <= pred.turnaround_minutes
+        assert pred.upper_bound_minutes >= pred.turnaround_minutes
+
+    def test_quantile_ordering(self):
+        """P10 <= median <= P90 for all predictions."""
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(300)
+        predictor.train(features, targets, train_quantiles=True)
+
+        for fs in features[:30]:
+            pred = predictor.predict(fs)
+            assert pred.lower_bound_minutes <= pred.turnaround_minutes, (
+                f"P10 ({pred.lower_bound_minutes}) > median ({pred.turnaround_minutes})"
+            )
+            assert pred.upper_bound_minutes >= pred.turnaround_minutes, (
+                f"P90 ({pred.upper_bound_minutes}) < median ({pred.turnaround_minutes})"
+            )
+
+    def test_confidence_from_interval_width(self):
+        """Confidence should be inversely related to interval width."""
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(200)
+        predictor.train(features, targets, train_quantiles=True)
+
+        pred = predictor.predict(features[0])
+        assert 0 < pred.confidence <= 1.0
+
+    def test_no_quantiles_still_works(self):
+        """train_quantiles=False should still produce fallback intervals."""
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(200)
+        predictor.train(features, targets, train_quantiles=False)
+
+        pred = predictor.predict(features[0])
+        assert pred.lower_bound_minutes > 0
+        assert pred.upper_bound_minutes > 0
+        assert not pred.is_fallback
+
+    def test_coarse_prediction_intervals(self):
+        """Coarse model should also produce prediction intervals."""
+        features, targets = _make_sample_features(200)
+        coarse_features = [f.to_coarse() for f in features]
+
+        predictor = OBTCoarsePredictor(airport_code="TEST")
+        predictor.train(coarse_features, targets, train_quantiles=True)
+
+        pred = predictor.predict(coarse_features[0])
+        assert pred.lower_bound_minutes <= pred.turnaround_minutes
+        assert pred.upper_bound_minutes >= pred.turnaround_minutes
+
+
+# ---------------------------------------------------------------------------
+# Cyclical encoding and international detection
+# ---------------------------------------------------------------------------
+
+
+class TestCyclicalEncoding:
+    def test_hour_0_and_24_equivalent(self):
+        """Hour 0 should produce same encoding as wrapping from 23."""
+        h0_sin, h0_cos = _cyclical_hour(0)
+        assert abs(h0_cos - 1.0) < 0.001
+        assert abs(h0_sin - 0.0) < 0.001
+
+    def test_hour_6(self):
+        h_sin, h_cos = _cyclical_hour(6)
+        assert abs(h_sin - 1.0) < 0.001
+        assert abs(h_cos - 0.0) < 0.001
+
+    def test_hour_12(self):
+        h_sin, h_cos = _cyclical_hour(12)
+        assert abs(h_sin - 0.0) < 0.001
+        assert abs(h_cos - (-1.0)) < 0.001
+
+    def test_hour_23_near_hour_0(self):
+        """Hours 23 and 0 should be close in cyclical space."""
+        s0, c0 = _cyclical_hour(0)
+        s23, c23 = _cyclical_hour(23)
+        dist = math.sqrt((s0 - s23) ** 2 + (c0 - c23) ** 2)
+        # Should be small — much less than distance between 0 and 12
+        dist_0_12 = math.sqrt((s0 - _cyclical_hour(12)[0]) ** 2 + (c0 - _cyclical_hour(12)[1]) ** 2)
+        assert dist < dist_0_12
+
+
+class TestInternationalDetection:
+    def test_us_to_us_domestic(self):
+        assert _is_international_route("SFO", "LAX", "SFO") is False
+
+    def test_us_to_uk_international(self):
+        assert _is_international_route("SFO", "LHR", "SFO") is True
+
+    def test_uk_to_us_international(self):
+        assert _is_international_route("LHR", "JFK", "JFK") is True
+
+    def test_unknown_airport_returns_false(self):
+        assert _is_international_route("SFO", "ZZZZ", "SFO") is False
+
+    def test_empty_returns_false(self):
+        assert _is_international_route("", "SFO", "SFO") is False

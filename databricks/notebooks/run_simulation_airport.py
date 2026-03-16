@@ -141,7 +141,7 @@ if result.stderr:
 import re, shutil
 
 def parse_summary_from_stdout(stdout: str) -> dict:
-    """Extract summary values from CLI stdout lines like '  Total flights:  123'."""
+    """Extract summary values from the 'Simulation Summary:' block in CLI stdout."""
     mapping = {
         "Total flights": "total_flights",
         "Arrivals": "arrivals",
@@ -159,9 +159,17 @@ def parse_summary_from_stdout(stdout: str) -> dict:
         "Scenario": "scenario_name",
     }
     result = {}
+    # Only parse lines after "Simulation Summary:" to avoid matching progress lines
+    in_summary = False
     for line in stdout.splitlines():
+        if "Simulation Summary:" in line:
+            in_summary = True
+            continue
+        if not in_summary:
+            continue
         for label, key in mapping.items():
-            if label + ":" in line:
+            # Match "  Label:  value" pattern (indented summary lines)
+            if label + ":" in line and line.strip().startswith(label):
                 val = line.split(":", 1)[1].strip().rstrip("%").replace(",", "")
                 if key == "scenario_name":
                     result[key] = val

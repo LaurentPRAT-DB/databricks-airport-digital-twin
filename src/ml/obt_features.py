@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Aircraft type → category mapping
+# Aircraft type -> category mapping
 WIDE_BODY_TYPES = frozenset([
     "A330", "A340", "A350", "A380",
     "B747", "B767", "B777", "B787",
@@ -31,6 +32,18 @@ REGIONAL_TYPES = frozenset([
 # Turnaround duration bounds (minutes) for filtering outliers
 MIN_TURNAROUND_MIN = 10.0
 MAX_TURNAROUND_MIN = 180.0
+
+# Country lookup for international detection (reused from fallback.py)
+_AIRPORT_COUNTRY: Dict[str, str] = {
+    "SFO": "US", "LAX": "US", "ORD": "US", "DFW": "US", "JFK": "US",
+    "ATL": "US", "DEN": "US", "SEA": "US", "BOS": "US", "PHX": "US",
+    "LAS": "US", "MCO": "US", "MIA": "US", "CLT": "US", "MSP": "US",
+    "DTW": "US", "EWR": "US", "PHL": "US", "IAH": "US", "SAN": "US",
+    "PDX": "US",
+    "LHR": "GB", "CDG": "FR", "FRA": "DE", "AMS": "NL",
+    "HKG": "HK", "NRT": "JP", "HND": "JP", "SIN": "SG", "SYD": "AU",
+    "DXB": "AE", "ICN": "KR", "GRU": "BR", "JNB": "ZA",
+}
 
 
 @dataclass
@@ -51,6 +64,12 @@ class OBTCoarseFeatureSet:
     wind_speed_kt: float
     visibility_sm: float
     has_active_ground_stop: bool
+    # New features
+    airport_code: str             # 3-letter IATA
+    day_of_week: int              # 0=Monday, 6=Sunday
+    hour_sin: float               # sin(2*pi*hour/24) — cyclical encoding
+    hour_cos: float               # cos(2*pi*hour/24)
+    is_weather_scenario: bool     # True if simulation used a scenario file
 
 
 @dataclass
@@ -72,6 +91,12 @@ class OBTFeatureSet:
     visibility_sm: float
     has_active_ground_stop: bool
     scheduled_departure_hour: int  # 0-23
+    # New features
+    airport_code: str             # 3-letter IATA
+    day_of_week: int              # 0=Monday, 6=Sunday
+    hour_sin: float               # sin(2*pi*hour/24) — cyclical encoding
+    hour_cos: float               # cos(2*pi*hour/24)
+    is_weather_scenario: bool     # True if simulation used a scenario file
 
     def to_coarse(self) -> OBTCoarseFeatureSet:
         """Project full feature set down to T-90 coarse features."""
@@ -84,6 +109,11 @@ class OBTFeatureSet:
             wind_speed_kt=self.wind_speed_kt,
             visibility_sm=self.visibility_sm,
             has_active_ground_stop=self.has_active_ground_stop,
+            airport_code=self.airport_code,
+            day_of_week=self.day_of_week,
+            hour_sin=self.hour_sin,
+            hour_cos=self.hour_cos,
+            is_weather_scenario=self.is_weather_scenario,
         )
 
 
@@ -134,32 +164,26 @@ def _parse_iso(ts: str) -> datetime:
     return datetime.fromisoformat(ts)
 
 
-def _is_international_route(origin: str, destination: str, airport_iata: str) -> bool:
-    """Determine if a flight is international based on origin/destination.
+def _cyclical_hour(hour: int) -> tuple[float, float]:
+    """Encode hour as cyclical sin/cos so 23 and 0 are adjacent."""
+    rad = 2.0 * math.pi * hour / 24.0
+    return round(math.sin(rad), 6), round(math.cos(rad), 6)
 
-    A flight is international if its route partner (origin for arrivals,
-    destination for departures) is in a different country than the airport.
-    Simple heuristic: different first letter or known international routes.
+
+def _is_international_route(origin: str, destination: str, airport_iata: str) -> bool:
+    """Determine if a flight is international using country lookup.
+
+    Returns True if the remote airport is in a different country than the
+    local airport.  Falls back to False when either airport is unknown.
     """
-    # If we can't determine, assume domestic
     if not origin or not destination:
         return False
-    # The airport's IATA is either origin or destination
-    # The "other" airport is the remote end
+    airport_country = _AIRPORT_COUNTRY.get(airport_iata.upper(), "")
     other = destination if origin.upper() == airport_iata.upper() else origin
-    # Simple heuristic: IATA codes starting with same letter as the airport
-    # tend to be in the same country (US: all US airports are 3-letter,
-    # but international ones differ). This is a rough proxy.
-    # A better approach: check if they're in different countries
-    # For simulation data, origins/destinations are real IATA codes
-    # We just check if they share the same country prefix
-    if len(other) == 3 and len(airport_iata) == 3:
-        # Very rough: same first letter often means same country for US
-        # But this isn't reliable globally. Use a simpler approach:
-        # If the "other" is a known domestic code, it's domestic.
-        # Otherwise mark as international.
-        return other[0] != airport_iata[0]
-    return False
+    other_country = _AIRPORT_COUNTRY.get(other.upper(), "")
+    if not airport_country or not other_country:
+        return False
+    return airport_country != other_country
 
 
 def _find_nearest_weather(
@@ -250,7 +274,9 @@ def extract_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]:
     gate_events = data.get("gate_events", [])
     weather_snapshots = data.get("weather_snapshots", [])
     scenario_events = data.get("scenario_events", [])
-    airport_iata = data.get("config", {}).get("airport", "")
+    config = data.get("config", {})
+    airport_iata = config.get("airport", "")
+    is_weather_scenario = bool(config.get("scenario_file"))
 
     # Sort gate events by time for concurrent counting
     gate_events_sorted = sorted(gate_events, key=lambda e: e["time"])
@@ -308,10 +334,10 @@ def extract_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]:
 
         # Gate info
         gate_id = gate_assignments.get(icao24, parked_pt.get("assigned_gate", ""))
-        gate_prefix = _gate_prefix(gate_id)
+        gate_pfx = _gate_prefix(gate_id)
         is_remote = _is_remote_stand(gate_id)
 
-        # International check
+        # International check — country-based
         origin = sched.get("origin", "")
         destination = sched.get("destination", "")
         is_intl = _is_international_route(origin, destination, airport_iata)
@@ -319,8 +345,7 @@ def extract_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]:
         # Arrival delay
         arrival_delay = float(sched.get("delay_minutes", 0) or 0)
 
-        # Scheduled departure hour (for departures it's scheduled_time,
-        # for arrivals we estimate: parked_time + default turnaround)
+        # Scheduled departure hour
         sched_time_str = sched.get("scheduled_time", "")
         if sched_time_str:
             sched_dt = _parse_iso(sched_time_str)
@@ -341,19 +366,27 @@ def extract_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]:
             gate_events_sorted, parked_time, icao24
         )
 
+        # Cyclical hour encoding
+        h_sin, h_cos = _cyclical_hour(parked_time.hour)
+
         features = OBTFeatureSet(
             aircraft_category=aircraft_category,
             airline_code=airline_code,
             hour_of_day=parked_time.hour,
             is_international=is_intl,
             arrival_delay_min=arrival_delay,
-            gate_id_prefix=gate_prefix,
+            gate_id_prefix=gate_pfx,
             is_remote_stand=is_remote,
             concurrent_gate_ops=concurrent_ops,
             wind_speed_kt=wind_speed,
             visibility_sm=visibility,
             has_active_ground_stop=ground_stop,
             scheduled_departure_hour=scheduled_dep_hour,
+            airport_code=airport_iata,
+            day_of_week=parked_time.weekday(),
+            hour_sin=h_sin,
+            hour_cos=h_cos,
+            is_weather_scenario=is_weather_scenario,
         )
 
         results.append({

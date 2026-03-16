@@ -35,16 +35,21 @@ NUMERIC_FEATURES = [
     "wind_speed_kt",
     "visibility_sm",
     "scheduled_departure_hour",
+    "day_of_week",
+    "hour_sin",
+    "hour_cos",
 ]
 CATEGORICAL_FEATURES = [
     "aircraft_category",
     "airline_code",
     "gate_id_prefix",
+    "airport_code",
 ]
 BINARY_FEATURES = [
     "is_international",
     "is_remote_stand",
     "has_active_ground_stop",
+    "is_weather_scenario",
 ]
 
 ALL_FEATURE_NAMES = NUMERIC_FEATURES + CATEGORICAL_FEATURES + BINARY_FEATURES
@@ -55,14 +60,19 @@ COARSE_NUMERIC_FEATURES = [
     "wind_speed_kt",
     "visibility_sm",
     "scheduled_departure_hour",
+    "day_of_week",
+    "hour_sin",
+    "hour_cos",
 ]
 COARSE_CATEGORICAL_FEATURES = [
     "aircraft_category",
     "airline_code",
+    "airport_code",
 ]
 COARSE_BINARY_FEATURES = [
     "is_international",
     "has_active_ground_stop",
+    "is_weather_scenario",
 ]
 ALL_COARSE_FEATURE_NAMES = (
     COARSE_NUMERIC_FEATURES + COARSE_CATEGORICAL_FEATURES + COARSE_BINARY_FEATURES
@@ -74,8 +84,10 @@ class OBTPrediction:
     """Result of an OBT turnaround prediction."""
 
     turnaround_minutes: float
-    confidence: float
-    is_fallback: bool
+    lower_bound_minutes: float = 0.0   # P10 quantile
+    upper_bound_minutes: float = 0.0   # P90 quantile
+    confidence: float = 0.5
+    is_fallback: bool = False
     horizon: str = "t_park"  # "t90" or "t_park"
 
 
@@ -88,12 +100,17 @@ def _features_to_row(f: OBTFeatureSet) -> List[Any]:
         f.wind_speed_kt,
         f.visibility_sm,
         f.scheduled_departure_hour,
+        f.day_of_week,
+        f.hour_sin,
+        f.hour_cos,
         f.aircraft_category,
         f.airline_code,
         f.gate_id_prefix,
+        f.airport_code,
         int(f.is_international),
         int(f.is_remote_stand),
         int(f.has_active_ground_stop),
+        int(f.is_weather_scenario),
     ]
 
 
@@ -104,10 +121,15 @@ def _coarse_features_to_row(f: OBTCoarseFeatureSet) -> List[Any]:
         f.wind_speed_kt,
         f.visibility_sm,
         f.scheduled_departure_hour,
+        f.day_of_week,
+        f.hour_sin,
+        f.hour_cos,
         f.aircraft_category,
         f.airline_code,
+        f.airport_code,
         int(f.is_international),
         int(f.has_active_ground_stop),
+        int(f.is_weather_scenario),
     ]
 
 
@@ -122,6 +144,11 @@ def _dict_to_coarse_feature_set(d: Dict[str, Any]) -> OBTCoarseFeatureSet:
         wind_speed_kt=float(d["wind_speed_kt"]),
         visibility_sm=float(d["visibility_sm"]),
         has_active_ground_stop=bool(d["has_active_ground_stop"]),
+        airport_code=d.get("airport_code", ""),
+        day_of_week=int(d.get("day_of_week", 0)),
+        hour_sin=float(d.get("hour_sin", 0.0)),
+        hour_cos=float(d.get("hour_cos", 1.0)),
+        is_weather_scenario=bool(d.get("is_weather_scenario", False)),
     )
 
 
@@ -140,7 +167,90 @@ def _dict_to_feature_set(d: Dict[str, Any]) -> OBTFeatureSet:
         visibility_sm=float(d["visibility_sm"]),
         has_active_ground_stop=bool(d["has_active_ground_stop"]),
         scheduled_departure_hour=int(d["scheduled_departure_hour"]),
+        airport_code=d.get("airport_code", ""),
+        day_of_week=int(d.get("day_of_week", 0)),
+        hour_sin=float(d.get("hour_sin", 0.0)),
+        hour_cos=float(d.get("hour_cos", 1.0)),
+        is_weather_scenario=bool(d.get("is_weather_scenario", False)),
     )
+
+
+def _build_pipeline(
+    feature_names: List[str],
+    categorical_features: List[str],
+    *,
+    max_depth: int = 6,
+    n_estimators: int = 200,
+    learning_rate: float = 0.05,
+    loss: str = "squared_error",
+    quantile: Optional[float] = None,
+) -> Pipeline:
+    """Build a preprocessing + GBT pipeline."""
+    cat_indices = [feature_names.index(c) for c in categorical_features]
+    num_indices = [i for i in range(len(feature_names)) if i not in cat_indices]
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            (
+                "cat",
+                OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1),
+                cat_indices,
+            ),
+            ("num", "passthrough", num_indices),
+        ]
+    )
+
+    model_kwargs: dict[str, Any] = dict(
+        max_depth=max_depth,
+        max_iter=n_estimators,
+        learning_rate=learning_rate,
+        random_state=42,
+    )
+    if quantile is not None:
+        model_kwargs["loss"] = "quantile"
+        model_kwargs["quantile"] = quantile
+    else:
+        model_kwargs["loss"] = loss
+
+    model = HistGradientBoostingRegressor(**model_kwargs)
+
+    return Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", model),
+    ])
+
+
+def _extract_feature_importances(
+    pipeline: Pipeline,
+    feature_names: List[str],
+    categorical_features: List[str],
+    X: np.ndarray,
+    y: np.ndarray,
+) -> Dict[str, float]:
+    """Extract feature importances from a trained pipeline."""
+    cat_indices = [feature_names.index(c) for c in categorical_features]
+    num_indices = [i for i in range(len(feature_names)) if i not in cat_indices]
+    reordered_names = [feature_names[i] for i in cat_indices] + [
+        feature_names[i] for i in num_indices
+    ]
+
+    fitted_model = pipeline.named_steps["model"]
+    try:
+        raw_importances = fitted_model.feature_importances_
+        return {
+            name: float(imp)
+            for name, imp in zip(reordered_names, raw_importances)
+        }
+    except AttributeError:
+        from sklearn.inspection import permutation_importance
+        X_transformed = pipeline.named_steps["preprocessor"].transform(X)
+        result = permutation_importance(
+            fitted_model, X_transformed, y, n_repeats=5, random_state=42,
+        )
+        return {
+            name: float(imp)
+            for name, imp in zip(reordered_names, result.importances_mean)
+        }
 
 
 class OBTPredictor:
@@ -149,6 +259,8 @@ class OBTPredictor:
     When trained, uses a HistGradientBoostingRegressor on simulation-derived
     features. When untrained, falls back to the GSE model constants so there
     is zero regression from current behavior.
+
+    Optionally trains P10/P90 quantile models for prediction intervals.
     """
 
     def __init__(
@@ -159,6 +271,8 @@ class OBTPredictor:
         self.airport_code = airport_code
         self._profile = airport_profile
         self._pipeline: Optional[Pipeline] = None
+        self._pipeline_p10: Optional[Pipeline] = None
+        self._pipeline_p90: Optional[Pipeline] = None
         self._feature_importances: Optional[Dict[str, float]] = None
         self._fallback_durations = {"narrow": 45.0, "wide": 90.0, "regional": 35.0}
 
@@ -174,6 +288,7 @@ class OBTPredictor:
         max_depth: int = 6,
         n_estimators: int = 200,
         learning_rate: float = 0.05,
+        train_quantiles: bool = True,
     ) -> Dict[str, Any]:
         """Train the GBT model on feature/target pairs.
 
@@ -183,6 +298,7 @@ class OBTPredictor:
             max_depth: Tree depth.
             n_estimators: Number of boosting rounds.
             learning_rate: Step size shrinkage.
+            train_quantiles: If True, also train P10/P90 quantile models.
 
         Returns:
             Dict with training metadata (n_samples, feature_importances).
@@ -194,76 +310,38 @@ class OBTPredictor:
             )
             return {"n_samples": len(features), "status": "insufficient_data"}
 
-        # Build feature matrix
         X_raw = [_features_to_row(f) for f in features]
         X = np.array(X_raw, dtype=object)
         y = np.array(targets, dtype=np.float64)
 
-        # Identify column indices
-        cat_indices = [ALL_FEATURE_NAMES.index(c) for c in CATEGORICAL_FEATURES]
-        num_indices = [
-            i for i in range(len(ALL_FEATURE_NAMES)) if i not in cat_indices
-        ]
-
-        # Build sklearn pipeline
-        preprocessor = ColumnTransformer(
-            transformers=[
-                (
-                    "cat",
-                    OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1),
-                    cat_indices,
-                ),
-                ("num", "passthrough", num_indices),
-            ]
-        )
-
-        model = HistGradientBoostingRegressor(
-            max_depth=max_depth,
-            max_iter=n_estimators,
+        # Main model (squared error / mean prediction)
+        self._pipeline = _build_pipeline(
+            ALL_FEATURE_NAMES, CATEGORICAL_FEATURES,
+            max_depth=max_depth, n_estimators=n_estimators,
             learning_rate=learning_rate,
-            random_state=42,
         )
+        self._pipeline.fit(X, y)
 
-        pipeline = Pipeline([
-            ("preprocessor", preprocessor),
-            ("model", model),
-        ])
-
-        pipeline.fit(X, y)
-        self._pipeline = pipeline
-
-        # Extract feature importances from the fitted model inside the pipeline
-        fitted_model = pipeline.named_steps["model"]
-        try:
-            raw_importances = fitted_model.feature_importances_
-            # Map back to readable names (after column transform, order changes)
-            # Cat features come first, then num features
-            reordered_names = [ALL_FEATURE_NAMES[i] for i in cat_indices] + [
-                ALL_FEATURE_NAMES[i] for i in num_indices
-            ]
-            self._feature_importances = {
-                name: float(imp)
-                for name, imp in zip(reordered_names, raw_importances)
-            }
-        except AttributeError:
-            # Compute permutation importances as fallback
-            from sklearn.inspection import permutation_importance
-
-            X_transformed = pipeline.named_steps["preprocessor"].transform(X)
-            result = permutation_importance(
-                fitted_model,
-                X_transformed,
-                y,
-                n_repeats=5,
-                random_state=42,
+        # Quantile models for prediction intervals
+        if train_quantiles:
+            self._pipeline_p10 = _build_pipeline(
+                ALL_FEATURE_NAMES, CATEGORICAL_FEATURES,
+                max_depth=max_depth, n_estimators=n_estimators,
+                learning_rate=learning_rate, quantile=0.1,
             )
-            reordered_names = [ALL_FEATURE_NAMES[i] for i in cat_indices] + [
-                ALL_FEATURE_NAMES[i] for i in num_indices
-            ]
-            self._feature_importances = {
-                name: float(imp)
-                for name, imp in zip(reordered_names, result.importances_mean)
-            }
+            self._pipeline_p10.fit(X, y)
+
+            self._pipeline_p90 = _build_pipeline(
+                ALL_FEATURE_NAMES, CATEGORICAL_FEATURES,
+                max_depth=max_depth, n_estimators=n_estimators,
+                learning_rate=learning_rate, quantile=0.9,
+            )
+            self._pipeline_p90.fit(X, y)
+
+        # Feature importances
+        self._feature_importances = _extract_feature_importances(
+            self._pipeline, ALL_FEATURE_NAMES, CATEGORICAL_FEATURES, X, y,
+        )
 
         logger.info(
             f"OBT model trained for {self.airport_code} on {len(features)} samples"
@@ -286,19 +364,35 @@ class OBTPredictor:
             )
             return OBTPrediction(
                 turnaround_minutes=duration,
+                lower_bound_minutes=duration * 0.8,
+                upper_bound_minutes=duration * 1.2,
                 confidence=0.3,
                 is_fallback=True,
             )
 
         row = np.array([_features_to_row(features)], dtype=object)
         pred = float(self._pipeline.predict(row)[0])
-
-        # Clamp to reasonable range
         pred = max(10.0, min(180.0, pred))
+
+        # Quantile bounds
+        if self._pipeline_p10 is not None and self._pipeline_p90 is not None:
+            p10 = max(10.0, float(self._pipeline_p10.predict(row)[0]))
+            p90 = min(180.0, float(self._pipeline_p90.predict(row)[0]))
+            # Ensure ordering
+            p10 = min(p10, pred)
+            p90 = max(p90, pred)
+            interval_width = max(p90 - p10, 1.0)
+            confidence = round(min(1.0, 30.0 / interval_width), 2)
+        else:
+            p10 = pred * 0.8
+            p90 = pred * 1.2
+            confidence = 0.75
 
         return OBTPrediction(
             turnaround_minutes=round(pred, 1),
-            confidence=0.75,
+            lower_bound_minutes=round(p10, 1),
+            upper_bound_minutes=round(p90, 1),
+            confidence=confidence,
             is_fallback=False,
         )
 
@@ -328,6 +422,8 @@ class OBTPredictor:
                 {
                     "airport_code": self.airport_code,
                     "pipeline": self._pipeline,
+                    "pipeline_p10": self._pipeline_p10,
+                    "pipeline_p90": self._pipeline_p90,
                     "feature_importances": self._feature_importances,
                     "fallback_durations": self._fallback_durations,
                 },
@@ -348,6 +444,8 @@ class OBTPredictor:
             with open(path, "rb") as f:
                 state = pickle.load(f)
             self._pipeline = state["pipeline"]
+            self._pipeline_p10 = state.get("pipeline_p10")
+            self._pipeline_p90 = state.get("pipeline_p90")
             self._feature_importances = state.get("feature_importances")
             self._fallback_durations = state.get(
                 "fallback_durations", self._fallback_durations
@@ -375,6 +473,8 @@ class OBTCoarsePredictor:
         self.airport_code = airport_code
         self._profile = airport_profile
         self._pipeline: Optional[Pipeline] = None
+        self._pipeline_p10: Optional[Pipeline] = None
+        self._pipeline_p90: Optional[Pipeline] = None
         self._feature_importances: Optional[Dict[str, float]] = None
         self._fallback_durations = {"narrow": 45.0, "wide": 90.0, "regional": 35.0}
 
@@ -390,6 +490,7 @@ class OBTCoarsePredictor:
         max_depth: int = 5,
         n_estimators: int = 150,
         learning_rate: float = 0.05,
+        train_quantiles: bool = True,
     ) -> Dict[str, Any]:
         """Train the coarse GBT model on T-90 features."""
         if len(features) < 10:
@@ -403,62 +504,31 @@ class OBTCoarsePredictor:
         X = np.array(X_raw, dtype=object)
         y = np.array(targets, dtype=np.float64)
 
-        cat_indices = [ALL_COARSE_FEATURE_NAMES.index(c) for c in COARSE_CATEGORICAL_FEATURES]
-        num_indices = [
-            i for i in range(len(ALL_COARSE_FEATURE_NAMES)) if i not in cat_indices
-        ]
-
-        preprocessor = ColumnTransformer(
-            transformers=[
-                (
-                    "cat",
-                    OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1),
-                    cat_indices,
-                ),
-                ("num", "passthrough", num_indices),
-            ]
-        )
-
-        model = HistGradientBoostingRegressor(
-            max_depth=max_depth,
-            max_iter=n_estimators,
+        self._pipeline = _build_pipeline(
+            ALL_COARSE_FEATURE_NAMES, COARSE_CATEGORICAL_FEATURES,
+            max_depth=max_depth, n_estimators=n_estimators,
             learning_rate=learning_rate,
-            random_state=42,
         )
+        self._pipeline.fit(X, y)
 
-        pipeline = Pipeline([
-            ("preprocessor", preprocessor),
-            ("model", model),
-        ])
-
-        pipeline.fit(X, y)
-        self._pipeline = pipeline
-
-        # Feature importances
-        fitted_model = pipeline.named_steps["model"]
-        try:
-            raw_importances = fitted_model.feature_importances_
-            reordered_names = [ALL_COARSE_FEATURE_NAMES[i] for i in cat_indices] + [
-                ALL_COARSE_FEATURE_NAMES[i] for i in num_indices
-            ]
-            self._feature_importances = {
-                name: float(imp)
-                for name, imp in zip(reordered_names, raw_importances)
-            }
-        except AttributeError:
-            from sklearn.inspection import permutation_importance
-
-            X_transformed = pipeline.named_steps["preprocessor"].transform(X)
-            result = permutation_importance(
-                fitted_model, X_transformed, y, n_repeats=5, random_state=42,
+        if train_quantiles:
+            self._pipeline_p10 = _build_pipeline(
+                ALL_COARSE_FEATURE_NAMES, COARSE_CATEGORICAL_FEATURES,
+                max_depth=max_depth, n_estimators=n_estimators,
+                learning_rate=learning_rate, quantile=0.1,
             )
-            reordered_names = [ALL_COARSE_FEATURE_NAMES[i] for i in cat_indices] + [
-                ALL_COARSE_FEATURE_NAMES[i] for i in num_indices
-            ]
-            self._feature_importances = {
-                name: float(imp)
-                for name, imp in zip(reordered_names, result.importances_mean)
-            }
+            self._pipeline_p10.fit(X, y)
+
+            self._pipeline_p90 = _build_pipeline(
+                ALL_COARSE_FEATURE_NAMES, COARSE_CATEGORICAL_FEATURES,
+                max_depth=max_depth, n_estimators=n_estimators,
+                learning_rate=learning_rate, quantile=0.9,
+            )
+            self._pipeline_p90.fit(X, y)
+
+        self._feature_importances = _extract_feature_importances(
+            self._pipeline, ALL_COARSE_FEATURE_NAMES, COARSE_CATEGORICAL_FEATURES, X, y,
+        )
 
         logger.info(
             f"OBT coarse (T-90) model trained for {self.airport_code} "
@@ -479,6 +549,8 @@ class OBTCoarsePredictor:
             )
             return OBTPrediction(
                 turnaround_minutes=duration,
+                lower_bound_minutes=duration * 0.8,
+                upper_bound_minutes=duration * 1.2,
                 confidence=0.2,
                 is_fallback=True,
                 horizon="t90",
@@ -488,9 +560,23 @@ class OBTCoarsePredictor:
         pred = float(self._pipeline.predict(row)[0])
         pred = max(10.0, min(180.0, pred))
 
+        if self._pipeline_p10 is not None and self._pipeline_p90 is not None:
+            p10 = max(10.0, float(self._pipeline_p10.predict(row)[0]))
+            p90 = min(180.0, float(self._pipeline_p90.predict(row)[0]))
+            p10 = min(p10, pred)
+            p90 = max(p90, pred)
+            interval_width = max(p90 - p10, 1.0)
+            confidence = round(min(1.0, 30.0 / interval_width), 2)
+        else:
+            p10 = pred * 0.75
+            p90 = pred * 1.25
+            confidence = 0.55
+
         return OBTPrediction(
             turnaround_minutes=round(pred, 1),
-            confidence=0.55,
+            lower_bound_minutes=round(p10, 1),
+            upper_bound_minutes=round(p90, 1),
+            confidence=confidence,
             is_fallback=False,
             horizon="t90",
         )
@@ -506,6 +592,8 @@ class OBTCoarsePredictor:
                 {
                     "airport_code": self.airport_code,
                     "pipeline": self._pipeline,
+                    "pipeline_p10": self._pipeline_p10,
+                    "pipeline_p90": self._pipeline_p90,
                     "feature_importances": self._feature_importances,
                     "fallback_durations": self._fallback_durations,
                 },
@@ -521,6 +609,8 @@ class OBTCoarsePredictor:
             with open(path, "rb") as f:
                 state = pickle.load(f)
             self._pipeline = state["pipeline"]
+            self._pipeline_p10 = state.get("pipeline_p10")
+            self._pipeline_p90 = state.get("pipeline_p90")
             self._feature_importances = state.get("feature_importances")
             self._fallback_durations = state.get(
                 "fallback_durations", self._fallback_durations
@@ -604,8 +694,6 @@ class TwoStageOBTPredictor:
 
         At T-90 we don't know the actual parking time, so we estimate:
         OBT = scheduled_departure - taxi_out_buffer (typically ~15 min).
-        The turnaround prediction is used to estimate when the aircraft
-        should have arrived to meet this OBT.
 
         Args:
             scheduled_departure: Unix timestamp of scheduled departure.
@@ -614,12 +702,6 @@ class TwoStageOBTPredictor:
         Returns:
             Predicted OBT as Unix timestamp (pushback time).
         """
-        pred = self.predict_t90(features)
-        # At T-90, OBT ≈ scheduled_departure minus a taxi-out buffer.
-        # The predicted turnaround helps estimate required parking time:
-        # parking_time = OBT - turnaround, OBT = parking_time + turnaround
-        # But since we don't know parking_time yet, return the best estimate:
-        # OBT ≈ scheduled_departure - taxi_out_minutes
         taxi_out_buffer_sec = 15.0 * 60.0  # 15 min typical taxi-out
         return scheduled_departure - taxi_out_buffer_sec
 
