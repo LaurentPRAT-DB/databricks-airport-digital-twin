@@ -125,3 +125,4 @@ simulation_output_*.json
 
 # Video output
 video_output/
+catboost_info/

@@ -110,6 +110,14 @@ def _get_turnaround_congestion_factor() -> float:
     return 1.0 + 0.01 * max(0, occupied - 10)
 
 
+def _get_turnaround_day_of_week_factor() -> float:
+    """Weekend turnarounds are ~5% slower (fewer ground crew on roster)."""
+    dow = datetime.now(timezone.utc).weekday()
+    if dow >= 5:  # Saturday or Sunday
+        return 1.05
+    return 1.0
+
+
 def _get_turnaround_international_factor(state: "FlightState") -> float:
     """International flights have longer turnarounds (+25%)."""
     origin = state.origin_airport or ""
@@ -1783,9 +1791,11 @@ def _compute_gate_standoff(gate_lat: float, gate_lon: float,
     # offset by full half-length so fuselage clears the building.
     # Gate is further out (remote stand / hardstand):
     # reduce the offset since the aircraft is already away from the building.
-    # Never go below a small minimum to keep nose near the gate node.
-    standoff = max(half_length - edge_dist, half_length * 0.3)
-    return standoff
+    # If the gate node is already beyond half-length from the terminal,
+    # no offset is needed — the aircraft fits without overlapping.
+    if edge_dist >= half_length:
+        return 0.0
+    return half_length - edge_dist
 
 
 def _get_parked_heading(gate_lat: float, gate_lon: float) -> float:
@@ -2432,7 +2442,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         weather_factor = _get_turnaround_weather_factor()
         congestion_factor = _get_turnaround_congestion_factor()
         intl_factor = _get_turnaround_international_factor(state)
-        combined_factor = airline_factor * weather_factor * congestion_factor * intl_factor
+        dow_factor = _get_turnaround_day_of_week_factor()
+        combined_factor = airline_factor * weather_factor * congestion_factor * intl_factor * dow_factor
         # +/-10% jitter (reduced from 20% since factors explain more variance)
         target = gate_seconds * combined_factor * random.uniform(0.9, 1.1)
         if state.time_at_gate > target:
@@ -3351,66 +3362,134 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         clamped_lon = max(center[1] - 0.5, min(center[1] + 0.5, end_lon))
         final_alt = end_alt if abs(end_lat - center[0]) < 0.5 else 3000
 
-        # Determine how far along the approach the aircraft currently is
-        # by finding the closest waypoint to the current position.
-        wp_count = len(_traj_app_wps2)
-        best_wp_idx = 0
-        best_wp_dist = float('inf')
-        for _wi in range(wp_count):
-            _wd = _distance_between(
-                (clamped_lat, clamped_lon),
-                (_traj_app_wps2[_wi][1], _traj_app_wps2[_wi][0])
-            )
-            if _wd < best_wp_dist:
-                best_wp_dist = _wd
-                best_wp_idx = _wi
+        # ── Guard: prevent trajectories that cross over the airfield ──
+        # The approach waypoints go from far out (index 0) toward the
+        # runway threshold (last index).  If the aircraft's current
+        # position is on the *opposite* side of the threshold from the
+        # approach direction, drawing the full waypoint path would cross
+        # the airport center — producing unrealistic overflight.
+        #
+        # Detection: the last waypoint (threshold) should be *between*
+        # the first waypoint (entry) and the aircraft.  If the aircraft
+        # is closer to the first waypoint than the threshold is, the
+        # aircraft is beyond the threshold on the approach side — fine.
+        # If the aircraft is farther from the first waypoint than the
+        # threshold AND on the opposite side of the threshold from the
+        # approach entry, the path would cross the field.
+        threshold_wp = _traj_app_wps2[-1]  # (lon, lat, alt)
+        entry_wp = _traj_app_wps2[0]       # (lon, lat, alt)
+        dist_entry_to_threshold = _distance_between(
+            (entry_wp[1], entry_wp[0]), (threshold_wp[1], threshold_wp[0])
+        )
+        dist_entry_to_aircraft = _distance_between(
+            (entry_wp[1], entry_wp[0]), (clamped_lat, clamped_lon)
+        )
+        dist_threshold_to_aircraft = _distance_between(
+            (threshold_wp[1], threshold_wp[0]), (clamped_lat, clamped_lon)
+        )
 
-        # Build path: approach waypoints from first up to nearest-to-aircraft,
-        # then final segment to the aircraft's exact position.
-        # Trim waypoints to only those before (or at) the aircraft.
-        path_wps = _traj_app_wps2[:best_wp_idx + 1]
-        # Append current position as the final target
-        path_wps.append((clamped_lon, clamped_lat, final_alt))
-        path_count = len(path_wps)
+        # Aircraft is "past the threshold" if it's farther from entry
+        # than the threshold AND farther from the threshold than the
+        # approach corridor width (~0.02 deg ≈ 2 km).
+        aircraft_past_threshold = (
+            dist_entry_to_aircraft > dist_entry_to_threshold
+            and dist_threshold_to_aircraft > 0.02
+        )
 
-        for i in range(num_points):
-            progress = i / (num_points - 1) if num_points > 1 else 0
+        if aircraft_past_threshold:
+            # Don't draw approach waypoints — just show a short
+            # descent segment ending at the aircraft position to avoid
+            # a trajectory line that crosses the airfield.
+            # Use only the last 3 approach waypoints (near threshold)
+            # offset toward the aircraft's side so the trail stays
+            # on the approach side of the field.
+            path_wps = [(clamped_lon, clamped_lat, final_alt)]
+            path_count = 1
+        else:
+            # Normal case: find nearest waypoint and build path
+            wp_count = len(_traj_app_wps2)
+            best_wp_idx = 0
+            best_wp_dist = float('inf')
+            for _wi in range(wp_count):
+                _wd = _distance_between(
+                    (clamped_lat, clamped_lon),
+                    (_traj_app_wps2[_wi][1], _traj_app_wps2[_wi][0])
+                )
+                if _wd < best_wp_dist:
+                    best_wp_dist = _wd
+                    best_wp_idx = _wi
 
-            wp_progress = progress * (path_count - 1)
-            wp_idx = int(wp_progress)
-            wp_frac = wp_progress - wp_idx
-            if wp_idx >= path_count - 1:
-                wp_idx = path_count - 2
-                wp_frac = 1.0
+            # Build path: approach waypoints from first up to nearest-to-aircraft,
+            # then final segment to the aircraft's exact position.
+            path_wps = _traj_app_wps2[:best_wp_idx + 1]
+            # Append current position as the final target
+            path_wps.append((clamped_lon, clamped_lat, final_alt))
+            path_count = len(path_wps)
 
-            wp1 = path_wps[wp_idx]
-            wp2 = path_wps[min(wp_idx + 1, path_count - 1)]
-
-            lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
-            lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
-            alt = wp1[2] + (wp2[2] - wp1[2]) * wp_frac
-
-            heading = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
-            velocity = 350 - progress * 210
-            vertical_rate = -1000 if alt > 2000 else (-600 if alt > 500 else -400)
-            phase = "approaching" if alt > 500 else "landing"
-
-            timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
-
+        if path_count < 2:
+            # Single point — just emit the aircraft's current position
+            timestamp = now
             points.append({
                 "timestamp": timestamp.isoformat(),
                 "icao24": icao24,
                 "callsign": callsign,
-                "latitude": lat + random.uniform(-0.001, 0.001),
-                "longitude": lon + random.uniform(-0.001, 0.001),
-                "altitude": max(0, alt + random.uniform(-50, 50)),
-                "velocity": max(100, velocity + random.uniform(-5, 5)),
-                "heading": heading + random.uniform(-2, 2),
-                "vertical_rate": vertical_rate,
-                "on_ground": alt < 50,
-                "flight_phase": phase,
+                "latitude": clamped_lat,
+                "longitude": clamped_lon,
+                "altitude": max(0, final_alt),
+                "velocity": 200,
+                "heading": current_heading,
+                "vertical_rate": -600,
+                "on_ground": False,
+                "flight_phase": "approaching",
                 "data_source": "synthetic",
             })
+        else:
+            for i in range(num_points):
+                progress = i / (num_points - 1) if num_points > 1 else 0
+
+                wp_progress = progress * (path_count - 1)
+                wp_idx = int(wp_progress)
+                wp_frac = wp_progress - wp_idx
+                if wp_idx >= path_count - 1:
+                    wp_idx = path_count - 2
+                    wp_frac = 1.0
+
+                wp1 = path_wps[wp_idx]
+                wp2 = path_wps[min(wp_idx + 1, path_count - 1)]
+
+                lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
+                lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
+                alt = wp1[2] + (wp2[2] - wp1[2]) * wp_frac
+
+                heading = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
+                velocity = 350 - progress * 210
+                vertical_rate = -1000 if alt > 2000 else (-600 if alt > 500 else -400)
+                phase = "approaching" if alt > 500 else "landing"
+
+                timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
+
+                # Scale noise by altitude — less noise on final approach
+                if alt < 500:
+                    _app_noise = 0.0002
+                elif alt < 2000:
+                    _app_noise = 0.0004
+                else:
+                    _app_noise = 0.0008
+
+                points.append({
+                    "timestamp": timestamp.isoformat(),
+                    "icao24": icao24,
+                    "callsign": callsign,
+                    "latitude": lat + random.uniform(-_app_noise, _app_noise),
+                    "longitude": lon + random.uniform(-_app_noise, _app_noise),
+                    "altitude": max(0, alt + random.uniform(-30, 30)),
+                    "velocity": max(100, velocity + random.uniform(-5, 5)),
+                    "heading": heading + random.uniform(-2, 2),
+                    "vertical_rate": vertical_rate,
+                    "on_ground": alt < 50,
+                    "flight_phase": phase,
+                    "data_source": "synthetic",
+                })
 
     return points
 

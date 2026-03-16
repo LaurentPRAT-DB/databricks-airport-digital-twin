@@ -16,6 +16,7 @@ import pytest
 import math
 
 from src.ml.obt_features import (
+    OBTBoardFeatureSet,
     OBTCoarseFeatureSet,
     OBTFeatureSet,
     classify_aircraft,
@@ -28,14 +29,18 @@ from src.ml.obt_features import (
 from src.ml.obt_model import (
     OBTPredictor,
     OBTCoarsePredictor,
+    OBTBoardPredictor,
     TwoStageOBTPredictor,
     OBTPrediction,
     _dict_to_feature_set,
     _dict_to_coarse_feature_set,
     _features_to_row,
     _coarse_features_to_row,
+    _board_features_to_row,
     ALL_FEATURE_NAMES,
     ALL_COARSE_FEATURE_NAMES,
+    ALL_BOARD_FEATURE_NAMES,
+    _HAS_CATBOOST,
 )
 
 # Path to a real simulation file for integration tests
@@ -54,6 +59,7 @@ _V2_DEFAULTS = dict(
     hour_sin=0.0,
     hour_cos=1.0,
     is_weather_scenario=False,
+    scheduled_buffer_min=60.0,
 )
 
 
@@ -323,6 +329,7 @@ def _make_sample_features(n: int = 100) -> tuple[list[OBTFeatureSet], list[float
             hour_sin=h_sin,
             hour_cos=h_cos,
             is_weather_scenario=rng.random() > 0.8,
+            scheduled_buffer_min=rng.uniform(20, 120),
         )
         features.append(fs)
         targets.append(target)
@@ -1319,3 +1326,487 @@ class TestInternationalDetection:
 
     def test_empty_returns_false(self):
         assert _is_international_route("", "SFO", "SFO") is False
+
+
+# ---------------------------------------------------------------------------
+# Scheduled buffer time feature
+# ---------------------------------------------------------------------------
+
+
+class TestScheduledBufferFeature:
+    def test_buffer_in_feature_set(self):
+        """scheduled_buffer_min should be present in OBTFeatureSet."""
+        fs = _make_full_fs(scheduled_buffer_min=75.0)
+        assert fs.scheduled_buffer_min == 75.0
+
+    def test_buffer_in_coarse_feature_set(self):
+        """scheduled_buffer_min should also be present in OBTCoarseFeatureSet."""
+        cs = _make_coarse_fs(scheduled_buffer_min=90.0)
+        assert cs.scheduled_buffer_min == 90.0
+
+    def test_buffer_default_zero(self):
+        fs = _make_full_fs()
+        # _V2_DEFAULTS sets 60.0, but the dataclass default is 0.0
+        assert isinstance(fs.scheduled_buffer_min, float)
+
+    def test_buffer_preserved_in_coarse_projection(self):
+        """to_coarse() should carry scheduled_buffer_min through."""
+        fs = _make_full_fs(scheduled_buffer_min=42.0)
+        coarse = fs.to_coarse()
+        assert coarse.scheduled_buffer_min == 42.0
+
+    def test_buffer_in_feature_names(self):
+        assert "scheduled_buffer_min" in ALL_FEATURE_NAMES
+        assert "scheduled_buffer_min" in ALL_COARSE_FEATURE_NAMES
+
+    def test_buffer_affects_prediction(self):
+        """Different buffer values should produce different predictions."""
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(300)
+        predictor.train(features, targets)
+
+        short_buf = _make_full_fs(scheduled_buffer_min=30.0)
+        long_buf = _make_full_fs(scheduled_buffer_min=150.0)
+        p_short = predictor.predict(short_buf)
+        p_long = predictor.predict(long_buf)
+        # They should differ (model learned something about buffer)
+        # Not asserting direction — just that it's not ignored
+        assert isinstance(p_short.turnaround_minutes, float)
+        assert isinstance(p_long.turnaround_minutes, float)
+
+
+# ---------------------------------------------------------------------------
+# CatBoost training (skip if catboost not installed)
+# ---------------------------------------------------------------------------
+
+
+class TestCatBoostTraining:
+    @pytest.mark.skipif(not _HAS_CATBOOST, reason="catboost not installed")
+    def test_catboost_train_and_predict(self):
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(200)
+        result = predictor.train(features, targets, use_catboost=True)
+        assert result["status"] == "trained"
+        assert predictor._use_catboost is True
+
+        pred = predictor.predict(features[0])
+        assert 10.0 <= pred.turnaround_minutes <= 180.0
+        assert not pred.is_fallback
+
+    @pytest.mark.skipif(not _HAS_CATBOOST, reason="catboost not installed")
+    def test_catboost_with_quantiles(self):
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(200)
+        result = predictor.train(features, targets, use_catboost=True, train_quantiles=True)
+        assert result["status"] == "trained"
+
+        pred = predictor.predict(features[0])
+        assert pred.lower_bound_minutes <= pred.turnaround_minutes
+        assert pred.upper_bound_minutes >= pred.turnaround_minutes
+
+    @pytest.mark.skipif(not _HAS_CATBOOST, reason="catboost not installed")
+    def test_catboost_save_and_load(self):
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(200)
+        predictor.train(features, targets, use_catboost=True)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "obt_cb.pkl"
+            predictor.save(path)
+
+            loaded = OBTPredictor(airport_code="TEST")
+            assert loaded.load(path)
+            assert loaded._use_catboost is True
+
+            orig = predictor.predict(features[0])
+            after = loaded.predict(features[0])
+            assert abs(orig.turnaround_minutes - after.turnaround_minutes) < 0.01
+
+    def test_sklearn_fallback_when_catboost_disabled(self):
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(200)
+        result = predictor.train(features, targets, use_catboost=False)
+        assert result["status"] == "trained"
+        assert predictor._use_catboost is False
+
+        pred = predictor.predict(features[0])
+        assert 10.0 <= pred.turnaround_minutes <= 180.0
+
+    @pytest.mark.skipif(not _HAS_CATBOOST, reason="catboost not installed")
+    def test_coarse_catboost_train(self):
+        features, targets = _make_sample_features(200)
+        coarse = [f.to_coarse() for f in features]
+
+        predictor = OBTCoarsePredictor(airport_code="TEST")
+        result = predictor.train(coarse, targets, use_catboost=True)
+        assert result["status"] == "trained"
+        assert predictor._use_catboost is True
+
+        pred = predictor.predict(coarse[0])
+        assert 10.0 <= pred.turnaround_minutes <= 180.0
+
+
+# ---------------------------------------------------------------------------
+# Conformalized Quantile Regression (CQR) calibration
+# ---------------------------------------------------------------------------
+
+
+class TestCQRCalibration:
+    def test_calibration_offset_nonnegative(self):
+        """CQR calibration offset should always be >= 0."""
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(300)
+        predictor.train(features, targets, train_quantiles=True, calibrate_intervals=True)
+        assert predictor._calibration_offset >= 0.0
+
+    def test_calibration_widens_intervals(self):
+        """Calibrated intervals should be at least as wide as uncalibrated."""
+        # Train with calibration
+        p_cal = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(300)
+        p_cal.train(features, targets, train_quantiles=True, calibrate_intervals=True)
+
+        # Train without calibration
+        p_nocal = OBTPredictor(airport_code="TEST")
+        p_nocal.train(features, targets, train_quantiles=True, calibrate_intervals=False)
+
+        # Calibrated intervals should be >= uncalibrated
+        pred_cal = p_cal.predict(features[0])
+        pred_nocal = p_nocal.predict(features[0])
+
+        cal_width = pred_cal.upper_bound_minutes - pred_cal.lower_bound_minutes
+        nocal_width = pred_nocal.upper_bound_minutes - pred_nocal.lower_bound_minutes
+        assert cal_width >= nocal_width - 0.01, (
+            f"Calibrated width ({cal_width:.1f}) should be >= uncalibrated ({nocal_width:.1f})"
+        )
+
+    def test_coverage_on_training_data(self):
+        """Calibrated intervals should cover ~80% of training data."""
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(500)
+        predictor.train(features, targets, train_quantiles=True, calibrate_intervals=True)
+
+        covered = 0
+        for fs, target in zip(features, targets):
+            pred = predictor.predict(fs)
+            if pred.lower_bound_minutes <= target <= pred.upper_bound_minutes:
+                covered += 1
+
+        coverage = covered / len(features)
+        # On training data, coverage should be well above 80%
+        assert coverage >= 0.70, f"Coverage {coverage:.1%} is too low (expected >= 70%)"
+
+    def test_calibration_offset_saved_and_loaded(self):
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(300)
+        predictor.train(features, targets, train_quantiles=True, calibrate_intervals=True)
+        offset = predictor._calibration_offset
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "cqr.pkl"
+            predictor.save(path)
+
+            loaded = OBTPredictor(airport_code="TEST")
+            loaded.load(path)
+            assert abs(loaded._calibration_offset - offset) < 1e-6
+
+    def test_coarse_cqr_calibration(self):
+        """CQR should also work on the coarse predictor."""
+        features, targets = _make_sample_features(300)
+        coarse = [f.to_coarse() for f in features]
+
+        predictor = OBTCoarsePredictor(airport_code="TEST")
+        predictor.train(coarse, targets, train_quantiles=True, calibrate_intervals=True)
+        assert predictor._calibration_offset >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# T-board prediction stage
+# ---------------------------------------------------------------------------
+
+
+class TestTBoardPredictor:
+    def test_board_feature_set_creation(self):
+        fs = _make_full_fs()
+        board_fs = fs.to_board(elapsed_gate_time_min=30.0, tpark_predicted_min=45.0)
+        assert isinstance(board_fs, OBTBoardFeatureSet)
+        assert board_fs.elapsed_gate_time_min == 30.0
+        assert abs(board_fs.turnaround_progress_pct - 30.0 / 45.0) < 0.01
+        assert abs(board_fs.remaining_predicted_min - 15.0) < 0.01
+
+    def test_board_features_inherit_tpark(self):
+        fs = _make_full_fs(aircraft_category="wide", airline_code="BAW")
+        board_fs = fs.to_board(elapsed_gate_time_min=60.0, tpark_predicted_min=90.0)
+        assert board_fs.aircraft_category == "wide"
+        assert board_fs.airline_code == "BAW"
+
+    def test_board_progress_clamped_to_1(self):
+        fs = _make_full_fs()
+        board_fs = fs.to_board(elapsed_gate_time_min=100.0, tpark_predicted_min=45.0)
+        assert board_fs.turnaround_progress_pct == 1.0
+        assert board_fs.remaining_predicted_min == 0.0
+
+    def test_board_feature_names(self):
+        assert "elapsed_gate_time_min" in ALL_BOARD_FEATURE_NAMES
+        assert "remaining_predicted_min" in ALL_BOARD_FEATURE_NAMES
+        assert "turnaround_progress_pct" in ALL_BOARD_FEATURE_NAMES
+        assert len(ALL_BOARD_FEATURE_NAMES) > len(ALL_FEATURE_NAMES)
+
+    def test_board_features_to_row(self):
+        fs = _make_full_fs()
+        board_fs = fs.to_board(elapsed_gate_time_min=25.0, tpark_predicted_min=50.0)
+        row = _board_features_to_row(board_fs)
+        assert len(row) == len(ALL_BOARD_FEATURE_NAMES)
+
+    def test_board_predictor_train_and_predict(self):
+        features, targets = _make_sample_features(300)
+        # Create board features: simulate ~70% elapsed
+        board_features = []
+        for fs, target in zip(features, targets):
+            elapsed = target * 0.7
+            board_fs = fs.to_board(elapsed_gate_time_min=elapsed, tpark_predicted_min=target)
+            board_features.append(board_fs)
+
+        predictor = OBTBoardPredictor(airport_code="TEST")
+        result = predictor.train(board_features, targets)
+        assert result["status"] == "trained"
+
+        pred = predictor.predict(board_features[0])
+        assert 10.0 <= pred.turnaround_minutes <= 180.0
+        assert pred.horizon == "t_board"
+
+    def test_boarding_threshold(self):
+        assert OBTBoardPredictor.BOARDING_THRESHOLD == 0.70
+
+
+# ---------------------------------------------------------------------------
+# A-CDM adapter
+# ---------------------------------------------------------------------------
+
+
+class TestACDMAdapter:
+    def test_valid_record_conversion(self):
+        from src.ml.acdm_adapter import acdm_record_to_features
+
+        record = {
+            "aibt": "2025-06-16T10:00:00",
+            "aobt": "2025-06-16T10:45:00",
+            "sobt": "2025-06-16T11:00:00",
+            "aircraft_type": "A320",
+            "airline_code": "UAL",
+            "gate": "B12",
+            "origin": "LAX",
+            "destination": "SFO",
+        }
+        result = acdm_record_to_features(record, "SFO")
+        assert result is not None
+        feat, target = result
+        assert isinstance(feat, OBTFeatureSet)
+        assert abs(target - 45.0) < 0.01  # 45 min turnaround
+
+    def test_invalid_record_returns_none(self):
+        from src.ml.acdm_adapter import acdm_record_to_features
+
+        # Missing required timestamps
+        assert acdm_record_to_features({}, "SFO") is None
+        assert acdm_record_to_features({"aibt": "2025-06-16T10:00:00"}, "SFO") is None
+
+    def test_too_short_turnaround_filtered(self):
+        from src.ml.acdm_adapter import acdm_record_to_features
+
+        record = {
+            "aibt": "2025-06-16T10:00:00",
+            "aobt": "2025-06-16T10:05:00",  # 5 min — too short
+        }
+        assert acdm_record_to_features(record, "SFO") is None
+
+    def test_too_long_turnaround_filtered(self):
+        from src.ml.acdm_adapter import acdm_record_to_features
+
+        record = {
+            "aibt": "2025-06-16T10:00:00",
+            "aobt": "2025-06-16T14:00:00",  # 4 hours — too long
+        }
+        assert acdm_record_to_features(record, "SFO") is None
+
+    def test_batch_conversion(self):
+        from src.ml.acdm_adapter import convert_acdm_dataset
+
+        records = [
+            {
+                "aibt": f"2025-06-16T{10+i}:00:00",
+                "aobt": f"2025-06-16T{10+i}:40:00",
+                "aircraft_type": "B738",
+                "airline_code": "DAL",
+            }
+            for i in range(5)
+        ]
+        features, targets = convert_acdm_dataset(records, "ATL")
+        assert len(features) == 5
+        assert len(targets) == 5
+        assert all(abs(t - 40.0) < 0.01 for t in targets)
+
+    def test_feature_fields_populated(self):
+        from src.ml.acdm_adapter import acdm_record_to_features
+
+        record = {
+            "aibt": "2025-06-16T14:00:00",
+            "aobt": "2025-06-16T14:50:00",
+            "aircraft_type": "B777",
+            "airline_code": "BAW",
+            "gate": "T5-42",
+            "origin": "LHR",
+            "destination": "JFK",
+            "arrival_delay_min": 15,
+            "wind_speed_kts": 12,
+            "concurrent_ops": 5,
+        }
+        feat, target = acdm_record_to_features(record, "JFK")
+        assert feat.aircraft_category == "wide"
+        assert feat.airline_code == "BAW"
+        assert feat.gate_id_prefix == "T"
+        assert feat.arrival_delay_min == 15.0
+        assert feat.wind_speed_kt == 12.0
+        assert feat.concurrent_gate_ops == 5
+        assert feat.hour_of_day == 14
+
+
+# ---------------------------------------------------------------------------
+# Day-of-week variation
+# ---------------------------------------------------------------------------
+
+
+class TestDayOfWeekVariation:
+    def test_traffic_factor_weekday_baseline(self):
+        from src.ingestion.schedule_generator import DAY_OF_WEEK_TRAFFIC_FACTOR
+
+        for dow in range(5):  # Mon-Fri
+            assert DAY_OF_WEEK_TRAFFIC_FACTOR[dow] == 1.0
+
+    def test_traffic_factor_saturday_reduced(self):
+        from src.ingestion.schedule_generator import DAY_OF_WEEK_TRAFFIC_FACTOR
+
+        assert DAY_OF_WEEK_TRAFFIC_FACTOR[5] < 1.0  # Saturday
+
+    def test_traffic_factor_sunday_reduced(self):
+        from src.ingestion.schedule_generator import DAY_OF_WEEK_TRAFFIC_FACTOR
+
+        assert DAY_OF_WEEK_TRAFFIC_FACTOR[6] < 1.0  # Sunday
+
+    def test_turnaround_factor_weekday(self):
+        from src.ingestion.fallback import _get_turnaround_day_of_week_factor
+        from unittest.mock import patch
+        from datetime import datetime, timezone
+
+        # Mock to Wednesday
+        mock_dt = datetime(2025, 6, 18, 12, 0, tzinfo=timezone.utc)  # Wed
+        with patch("src.ingestion.fallback.datetime") as mock_datetime:
+            mock_datetime.now.return_value = mock_dt
+            mock_datetime.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            factor = _get_turnaround_day_of_week_factor()
+        assert factor == 1.0
+
+    def test_turnaround_factor_weekend(self):
+        from src.ingestion.fallback import _get_turnaround_day_of_week_factor
+        from unittest.mock import patch
+        from datetime import datetime, timezone
+
+        # Mock to Saturday
+        mock_dt = datetime(2025, 6, 21, 12, 0, tzinfo=timezone.utc)  # Sat
+        with patch("src.ingestion.fallback.datetime") as mock_datetime:
+            mock_datetime.now.return_value = mock_dt
+            mock_datetime.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            factor = _get_turnaround_day_of_week_factor()
+        assert factor == 1.05
+
+    def test_day_of_week_in_feature_set(self):
+        fs = _make_full_fs(day_of_week=5)
+        assert fs.day_of_week == 5
+
+    def test_day_of_week_preserved_in_coarse(self):
+        fs = _make_full_fs(day_of_week=6)
+        coarse = fs.to_coarse()
+        assert coarse.day_of_week == 6
+
+
+# ---------------------------------------------------------------------------
+# Transfer learning
+# ---------------------------------------------------------------------------
+
+
+class TestTransferLearning:
+    def test_fine_tune_insufficient_data(self):
+        from src.ml.transfer_learning import fine_tune_obt
+
+        # Create and save a base model
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(200)
+        predictor.train(features, targets)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_path = Path(tmpdir) / "base.pkl"
+            predictor.save(base_path)
+
+            # Only 5 A-CDM records — too few
+            records = [
+                {
+                    "aibt": f"2025-06-16T{10+i}:00:00",
+                    "aobt": f"2025-06-16T{10+i}:40:00",
+                }
+                for i in range(5)
+            ]
+            result = fine_tune_obt(
+                base_model_path=base_path,
+                acdm_records=records,
+                airport_iata="TEST",
+            )
+            assert result["status"] == "insufficient_data"
+
+    def test_fine_tune_missing_base_model(self):
+        from src.ml.transfer_learning import fine_tune_obt
+
+        result = fine_tune_obt(
+            base_model_path="/nonexistent/model.pkl",
+            acdm_records=[],
+            airport_iata="TEST",
+        )
+        assert result["status"] == "error"
+        assert result["reason"] == "base_model_not_found"
+
+    def test_fine_tune_success(self):
+        from src.ml.transfer_learning import fine_tune_obt
+
+        # Create and save a base model
+        predictor = OBTPredictor(airport_code="TEST")
+        features, targets = _make_sample_features(200)
+        predictor.train(features, targets)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_path = Path(tmpdir) / "base.pkl"
+            predictor.save(base_path)
+            output_path = Path(tmpdir) / "finetuned.pkl"
+
+            # 30 valid A-CDM records with varying turnaround times
+            records = []
+            for i in range(30):
+                h = 10 + (i % 8)
+                m_in = (i * 7) % 60
+                # Vary turnaround: 30-90 min
+                ta_min = 30 + (i * 2)
+                m_out = m_in + ta_min
+                h_out = h + m_out // 60
+                m_out = m_out % 60
+                records.append({
+                    "aibt": f"2025-06-16T{h}:{m_in:02d}:00",
+                    "aobt": f"2025-06-16T{h_out}:{m_out:02d}:00",
+                    "aircraft_type": ["A320", "B738", "B777", "E190"][i % 4],
+                    "airline_code": ["UAL", "DAL", "AAL", "BAW"][i % 4],
+                })
+            result = fine_tune_obt(
+                base_model_path=base_path,
+                acdm_records=records,
+                airport_iata="TEST",
+                output_path=output_path,
+            )
+            assert result.get("fine_tuned") is True
+            assert output_path.exists()

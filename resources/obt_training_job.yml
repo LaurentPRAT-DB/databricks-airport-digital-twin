@@ -10,6 +10,7 @@ resources:
             client: "1"
             dependencies:
               - scikit-learn
+              - catboost>=1.2
               - pyyaml
               - pydantic
               - mlflow

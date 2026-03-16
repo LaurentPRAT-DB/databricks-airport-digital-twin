@@ -1,4 +1,5 @@
 airport: DXB
+start_date: "2025-06-16"
 arrivals: 500
 departures: 500
 duration_hours: 24

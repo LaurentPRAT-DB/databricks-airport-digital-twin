@@ -27,6 +27,10 @@ class SimulationConfig(BaseModel):
     output_file: str = Field(
         default="simulation_output.json", description="Output file path"
     )
+    start_date: Optional[str] = Field(
+        default=None,
+        description="Anchor date for simulation (YYYY-MM-DD). Sets day_of_week for OBT features.",
+    )
     scenario_file: Optional[str] = Field(
         default=None, description="Path to scenario YAML file for disruption injection"
     )
@@ -36,9 +40,12 @@ class SimulationConfig(BaseModel):
     )
 
     def effective_start_time(self) -> datetime:
-        """Return start_time or midnight UTC today."""
+        """Return start_time, or midnight of start_date, or midnight UTC today."""
         if self.start_time is not None:
             return self.start_time
+        if self.start_date is not None:
+            d = datetime.strptime(self.start_date, "%Y-%m-%d")
+            return d.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
         return now.replace(hour=0, minute=0, second=0, microsecond=0)
 

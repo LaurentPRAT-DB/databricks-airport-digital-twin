@@ -271,6 +271,23 @@ TRAFFIC_PROFILES: dict[str, list[tuple[int, int]]] = {
     ],
 }
 
+# Day-of-week traffic multipliers (0=Monday..6=Sunday)
+# Weekdays are baseline; Saturdays have reduced traffic; Sundays slightly reduced.
+DAY_OF_WEEK_TRAFFIC_FACTOR: dict[int, float] = {
+    0: 1.0,   # Monday
+    1: 1.0,   # Tuesday
+    2: 1.0,   # Wednesday
+    3: 1.0,   # Thursday
+    4: 1.0,   # Friday
+    5: 0.82,  # Saturday: -18% overall (leisure pattern)
+    6: 0.90,  # Sunday: -10% (redeye recovery)
+}
+
+# Saturday peak hour shift: morning peak starts 1h later
+DAY_OF_WEEK_PEAK_SHIFT: dict[int, int] = {
+    5: 1,  # Saturday: shift morning peak +1 hour
+}
+
 # Current traffic profile (set by simulation engine based on airport characteristics)
 _current_profile: str = "us_dual_peak"
 
@@ -303,28 +320,47 @@ def _get_flights_per_hour(
     hour: int,
     profile: str | None = None,
     airport_profile: AirportProfile | None = None,
+    day_of_week: int | None = None,
 ) -> int:
     """Get number of flights for a given hour based on traffic profile.
 
     If an AirportProfile with hourly_profile is given, use it as relative
     weights to distribute flights. Otherwise fall back to TRAFFIC_PROFILES.
+
+    When ``day_of_week`` is provided (0=Mon..6=Sun) the count is scaled by
+    DAY_OF_WEEK_TRAFFIC_FACTOR and the hour is shifted by
+    DAY_OF_WEEK_PEAK_SHIFT (e.g. Saturday morning peak starts 1h later).
     """
+    effective_hour = hour
+    if day_of_week is not None:
+        effective_hour = hour - DAY_OF_WEEK_PEAK_SHIFT.get(day_of_week, 0)
+        if effective_hour < 0:
+            effective_hour = 0
+
     # If we have a calibrated hourly profile, return a relative weight
     # (caller uses this as a weight for distributing total flights)
     if airport_profile and airport_profile.hourly_profile and len(airport_profile.hourly_profile) == 24:
         # Return weight scaled to approximate flight count range (0-30)
-        weight = airport_profile.hourly_profile[hour % 24]
+        weight = airport_profile.hourly_profile[effective_hour % 24]
         max_weight = max(airport_profile.hourly_profile)
         if max_weight > 0:
             scaled = weight / max_weight * 25  # scale to ~25 max
-            return max(0, int(scaled + random.uniform(-2, 2)))
-        return 0
+            base = max(0, int(scaled + random.uniform(-2, 2)))
+        else:
+            base = 0
+    else:
+        p = profile or _current_profile
+        if p not in TRAFFIC_PROFILES:
+            p = "us_dual_peak"
+        lo, hi = TRAFFIC_PROFILES[p][effective_hour % 24]
+        base = random.randint(lo, hi)
 
-    p = profile or _current_profile
-    if p not in TRAFFIC_PROFILES:
-        p = "us_dual_peak"
-    lo, hi = TRAFFIC_PROFILES[p][hour % 24]
-    return random.randint(lo, hi)
+    # Apply day-of-week traffic factor
+    if day_of_week is not None:
+        factor = DAY_OF_WEEK_TRAFFIC_FACTOR.get(day_of_week, 1.0)
+        base = max(0, round(base * factor))
+
+    return base
 
 
 def generate_daily_schedule(

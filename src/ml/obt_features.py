@@ -18,6 +18,55 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# OurAirports-based IATA → country lookup (lazy-loaded singleton)
+# ---------------------------------------------------------------------------
+_OURAIRPORTS_CSV = Path(__file__).resolve().parent.parent.parent / "data" / "calibration" / "airports.csv"
+_iata_country_cache: Optional[Dict[str, str]] = None
+
+
+def _load_iata_country_lookup() -> Dict[str, str]:
+    """Build IATA→country mapping from OurAirports CSV.
+
+    Falls back to the hardcoded _AIRPORT_COUNTRY dict if the CSV is not
+    available.  Result is cached at module level.
+    """
+    global _iata_country_cache
+    if _iata_country_cache is not None:
+        return _iata_country_cache
+
+    if _OURAIRPORTS_CSV.exists():
+        try:
+            from src.calibration.ourairports_ingest import parse_airports_csv
+
+            airports = parse_airports_csv(_OURAIRPORTS_CSV)
+            lookup: Dict[str, str] = {}
+            for info in airports.values():
+                iata = info.get("iata", "").strip().upper()
+                country = info.get("country", "").strip().upper()
+                if iata and country:
+                    lookup[iata] = country
+            _iata_country_cache = lookup
+            logger.info("Loaded %d IATA→country mappings from OurAirports CSV", len(lookup))
+            return _iata_country_cache
+        except Exception as exc:
+            logger.warning("Failed to load OurAirports CSV, using fallback: %s", exc)
+
+    # Fallback: use the small hardcoded dict (converted into the cache)
+    _iata_country_cache = dict(_AIRPORT_COUNTRY)
+    return _iata_country_cache
+
+
+def _get_country(iata: str) -> str:
+    """Look up the ISO country code for an IATA airport code.
+
+    Tries the OurAirports-backed cache first, then falls back to the
+    hardcoded _AIRPORT_COUNTRY dict.
+    """
+    lookup = _load_iata_country_lookup()
+    return lookup.get(iata.upper(), "")
+
+
 # Aircraft type -> category mapping
 WIDE_BODY_TYPES = frozenset([
     "A330", "A340", "A350", "A380",
@@ -70,6 +119,7 @@ class OBTCoarseFeatureSet:
     hour_sin: float               # sin(2*pi*hour/24) — cyclical encoding
     hour_cos: float               # cos(2*pi*hour/24)
     is_weather_scenario: bool     # True if simulation used a scenario file
+    scheduled_buffer_min: float = 0.0  # SOBT - SIBT (schedule-only at T-90)
 
 
 @dataclass
@@ -97,6 +147,7 @@ class OBTFeatureSet:
     hour_sin: float               # sin(2*pi*hour/24) — cyclical encoding
     hour_cos: float               # cos(2*pi*hour/24)
     is_weather_scenario: bool     # True if simulation used a scenario file
+    scheduled_buffer_min: float = 0.0  # scheduled_departure - actual_arrival (T-park)
 
     def to_coarse(self) -> OBTCoarseFeatureSet:
         """Project full feature set down to T-90 coarse features."""
@@ -114,7 +165,38 @@ class OBTFeatureSet:
             hour_sin=self.hour_sin,
             hour_cos=self.hour_cos,
             is_weather_scenario=self.is_weather_scenario,
+            scheduled_buffer_min=self.scheduled_buffer_min,
         )
+
+    def to_board(
+        self,
+        elapsed_gate_time_min: float,
+        tpark_predicted_min: float,
+    ) -> "OBTBoardFeatureSet":
+        """Extend to T-board features once boarding has started."""
+        total = max(tpark_predicted_min, 1.0)
+        progress = min(1.0, elapsed_gate_time_min / total)
+        remaining = max(0.0, tpark_predicted_min - elapsed_gate_time_min)
+        return OBTBoardFeatureSet(
+            **{k: getattr(self, k) for k in OBTFeatureSet.__dataclass_fields__},
+            elapsed_gate_time_min=elapsed_gate_time_min,
+            remaining_predicted_min=remaining,
+            turnaround_progress_pct=progress,
+        )
+
+
+@dataclass
+class OBTBoardFeatureSet(OBTFeatureSet):
+    """Feature vector for T-board (boarding start) OBT prediction.
+
+    Extends T-park features with elapsed time at the gate and progress
+    information.  The T-board model is triggered when ~70% of the
+    predicted turnaround has elapsed.
+    """
+
+    elapsed_gate_time_min: float = 0.0
+    remaining_predicted_min: float = 0.0
+    turnaround_progress_pct: float = 0.0
 
 
 def classify_aircraft(aircraft_type: str) -> str:
@@ -173,14 +255,15 @@ def _cyclical_hour(hour: int) -> tuple[float, float]:
 def _is_international_route(origin: str, destination: str, airport_iata: str) -> bool:
     """Determine if a flight is international using country lookup.
 
-    Returns True if the remote airport is in a different country than the
-    local airport.  Falls back to False when either airport is unknown.
+    Uses the OurAirports-backed IATA→country lookup (60K+ airports) when
+    available, falling back to the hardcoded dict.  Returns False when
+    either airport is unknown.
     """
     if not origin or not destination:
         return False
-    airport_country = _AIRPORT_COUNTRY.get(airport_iata.upper(), "")
+    airport_country = _get_country(airport_iata)
     other = destination if origin.upper() == airport_iata.upper() else origin
-    other_country = _AIRPORT_COUNTRY.get(other.upper(), "")
+    other_country = _get_country(other)
     if not airport_country or not other_country:
         return False
     return airport_country != other_country
@@ -369,6 +452,14 @@ def extract_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]:
         # Cyclical hour encoding
         h_sin, h_cos = _cyclical_hour(parked_time.hour)
 
+        # Scheduled buffer: time between scheduled departure and actual arrival
+        scheduled_buffer = 0.0
+        if sched_time_str:
+            sched_dt = _parse_iso(sched_time_str)
+            scheduled_buffer = (sched_dt - parked_time).total_seconds() / 60.0
+            # Clamp to reasonable range (negative = already late)
+            scheduled_buffer = max(-60.0, min(300.0, scheduled_buffer))
+
         features = OBTFeatureSet(
             aircraft_category=aircraft_category,
             airline_code=airline_code,
@@ -387,6 +478,7 @@ def extract_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]:
             hour_sin=h_sin,
             hour_cos=h_cos,
             is_weather_scenario=is_weather_scenario,
+            scheduled_buffer_min=scheduled_buffer,
         )
 
         results.append({

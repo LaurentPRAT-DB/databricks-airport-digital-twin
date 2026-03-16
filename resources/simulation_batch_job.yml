@@ -2,7 +2,7 @@ resources:
   jobs:
     simulation_batch:
       name: "[${bundle.target}] Airport DT - Multi-Airport Simulation Batch"
-      description: "Runs 10 airport simulations in parallel (1000 flights each) with region-appropriate weather, then analyzes results and trains OBT model"
+      description: "Runs 33 airport simulations in parallel (7-day, 1000 flights/day each) with region-appropriate weather, then analyzes results and trains OBT model"
 
       environments:
         - environment_key: sim_env
@@ -10,95 +10,282 @@ resources:
             client: "1"
             dependencies:
               - scikit-learn
+              - catboost>=1.2
               - pyyaml
               - pydantic
 
       tasks:
-        # ── 10 parallel simulation tasks (one per airport) ──────────────
+        # ── 33 parallel simulation tasks (all known-profile airports) ──────
+        # US domestic airports
         - task_key: sim_sfo
           notebook_task:
             notebook_path: ../databricks/notebooks/run_simulation_airport.py
             base_parameters:
               airport: "SFO"
-              config_file: "configs/simulation_sfo_1000.yaml"
+              config_file: "configs/simulation_sfo_7day.yaml"
 
         - task_key: sim_jfk
           notebook_task:
             notebook_path: ../databricks/notebooks/run_simulation_airport.py
             base_parameters:
               airport: "JFK"
-              config_file: "configs/simulation_jfk_1000.yaml"
+              config_file: "configs/simulation_jfk_7day.yaml"
 
+        - task_key: sim_atl
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ATL"
+              config_file: "configs/simulation_atl_7day.yaml"
+
+        - task_key: sim_ord
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ORD"
+              config_file: "configs/simulation_ord_7day.yaml"
+
+        - task_key: sim_lax
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LAX"
+              config_file: "configs/simulation_lax_7day.yaml"
+
+        - task_key: sim_dfw
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DFW"
+              config_file: "configs/simulation_dfw_7day.yaml"
+
+        - task_key: sim_den
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DEN"
+              config_file: "configs/simulation_den_7day.yaml"
+
+        - task_key: sim_sea
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SEA"
+              config_file: "configs/simulation_sea_7day.yaml"
+
+        - task_key: sim_mia
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MIA"
+              config_file: "configs/simulation_mia_7day.yaml"
+
+        - task_key: sim_ewr
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "EWR"
+              config_file: "configs/simulation_ewr_7day.yaml"
+
+        - task_key: sim_bos
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "BOS"
+              config_file: "configs/simulation_bos_7day.yaml"
+
+        - task_key: sim_phx
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PHX"
+              config_file: "configs/simulation_phx_7day.yaml"
+
+        - task_key: sim_las
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "LAS"
+              config_file: "configs/simulation_las_7day.yaml"
+
+        - task_key: sim_mco
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MCO"
+              config_file: "configs/simulation_mco_7day.yaml"
+
+        - task_key: sim_clt
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "CLT"
+              config_file: "configs/simulation_clt_7day.yaml"
+
+        - task_key: sim_msp
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "MSP"
+              config_file: "configs/simulation_msp_7day.yaml"
+
+        - task_key: sim_dtw
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "DTW"
+              config_file: "configs/simulation_dtw_7day.yaml"
+
+        - task_key: sim_phl
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PHL"
+              config_file: "configs/simulation_phl_7day.yaml"
+
+        - task_key: sim_iah
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "IAH"
+              config_file: "configs/simulation_iah_7day.yaml"
+
+        - task_key: sim_san
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "SAN"
+              config_file: "configs/simulation_san_7day.yaml"
+
+        - task_key: sim_pdx
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "PDX"
+              config_file: "configs/simulation_pdx_7day.yaml"
+
+        # International airports
         - task_key: sim_lhr
           notebook_task:
             notebook_path: ../databricks/notebooks/run_simulation_airport.py
             base_parameters:
               airport: "LHR"
-              config_file: "configs/simulation_lhr_1000.yaml"
-
-        - task_key: sim_fra
-          notebook_task:
-            notebook_path: ../databricks/notebooks/run_simulation_airport.py
-            base_parameters:
-              airport: "FRA"
-              config_file: "configs/simulation_fra_1000.yaml"
+              config_file: "configs/simulation_lhr_7day.yaml"
 
         - task_key: sim_dxb
           notebook_task:
             notebook_path: ../databricks/notebooks/run_simulation_airport.py
             base_parameters:
               airport: "DXB"
-              config_file: "configs/simulation_dxb_1000.yaml"
+              config_file: "configs/simulation_dxb_7day.yaml"
 
         - task_key: sim_nrt
           notebook_task:
             notebook_path: ../databricks/notebooks/run_simulation_airport.py
             base_parameters:
               airport: "NRT"
-              config_file: "configs/simulation_nrt_1000.yaml"
+              config_file: "configs/simulation_nrt_7day.yaml"
 
         - task_key: sim_sin
           notebook_task:
             notebook_path: ../databricks/notebooks/run_simulation_airport.py
             base_parameters:
               airport: "SIN"
-              config_file: "configs/simulation_sin_1000.yaml"
+              config_file: "configs/simulation_sin_7day.yaml"
 
-        - task_key: sim_gru
+        - task_key: sim_hkg
           notebook_task:
             notebook_path: ../databricks/notebooks/run_simulation_airport.py
             base_parameters:
-              airport: "GRU"
-              config_file: "configs/simulation_gru_1000.yaml"
+              airport: "HKG"
+              config_file: "configs/simulation_hkg_7day.yaml"
+
+        - task_key: sim_cdg
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "CDG"
+              config_file: "configs/simulation_cdg_7day.yaml"
+
+        - task_key: sim_fra
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "FRA"
+              config_file: "configs/simulation_fra_7day.yaml"
+
+        - task_key: sim_ams
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "AMS"
+              config_file: "configs/simulation_ams_7day.yaml"
 
         - task_key: sim_syd
           notebook_task:
             notebook_path: ../databricks/notebooks/run_simulation_airport.py
             base_parameters:
               airport: "SYD"
-              config_file: "configs/simulation_syd_1000.yaml"
+              config_file: "configs/simulation_syd_7day.yaml"
+
+        - task_key: sim_icn
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "ICN"
+              config_file: "configs/simulation_icn_7day.yaml"
+
+        - task_key: sim_gru
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_simulation_airport.py
+            base_parameters:
+              airport: "GRU"
+              config_file: "configs/simulation_gru_7day.yaml"
 
         - task_key: sim_jnb
           notebook_task:
             notebook_path: ../databricks/notebooks/run_simulation_airport.py
             base_parameters:
               airport: "JNB"
-              config_file: "configs/simulation_jnb_1000.yaml"
+              config_file: "configs/simulation_jnb_7day.yaml"
 
-        # ── Analysis task (depends on all 10 simulations) ──────────────
+        # ── Analysis task (depends on all 33 simulations) ──────────────
         - task_key: analyze_results
           notebook_task:
             notebook_path: ../databricks/notebooks/analyze_simulations.py
           depends_on:
             - task_key: sim_sfo
             - task_key: sim_jfk
+            - task_key: sim_atl
+            - task_key: sim_ord
+            - task_key: sim_lax
+            - task_key: sim_dfw
+            - task_key: sim_den
+            - task_key: sim_sea
+            - task_key: sim_mia
+            - task_key: sim_ewr
+            - task_key: sim_bos
+            - task_key: sim_phx
+            - task_key: sim_las
+            - task_key: sim_mco
+            - task_key: sim_clt
+            - task_key: sim_msp
+            - task_key: sim_dtw
+            - task_key: sim_phl
+            - task_key: sim_iah
+            - task_key: sim_san
+            - task_key: sim_pdx
             - task_key: sim_lhr
-            - task_key: sim_fra
             - task_key: sim_dxb
             - task_key: sim_nrt
             - task_key: sim_sin
-            - task_key: sim_gru
+            - task_key: sim_hkg
+            - task_key: sim_cdg
+            - task_key: sim_fra
+            - task_key: sim_ams
             - task_key: sim_syd
+            - task_key: sim_icn
+            - task_key: sim_gru
             - task_key: sim_jnb
 
         # ── OBT model training (depends on all simulations) ──────────────
@@ -107,20 +294,11 @@ resources:
             notebook_path: ../databricks/notebooks/train_obt_model.py
           environment_key: sim_env
           depends_on:
-            - task_key: sim_sfo
-            - task_key: sim_jfk
-            - task_key: sim_lhr
-            - task_key: sim_fra
-            - task_key: sim_dxb
-            - task_key: sim_nrt
-            - task_key: sim_sin
-            - task_key: sim_gru
-            - task_key: sim_syd
-            - task_key: sim_jnb
+            - task_key: analyze_results
 
       tags:
         project: airport-digital-twin
         component: simulation
         target: ${bundle.target}
 
-      timeout_seconds: 3600
+      timeout_seconds: 28800  # 8 hours for 33 x 7-day sims + training

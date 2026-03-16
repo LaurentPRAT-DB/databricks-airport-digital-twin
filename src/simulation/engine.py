@@ -281,18 +281,25 @@ class SimulationEngine:
         drain_gate_events()
 
     def _generate_schedule(self) -> None:
-        """Pre-generate the full flight schedule distributed across the duration."""
+        """Pre-generate the full flight schedule distributed across the duration.
+
+        For multi-day simulations (duration > 24h), generates flights for each
+        day separately with the correct day-of-week traffic variation.
+        """
         start = self.config.effective_start_time()
         duration_h = self.config.effective_duration_hours()
         profile = self.airport_profile
 
-        # Get hourly distribution weights
+        # Build hourly weights for the FULL duration (multi-day aware)
+        # Each slot maps to an offset hour from start (0..duration_h-1).
+        n_hours = int(duration_h) + (1 if duration_h % 1 > 0 else 0)
         hour_weights: list[float] = []
-        for h in range(24):
-            if h < int(duration_h) or (h == int(duration_h) and duration_h % 1 > 0):
-                hour_weights.append(max(_get_flights_per_hour(h, airport_profile=profile), 1))
-            else:
-                break
+        for h_offset in range(n_hours):
+            clock_hour = (start.hour + h_offset) % 24
+            day_offset = (start.hour + h_offset) // 24
+            dow = (start.weekday() + day_offset) % 7
+            w = _get_flights_per_hour(clock_hour, airport_profile=profile, day_of_week=dow)
+            hour_weights.append(max(w, 1.0))
 
         if not hour_weights:
             hour_weights = [1.0]
@@ -335,9 +342,6 @@ class SimulationEngine:
                     )
 
                     # Schedule within this hour
-                    hour = start.hour + h_idx
-                    if hour >= 24:
-                        hour = hour % 24
                     minute = random.randint(0, 59)
                     scheduled_time = start + timedelta(hours=h_idx, minutes=minute)
 
