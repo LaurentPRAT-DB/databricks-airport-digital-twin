@@ -3,7 +3,7 @@ start_date: '2025-06-16'
 arrivals: 3500
 departures: 3500
 duration_hours: 168
-time_step_seconds: 2.0
+time_step_seconds: 10.0
 seed: 42
 output_file: simulation_output/simulation_mco_7day.json
 scenario_file: scenarios/mco_thunderstorm_complex.yaml

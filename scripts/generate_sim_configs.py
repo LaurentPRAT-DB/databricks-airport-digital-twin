@@ -82,7 +82,7 @@ def generate_configs(days: int = 7) -> list[Path]:
             "arrivals": arrivals,
             "departures": departures,
             "duration_hours": duration_hours,
-            "time_step_seconds": 2.0,
+            "time_step_seconds": 10.0 if days > 1 else 2.0,
             "seed": 42,
             "output_file": f"simulation_output/simulation_{iata.lower()}_{suffix}.json",
         }
