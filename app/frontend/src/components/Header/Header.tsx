@@ -13,14 +13,15 @@ interface HeaderProps {
 
 export default function Header({ onShowFIDS, simulationControls }: HeaderProps) {
   const { flights, isLoading, error, lastUpdated, dataSource } = useFlightContext();
-  const { currentAirport, isLoading: isLoadingAirport, loadAirport, switchProgress } = useAirportConfigContext();
+  const { currentAirport, isLoading: isLoadingAirport, error: airportError, loadAirport, switchProgress } = useAirportConfigContext();
 
   return (
     <header className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between shadow-lg z-[1002] relative">
-      {/* Airport switch progress overlay — show whenever loading, with WS details when available */}
-      {isLoadingAirport && (
+      {/* Airport switch progress overlay — show for loading or error state */}
+      {(isLoadingAirport || switchProgress) && (
         <AirportSwitchProgress
-          progress={switchProgress && !switchProgress.done ? switchProgress : { step: 0, total: 7, message: 'Loading airport data, please wait...', done: false }}
+          progress={switchProgress && (!switchProgress.done || switchProgress.error) ? switchProgress : { step: 0, total: 7, message: 'Loading airport data, please wait...', done: false }}
+          error={switchProgress?.error ? (airportError || switchProgress.message) : undefined}
         />
       )}
       <div className="flex items-center gap-4">

@@ -98,18 +98,22 @@ class FlightBroadcaster:
         self._connections -= disconnected
 
     async def broadcast_progress(
-        self, step: int, total: int, message: str, icao_code: str, done: bool = False
+        self, step: int, total: int, message: str, icao_code: str,
+        done: bool = False, error: bool = False,
     ) -> None:
         """Broadcast airport switch progress to all connected clients."""
+        data: dict = {
+            "step": step,
+            "total": total,
+            "message": message,
+            "icaoCode": icao_code,
+            "done": done,
+        }
+        if error:
+            data["error"] = True
         await self.broadcast({
             "type": "airport_switch_progress",
-            "data": {
-                "step": step,
-                "total": total,
-                "message": message,
-                "icaoCode": icao_code,
-                "done": done,
-            },
+            "data": data,
         })
 
     async def _broadcast_loop(self, interval: float = 2.0) -> None:

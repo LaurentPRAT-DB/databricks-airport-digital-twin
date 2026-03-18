@@ -36,6 +36,16 @@ export default function AirportSelector({
   const [airports, setAirports] = useState<AirportInfo[]>([]);
   const [preloading, setPreloading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-dismiss error toast after 8 seconds
+  useEffect(() => {
+    if (loadError && !isOpen) {
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = setTimeout(() => setLoadError(null), 8000);
+    }
+    return () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current); };
+  }, [loadError, isOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -172,6 +182,21 @@ export default function AirportSelector({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
+
+      {/* Error toast — visible even when dropdown is closed */}
+      {loadError && !isOpen && (
+        <div className="absolute top-full left-0 mt-1 w-80 bg-red-50 border border-red-200 rounded-lg shadow-lg px-3 py-2 z-[1100] flex items-center gap-2">
+          <svg className="w-4 h-4 text-red-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <span className="text-red-700 text-xs flex-1">{loadError}</span>
+          <button onClick={() => setLoadError(null)} className="text-red-400 hover:text-red-600 text-xs font-bold">
+            ✕
+          </button>
+        </div>
+      )}
 
       {isOpen && (
         <div className="absolute top-full left-0 mt-1 w-80 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden z-[1100]">

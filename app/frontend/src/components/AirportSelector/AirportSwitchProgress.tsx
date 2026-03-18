@@ -3,20 +3,29 @@ interface SwitchProgress {
   total: number;
   message: string;
   done: boolean;
+  error?: boolean;
 }
 
 interface AirportSwitchProgressProps {
   progress: SwitchProgress;
+  error?: string | null;
 }
 
-export default function AirportSwitchProgress({ progress }: AirportSwitchProgressProps) {
+export default function AirportSwitchProgress({ progress, error }: AirportSwitchProgressProps) {
+  const hasError = !!error || progress.error;
   const hasSteps = progress.step > 0;
   const pct = hasSteps ? Math.round((progress.step / progress.total) * 100) : 0;
 
   return (
-    <div className="absolute top-full left-0 right-0 bg-slate-700 border-t border-slate-600 px-4 py-2 shadow-lg z-[1001] flex items-center gap-3">
-      {/* Spinner */}
-      {!progress.done && (
+    <div className={`absolute top-full left-0 right-0 ${hasError ? 'bg-red-800' : 'bg-slate-700'} border-t ${hasError ? 'border-red-600' : 'border-slate-600'} px-4 py-2 shadow-lg z-[1001] flex items-center gap-3`}>
+      {/* Icon: error or spinner */}
+      {hasError ? (
+        <svg className="w-4 h-4 text-red-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      ) : !progress.done && (
         <svg
           className="w-4 h-4 animate-spin text-blue-400 shrink-0"
           viewBox="0 0 24 24"
@@ -36,28 +45,30 @@ export default function AirportSwitchProgress({ progress }: AirportSwitchProgres
       )}
 
       {/* Message */}
-      <span className="text-sm text-slate-200 whitespace-nowrap">
-        {progress.message}
+      <span className={`text-sm ${hasError ? 'text-red-200' : 'text-slate-200'} whitespace-nowrap`}>
+        {error || progress.message}
       </span>
 
-      {/* Step counter — only when real progress arrives */}
-      {hasSteps && (
+      {/* Step counter — only when real progress arrives and no error */}
+      {hasSteps && !hasError && (
         <span className="text-xs text-slate-400 whitespace-nowrap">
           {progress.step}/{progress.total}
         </span>
       )}
 
-      {/* Progress bar — indeterminate pulse when waiting, determinate when steps arrive */}
-      <div className="flex-1 h-1.5 bg-slate-600 rounded-full overflow-hidden min-w-[80px]">
-        {hasSteps ? (
-          <div
-            className="h-full bg-blue-500 rounded-full transition-all duration-300"
-            style={{ width: `${pct}%` }}
-          />
-        ) : (
-          <div className="h-full w-1/3 bg-blue-500/60 rounded-full animate-pulse" />
-        )}
-      </div>
+      {/* Progress bar — hidden on error */}
+      {!hasError && (
+        <div className="flex-1 h-1.5 bg-slate-600 rounded-full overflow-hidden min-w-[80px]">
+          {hasSteps ? (
+            <div
+              className="h-full bg-blue-500 rounded-full transition-all duration-300"
+              style={{ width: `${pct}%` }}
+            />
+          ) : (
+            <div className="h-full w-1/3 bg-blue-500/60 rounded-full animate-pulse" />
+          )}
+        </div>
+      )}
     </div>
   );
 }

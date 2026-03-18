@@ -889,10 +889,13 @@ async def activate_airport(icao_code: str) -> dict:
                 await data_generator.switch_airport(icao_code, progress_callback=_progress)
             except Exception as e:
                 logger.error(f"Background data generation failed for {icao_code}: {e}")
-            finally:
                 await broadcaster.broadcast_progress(
-                    total_steps, total_steps, "Airport ready", icao_code, done=True
+                    total_steps, total_steps, f"Failed: {e}", icao_code, done=True, error=True
                 )
+                return
+            await broadcaster.broadcast_progress(
+                total_steps, total_steps, "Airport ready", icao_code, done=True
+            )
 
         asyncio.create_task(_generate_data_background())
 

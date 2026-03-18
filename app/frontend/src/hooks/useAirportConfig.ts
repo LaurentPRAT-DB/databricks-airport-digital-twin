@@ -30,6 +30,7 @@ export interface SwitchProgress {
   total: number;
   message: string;
   done: boolean;
+  error?: boolean;
 }
 
 interface UseAirportConfigReturn {
@@ -177,10 +178,14 @@ export function useAirportConfig(): UseAirportConfigReturn {
         if (msg.type === 'airport_switch_progress') {
           const data = msg.data as SwitchProgress;
           setSwitchProgress(data);
+          // Set error state when backend reports failure
+          if (data.error && data.message) {
+            setError(data.message);
+          }
           // Auto-clear after done
           if (data.done) {
             if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
-            progressTimerRef.current = setTimeout(() => setSwitchProgress(null), 1500);
+            progressTimerRef.current = setTimeout(() => setSwitchProgress(null), data.error ? 3000 : 1500);
           }
         }
       } catch {
