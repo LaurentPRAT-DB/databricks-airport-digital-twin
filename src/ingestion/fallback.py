@@ -318,9 +318,37 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
         else:
             status = "on_time"
 
-        # Use current time as approximate scheduled time
-        # (synthetic flights don't have real schedule times)
-        scheduled_time = now.isoformat()
+        # Estimate a scheduled time based on phase progression.
+        # Use a deterministic offset derived from icao24 so times stay stable
+        # across FIDS refreshes (hash gives consistent per-flight jitter).
+        _h = hash(icao24) & 0xFFFF
+        jitter_min = (_h % 13) + 2  # 2-14 min deterministic offset per flight
+
+        if is_arrival:
+            if phase in (FlightPhase.PARKED,):
+                scheduled_time = (now - timedelta(minutes=jitter_min)).isoformat()
+            elif phase in (FlightPhase.TAXI_TO_GATE,):
+                scheduled_time = (now + timedelta(minutes=2 + jitter_min % 6)).isoformat()
+            elif phase == FlightPhase.LANDING:
+                scheduled_time = (now + timedelta(minutes=5 + jitter_min % 7)).isoformat()
+            elif phase == FlightPhase.APPROACHING:
+                center = get_airport_center()
+                dist_deg = _distance_between((state.latitude, state.longitude), center)
+                eta_min = max(3, int(dist_deg * 60 / 0.04))
+                scheduled_time = (now + timedelta(minutes=eta_min)).isoformat()
+            elif phase == FlightPhase.ENROUTE:
+                scheduled_time = (now + timedelta(minutes=20 + (_h % 40))).isoformat()
+            else:
+                scheduled_time = now.isoformat()
+        else:
+            if phase == FlightPhase.PARKED:
+                scheduled_time = (now + timedelta(minutes=10 + (_h % 30))).isoformat()
+            elif phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY):
+                scheduled_time = (now - timedelta(minutes=jitter_min % 5)).isoformat()
+            elif phase in (FlightPhase.TAKEOFF, FlightPhase.DEPARTING):
+                scheduled_time = (now - timedelta(minutes=5 + jitter_min)).isoformat()
+            else:
+                scheduled_time = now.isoformat()
 
         schedule.append({
             "flight_number": callsign,
