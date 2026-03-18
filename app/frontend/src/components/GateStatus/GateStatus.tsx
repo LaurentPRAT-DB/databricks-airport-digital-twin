@@ -113,18 +113,19 @@ function buildGates(osmGates: OSMGate[], gateFlightMap: Map<string, { flight: Fl
     });
   }
 
-  // Fallback: hardcoded defaults
+  // Fallback: derive gates from flights that have assigned gates
   const gates: Gate[] = [];
-  for (let i = 1; i <= 10; i++) {
-    const ref = `A${i}`;
-    const info = gateFlightMap.get(ref);
-    gates.push({ id: ref, ref, terminal: 'Terminal A', status: info?.status ?? 'VACANT', flight: info?.flight ?? null });
+  for (const [ref, info] of gateFlightMap) {
+    gates.push({
+      id: ref,
+      ref,
+      terminal: inferTerminal(ref),
+      status: info.status,
+      flight: info.flight,
+    });
   }
-  for (let i = 1; i <= 10; i++) {
-    const ref = `B${i}`;
-    const info = gateFlightMap.get(ref);
-    gates.push({ id: ref, ref, terminal: 'Terminal B', status: info?.status ?? 'VACANT', flight: info?.flight ?? null });
-  }
+  // Sort naturally so A1, A2, A14 etc. are in order
+  gates.sort((a, b) => naturalSort(a.ref, b.ref));
   return gates;
 }
 
