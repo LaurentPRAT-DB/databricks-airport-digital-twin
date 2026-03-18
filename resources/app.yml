@@ -4,3 +4,8 @@ resources:
       name: airport-digital-twin-${bundle.target}
       description: "Airport Digital Twin - Real-time flight visualization"
       source_code_path: ..
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: b868e84cedeb4262
+            permission: CAN_USE
