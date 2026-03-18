@@ -13,6 +13,7 @@ from src.ingestion.schedule_generator import (
     get_cached_schedule,
     get_arrivals,
     get_departures,
+    get_future_schedule,
 )
 from src.ingestion.fallback import get_flights_as_schedule
 from app.backend.models.schedule import (
@@ -68,7 +69,8 @@ class ScheduleService:
         """
         Get arrival flights for the specified time window.
 
-        Reads from Lakebase first for persistence, falls back to generator.
+        Reads from Lakebase first for persistence, otherwise merges live
+        flights (matching the map) with future scheduled flights.
 
         Args:
             hours_ahead: Hours into future to include
@@ -93,21 +95,9 @@ class ScheduleService:
             if raw_arrivals:
                 logger.debug(f"Schedule arrivals from Lakebase: {len(raw_arrivals)}")
 
-        # Fallback to live synthetic flights (same data as map)
+        # Merge live flights + future schedule
         if not raw_arrivals:
-            live_schedule = get_flights_as_schedule()
-            raw_arrivals = [f for f in live_schedule if f["flight_type"] == "arrival"]
-            if raw_arrivals:
-                logger.debug(f"Schedule arrivals from live synthetic flights: {len(raw_arrivals)}")
-
-        # Last resort: independent schedule generator
-        if not raw_arrivals:
-            logger.debug("Schedule arrivals from generator")
-            raw_arrivals = get_arrivals(
-                airport=self._airport,
-                hours_ahead=hours_ahead,
-                hours_behind=hours_behind,
-            )[:limit]
+            raw_arrivals = self._merge_live_and_future("arrival", limit)
 
         flights = [_dict_to_scheduled_flight(f) for f in raw_arrivals[:limit]]
 
@@ -129,7 +119,8 @@ class ScheduleService:
         """
         Get departure flights for the specified time window.
 
-        Reads from Lakebase first for persistence, falls back to generator.
+        Reads from Lakebase first for persistence, otherwise merges live
+        flights (matching the map) with future scheduled flights.
 
         Args:
             hours_ahead: Hours into future to include
@@ -154,21 +145,9 @@ class ScheduleService:
             if raw_departures:
                 logger.debug(f"Schedule departures from Lakebase: {len(raw_departures)}")
 
-        # Fallback to live synthetic flights (same data as map)
+        # Merge live flights + future schedule
         if not raw_departures:
-            live_schedule = get_flights_as_schedule()
-            raw_departures = [f for f in live_schedule if f["flight_type"] == "departure"]
-            if raw_departures:
-                logger.debug(f"Schedule departures from live synthetic flights: {len(raw_departures)}")
-
-        # Last resort: independent schedule generator
-        if not raw_departures:
-            logger.debug("Schedule departures from generator")
-            raw_departures = get_departures(
-                airport=self._airport,
-                hours_ahead=hours_ahead,
-                hours_behind=hours_behind,
-            )[:limit]
+            raw_departures = self._merge_live_and_future("departure", limit)
 
         flights = [_dict_to_scheduled_flight(f) for f in raw_departures[:limit]]
 
@@ -180,6 +159,63 @@ class ScheduleService:
             airport=self._airport,
             flight_type=FlightType.DEPARTURE,
         )
+
+    def _merge_live_and_future(
+        self, flight_type: str, limit: int,
+    ) -> list[dict]:
+        """Merge live map flights with future scheduled flights.
+
+        Live flights (from the simulation) always take priority since they
+        match what the user sees on the map. Future flights from the schedule
+        generator fill out the rest of the FIDS.
+
+        Args:
+            flight_type: "arrival" or "departure"
+            limit: Maximum total flights to return
+
+        Returns:
+            Merged, deduplicated, sorted list of flight dicts
+        """
+        # 1. Get live flights (same data as map)
+        live_schedule = get_flights_as_schedule()
+        live_flights = [f for f in live_schedule if f["flight_type"] == flight_type]
+        if live_flights:
+            logger.debug(f"FIDS {flight_type}s: {len(live_flights)} live flights from map")
+
+        # 2. Determine cutoff: latest scheduled_time among live flights
+        #    Future flights will supplement after this point
+        now = datetime.now(timezone.utc)
+        if live_flights:
+            latest_live = max(
+                datetime.fromisoformat(f["scheduled_time"]) for f in live_flights
+            )
+            cutoff = latest_live
+        else:
+            cutoff = now - timedelta(minutes=30)
+
+        # 3. Get future flights from schedule generator
+        future_flights = get_future_schedule(
+            airport=self._airport,
+            after=cutoff,
+            flight_type=flight_type,
+            limit=limit,
+        )
+        if future_flights:
+            logger.debug(
+                f"FIDS {flight_type}s: {len(future_flights)} future flights from generator"
+            )
+
+        # 4. Merge and deduplicate by flight_number (live wins)
+        seen_numbers = {f["flight_number"] for f in live_flights}
+        merged = list(live_flights)
+        for f in future_flights:
+            if f["flight_number"] not in seen_numbers:
+                seen_numbers.add(f["flight_number"])
+                merged.append(f)
+
+        # 5. Sort by scheduled_time
+        merged.sort(key=lambda x: x["scheduled_time"])
+        return merged[:limit]
 
     def get_flight_by_number(self, flight_number: str) -> Optional[ScheduledFlight]:
         """

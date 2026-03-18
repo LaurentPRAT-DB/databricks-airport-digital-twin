@@ -112,6 +112,11 @@ AIRPORT_COORDINATES = {
 NARROW_BODY = ["A320", "A321", "B737", "B738", "A319", "E175"]
 WIDE_BODY = ["B777", "B787", "A330", "A350", "A380"]
 
+# Turnaround times by aircraft category (minutes)
+NARROW_BODY_TURNAROUND = 45
+WIDE_BODY_TURNAROUND = 90
+GATE_COOLDOWN_BUFFER = 10  # minutes between consecutive occupations
+
 # IATA delay codes with descriptions and weights
 DELAY_CODES = {
     "61": ("Cargo/Mail", 0.05),
@@ -363,6 +368,74 @@ def _get_flights_per_hour(
     return base
 
 
+def _get_turnaround_minutes(aircraft_type: str) -> int:
+    """Get turnaround time based on aircraft type."""
+    if aircraft_type in WIDE_BODY:
+        return WIDE_BODY_TURNAROUND
+    return NARROW_BODY_TURNAROUND
+
+
+def _assign_gate_with_occupancy(
+    gates: list[str],
+    gate_timeline: dict[str, list[tuple[datetime, datetime]]],
+    scheduled_time: datetime,
+    is_arrival: bool,
+    aircraft_type: str,
+) -> str:
+    """Assign a gate ensuring no overlapping occupancy.
+
+    Args:
+        gates: Available gate names
+        gate_timeline: Dict mapping gate -> list of (start, end) occupation windows
+        scheduled_time: Scheduled arrival/departure time
+        is_arrival: Whether this is an arrival (True) or departure (False)
+        aircraft_type: Aircraft type to determine turnaround duration
+
+    Returns:
+        Assigned gate name (updates gate_timeline in place)
+    """
+    if not gates:
+        return "A1"
+
+    turnaround = _get_turnaround_minutes(aircraft_type)
+    buffer = GATE_COOLDOWN_BUFFER
+
+    # Compute the occupation window for this flight
+    if is_arrival:
+        occ_start = scheduled_time
+        occ_end = scheduled_time + timedelta(minutes=turnaround)
+    else:
+        occ_start = scheduled_time - timedelta(minutes=turnaround)
+        occ_end = scheduled_time
+
+    # Add buffer
+    check_start = occ_start - timedelta(minutes=buffer)
+    check_end = occ_end + timedelta(minutes=buffer)
+
+    def _overlap_count(gate: str) -> int:
+        """Count how many existing windows overlap with the proposed window."""
+        count = 0
+        for existing_start, existing_end in gate_timeline.get(gate, []):
+            if existing_start < check_end and existing_end > check_start:
+                count += 1
+        return count
+
+    # Try to find a gate with zero conflicts
+    candidates = [(g, _overlap_count(g)) for g in gates]
+    # Sort by conflict count, then random tiebreak
+    random.shuffle(candidates)
+    candidates.sort(key=lambda x: x[1])
+
+    gate = candidates[0][0]
+
+    # Record the occupation
+    if gate not in gate_timeline:
+        gate_timeline[gate] = []
+    gate_timeline[gate].append((occ_start, occ_end))
+
+    return gate
+
+
 def generate_daily_schedule(
     airport: str = "SFO",
     date: Optional[datetime] = None,
@@ -387,6 +460,10 @@ def generate_daily_schedule(
     # Start from past hours for arrivals/departures that already happened
     start_hour = max(0, date.hour - include_past_hours)
     schedule = []
+
+    # Track gate occupancy to prevent overlapping assignments
+    available_gates = list(get_gates().keys())
+    gate_timeline: dict[str, list[tuple[datetime, datetime]]] = {}
 
     # Generate flights for each hour
     for hour in range(start_hour, 24):
@@ -440,9 +517,11 @@ def generate_daily_schedule(
                 status = "on_time"
                 actual_time = None
 
-            # Assign gate from actual OSM data (or fallback defaults)
-            available_gates = list(get_gates().keys())
-            gate = random.choice(available_gates) if available_gates else "A1"
+            # Assign gate with occupancy tracking (no double-booking)
+            gate = _assign_gate_with_occupancy(
+                available_gates, gate_timeline, scheduled_time,
+                is_arrival, aircraft,
+            )
 
             flight = {
                 "flight_number": flight_number,
@@ -539,3 +618,38 @@ def get_cached_schedule(airport: str = "SFO") -> list[dict]:
         _cache_minute = current_minute
 
     return _schedule_cache[airport]
+
+
+def get_future_schedule(
+    airport: str = "SFO",
+    after: datetime | None = None,
+    flight_type: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    """Get scheduled flights after a cutoff time.
+
+    Args:
+        airport: Airport IATA code
+        after: Only return flights scheduled after this time (defaults to now)
+        flight_type: Filter by "arrival" or "departure" (None for both)
+        limit: Maximum number of flights to return
+
+    Returns:
+        List of future flight schedule dicts, sorted by scheduled_time
+    """
+    if after is None:
+        after = datetime.now(timezone.utc)
+
+    schedule = get_cached_schedule(airport=airport)
+    future = []
+    for f in schedule:
+        sched_time = datetime.fromisoformat(f["scheduled_time"])
+        if sched_time <= after:
+            continue
+        if flight_type and f["flight_type"] != flight_type:
+            continue
+        future.append(f)
+        if len(future) >= limit:
+            break
+
+    return future
