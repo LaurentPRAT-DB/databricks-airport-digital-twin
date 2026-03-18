@@ -90,7 +90,38 @@ class TaxiwayGraph:
                 if nearest is not None:
                     self._add_edge(rwy_id, nearest)
 
-        # 3. Gate nodes → nearest taxiway node
+        # 3. Apron perimeter nodes → connect to nearest taxiway node
+        # Aprons are the paved areas around terminals; adding their perimeter
+        # points gives Dijkstra more paths around buildings.
+        for apron in config.get("osmAprons", []):
+            geo_polygon = apron.get("geoPolygon", [])
+            if len(geo_polygon) < 3:
+                continue
+            prev_apron_id = None
+            for pt in geo_polygon:
+                lat = pt.get("latitude")
+                lon = pt.get("longitude")
+                if lat is None or lon is None:
+                    continue
+                apron_node_id = self._get_or_create_node(float(lat), float(lon))
+                # Chain consecutive apron perimeter points
+                if prev_apron_id is not None and prev_apron_id != apron_node_id:
+                    self._add_edge(prev_apron_id, apron_node_id)
+                prev_apron_id = apron_node_id
+                # Connect apron node to nearest existing taxiway node
+                nearest = self._find_nearest_node(
+                    float(lat), float(lon), exclude={apron_node_id}
+                )
+                if nearest is not None:
+                    dist = _haversine_m(
+                        float(lat), float(lon),
+                        self.nodes[nearest][0], self.nodes[nearest][1],
+                    )
+                    # Only connect if within 300m — avoid long phantom edges
+                    if dist < 300:
+                        self._add_edge(apron_node_id, nearest)
+
+        # 4. Gate nodes → nearest taxiway node
         for gate in config.get("gates", []):
             geo = gate.get("geo", {})
             lat = geo.get("latitude")

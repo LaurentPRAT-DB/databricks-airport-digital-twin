@@ -14,6 +14,7 @@ Aircraft Separation Standards (FAA/ICAO):
 - Gate: Aircraft dimensions + safety buffer
 """
 
+import logging
 import math
 import random
 import threading
@@ -22,6 +23,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, field
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 from faker import Faker
 
@@ -1169,11 +1172,72 @@ def _get_takeoff_runway_geometry() -> tuple:
     return start, end, 284.0, 11381.0
 
 
+def _get_apron_aware_fallback(gate_pos: tuple, center: tuple) -> List[tuple]:
+    """Build an apron-aware taxi route that avoids cutting through terminals.
+
+    Instead of a straight line center→gate, routes via the nearest apron
+    centroid as an intermediate waypoint, creating an L-shaped path that
+    stays on paved ramp areas.
+
+    Args:
+        gate_pos: (lat, lon) of the gate
+        center: (lat, lon) of the airport center
+
+    Returns:
+        List of (lon, lat) waypoints, or empty list if no apron data.
+    """
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+        aprons = config.get("osmAprons", [])
+        if not aprons:
+            return []
+
+        gate_lat, gate_lon = gate_pos
+        center_lat, center_lon = center
+
+        # Find the nearest apron centroid to the gate
+        best_apron_geo = None
+        best_dist = float("inf")
+        for apron in aprons:
+            geo = apron.get("geo", {})
+            a_lat = geo.get("latitude")
+            a_lon = geo.get("longitude")
+            if a_lat is None or a_lon is None:
+                continue
+            d = (float(a_lat) - gate_lat) ** 2 + (float(a_lon) - gate_lon) ** 2
+            if d < best_dist:
+                best_dist = d
+                best_apron_geo = (float(a_lat), float(a_lon))
+
+        if best_apron_geo is None:
+            return []
+
+        apron_lat, apron_lon = best_apron_geo
+
+        # Route: runway area → apron centroid → gate
+        # This creates an L-shaped path that goes around the terminal.
+        # Only use the apron waypoint if it's not collinear with center→gate
+        # (i.e., it actually helps avoid a building).
+        waypoints = [
+            (center_lon, center_lat),
+            (apron_lon, apron_lat),
+            (gate_lon, gate_lat),
+        ]
+        return waypoints
+
+    except ImportError:
+        return []
+    except Exception:
+        return []
+
+
 def _get_taxi_waypoints_arrival(gate_ref: str) -> List[tuple]:
     """Get taxi route from landing runway exit to assigned gate.
 
     Uses OSM taxiway graph when available, falls back to hardcoded SFO
-    waypoints or generic straight-line path.
+    waypoints or apron-aware routing for non-SFO airports.
 
     Returns list of (lon, lat) tuples matching existing waypoint format.
     """
@@ -1193,15 +1257,24 @@ def _get_taxi_waypoints_arrival(gate_ref: str) -> List[tuple]:
                     return [(lon, lat) for lat, lon in route]
     except ImportError:
         pass
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Taxiway graph arrival route failed for gate %s: %s", gate_ref, e)
 
     # Fallback: existing behavior
     center = get_airport_center()
     if abs(center[0] - AIRPORT_CENTER[0]) < 0.01:
         return TAXI_WAYPOINTS_ARRIVAL
-    # Generic: straight line from center to gate
+
+    # Apron-aware fallback: route via nearest apron centroid to avoid
+    # cutting through terminal buildings
     gate_pos = get_gates().get(gate_ref, center)
+    apron_route = _get_apron_aware_fallback(gate_pos, center)
+    if apron_route:
+        logger.debug("Using apron-aware fallback for arrival gate %s", gate_ref)
+        return apron_route
+
+    # Last resort: straight line from center to gate
+    logger.debug("Using straight-line fallback for arrival gate %s", gate_ref)
     return [(center[1], center[0]), (gate_pos[1], gate_pos[0])]
 
 
@@ -1209,7 +1282,7 @@ def _get_taxi_waypoints_departure(gate_ref: str) -> List[tuple]:
     """Get taxi route from gate to departure runway.
 
     Uses OSM taxiway graph when available, falls back to hardcoded SFO
-    waypoints or generic straight-line path.
+    waypoints or apron-aware routing for non-SFO airports.
 
     Returns list of (lon, lat) tuples matching existing waypoint format.
     """
@@ -1229,14 +1302,25 @@ def _get_taxi_waypoints_departure(gate_ref: str) -> List[tuple]:
                     return [(lon, lat) for lat, lon in route]
     except ImportError:
         pass
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Taxiway graph departure route failed for gate %s: %s", gate_ref, e)
 
     # Fallback: existing behavior
     center = get_airport_center()
     if abs(center[0] - AIRPORT_CENTER[0]) < 0.01:
         return TAXI_WAYPOINTS_DEPARTURE
+
+    # Apron-aware fallback: route via nearest apron centroid to avoid
+    # cutting through terminal buildings (reversed: gate → apron → runway)
     gate_pos = get_gates().get(gate_ref, center)
+    apron_route = _get_apron_aware_fallback(gate_pos, center)
+    if apron_route:
+        logger.debug("Using apron-aware fallback for departure gate %s", gate_ref)
+        # Reverse the arrival route for departures: gate → apron → runway
+        return list(reversed(apron_route))
+
+    # Last resort: straight line from gate to center
+    logger.debug("Using straight-line fallback for departure gate %s", gate_ref)
     return [(gate_pos[1], gate_pos[0]), (center[1], center[0])]
 
 
