@@ -6,6 +6,7 @@ Fetches and parses airport data from OpenStreetMap via Overpass API.
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Union
@@ -23,14 +24,42 @@ from src.formats.osm.models import (
 
 logger = logging.getLogger(__name__)
 
-# Overpass API endpoints (use multiple for redundancy)
-OVERPASS_ENDPOINTS = [
+# Built-in defaults (used when config file is absent)
+_DEFAULT_OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 ]
+_DEFAULT_TIMEOUT = 60.0
+_DEFAULT_QUERY_TIMEOUT = 55
+_DEFAULT_RETRY_COUNT = 1
+_DEFAULT_RETRY_DELAY = 2.0
 
-# Default timeout for API requests
-DEFAULT_TIMEOUT = 30.0
+
+def _load_overpass_config() -> dict:
+    """Load Overpass API config from config/overpass_api.json, falling back to built-in defaults."""
+    config_candidates = [
+        Path(__file__).resolve().parents[3] / "config" / "overpass_api.json",
+        Path.cwd() / "config" / "overpass_api.json",
+    ]
+    for path in config_candidates:
+        if path.is_file():
+            try:
+                with open(path) as f:
+                    cfg = json.load(f)
+                logger.debug(f"Loaded Overpass config from {path}")
+                return cfg
+            except Exception as e:
+                logger.warning(f"Failed to load Overpass config from {path}: {e}")
+    return {}
+
+
+_overpass_cfg = _load_overpass_config()
+
+OVERPASS_ENDPOINTS: list[str] = _overpass_cfg.get("endpoints", _DEFAULT_OVERPASS_ENDPOINTS)
+DEFAULT_TIMEOUT: float = _overpass_cfg.get("timeout_seconds", _DEFAULT_TIMEOUT)
+QUERY_TIMEOUT: int = _overpass_cfg.get("query_timeout_seconds", _DEFAULT_QUERY_TIMEOUT)
+RETRY_COUNT: int = _overpass_cfg.get("retry_count", _DEFAULT_RETRY_COUNT)
+RETRY_DELAY: float = _overpass_cfg.get("retry_delay_seconds", _DEFAULT_RETRY_DELAY)
 
 
 class OSMParser(AirportFormatParser[OSMDocument]):
@@ -43,17 +72,17 @@ class OSMParser(AirportFormatParser[OSMDocument]):
     def __init__(
         self,
         converter: CoordinateConverter | None = None,
-        timeout: float = DEFAULT_TIMEOUT,
+        timeout: float | None = None,
     ):
         """
         Initialize OSM parser.
 
         Args:
             converter: Coordinate converter (auto-created from airport data)
-            timeout: API request timeout in seconds
+            timeout: API request timeout in seconds (defaults to module-level DEFAULT_TIMEOUT)
         """
         super().__init__(converter)
-        self.timeout = timeout
+        self.timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
 
     def build_query(
         self,
@@ -117,7 +146,7 @@ class OSMParser(AirportFormatParser[OSMDocument]):
         features = "\n  ".join(selectors)
 
         # Include airport area itself to get name/iata metadata
-        query = f"""[out:json][timeout:25];
+        query = f"""[out:json][timeout:{QUERY_TIMEOUT}];
 area["icao"="{icao_code}"]->.airport;
 (
   way["icao"="{icao_code}"]["aeroway"="aerodrome"];
@@ -176,24 +205,32 @@ out body geom;
         logger.debug(f"Overpass query:\n{query}")
 
         last_error = None
+        max_retries = RETRY_COUNT
+        retry_delay = RETRY_DELAY
+
         for endpoint in OVERPASS_ENDPOINTS:
-            try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    response = client.post(
-                        endpoint,
-                        data={"data": query},
-                    )
-                    response.raise_for_status()
-                    return response.json()
-            except httpx.TimeoutException:
-                last_error = f"Timeout fetching from {endpoint}"
-                logger.warning(last_error)
-            except httpx.HTTPStatusError as e:
-                last_error = f"HTTP {e.response.status_code} from {endpoint}: {e.response.text}"
-                logger.warning(last_error)
-            except Exception as e:
-                last_error = f"Error fetching from {endpoint}: {e}"
-                logger.warning(last_error)
+            for attempt in range(max_retries + 1):
+                try:
+                    with httpx.Client(timeout=self.timeout) as client:
+                        response = client.post(
+                            endpoint,
+                            data={"data": query},
+                        )
+                        response.raise_for_status()
+                        return response.json()
+                except httpx.TimeoutException:
+                    last_error = f"Timeout fetching from {endpoint} (attempt {attempt + 1})"
+                    logger.warning(last_error)
+                except httpx.HTTPStatusError as e:
+                    last_error = f"HTTP {e.response.status_code} from {endpoint} (attempt {attempt + 1}): {e.response.text}"
+                    logger.warning(last_error)
+                except Exception as e:
+                    last_error = f"Error fetching from {endpoint} (attempt {attempt + 1}): {e}"
+                    logger.warning(last_error)
+
+                if attempt < max_retries:
+                    logger.info(f"Retrying {endpoint} in {retry_delay}s...")
+                    time.sleep(retry_delay)
 
         raise ParseError(f"Failed to fetch OSM data: {last_error}")
 
