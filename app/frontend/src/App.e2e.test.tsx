@@ -917,14 +917,18 @@ describe('End-to-end user interaction flows', () => {
     it('renders gate grid with filter pills and available/occupied counts', async () => {
       renderApp()
       await waitForAppReady()
+      await waitForFlights() // Gates are derived from flights when OSM gates are empty
 
       // Gate status should be visible in right panel
       expect(screen.getByText(/gate status/i)).toBeInTheDocument()
 
       // Should show "All" pill and at least one terminal pill
-      const tabs = screen.getAllByRole('tab')
-      expect(tabs.length).toBeGreaterThanOrEqual(2) // "All" + at least one terminal
-      expect(tabs[0]).toHaveTextContent('All')
+      // (tabs appear after flights load since gates are derived from flight data)
+      await waitFor(() => {
+        const tabs = screen.getAllByRole('tab')
+        expect(tabs.length).toBeGreaterThanOrEqual(2) // "All" + at least one terminal
+        expect(tabs[0]).toHaveTextContent('All')
+      })
 
       // Should show at least one terminal in summary view
       const terminalLabels = screen.getAllByText(/terminal/i)
@@ -1402,10 +1406,13 @@ describe('End-to-end user interaction flows', () => {
       const user = userEvent.setup()
       renderApp()
       await waitForAppReady()
+      await waitForFlights() // Gates are derived from flights when OSM gates are empty
 
-      // Verify gate status renders initially
+      // Verify gate status renders initially (wait for flight-derived tabs)
+      await waitFor(() => {
+        expect(screen.getAllByRole('tab').length).toBeGreaterThanOrEqual(2)
+      })
       const tabs = screen.getAllByRole('tab')
-      expect(tabs.length).toBeGreaterThanOrEqual(2)
 
       // Click "All" tab
       await user.click(tabs[0])

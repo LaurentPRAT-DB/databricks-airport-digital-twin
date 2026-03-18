@@ -392,6 +392,19 @@ export const handlers = [
   // Airport config endpoint
   http.get('/api/airport/config', async () => {
     await delay(30)
+    // 20 gates across Terminal A (A1-A10) and Terminal B (B1-B10)
+    const mockGates = [
+      ...Array.from({ length: 10 }, (_, i) => ({
+        id: `gate-a${i + 1}`,
+        ref: `A${i + 1}`,
+        terminal: 'Terminal A',
+      })),
+      ...Array.from({ length: 10 }, (_, i) => ({
+        id: `gate-b${i + 1}`,
+        ref: `B${i + 1}`,
+        terminal: 'Terminal B',
+      })),
+    ]
     return HttpResponse.json({
       config: {
         sources: ['osm'],
@@ -400,7 +413,7 @@ export const handlers = [
         aprons: [],
         navaids: [],
         buildings: [],
-        gates: [],
+        gates: mockGates,
         terminals: [],
         icaoCode: 'KSFO',
       },

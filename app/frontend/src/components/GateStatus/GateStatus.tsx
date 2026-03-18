@@ -100,8 +100,10 @@ function buildGateFlightMap(flights: Flight[]): Map<string, { flight: Flight; st
 // Build gates from OSM data, enriched with flight data
 function buildGates(osmGates: OSMGate[], gateFlightMap: Map<string, { flight: Flight; status: GateStatusLabel }>): Gate[] {
   if (osmGates.length > 0) {
-    return osmGates.map((g) => {
+    const osmRefs = new Set<string>();
+    const gates: Gate[] = osmGates.map((g) => {
       const ref = g.ref || g.id;
+      osmRefs.add(ref);
       const info = gateFlightMap.get(ref);
       return {
         id: g.id,
@@ -111,6 +113,22 @@ function buildGates(osmGates: OSMGate[], gateFlightMap: Map<string, { flight: Fl
         flight: info?.flight ?? null,
       };
     });
+
+    // Include flight-assigned gates not present in OSM data
+    for (const [ref, info] of gateFlightMap) {
+      if (!osmRefs.has(ref)) {
+        gates.push({
+          id: ref,
+          ref,
+          terminal: inferTerminal(ref),
+          status: info.status,
+          flight: info.flight,
+        });
+      }
+    }
+
+    gates.sort((a, b) => naturalSort(a.ref, b.ref));
+    return gates;
   }
 
   // Fallback: derive gates from flights that have assigned gates
