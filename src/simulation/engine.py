@@ -60,6 +60,7 @@ from src.ingestion.schedule_generator import (
     _get_flights_per_hour,
     set_traffic_airport,
 )
+from src.ml.gse_model import get_turnaround_timing, PHASE_DEPENDENCIES
 from src.ingestion.weather_generator import generate_metar
 from src.ingestion.baggage_generator import generate_bags_for_flight
 from src.calibration.profile import AirportProfileLoader
@@ -78,6 +79,30 @@ ALTERNATE_AIRPORTS: dict[str, list[str]] = {
     "FRA": ["MUC", "DUS"],
     "JNB": ["CPT"],
 }
+
+
+def _critical_path_turnaround(aircraft_type: str) -> float:
+    """Compute turnaround duration via critical-path through the phase DAG.
+
+    Each phase gets independent ±20% jitter, then the longest path through
+    the dependency graph determines total turnaround time.
+    """
+    timing = get_turnaround_timing(aircraft_type)
+    phases = timing["phases"]
+
+    # Apply per-phase jitter
+    jittered: dict[str, float] = {}
+    for phase, nominal in phases.items():
+        jittered[phase] = nominal * random.uniform(0.80, 1.20)
+
+    # Critical-path: earliest finish time per phase
+    finish: dict[str, float] = {}
+    for phase in phases:
+        deps = PHASE_DEPENDENCIES.get(phase, [])
+        earliest_start = max((finish[d] for d in deps if d in finish), default=0.0)
+        finish[phase] = earliest_start + jittered[phase]
+
+    return max(finish.values()) if finish else timing["total_minutes"]
 
 
 class SimulationEngine:
@@ -283,15 +308,17 @@ class SimulationEngine:
     def _generate_schedule(self) -> None:
         """Pre-generate the full flight schedule distributed across the duration.
 
-        For multi-day simulations (duration > 24h), generates flights for each
-        day separately with the correct day-of-week traffic variation.
+        Uses a three-phase approach for realistic aircraft rotations:
+        1. Generate arrivals distributed across hours (same as before)
+        2. Link departures to arrivals via turnaround time (same aircraft/airline)
+        3. Fill surplus departures as overnight-parked aircraft in the first 2 hours
         """
         start = self.config.effective_start_time()
+        end_time = start + timedelta(hours=self.config.effective_duration_hours())
         duration_h = self.config.effective_duration_hours()
         profile = self.airport_profile
 
         # Build hourly weights for the FULL duration (multi-day aware)
-        # Each slot maps to an offset hour from start (0..duration_h-1).
         n_hours = int(duration_h) + (1 if duration_h % 1 > 0 else 0)
         hour_weights: list[float] = []
         for h_offset in range(n_hours):
@@ -306,60 +333,100 @@ class SimulationEngine:
 
         total_weight = sum(hour_weights)
 
-        # Distribute arrivals and departures proportionally across hours
-        schedule = []
+        schedule: list[dict] = []
         local_iata = self.config.airport
 
-        for flight_type, count in [("arrival", self.config.arrivals), ("departure", self.config.departures)]:
-            for h_idx, weight in enumerate(hour_weights):
-                # How many flights this hour
-                flights_this_hour = max(1, round(count * weight / total_weight))
-                if h_idx == len(hour_weights) - 1:
-                    # Last hour gets remaining flights
-                    already_scheduled = sum(
-                        1 for f in schedule if f["flight_type"] == flight_type
-                    )
-                    flights_this_hour = max(0, count - already_scheduled)
+        # --- Phase 1: Generate arrivals distributed across hours ---
+        for h_idx, weight in enumerate(hour_weights):
+            flights_this_hour = max(1, round(self.config.arrivals * weight / total_weight))
+            if h_idx == len(hour_weights) - 1:
+                already = sum(1 for f in schedule if f["flight_type"] == "arrival")
+                flights_this_hour = max(0, self.config.arrivals - already)
 
-                for _ in range(flights_this_hour):
-                    if sum(1 for f in schedule if f["flight_type"] == flight_type) >= count:
-                        break
+            for _ in range(flights_this_hour):
+                if sum(1 for f in schedule if f["flight_type"] == "arrival") >= self.config.arrivals:
+                    break
 
-                    airline_code, airline_name = _select_airline(profile=profile)
-                    flight_number = _generate_flight_number(airline_code)
+                airline_code, airline_name = _select_airline(profile=profile)
+                flight_number = _generate_flight_number(airline_code)
+                origin = _select_destination("arrival", airline_code, profile=profile)
+                aircraft = _select_aircraft(origin, airline_code=airline_code, profile=profile)
+                minute = random.randint(0, 59)
+                scheduled_time = start + timedelta(hours=h_idx, minutes=minute)
+                delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
 
-                    if flight_type == "arrival":
-                        origin = _select_destination("arrival", airline_code, profile=profile)
-                        destination = local_iata
-                    else:
-                        origin = local_iata
-                        destination = _select_destination("departure", airline_code, profile=profile)
+                schedule.append({
+                    "flight_number": flight_number,
+                    "airline": airline_name,
+                    "airline_code": airline_code,
+                    "origin": origin,
+                    "destination": local_iata,
+                    "aircraft_type": aircraft,
+                    "flight_type": "arrival",
+                    "scheduled_time": scheduled_time.isoformat(),
+                    "delay_minutes": delay_minutes,
+                    "delay_code": delay_code,
+                    "delay_reason": delay_reason,
+                })
 
-                    # Select aircraft based on REMOTE airport (not local)
-                    remote_airport = origin if flight_type == "arrival" else destination
-                    aircraft = _select_aircraft(
-                        remote_airport, airline_code=airline_code, profile=profile,
-                    )
+        arrivals = [f for f in schedule if f["flight_type"] == "arrival"]
 
-                    # Schedule within this hour
-                    minute = random.randint(0, 59)
-                    scheduled_time = start + timedelta(hours=h_idx, minutes=minute)
+        # --- Phase 2: Link departures to arrivals via turnaround ---
+        linked_count = 0
+        linkable = min(len(arrivals), self.config.departures)
+        for arr in arrivals[:linkable]:
+            turnaround = _critical_path_turnaround(arr["aircraft_type"])
+            arr_time = datetime.fromisoformat(arr["scheduled_time"])
+            dep_time = arr_time + timedelta(minutes=turnaround)
 
-                    delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
+            if dep_time >= end_time:
+                continue  # aircraft stays parked past sim window
 
-                    schedule.append({
-                        "flight_number": flight_number,
-                        "airline": airline_name,
-                        "airline_code": airline_code,
-                        "origin": origin,
-                        "destination": destination,
-                        "aircraft_type": aircraft,
-                        "flight_type": flight_type,
-                        "scheduled_time": scheduled_time.isoformat(),
-                        "delay_minutes": delay_minutes,
-                        "delay_code": delay_code,
-                        "delay_reason": delay_reason,
-                    })
+            destination = _select_destination("departure", arr["airline_code"], profile=profile)
+            delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
+
+            schedule.append({
+                "flight_number": _generate_flight_number(arr["airline_code"]),
+                "airline": arr["airline"],
+                "airline_code": arr["airline_code"],
+                "origin": local_iata,
+                "destination": destination,
+                "aircraft_type": arr["aircraft_type"],
+                "flight_type": "departure",
+                "scheduled_time": dep_time.isoformat(),
+                "delay_minutes": delay_minutes,
+                "delay_code": delay_code,
+                "delay_reason": delay_reason,
+                "linked_arrival": arr["flight_number"],
+            })
+            linked_count += 1
+
+        # --- Phase 3: Surplus independent departures (overnight-parked) ---
+        surplus = self.config.departures - linked_count
+        if surplus > 0:
+            # Schedule in the first 2 hours of the sim (early morning departures)
+            early_window_h = min(2.0, duration_h)
+            for _ in range(surplus):
+                airline_code, airline_name = _select_airline(profile=profile)
+                destination = _select_destination("departure", airline_code, profile=profile)
+                aircraft = _select_aircraft(destination, airline_code=airline_code, profile=profile)
+                minute = random.randint(0, int(early_window_h * 60) - 1)
+                scheduled_time = start + timedelta(minutes=minute)
+                delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
+
+                schedule.append({
+                    "flight_number": _generate_flight_number(airline_code),
+                    "airline": airline_name,
+                    "airline_code": airline_code,
+                    "origin": local_iata,
+                    "destination": destination,
+                    "aircraft_type": aircraft,
+                    "flight_type": "departure",
+                    "scheduled_time": scheduled_time.isoformat(),
+                    "delay_minutes": delay_minutes,
+                    "delay_code": delay_code,
+                    "delay_reason": delay_reason,
+                })
 
         # Sort by scheduled time
         schedule.sort(key=lambda f: f["scheduled_time"])
@@ -367,9 +434,11 @@ class SimulationEngine:
         self.recorder.schedule = schedule
 
         logger.info(
-            "Generated schedule: %d arrivals, %d departures over %.1fh",
+            "Generated schedule: %d arrivals, %d departures (%d linked, %d overnight) over %.1fh",
             sum(1 for f in schedule if f["flight_type"] == "arrival"),
             sum(1 for f in schedule if f["flight_type"] == "departure"),
+            linked_count,
+            surplus,
             duration_h,
         )
 
