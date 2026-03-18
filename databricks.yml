@@ -25,6 +25,7 @@ sync:
     - .planning/**
     - .databricks/**
     - simulation_output/*.json
+    - simulation_output/calibrated/**
     - configs/calibration_batch/**
 
 include:
