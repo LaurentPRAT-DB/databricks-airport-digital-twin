@@ -109,9 +109,9 @@ describe('map3d-calculations', () => {
   // Animation Calculations
   // ========================================================================
   describe('headingToRotation', () => {
-    it('converts north (0°) to -90° rotation', () => {
+    it('converts north (0°) to +90° rotation', () => {
       const rot = headingToRotation(0);
-      expect(rot).toBeCloseTo(-Math.PI / 2, 5);
+      expect(rot).toBeCloseTo(Math.PI / 2, 5);
     });
 
     it('converts east (90°) to 0° rotation', () => {
@@ -119,19 +119,19 @@ describe('map3d-calculations', () => {
       expect(rot).toBeCloseTo(0, 5);
     });
 
-    it('converts south (180°) to 90° rotation', () => {
+    it('converts south (180°) to -90° rotation', () => {
       const rot = headingToRotation(180);
-      expect(rot).toBeCloseTo(Math.PI / 2, 5);
+      expect(rot).toBeCloseTo(-Math.PI / 2, 5);
     });
 
-    it('converts west (270°) to 180° rotation', () => {
+    it('converts west (270°) to -180° rotation', () => {
       const rot = headingToRotation(270);
-      expect(rot).toBeCloseTo(Math.PI, 5);
+      expect(rot).toBeCloseTo(-Math.PI, 5);
     });
 
     it('handles null heading as 0', () => {
       const rot = headingToRotation(null);
-      expect(rot).toBeCloseTo(-Math.PI / 2, 5);
+      expect(rot).toBeCloseTo(Math.PI / 2, 5);
     });
   });
 

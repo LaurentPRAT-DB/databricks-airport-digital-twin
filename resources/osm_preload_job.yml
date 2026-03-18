@@ -1,0 +1,17 @@
+resources:
+  jobs:
+    osm_preload:
+      name: "[${bundle.target}] Airport DT - OSM Airport Pre-load"
+      description: "Pre-fetches OSM data for all well-known airports into Unity Catalog so the app never hits Overpass at runtime"
+
+      tasks:
+        - task_key: preload_osm_airports
+          notebook_task:
+            notebook_path: ../databricks/notebooks/preload_osm_airports.py
+
+      tags:
+        project: airport-digital-twin
+        component: osm-preload
+        target: ${bundle.target}
+
+      timeout_seconds: 7200  # 2 hours for 26 airports with retries
