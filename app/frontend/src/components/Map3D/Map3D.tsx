@@ -2,7 +2,9 @@ import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { AirportScene } from './AirportScene';
+import { NavigationControls3D } from './NavigationControls3D';
 import { AIRPORT_3D_CONFIG } from '../../constants/airport3D';
 import { Flight } from '../../types/flight';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
@@ -185,8 +187,9 @@ export function Map3D({
         const camDist = 40;
         const camHeight = 25;
         // Camera behind the aircraft (opposite to heading direction)
+        // Heading direction in scene: (+sin(h), 0, -cos(h)), so behind = (-sin(h), 0, +cos(h))
         const camX = pos3D.x - Math.sin(headingRad) * camDist;
-        const camZ = pos3D.z - Math.cos(headingRad) * camDist;
+        const camZ = pos3D.z + Math.cos(headingRad) * camDist;
         return {
           cameraPosition: [camX, pos3D.y + camHeight, camZ] as [number, number, number],
           cameraTarget: [pos3D.x, pos3D.y, pos3D.z] as [number, number, number],
@@ -198,7 +201,7 @@ export function Map3D({
         const camDist = 150;
         const camHeight = 60;
         const camX = pos3D.x - Math.sin(headingRad) * camDist;
-        const camZ = pos3D.z - Math.cos(headingRad) * camDist;
+        const camZ = pos3D.z + Math.cos(headingRad) * camDist;
         return {
           cameraPosition: [camX, pos3D.y + camHeight, camZ] as [number, number, number],
           cameraTarget: [pos3D.x, pos3D.y, pos3D.z] as [number, number, number],
@@ -266,6 +269,9 @@ export function Map3D({
       computedExtent: extent,
     };
   }, [terminals, osmRunways, osmTaxiways, osmAprons, airportCenter?.lat, airportCenter?.lon, sharedViewport, selectedFlightObj]);
+
+  // Ref to OrbitControls for programmatic camera manipulation
+  const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
 
   // Navigation controls hint — auto-hides after 5s, reappears on hover
   const [hintVisible, setHintVisible] = useState(true);
@@ -346,6 +352,7 @@ export function Map3D({
 
         {/* Orbit controls for user interaction */}
         <OrbitControls
+          ref={orbitControlsRef}
           enablePan={true}
           enableZoom={true}
           enableRotate={true}
@@ -355,6 +362,9 @@ export function Map3D({
           target={cameraTarget}
         />
       </Canvas>
+
+      {/* 3D navigation buttons */}
+      <NavigationControls3D controlsRef={orbitControlsRef} />
 
       {/* Navigation controls hint */}
       <div

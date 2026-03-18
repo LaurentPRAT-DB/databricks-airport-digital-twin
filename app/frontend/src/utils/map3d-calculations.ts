@@ -116,7 +116,7 @@ export function position3DToLatLon(
  * Heading is degrees clockwise from north; scene Z is forward
  */
 export function headingToRotation(heading: number | null): number {
-  return ((heading || 0) - 90) * Math.PI / 180;
+  return (90 - (heading || 0)) * Math.PI / 180;
 }
 
 /**
