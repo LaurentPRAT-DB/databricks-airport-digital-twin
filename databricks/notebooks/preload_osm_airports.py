@@ -117,6 +117,7 @@ if to_load:
 
 from app.backend.services.airport_config_service import AirportConfigService
 import src.formats.osm.parser as osm_parser
+import traceback
 
 # Override parser defaults for large airports (workspace may not find config file)
 osm_parser.OVERPASS_ENDPOINTS = [
@@ -130,6 +131,7 @@ osm_parser.RETRY_DELAY = 15.0
 
 print(f"Overpass config: timeout={osm_parser.DEFAULT_TIMEOUT}s, query_timeout={osm_parser.QUERY_TIMEOUT}s, "
       f"retries={osm_parser.RETRY_COUNT}, retry_delay={osm_parser.RETRY_DELAY}s")
+print(f"Endpoints: {osm_parser.OVERPASS_ENDPOINTS}")
 
 loaded = []
 failed = []
@@ -185,7 +187,8 @@ for i, icao in enumerate(to_load, 1):
 
     except Exception as e:
         elapsed = time.time() - start
-        print(f"  FAILED ({elapsed:.1f}s): {e}")
+        print(f"  FAILED ({elapsed:.1f}s): {type(e).__name__}: {e}")
+        traceback.print_exc()
         failed.append({
             "icao": icao,
             "iata": info["iata"],
@@ -232,5 +235,6 @@ dbutils.notebook.exit(json.dumps({
     "loaded": len(loaded),
     "failed": len(failed),
     "total": len(WELL_KNOWN_AIRPORTS),
-    "failed_airports": [r["icao"] for r in failed],
+    "failed_details": [{"icao": r["icao"], "error": r["error"]} for r in failed],
+    "loaded_details": [{"icao": r["icao"], "gates": r["gates"]} for r in loaded],
 }))

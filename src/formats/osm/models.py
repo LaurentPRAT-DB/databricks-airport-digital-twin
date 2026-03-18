@@ -12,7 +12,26 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+import re
+from typing import Annotated
+
+from pydantic import BaseModel, BeforeValidator, Field
+
+
+def _parse_osm_measurement(v):
+    """Parse OSM measurement values that may include units (e.g., '150 ft', '44m', \"200'\")."""
+    if v is None or isinstance(v, (int, float)):
+        return v
+    if isinstance(v, str):
+        # Extract leading numeric part, ignoring units
+        m = re.match(r"^\s*([+-]?\d+\.?\d*)", v)
+        if m:
+            return float(m.group(1))
+        return None
+    return v
+
+
+OSMMeasurement = Annotated[Optional[float], BeforeValidator(_parse_osm_measurement)]
 
 
 class OSMElementType(str, Enum):
@@ -48,9 +67,9 @@ class OSMTags(BaseModel):
     iata: Optional[str] = None
     terminal: Optional[str] = Field(None, description="Terminal name/number")
     level: Optional[str] = None
-    height: Optional[float] = None
-    ele: Optional[float] = Field(None, description="Elevation in meters")
-    width: Optional[float] = None
+    height: OSMMeasurement = None
+    ele: OSMMeasurement = Field(None, description="Elevation in meters")
+    width: OSMMeasurement = None
     surface: Optional[str] = None
 
 
