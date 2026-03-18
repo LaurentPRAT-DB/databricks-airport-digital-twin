@@ -284,8 +284,16 @@ export function useAirportConfig(): UseAirportConfigReturn {
         method: 'POST',
       });
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `Failed to activate airport: ${response.statusText}`);
+        let detail = `Failed to activate airport: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.detail) detail = errorData.detail;
+        } catch {
+          // Response body wasn't JSON (e.g., proxy error)
+          const text = await response.text().catch(() => '');
+          if (text) detail = text.slice(0, 200);
+        }
+        throw new Error(detail);
       }
 
       const data = await response.json();

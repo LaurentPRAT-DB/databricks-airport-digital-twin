@@ -834,9 +834,10 @@ async def activate_airport(icao_code: str) -> dict:
     total_steps = 7
     service = get_airport_config_service()
 
-    # Step 1: Load airport config (fast)
+    # Step 1: Load airport config (runs sync HTTP/SQL in thread pool to avoid blocking event loop)
     await broadcaster.broadcast_progress(1, total_steps, "Loading airport configuration...", icao_code)
-    loaded = service.initialize_from_lakehouse(
+    loaded = await asyncio.to_thread(
+        service.initialize_from_lakehouse,
         icao_code=icao_code,
         fallback_to_osm=True,
     )
