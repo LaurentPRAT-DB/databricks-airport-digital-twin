@@ -265,6 +265,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
         <SimulationControls
           onFlightsChange={handleSimFlightsChange}
           onActiveChange={setSimulationActive}
+          onAirportChange={loadAirport}
         />
       } />
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} />}

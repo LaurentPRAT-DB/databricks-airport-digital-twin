@@ -9,6 +9,16 @@ import {
 
 const SPEED_OPTIONS: PlaybackSpeed[] = [1, 2, 5, 10, 30, 60];
 
+const MAX_LOADABLE_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB
+
+/** Format byte count to human-readable size string. */
+function formatFileSize(sizeBytes: number | undefined, sizeKb: number): string {
+  const bytes = sizeBytes ?? sizeKb * 1024;
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
 /** Format ISO timestamp to short time display. */
 function formatSimTime(iso: string | null): string {
   if (!iso) return '--:--:--';
@@ -24,23 +34,30 @@ function formatSimTime(iso: string | null): string {
 function FilePicker({
   files,
   isLoading,
+  isFetchingFiles,
   onLoad,
   onClose,
 }: {
   files: SimulationFile[];
   isLoading: boolean;
+  isFetchingFiles: boolean;
   onLoad: (filename: string) => void;
   onClose: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl shadow-2xl w-[480px] max-h-[400px] overflow-hidden">
+      <div className="bg-white rounded-xl shadow-2xl w-[520px] max-h-[480px] overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <h3 className="text-lg font-semibold text-slate-800">Load Simulation</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
         </div>
-        <div className="p-5 overflow-y-auto max-h-[300px]">
-          {files.length === 0 ? (
+        <div className="p-5 overflow-y-auto max-h-[380px]">
+          {isFetchingFiles ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
+              <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-slate-500 text-sm">Loading simulation files...</p>
+            </div>
+          ) : files.length === 0 ? (
             <p className="text-slate-500 text-sm">
               No simulation files found. Run a simulation first:
               <code className="block mt-2 bg-slate-100 p-2 rounded text-xs">
@@ -49,29 +66,43 @@ function FilePicker({
             </p>
           ) : (
             <div className="space-y-2">
-              {files.map((f) => (
-                <button
-                  key={f.filename}
-                  onClick={() => onLoad(f.filename)}
-                  disabled={isLoading}
-                  className="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors disabled:opacity-50"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-slate-800">
-                      {f.airport} &mdash; {f.total_flights} flights
-                    </span>
-                    <span className="text-xs text-slate-400">{f.size_kb} KB</span>
-                  </div>
-                  <div className="text-xs text-slate-500 mt-1">
-                    {f.arrivals} arr / {f.departures} dep &middot; {f.duration_hours}h &middot; {f.filename}
-                    {f.scenario_name && (
-                      <span className="ml-1 text-amber-600">
-                        &middot; {f.scenario_name}
+              {files.map((f) => {
+                const tooLarge = (f.size_bytes ?? f.size_kb * 1024) > MAX_LOADABLE_BYTES;
+                return (
+                  <button
+                    key={f.filename}
+                    onClick={() => !tooLarge && onLoad(f.filename)}
+                    disabled={isLoading || tooLarge}
+                    className={`w-full text-left px-4 py-3 rounded-lg border transition-colors ${
+                      tooLarge
+                        ? 'border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed'
+                        : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-50'
+                    }`}
+                    title={tooLarge ? 'Too large for browser playback (>1 GB)' : f.filename}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-slate-800">
+                        {f.scenario_name ? (
+                          <>{f.airport} &mdash; {f.scenario_name}</>
+                        ) : (
+                          <>{f.airport} &mdash; {f.total_flights} flights</>
+                        )}
                       </span>
-                    )}
-                  </div>
-                </button>
-              ))}
+                      <span className={`text-xs ${tooLarge ? 'text-red-400 font-medium' : 'text-slate-400'}`}>
+                        {formatFileSize(f.size_bytes, f.size_kb)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {f.total_flights} flights &middot; {f.arrivals} arr / {f.departures} dep &middot; {f.duration_hours}h
+                      {tooLarge && (
+                        <span className="ml-1 text-red-400">
+                          &middot; Too large for browser playback
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -218,9 +249,11 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
 export function SimulationControls({
   onFlightsChange,
   onActiveChange,
+  onAirportChange,
 }: {
   onFlightsChange: (flights: import('../../types/flight').Flight[] | null) => void;
   onActiveChange: (active: boolean) => void;
+  onAirportChange?: (icaoCode: string) => Promise<void>;
 }) {
   const sim = useSimulationReplay();
   const [showPicker, setShowPicker] = useState(false);
@@ -230,6 +263,16 @@ export function SimulationControls({
     sim.fetchFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Switch airport when simulation loads a different one
+  useEffect(() => {
+    if (sim.airport && onAirportChange) {
+      onAirportChange(sim.airport).catch((err) => {
+        console.warn('Failed to switch airport for simulation:', err);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sim.airport]);
 
   // Push simulation flights to parent
   useEffect(() => {
@@ -282,6 +325,7 @@ export function SimulationControls({
         <FilePicker
           files={sim.availableFiles}
           isLoading={sim.isLoading}
+          isFetchingFiles={sim.isFetchingFiles}
           onLoad={handleLoad}
           onClose={() => setShowPicker(false)}
         />

@@ -11,6 +11,7 @@ export interface SimulationFile {
   departures: number;
   duration_hours: number;
   size_kb: number;
+  size_bytes?: number;
   scenario_name?: string | null;
 }
 
@@ -90,6 +91,7 @@ export interface UseSimulationReplayResult {
   isActive: boolean;
   isPlaying: boolean;
   isLoading: boolean;
+  isFetchingFiles: boolean;
   speed: PlaybackSpeed;
   currentFrameIndex: number;
   totalFrames: number;
@@ -100,6 +102,7 @@ export interface UseSimulationReplayResult {
   summary: Record<string, unknown> | null;
   scenarioEvents: ScenarioEvent[];
   scenarioName: string | null;
+  airport: string | null;
   simStartTime: string | null;
   simEndTime: string | null;
 
@@ -136,6 +139,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const [simData, setSimData] = useState<SimulationData | null>(null);
   const [loadedFile, setLoadedFile] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingFiles, setIsFetchingFiles] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
@@ -153,6 +157,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
 
   // Fetch list of available simulation files
   const fetchFiles = useCallback(async () => {
+    setIsFetchingFiles(true);
     try {
       const res = await fetch('/api/simulation/files');
       if (res.ok) {
@@ -161,6 +166,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       }
     } catch {
       // Silently fail — simulation might not be available
+    } finally {
+      setIsFetchingFiles(false);
     }
   }, []);
 
@@ -287,6 +294,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     isActive,
     isPlaying,
     isLoading,
+    isFetchingFiles,
     speed,
     currentFrameIndex,
     totalFrames,
@@ -297,6 +305,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     summary: simData?.summary as Record<string, unknown> | null ?? null,
     scenarioEvents: simData?.scenario_events ?? [],
     scenarioName: (simData?.summary as Record<string, unknown>)?.scenario_name as string | null ?? null,
+    airport: (simData?.config as Record<string, unknown>)?.airport as string | null ?? null,
     simStartTime,
     simEndTime,
 
