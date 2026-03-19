@@ -10,6 +10,7 @@ and refreshes it periodically:
 
 import asyncio
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Callable, Coroutine, Optional
@@ -328,7 +329,8 @@ class DataGeneratorService:
             all_stats.append({"airport_icao": self._current_airport_icao, **stats})
 
         # Write events to landing zone for DLT pipeline pickup
-        if all_stats:
+        # (only works inside Databricks — /Volumes is not mounted in App containers)
+        if all_stats and os.path.isdir("/Volumes"):
             try:
                 from src.ingestion.baggage_writer import write_baggage_events
                 write_baggage_events(

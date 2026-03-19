@@ -70,11 +70,26 @@ export function useFlights(): UseFlightsResult {
       ws.onmessage = (event) => {
         try {
           const msg: WsFlightMessage = JSON.parse(event.data);
+
+          // Handle airport switch progress (including errors)
+          if (msg.type === 'airport_switch_progress') {
+            const progress = (msg as any).data;
+            if (progress.error) {
+              // Switch failed — clear stale flights from partial switch
+              flightsMapRef.current = new Map();
+              setWsData({ flights: [], count: 0, timestamp: new Date().toISOString(), data_source: 'synthetic' });
+            }
+            return;
+          }
+
           if (msg.type === 'initial' || msg.type === 'flight_update') {
             const fullMsg = msg as WsFullMessage;
             // Full update — replace map entirely
             const map = new Map<string, Flight>();
             for (const f of fullMsg.data.flights) {
+              // Skip flights with invalid data
+              if (!f.callsign?.trim() || f.callsign === f.icao24) continue;
+              if (f.altitude !== null && f.altitude !== undefined && isNaN(Number(f.altitude))) continue;
               map.set(f.icao24, f);
             }
             flightsMapRef.current = map;

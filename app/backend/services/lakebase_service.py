@@ -10,6 +10,7 @@ Supports two authentication modes:
 
 import os
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from contextlib import contextmanager
 
@@ -23,7 +24,30 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def _get_oauth_token(endpoint_name: str) -> Optional[tuple[str, str]]:
+def _parse_expiry(expire_time) -> Optional[datetime]:
+    """Parse expire_time from Databricks SDK credential response.
+
+    The SDK may return a protobuf Timestamp (with .seconds attr),
+    an ISO 8601 string, or None.
+
+    Returns:
+        timezone-aware datetime, or None if parsing fails.
+    """
+    if not expire_time:
+        return None
+    try:
+        # Protobuf Timestamp object (google.protobuf.timestamp_pb2.Timestamp)
+        if hasattr(expire_time, "seconds"):
+            return datetime.fromtimestamp(expire_time.seconds, tz=timezone.utc)
+        # ISO 8601 string
+        if isinstance(expire_time, str):
+            return datetime.fromisoformat(expire_time.replace("Z", "+00:00"))
+        return None
+    except (ValueError, AttributeError, OSError):
+        return None
+
+
+def _get_oauth_token(endpoint_name: str) -> Optional[tuple[str, str, Optional[str]]]:
     """Get OAuth token for Lakebase Autoscaling using Databricks SDK.
 
     Tries two approaches:
@@ -35,7 +59,7 @@ def _get_oauth_token(endpoint_name: str) -> Optional[tuple[str, str]]:
             (e.g., 'projects/my-app/branches/production/endpoints/primary')
 
     Returns:
-        Tuple of (token, user_email) or None if unavailable.
+        Tuple of (token, user_email, expire_time) or None if unavailable.
     """
     try:
         from databricks.sdk import WorkspaceClient
@@ -50,7 +74,7 @@ def _get_oauth_token(endpoint_name: str) -> Optional[tuple[str, str]]:
             cred = w.postgres.generate_database_credential(endpoint=endpoint_name)
             me = w.current_user.me()
             logger.info("Lakebase OAuth: got token via direct WorkspaceClient (M2M)")
-            return (cred.token, me.user_name)
+            return (cred.token, me.user_name, getattr(cred, "expire_time", None))
         except Exception as e:
             logger.debug(f"Direct WorkspaceClient OAuth failed: {e}")
 
@@ -63,7 +87,7 @@ def _get_oauth_token(endpoint_name: str) -> Optional[tuple[str, str]]:
                 w2 = WorkspaceClient()
                 cred2 = w2.postgres.generate_database_credential(endpoint=endpoint_name)
                 me2 = w2.current_user.me()
-                result.append((cred2.token, me2.user_name))
+                result.append((cred2.token, me2.user_name, getattr(cred2, "expire_time", None)))
             except Exception as e2:
                 error.append(e2)
 
@@ -101,6 +125,7 @@ class LakebaseService:
         self._endpoint_name = os.getenv("LAKEBASE_ENDPOINT_NAME")
         self._use_oauth = os.getenv("LAKEBASE_USE_OAUTH", "false").lower() == "true"
         self._cached_credentials: Optional[tuple[str, str]] = None
+        self._credential_expiry: Optional[datetime] = None
         self._airport_columns_ensured = False
         self._ml_tables_ensured = False
 
@@ -122,16 +147,58 @@ class LakebaseService:
         return bool(self._host and self._user and self._password)
 
     def _get_credentials(self) -> Optional[tuple[str, str]]:
-        """Get user and password, using OAuth if configured."""
+        """Get user and password, using OAuth if configured.
+
+        For OAuth mode, credentials are refreshed when within 5 minutes of expiry.
+        If no expire_time is available from the SDK, falls back to a 45-minute TTL.
+        """
         if self._use_oauth and self._endpoint_name:
-            if self._cached_credentials is None:
-                self._cached_credentials = _get_oauth_token(self._endpoint_name)
+            now = datetime.now(timezone.utc)
+            needs_refresh = (
+                self._cached_credentials is None
+                or self._credential_expiry is None
+                or now >= self._credential_expiry - timedelta(minutes=5)
+            )
+            if needs_refresh:
+                result = _get_oauth_token(self._endpoint_name)
+                if result:
+                    token, user, expire_time_str = result
+                    self._cached_credentials = (token, user)
+                    self._credential_expiry = _parse_expiry(expire_time_str)
+                    if self._credential_expiry is None:
+                        # Fallback: assume 1h token, refresh after 45min
+                        self._credential_expiry = now + timedelta(minutes=45)
+                    logger.info(
+                        "Lakebase OAuth credentials refreshed, expires %s",
+                        self._credential_expiry.isoformat(),
+                    )
+                else:
+                    self._cached_credentials = None
+                    self._credential_expiry = None
             return self._cached_credentials
 
         if self._user and self._password:
             return (self._password, self._user)
 
         return None
+
+    def _invalidate_credentials_if_auth_error(self, exc: Exception) -> None:
+        """Clear cached OAuth credentials only for authentication-related failures.
+
+        SQL errors (missing table, constraint violations, etc.) should NOT
+        invalidate credentials — only connection/auth failures should.
+        """
+        msg = str(exc).lower()
+        if any(kw in msg for kw in (
+            "password authentication failed",
+            "authentication failed",
+            "connection refused",
+            "could not connect",
+            "connection timed out",
+            "ssl",
+        )):
+            self._cached_credentials = None
+            self._credential_expiry = None
 
     @contextmanager
     def _get_connection(self):
@@ -179,10 +246,13 @@ class LakebaseService:
                             f"airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO'"
                         )
                     conn.commit()
-            self._airport_columns_ensured = True
             logger.debug("Ensured airport_icao columns exist on all tables")
         except Exception as e:
+            # Mark as ensured even on failure — columns likely already exist
+            # in the schema. Retrying on every request just adds noise.
             logger.debug(f"Airport column migration check: {e}")
+        finally:
+            self._airport_columns_ensured = True
 
     def get_flights(self, limit: int = 100) -> Optional[list[dict]]:
         """
@@ -228,8 +298,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase query failed: {e}")
-            # Invalidate cached credentials on failure (might be expired)
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return None
 
     def get_flight_by_icao24(self, icao24: str) -> Optional[dict]:
@@ -273,7 +342,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase query failed for {icao24}: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return None
 
     def health_check(self) -> bool:
@@ -288,7 +357,7 @@ class LakebaseService:
                     return True
         except Exception as e:
             logger.warning(f"Lakebase health check failed: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return False
 
     # =========================================================================
@@ -353,7 +422,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase weather upsert failed: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return False
 
     def get_weather(self, station: str) -> Optional[dict]:
@@ -398,7 +467,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase weather query failed for {station}: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return None
 
     # =========================================================================
@@ -460,7 +529,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase schedule upsert failed: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return 0
 
     def get_schedule(
@@ -518,7 +587,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase schedule query failed: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return None
 
     def clear_old_schedule(self, hours_old: int = 24, airport_icao: str = "KSFO") -> int:
@@ -539,7 +608,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase schedule cleanup failed: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return 0
 
     def has_synthetic_data(self, airport_icao: str) -> bool:
@@ -568,7 +637,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase has_synthetic_data check failed for {airport_icao}: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return False
 
     # =========================================================================
@@ -621,7 +690,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase baggage upsert failed: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return False
 
     def get_baggage_stats(self, flight_number: str, airport_icao: str = "KSFO") -> Optional[dict]:
@@ -658,7 +727,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase baggage query failed for {flight_number}: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return None
 
     # =========================================================================
@@ -711,7 +780,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase GSE fleet upsert failed: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return 0
 
     def get_gse_fleet(self, airport_icao: str = "KSFO") -> Optional[list[dict]]:
@@ -748,7 +817,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase GSE fleet query failed: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return None
 
     # =========================================================================
@@ -777,7 +846,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Failed to create airport_config_cache table: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return False
 
     def upsert_airport_config(self, icao_code: str, config: dict) -> bool:
@@ -796,6 +865,21 @@ class LakebaseService:
 
         try:
             import json
+            from datetime import datetime as _dt
+            import numpy as np
+
+            class _SafeEncoder(json.JSONEncoder):
+                def default(self, obj):
+                    if isinstance(obj, np.ndarray):
+                        return obj.tolist()
+                    if isinstance(obj, (np.integer,)):
+                        return int(obj)
+                    if isinstance(obj, (np.floating,)):
+                        return float(obj)
+                    if isinstance(obj, _dt):
+                        return obj.isoformat()
+                    return super().default(obj)
+
             self._ensure_airport_config_table()
 
             with self._get_connection() as conn:
@@ -808,7 +892,7 @@ class LakebaseService:
                             config_json = EXCLUDED.config_json,
                             updated_at = EXCLUDED.updated_at
                         """,
-                        (icao_code, json.dumps(config)),
+                        (icao_code, json.dumps(config, cls=_SafeEncoder)),
                     )
                     conn.commit()
                     logger.info(f"Cached airport config for {icao_code} in Lakebase")
@@ -816,7 +900,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase airport config upsert failed: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return False
 
     def get_airport_config(self, icao_code: str) -> Optional[dict]:
@@ -852,7 +936,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase airport config query failed for {icao_code}: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return None
 
     # =========================================================================
@@ -883,7 +967,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Failed to create user_airport_usage table: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return False
 
     def record_airport_usage(self, user_email: str, icao_code: str) -> bool:
@@ -920,7 +1004,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Failed to record airport usage: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return False
 
     def get_user_top_airports(self, user_email: str, limit: int = 5) -> list[str]:
@@ -954,7 +1038,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Failed to get user top airports: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return []
 
     def get_cached_airport_codes(self) -> list[str]:
@@ -976,7 +1060,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Failed to get cached airport codes: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return []
 
     # =========================================================================
@@ -1028,7 +1112,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase turnaround upsert failed: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return False
 
     def get_turnaround(self, icao24: str, airport_icao: str = "KSFO") -> Optional[dict]:
@@ -1065,7 +1149,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase turnaround query failed for {icao24}: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return None
 
     def delete_turnaround(self, icao24: str, airport_icao: str = "KSFO") -> bool:
@@ -1087,7 +1171,7 @@ class LakebaseService:
 
         except Exception as e:
             logger.warning(f"Lakebase turnaround delete failed for {icao24}: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return False
 
 
@@ -1187,10 +1271,11 @@ class LakebaseService:
                         ON ml_predictions (session_id, airport_icao, event_time)
                     """)
                     conn.commit()
-            self._ml_tables_ensured = True
             logger.debug("Ensured ML training data tables exist")
         except Exception as e:
             logger.debug(f"ML tables creation check: {e}")
+        finally:
+            self._ml_tables_ensured = True
 
     def insert_flight_snapshots(
         self, snapshots: list[dict], session_id: str, airport_icao: str
@@ -1237,7 +1322,7 @@ class LakebaseService:
                     return len(values)
         except Exception as e:
             logger.warning(f"Failed to insert flight snapshots: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return 0
 
     def insert_phase_transitions(
@@ -1279,7 +1364,7 @@ class LakebaseService:
                     return len(values)
         except Exception as e:
             logger.warning(f"Failed to insert phase transitions: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return 0
 
     def insert_gate_events(
@@ -1317,7 +1402,7 @@ class LakebaseService:
                     return len(values)
         except Exception as e:
             logger.warning(f"Failed to insert gate events: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return 0
 
     def insert_ml_predictions(
@@ -1355,7 +1440,7 @@ class LakebaseService:
                     return len(values)
         except Exception as e:
             logger.warning(f"Failed to insert ML predictions: {e}")
-            self._cached_credentials = None
+            self._invalidate_credentials_if_auth_error(e)
             return 0
 
 

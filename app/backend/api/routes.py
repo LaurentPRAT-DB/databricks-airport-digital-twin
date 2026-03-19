@@ -40,7 +40,7 @@ from app.backend.models.airport_config import (
     OSMImportResponse,
     FAAImportResponse,
 )
-from src.ingestion.fallback import generate_synthetic_trajectory, reload_gates, reset_synthetic_state, set_airport_center
+from src.ingestion.fallback import generate_synthetic_trajectory, get_airport_center, get_current_airport_iata, reload_gates, reset_synthetic_state, set_airport_center
 from src.ml.gate_model import reload_gate_recommender
 from src.ml.registry import get_model_registry
 from app.backend.services.prediction_service import get_prediction_service
@@ -836,45 +836,82 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
     total_steps = 7
     service = get_airport_config_service()
 
-    # Step 1: Load airport config (runs sync HTTP/SQL in thread pool to avoid blocking event loop)
-    await broadcaster.broadcast_progress(1, total_steps, "Loading airport configuration...", icao_code)
-    loaded = await asyncio.to_thread(
-        service.initialize_from_lakehouse,
-        icao_code=icao_code,
-        fallback_to_osm=True,
-    )
+    # Save rollback state before modifying anything
+    prev_iata = get_current_airport_iata()
+    prev_center = get_airport_center()
+    prev_icao = f"K{prev_iata}" if len(prev_iata) == 3 else prev_iata
 
-    if not loaded:
-        await broadcaster.broadcast_progress(1, total_steps, "Airport not found", icao_code, done=True)
-        raise HTTPException(
-            status_code=404,
-            detail=f"Airport {icao_code} not found (tried lakehouse and OSM)"
+    try:
+        # Step 1: Load airport config (runs sync HTTP/SQL in thread pool to avoid blocking event loop)
+        await broadcaster.broadcast_progress(1, total_steps, "Loading airport configuration...", icao_code)
+        loaded = await asyncio.to_thread(
+            service.initialize_from_lakehouse,
+            icao_code=icao_code,
+            fallback_to_osm=True,
         )
 
-    config = service.get_config()
-    source = "lakehouse" if config.get("source") == "LAKEHOUSE" else "osm"
+        if not loaded:
+            await broadcaster.broadcast_progress(1, total_steps, "Airport not found", icao_code, done=True)
+            raise HTTPException(
+                status_code=404,
+                detail=f"Airport {icao_code} not found (tried lakehouse and OSM)"
+            )
 
-    # Step 2: Reload gates and swap ML models (fast)
-    await broadcaster.broadcast_progress(2, total_steps, "Reloading gate positions and ML models...", icao_code)
-    gates = reload_gates()
-    gate_recommender_count = reload_gate_recommender()
+        config = service.get_config()
+        source = "lakehouse" if config.get("source") == "LAKEHOUSE" else "osm"
 
-    # Swap ML models to airport-specific instances
-    registry = get_model_registry()
-    registry.retrain(icao_code)
-    prediction_service = get_prediction_service()
-    prediction_service.set_airport(icao_code)
+        # Step 2: Reload gates and swap ML models (fast)
+        await broadcaster.broadcast_progress(2, total_steps, "Reloading gate positions and ML models...", icao_code)
+        gates = reload_gates()
+        gate_recommender_count = reload_gate_recommender()
 
-    # Step 3: Set airport center BEFORE resetting state, so any concurrent
-    # flight generation uses the new center immediately
-    await broadcaster.broadcast_progress(3, total_steps, "Resetting flight state...", icao_code)
-    from src.ingestion.schedule_generator import AIRPORT_COORDINATES
-    from app.backend.services.data_generator_service import _icao_to_iata
-    iata_code = _icao_to_iata(icao_code)
-    if iata_code in AIRPORT_COORDINATES:
-        lat, lon = AIRPORT_COORDINATES[iata_code]
+        # Swap ML models to airport-specific instances
+        registry = get_model_registry()
+        registry.retrain(icao_code)
+        prediction_service = get_prediction_service()
+        prediction_service.set_airport(icao_code)
+
+        # Step 3: Set airport center BEFORE resetting state, so any concurrent
+        # flight generation uses the new center immediately
+        await broadcaster.broadcast_progress(3, total_steps, "Resetting flight state...", icao_code)
+        from src.ingestion.schedule_generator import AIRPORT_COORDINATES
+        from app.backend.services.data_generator_service import _icao_to_iata
+        iata_code = _icao_to_iata(icao_code)
+        if iata_code in AIRPORT_COORDINATES:
+            lat, lon = AIRPORT_COORDINATES[iata_code]
+        elif config.get("center"):
+            lat = config["center"]["latitude"]
+            lon = config["center"]["longitude"]
+        else:
+            raise ValueError(f"No coordinates available for {icao_code}")
+
         set_airport_center(lat, lon, iata_code)
-    reset_result = reset_synthetic_state()
+        reset_result = reset_synthetic_state()
+
+        # Force full WS update (clear delta cache so clients get a full refresh)
+        broadcaster._prev_flights.clear()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Airport switch to {icao_code} failed, rolling back: {e}")
+        # Rollback to previous airport state
+        try:
+            await asyncio.to_thread(
+                service.initialize_from_lakehouse,
+                icao_code=prev_icao,
+                fallback_to_osm=True,
+            )
+            reload_gates()
+            set_airport_center(prev_center[0], prev_center[1], prev_iata)
+            reset_synthetic_state()
+            broadcaster._prev_flights.clear()
+        except Exception as rb_err:
+            logger.error(f"Rollback to {prev_icao} also failed: {rb_err}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Airport switch failed: {e}. Rolled back to {prev_iata}.",
+        )
 
     # Check if data generation is needed
     data_generator = get_data_generator_service()

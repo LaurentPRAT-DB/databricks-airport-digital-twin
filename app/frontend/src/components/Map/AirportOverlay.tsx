@@ -216,11 +216,11 @@ export default function AirportOverlay() {
       })}
 
       {/* Render OSM gates as circle markers (preferred) - top layer so labels are visible */}
-      {useOsmGates && osmGates.filter((gate) => gate.geo).map((gate) => {
+      {useOsmGates && osmGates.filter((gate) => gate.geo).map((gate, index) => {
         const label = gate.ref || gate.name || gate.id;
         return (
           <CircleMarker
-            key={`${gate.id}-${showGateLabels}`}
+            key={`osm-${index}-${gate.id}-${showGateLabels}`}
             center={[Number(gate.geo.latitude), Number(gate.geo.longitude)]}
             radius={gateDotRadius}
             pathOptions={{
@@ -246,12 +246,12 @@ export default function AirportOverlay() {
       })}
 
       {/* Fallback: Render hardcoded gates as circle markers */}
-      {!useOsmGates && hardcodedGates.map((gate) => {
+      {!useOsmGates && hardcodedGates.map((gate, index) => {
         const coords = (gate.geometry as GeoJSON.Point).coordinates;
         const label = gate.properties?.name;
         return (
           <CircleMarker
-            key={`${label}-${showGateLabels}`}
+            key={`hardcoded-${index}-${label}-${showGateLabels}`}
             center={[coords[1], coords[0]]}
             radius={gateDotRadius}
             pathOptions={{

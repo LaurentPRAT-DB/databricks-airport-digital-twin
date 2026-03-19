@@ -116,7 +116,7 @@ class OSMConverter:
                 config["osmParkingPositions"].append(converted)
                 # Parking positions are legitimate aircraft stands
                 ref = converted.get("ref") or converted.get("id")
-                if ref and converted.get("geo") and ref not in gate_refs:
+                if ref and converted.get("geo") and ref not in gate_refs and self._is_valid_gate_ref(str(ref)):
                     gate_entry = {
                         "id": ref,
                         "osmId": converted.get("osmId"),
@@ -159,12 +159,29 @@ class OSMConverter:
                 reference_alt=self.coord_converter.reference_alt,
             )
 
+    @staticmethod
+    def _is_valid_gate_ref(ref: str) -> bool:
+        """Check if a gate ref looks like a real gate number, not an OSM ID.
+
+        Real gate numbers are typically < 200 or have letter prefixes (e.g. "A12", "T3").
+        Purely numeric values > 999 are likely OSM way/node IDs leaking through.
+        """
+        if not ref:
+            return False
+        if ref.isdigit() and int(ref) > 999:
+            return False
+        return True
+
     def _convert_gate(self, gate: OSMNode) -> dict[str, Any] | None:
         """Convert OSM gate node to internal gate format."""
         ref = gate.gate_ref
         if not ref:
-            # Generate ref from OSM ID if missing
-            ref = f"G{gate.id % 1000}"
+            # No ref tag — skip this gate rather than generating a fake name
+            # (e.g. "G869" from OSM node IDs confuses users)
+            return None
+
+        if not self._is_valid_gate_ref(ref):
+            return None
 
         pos = self.coord_converter.geo_to_local(
             GeoPosition(gate.lat, gate.lon, gate.tags.ele or 0.0)
@@ -417,7 +434,7 @@ class OSMConverter:
 
         for gate in doc.gates:
             ref = gate.gate_ref
-            if not ref:
+            if not ref or not self._is_valid_gate_ref(ref):
                 continue
 
             gates_dict[ref] = {

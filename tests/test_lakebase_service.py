@@ -507,9 +507,11 @@ class TestLakebaseConnectionErrorHandling:
     """Tests for connection error handling."""
 
     @patch("app.backend.services.lakebase_service.psycopg2", create=True)
-    def test_connection_error_clears_cached_credentials(self, mock_psycopg2):
-        """Test that connection errors clear cached OAuth credentials."""
-        mock_psycopg2.connect.side_effect = Exception("Connection failed")
+    def test_auth_error_clears_cached_credentials(self, mock_psycopg2):
+        """Test that authentication errors clear cached OAuth credentials."""
+        mock_psycopg2.connect.side_effect = Exception(
+            "password authentication failed for user 'sp-uuid'"
+        )
 
         env_vars = {
             "LAKEBASE_CONNECTION_STRING": "postgresql://user:pass@host:5432/db",
@@ -522,11 +524,36 @@ class TestLakebaseConnectionErrorHandling:
                 # Set some cached credentials
                 service._cached_credentials = ("token", "user@example.com")
 
-                # Try an operation that will fail
+                # Try an operation that will fail with auth error
                 result = service.get_weather("KSFO")
 
                 assert result is None
                 assert service._cached_credentials is None  # Should be cleared
+
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_sql_error_preserves_cached_credentials(self, mock_psycopg2):
+        """Test that SQL errors (missing table etc.) do NOT clear credentials."""
+        conn = MagicMock()
+        mock_psycopg2.connect.return_value = conn
+        cursor = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        cursor.execute.side_effect = Exception('relation "weather" does not exist')
+
+        env_vars = {
+            "LAKEBASE_CONNECTION_STRING": "postgresql://user:pass@host:5432/db",
+        }
+        with patch.dict(os.environ, env_vars):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+
+                service._cached_credentials = ("token", "user@example.com")
+
+                result = service.get_weather("KSFO")
+
+                assert result is None
+                assert service._cached_credentials is not None  # Should be preserved
 
     @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_health_check_handles_errors(self, mock_psycopg2):

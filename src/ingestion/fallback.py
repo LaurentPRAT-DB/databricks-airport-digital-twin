@@ -324,6 +324,7 @@ def get_current_flight_states() -> List[Dict[str, Any]]:
 
 # Callsign prefix → airline name mapping (must match AIRLINE_FLEET keys)
 _AIRLINE_NAMES = {
+    # ICAO codes (3-letter)
     "UAL": "United Airlines",
     "DAL": "Delta Air Lines",
     "AAL": "American Airlines",
@@ -333,6 +334,55 @@ _AIRLINE_NAMES = {
     "UAE": "Emirates",
     "AFR": "Air France",
     "CPA": "Cathay Pacific",
+    "CSN": "China Southern",
+    "HAL": "Hawaiian Airlines",
+    "ACA": "Air Canada",
+    "MXA": "Mexicana",
+    "QFA": "Qantas",
+    "ANA": "All Nippon Airways",
+    "BAW": "British Airways",
+    "DLH": "Lufthansa",
+    "KAL": "Korean Air",
+    "JAL": "Japan Airlines",
+    "SIA": "Singapore Airlines",
+    "THY": "Turkish Airlines",
+    "EVA": "EVA Air",
+    "CCA": "Air China",
+    "SAS": "SAS",
+    "ICE": "Icelandair",
+    "FIN": "Finnair",
+    "TAP": "TAP Portugal",
+    "KLM": "KLM Royal Dutch",
+    "QTR": "Qatar Airways",
+    "ETH": "Ethiopian Airlines",
+    "VIR": "Virgin Atlantic",
+    "NKS": "Spirit Airlines",
+    "FFT": "Frontier Airlines",
+    "SKW": "SkyWest Airlines",
+    "RPA": "Republic Airways",
+    "ENY": "Envoy Air",
+    "PDT": "Piedmont Airlines",
+    "CPZ": "Compass Airlines",
+    "EDV": "Endeavor Air",
+    "OTH": "Other",
+    # IATA codes (2-letter) — some callsigns use these
+    "CZ": "China Southern",
+    "MU": "China Eastern",
+    "CA": "Air China",
+    "NH": "All Nippon Airways",
+    "JL": "Japan Airlines",
+    "KE": "Korean Air",
+    "SQ": "Singapore Airlines",
+    "TK": "Turkish Airlines",
+    "BR": "EVA Air",
+    "EK": "Emirates",
+    "QR": "Qatar Airways",
+    "LH": "Lufthansa",
+    "BA": "British Airways",
+    "AF": "Air France",
+    "AC": "Air Canada",
+    "QF": "Qantas",
+    "HA": "Hawaiian Airlines",
 }
 
 
@@ -351,7 +401,8 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
     for icao24, state in _flight_states.items():
         callsign = state.callsign.strip() if state.callsign else ""
         airline_code = callsign[:3].upper() if len(callsign) >= 3 else "UAL"
-        airline_name = _AIRLINE_NAMES.get(airline_code, airline_code)
+        # Try ICAO 3-letter, then IATA 2-letter prefix
+        airline_name = _AIRLINE_NAMES.get(airline_code) or _AIRLINE_NAMES.get(callsign[:2].upper(), airline_code)
 
         local_iata = get_current_airport_iata()
         origin = state.origin_airport or "???"
@@ -395,9 +446,9 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
             elif phase == FlightPhase.LANDING:
                 scheduled_time = (now + timedelta(minutes=5 + jitter_min % 7)).isoformat()
             elif phase == FlightPhase.APPROACHING:
-                center = get_airport_center()
-                dist_deg = _distance_between((state.latitude, state.longitude), center)
-                eta_min = max(3, int(dist_deg * 60 / 0.04))
+                # ETA from altitude: assume ~800 fpm descent + 5 min taxi buffer
+                descent_min = state.altitude / 800.0 if state.altitude > 0 else 2.0
+                eta_min = max(3, int(descent_min + 5))
                 scheduled_time = (now + timedelta(minutes=eta_min)).isoformat()
             elif phase == FlightPhase.ENROUTE:
                 scheduled_time = (now + timedelta(minutes=20 + (_h % 40))).isoformat()
@@ -2515,8 +2566,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 new_pos = _move_toward((state.latitude, state.longitude), target, speed_factor)
                 state.latitude, state.longitude = new_pos
 
-                # Descend
-                state.altitude = _interpolate_altitude(state.altitude, target_alt, 300 * dt)
+                # Descend (clamp to prevent sub-ground altitudes)
+                state.altitude = max(0.0, _interpolate_altitude(state.altitude, target_alt, 300 * dt))
                 # Type-specific approach speed: decelerate from 180 kts to Vref
                 vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
                 total_wps = len(_get_approach_waypoints(state.origin_airport))
@@ -2931,9 +2982,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             roll_frac = min(state.takeoff_roll_dist_ft / rwy_len_ft, 0.98)
             state.latitude = rwy_start[0] + rwy_dlat * roll_frac
             state.longitude = rwy_start[1] + rwy_dlon * roll_frac
-            # Ramp vertical rate from 0 toward 500 fpm
+            # Ramp vertical rate from 0 toward 500 fpm, start climbing
             state.phase_progress += dt
             state.vertical_rate = min(500 * (state.phase_progress / 3.0), 500)
+            state.altitude += state.vertical_rate / 60.0 * dt
             if state.phase_progress >= 3.0 or state.velocity >= v2:
                 state.takeoff_subphase = "liftoff"
                 state.phase_progress = 0.0
@@ -2992,7 +3044,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
             new_pos = _move_toward((state.latitude, state.longitude), target, 0.002)
             state.latitude, state.longitude = new_pos
-            state.altitude = _interpolate_altitude(state.altitude, target_alt, 500 * dt)
+            state.altitude = max(0.0, _interpolate_altitude(state.altitude, target_alt, 500 * dt))
             raw_speed = 200 + state.waypoint_index * 50
             state.velocity = min(raw_speed, MAX_SPEED_BELOW_FL100_KTS) if state.altitude < 10000 else raw_speed
             state.vertical_rate = 1500 if state.altitude < target_alt else 0
@@ -3127,6 +3179,17 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         # Move in current heading direction
         state.latitude += math.cos(math.radians(state.heading)) * 0.001 * dt
         state.longitude += math.sin(math.radians(state.heading)) * 0.001 * dt
+
+    # Safety: clamp altitude floor and normalize heading
+    state.altitude = max(0.0, state.altitude)
+    state.heading = state.heading % 360
+
+    # Safety: clamp velocity for ground phases
+    if state.phase in (FlightPhase.TAXI_TO_GATE, FlightPhase.TAXI_TO_RUNWAY):
+        state.velocity = min(state.velocity, TAXI_SPEED_STRAIGHT_KTS)
+    elif state.phase == FlightPhase.PARKED:
+        state.velocity = 0.0
+        state.vertical_rate = 0.0
 
     return state
 

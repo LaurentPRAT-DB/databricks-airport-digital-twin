@@ -72,12 +72,10 @@ export default function FlightDetail() {
     showTrajectory
   );
 
-  // Show gate recommendations for descending flights (pre-arrival optimization)
-  // and ground flights without a gate yet (taxi to gate). Skip for parked flights
-  // that already have a gate — the turnaround panel shows their actual gate.
+  // Show gate recommendations only for descending flights (pre-arrival optimization).
+  // Ground flights either have a gate (PARKED/TAXI_TO_GATE) or are departing.
   const needsGateAssignment =
-    selectedFlight?.flight_phase === 'descending' ||
-    (selectedFlight?.flight_phase === 'ground' && !selectedFlight?.assigned_gate);
+    selectedFlight?.flight_phase === 'descending';
 
   if (!selectedFlight) {
     return (
@@ -350,7 +348,11 @@ export default function FlightDetail() {
           Metadata
         </div>
         <DetailRow label="Data Source" value={data_source} />
-        <DetailRow label="Last Seen" value={new Date(last_seen).toLocaleTimeString()} />
+        <DetailRow label="Last Seen" value={
+          typeof last_seen === 'number'
+            ? new Date(last_seen * 1000).toLocaleTimeString()
+            : new Date(last_seen).toLocaleTimeString()
+        } />
       </div>
     </div>
   );
