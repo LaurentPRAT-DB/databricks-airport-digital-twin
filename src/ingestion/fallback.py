@@ -364,7 +364,12 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
         # Map flight phase to FIDS status
         phase = state.phase
         if phase in (FlightPhase.PARKED,):
-            status = "arrived" if is_arrival else "boarding"
+            if is_arrival:
+                status = "arrived"
+            elif state.turnaround_phase in ("boarding", "loading", "chocks_off"):
+                status = "boarding"
+            else:
+                status = "on_time"
         elif phase in (FlightPhase.APPROACHING, FlightPhase.LANDING, FlightPhase.TAXI_TO_GATE):
             status = "on_time"
         elif phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY, FlightPhase.TAKEOFF):
