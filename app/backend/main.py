@@ -38,6 +38,47 @@ log_format = (
 )
 logging.basicConfig(level=log_level, format=log_format, force=True)
 
+# --- In-memory ring buffer log handler ---
+from collections import deque
+import threading
+
+class RingBufferHandler(logging.Handler):
+    """Logging handler that stores the last N log records in memory."""
+
+    def __init__(self, capacity: int = 2000):
+        super().__init__()
+        self._buffer: deque[str] = deque(maxlen=capacity)
+        self._lock = threading.Lock()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            with self._lock:
+                self._buffer.append(msg)
+        except Exception:
+            self.handleError(record)
+
+    def get_lines(self, n: int | None = None, level: str | None = None,
+                  search: str | None = None) -> list[str]:
+        """Return buffered log lines, optionally filtered."""
+        with self._lock:
+            lines = list(self._buffer)
+        if level:
+            level_upper = level.upper()
+            lines = [l for l in lines if f"[{level_upper}" in l]
+        if search:
+            search_lower = search.lower()
+            lines = [l for l in lines if search_lower in l.lower()]
+        if n:
+            lines = lines[-n:]
+        return lines
+
+_ring_handler = RingBufferHandler(capacity=2000)
+_ring_handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)-8s] %(name)s:%(funcName)s:%(lineno)d - %(message)s"
+))
+logging.getLogger().addHandler(_ring_handler)
+
 logger = logging.getLogger(__name__)
 
 # Resolve frontend dist path
@@ -253,6 +294,37 @@ async def readiness():
     return {
         "ready": getattr(app.state, "ready", False),
         "status": getattr(app.state, "startup_status", "Initializing..."),
+    }
+
+
+@app.get("/api/logs")
+async def get_logs(
+    n: int = 200,
+    level: str | None = None,
+    search: str | None = None,
+    format: str = "json",
+):
+    """Return recent application log lines from the in-memory ring buffer.
+
+    Query params:
+        n: Number of most recent lines to return (default 200, max 2000)
+        level: Filter by log level (e.g. ERROR, WARNING, INFO)
+        search: Case-insensitive substring search
+        format: "json" (default) or "text" for plain-text output
+    """
+    from fastapi.responses import PlainTextResponse
+
+    n = min(n, 2000)
+    lines = _ring_handler.get_lines(n=n, level=level, search=search)
+
+    if format == "text":
+        return PlainTextResponse("\n".join(lines), media_type="text/plain")
+
+    return {
+        "count": len(lines),
+        "total_buffered": len(_ring_handler._buffer),
+        "filters": {"n": n, "level": level, "search": search},
+        "lines": lines,
     }
 
 
