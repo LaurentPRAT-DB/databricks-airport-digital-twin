@@ -875,7 +875,7 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
         # flight generation uses the new center immediately
         await broadcaster.broadcast_progress(3, total_steps, "Resetting flight state...", icao_code)
         from src.ingestion.schedule_generator import AIRPORT_COORDINATES
-        from app.backend.services.data_generator_service import _icao_to_iata
+        from src.calibration.profile import _icao_to_iata
         iata_code = _icao_to_iata(icao_code)
         if iata_code in AIRPORT_COORDINATES:
             lat, lon = AIRPORT_COORDINATES[iata_code]
@@ -895,7 +895,7 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
         raise
     except Exception as e:
         logger.error(f"Airport switch to {icao_code} failed, rolling back: {e}")
-        # Rollback to previous airport state
+        # Rollback to previous airport state (restore ALL components)
         try:
             await asyncio.to_thread(
                 service.initialize_from_lakehouse,
@@ -904,6 +904,13 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
             )
             reload_gates()
             set_airport_center(prev_center[0], prev_center[1], prev_iata)
+            # Restore ML models and schedule service to previous airport
+            registry = get_model_registry()
+            registry.retrain(prev_icao)
+            prediction_service = get_prediction_service()
+            prediction_service.set_airport(prev_icao)
+            schedule_svc = get_schedule_service()
+            schedule_svc.set_airport(prev_iata, prev_icao)
             reset_synthetic_state()
             broadcaster._prev_flights.clear()
         except Exception as rb_err:

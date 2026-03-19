@@ -27,6 +27,13 @@ from app.backend.services.lakebase_service import get_lakebase_service
 logger = logging.getLogger(__name__)
 
 
+def _parse_datetime(val) -> datetime:
+    """Parse a datetime value that may be a string or already a datetime object."""
+    if isinstance(val, datetime):
+        return val
+    return datetime.fromisoformat(val)
+
+
 def _dict_to_scheduled_flight(data: dict) -> ScheduledFlight:
     """Convert schedule dictionary to ScheduledFlight model."""
     return ScheduledFlight(
@@ -35,9 +42,9 @@ def _dict_to_scheduled_flight(data: dict) -> ScheduledFlight:
         airline_code=data["airline_code"],
         origin=data["origin"],
         destination=data["destination"],
-        scheduled_time=datetime.fromisoformat(data["scheduled_time"]),
-        estimated_time=datetime.fromisoformat(data["estimated_time"]) if data.get("estimated_time") else None,
-        actual_time=datetime.fromisoformat(data["actual_time"]) if data.get("actual_time") else None,
+        scheduled_time=_parse_datetime(data["scheduled_time"]),
+        estimated_time=_parse_datetime(data["estimated_time"]) if data.get("estimated_time") else None,
+        actual_time=_parse_datetime(data["actual_time"]) if data.get("actual_time") else None,
         gate=data.get("gate"),
         status=FlightStatus(data["status"]),
         delay_minutes=data.get("delay_minutes", 0),

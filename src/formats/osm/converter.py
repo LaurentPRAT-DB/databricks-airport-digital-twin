@@ -163,12 +163,24 @@ class OSMConverter:
     def _is_valid_gate_ref(ref: str) -> bool:
         """Check if a gate ref looks like a real gate number, not an OSM ID.
 
-        Real gate numbers are typically < 200 or have letter prefixes (e.g. "A12", "T3").
-        Purely numeric values > 999 are likely OSM way/node IDs leaking through.
+        Real gate numbers are typically short: "A12", "T3", "42", "B1",
+        "G11-G12", "31 A,B,C,D". Purely numeric values > 200 are likely
+        OSM way/node IDs leaking through. Letter+number combos where the
+        number part exceeds 200 (e.g. "G869") are also invalid.
         """
+        import re
+
         if not ref:
             return False
-        if ref.isdigit() and int(ref) > 999:
+        # Purely numeric: reject > 200 (real gates are typically < 200)
+        if ref.isdigit():
+            return int(ref) <= 200
+        # Letter prefix + large number (e.g. "G869"): extract numeric part
+        match = re.match(r'^[A-Za-z]{1,2}(\d+)$', ref)
+        if match and int(match.group(1)) > 200:
+            return False
+        # Reject very long refs (likely compound OSM IDs)
+        if len(ref) > 15:
             return False
         return True
 
