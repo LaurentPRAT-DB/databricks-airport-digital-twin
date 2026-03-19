@@ -23,7 +23,12 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.calibration.profile import AirportProfileLoader, _icao_to_iata
-from src.ingestion.schedule_generator import generate_daily_schedule
+from src.ingestion.schedule_generator import (
+    generate_daily_schedule,
+    AIRPORT_COUNTRY,
+    COUNTRY_DOMESTIC_AIRPORTS,
+    DOMESTIC_AIRPORTS,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -151,14 +156,34 @@ def score_airport(icao: str, loader: AirportProfileLoader, n_schedules: int = 10
         for k, v in profile.international_route_shares.items():
             gt_routes[k] = gt_routes.get(k, 0.0) + v * intl_weight
 
-    # 3. Domestic ratio — classify based on whether remote airport appears in
-    #    the profile's domestic vs international route shares
-    intl_airports = set(profile.international_route_shares.keys()) if profile.international_route_shares else _INTERNATIONAL_IATAS
-    domestic_count = 0
-    for f in all_flights:
-        remote = f["origin"] if f["flight_type"] == "arrival" else f["destination"]
-        if remote not in intl_airports:
-            domestic_count += 1
+    # 3. Domestic ratio — classify using country-based lookup.
+    #    A flight to a same-country airport is domestic.
+    country = AIRPORT_COUNTRY.get(iata)
+    if country:
+        # Build set of all known domestic IATA codes for this country
+        same_country_airports = set(COUNTRY_DOMESTIC_AIRPORTS.get(country, []))
+        # Also include US domestic airports if the airport is US
+        if country == "US":
+            same_country_airports.update(DOMESTIC_AIRPORTS)
+        # Also include airports from the profile's domestic_route_shares
+        if profile.domestic_route_shares:
+            same_country_airports.update(profile.domestic_route_shares.keys())
+        domestic_count = 0
+        for f in all_flights:
+            remote = f["origin"] if f["flight_type"] == "arrival" else f["destination"]
+            if remote in same_country_airports:
+                domestic_count += 1
+    else:
+        # US airports or unknown country: use profile's domestic_route_shares
+        # or fall back to the DOMESTIC_AIRPORTS list
+        domestic_set = set(DOMESTIC_AIRPORTS)
+        if profile.domestic_route_shares:
+            domestic_set.update(profile.domestic_route_shares.keys())
+        domestic_count = 0
+        for f in all_flights:
+            remote = f["origin"] if f["flight_type"] == "arrival" else f["destination"]
+            if remote in domestic_set:
+                domestic_count += 1
     syn_domestic_ratio = domestic_count / n_flights if n_flights else 0.5
 
     # 4. Fleet mix per airline (averaged JSD)

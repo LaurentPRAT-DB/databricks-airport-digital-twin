@@ -69,6 +69,48 @@ INTERNATIONAL_AIRPORTS = [
     "LHR", "CDG", "FRA", "AMS", "HKG", "NRT", "SIN", "SYD", "DXB", "ICN",
 ]
 
+# Country-based domestic airports for international hubs where
+# domestic_route_shares may be empty in the calibrated profile.
+COUNTRY_DOMESTIC_AIRPORTS: dict[str, list[str]] = {
+    "DE": ["MUC", "DUS", "HAM", "BER", "STR", "CGN"],
+    "FR": ["ORY", "NCE", "LYS", "MRS", "TLS", "BOD"],
+    "JP": ["HND", "KIX", "FUK", "CTS", "OKA", "NGO"],
+    "KR": ["GMP", "PUS", "CJU", "TAE", "KWJ"],
+    "GB": ["LGW", "MAN", "EDI", "BHX", "GLA", "BRS"],
+    "NL": ["EIN", "RTM", "MST"],
+    "AE": ["AUH", "SHJ", "DWC"],
+    "SG": [],
+    "HK": [],
+    "AU": ["MEL", "BNE", "PER", "ADL", "CBR", "OOL"],
+    "BR": ["CGH", "GIG", "BSB", "CNF", "SSA", "CWB"],
+    "ZA": ["CPT", "DUR", "PLZ", "BFN"],
+    "TR": ["SAW", "ESB", "AYT", "ADB", "ADA"],
+    "CA": ["YYZ", "YVR", "YUL", "YOW", "YEG", "YWG"],
+    "MX": ["CUN", "GDL", "MTY", "TIJ", "CJS"],
+    "TW": ["TSA", "KHH", "RMQ", "TNN"],
+    "CL": ["SCL", "CCP", "PMC", "IQQ"],
+}
+
+AIRPORT_COUNTRY: dict[str, str] = {
+    "FRA": "DE", "MUC": "DE",
+    "CDG": "FR", "ORY": "FR",
+    "NRT": "JP", "HND": "JP",
+    "ICN": "KR", "GMP": "KR",
+    "LHR": "GB", "LGW": "GB", "STN": "GB",
+    "AMS": "NL",
+    "DXB": "AE", "AUH": "AE",
+    "SIN": "SG",
+    "HKG": "HK",
+    "SYD": "AU", "MEL": "AU",
+    "GRU": "BR", "GIG": "BR",
+    "JNB": "ZA", "CPT": "ZA",
+    "IST": "TR",
+    "YYZ": "CA", "YVR": "CA",
+    "MEX": "MX",
+    "TPE": "TW",
+    "SCL": "CL",
+}
+
 # Real airport coordinates (lat, lon) for all origin/destination airports
 AIRPORT_COORDINATES = {
     # Home airport
@@ -161,12 +203,17 @@ def _generate_flight_number(airline_code: str) -> str:
 
 
 def _select_destination(
-    flight_type: str, airline_code: str, profile: AirportProfile | None = None,
+    flight_type: str, airline_code: str,
+    profile: AirportProfile | None = None,
+    airport: str | None = None,
 ) -> str:
     """Select destination based on airline and flight type.
 
     If a calibrated profile is provided, sample from its route shares
     and domestic_ratio. Otherwise fall back to uniform random choice.
+
+    When domestic_route_shares is empty (common for international hubs like
+    FRA, CDG, NRT, ICN), falls back to country-based domestic airports.
     """
     if profile and (profile.domestic_route_shares or profile.international_route_shares):
         is_domestic = random.random() < profile.domestic_ratio
@@ -174,7 +221,16 @@ def _select_destination(
             routes = list(profile.domestic_route_shares.keys())
             weights = list(profile.domestic_route_shares.values())
             return random.choices(routes, weights=weights, k=1)[0]
-        elif profile.international_route_shares:
+        elif is_domestic and not profile.domestic_route_shares:
+            # No calibrated domestic routes — use country-based fallback
+            iata = airport or ""
+            country = AIRPORT_COUNTRY.get(iata)
+            if country and COUNTRY_DOMESTIC_AIRPORTS.get(country):
+                candidates = [a for a in COUNTRY_DOMESTIC_AIRPORTS[country] if a != iata]
+                if candidates:
+                    return random.choice(candidates)
+            # Country has no domestic airports (SG, HK) — fall through to international
+        if profile.international_route_shares:
             routes = list(profile.international_route_shares.keys())
             weights = list(profile.international_route_shares.values())
             return random.choices(routes, weights=weights, k=1)[0]
@@ -209,18 +265,15 @@ def _select_aircraft(
     return random.choice(NARROW_BODY)
 
 
-def _generate_delay(
+def _generate_delay_details(
     profile: AirportProfile | None = None,
-) -> tuple[int, Optional[str], Optional[str]]:
-    """Generate realistic delay if applicable.
+) -> tuple[int, str, str]:
+    """Generate delay details (minutes, code, reason) without rate check.
 
-    If a calibrated profile is provided, use its delay_rate and
-    delay_distribution instead of the hardcoded 15% rate.
+    Always returns a delay. The caller is responsible for deciding which
+    flights get delayed (Bernoulli flip or two-pass assignment).
     """
-    delay_rate = profile.delay_rate if profile else 0.15
-
-    if random.random() > delay_rate:
-        return 0, None, None
+    import math
 
     # Select delay code based on weights
     if profile and profile.delay_distribution:
@@ -233,16 +286,33 @@ def _generate_delay(
     code = random.choices(codes, weights=weights, k=1)[0]
     reason = DELAY_CODES[code][0] if code in DELAY_CODES else f"Delay code {code}"
 
-    # Delay duration based on profile mean or default
+    # Delay duration: log-normal distribution (realistic right-skewed delays)
     mean_delay = profile.mean_delay_minutes if profile else 20.0
-    if random.random() < 0.8:
-        # Short delay: 5 to mean
-        delay_minutes = random.randint(5, max(6, int(mean_delay)))
-    else:
-        # Long delay: mean to 2x mean (capped at 180)
-        delay_minutes = random.randint(int(mean_delay), min(180, int(mean_delay * 2)))
+    sigma = 0.8
+    mu = math.log(max(mean_delay, 5.0)) - sigma * sigma / 2.0
+    delay_minutes = max(5, min(120, round(random.lognormvariate(mu, sigma))))
 
     return delay_minutes, code, reason
+
+
+def _generate_delay(
+    profile: AirportProfile | None = None,
+) -> tuple[int, Optional[str], Optional[str]]:
+    """Generate realistic delay if applicable (single-flight Bernoulli).
+
+    If a calibrated profile is provided, use its delay_rate and
+    delay_distribution instead of the hardcoded 15% rate.
+
+    Note: generate_daily_schedule() uses the two-pass method instead
+    for tighter delay-rate accuracy. This function is kept for
+    backward compatibility with other callers.
+    """
+    delay_rate = profile.delay_rate if profile else 0.15
+
+    if random.random() > delay_rate:
+        return 0, None, None
+
+    return _generate_delay_details(profile=profile)
 
 
 # Per-airport traffic profiles
@@ -352,7 +422,8 @@ def _get_flights_per_hour(
         max_weight = max(airport_profile.hourly_profile)
         if max_weight > 0:
             scaled = weight / max_weight * 25  # scale to ~25 max
-            base = max(0, int(scaled + random.uniform(-2, 2)))
+            noise_range = max(0.5, scaled * 0.15)  # 15% proportional noise
+            base = max(0, int(scaled + random.uniform(-noise_range, noise_range)))
         else:
             base = 0
     else:
@@ -479,11 +550,11 @@ def generate_daily_schedule(
             flight_number = _generate_flight_number(airline_code)
 
             if is_arrival:
-                origin = _select_destination("arrival", airline_code, profile=profile)
+                origin = _select_destination("arrival", airline_code, profile=profile, airport=airport)
                 destination = airport
             else:
                 origin = airport
-                destination = _select_destination("departure", airline_code, profile=profile)
+                destination = _select_destination("departure", airline_code, profile=profile, airport=airport)
 
             remote_airport = origin if is_arrival else destination
             aircraft = _select_aircraft(
@@ -495,29 +566,6 @@ def generate_daily_schedule(
             scheduled_time = date.replace(
                 hour=hour, minute=minute, second=0, microsecond=0
             )
-
-            # Generate delay
-            delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
-            estimated_time = None
-            if delay_minutes > 0:
-                estimated_time = scheduled_time + timedelta(minutes=delay_minutes)
-
-            # Determine status based on time
-            now = datetime.now(timezone.utc)
-            effective_time = estimated_time or scheduled_time
-
-            if effective_time < now - timedelta(minutes=15):
-                status = "arrived" if is_arrival else "departed"
-                actual_time = effective_time
-            elif effective_time < now:
-                status = "boarding" if not is_arrival else "arrived"
-                actual_time = effective_time if status == "arrived" else None
-            elif delay_minutes > 0:
-                status = "delayed"
-                actual_time = None
-            else:
-                status = "on_time"
-                actual_time = None
 
             # Assign gate with occupancy tracking (no double-booking)
             gate = _assign_gate_with_occupancy(
@@ -532,16 +580,55 @@ def generate_daily_schedule(
                 "origin": origin,
                 "destination": destination,
                 "scheduled_time": scheduled_time.isoformat(),
-                "estimated_time": estimated_time.isoformat() if estimated_time else None,
-                "actual_time": actual_time.isoformat() if actual_time else None,
+                "estimated_time": None,
+                "actual_time": None,
                 "gate": gate,
-                "status": status,
-                "delay_minutes": delay_minutes,
-                "delay_reason": delay_reason,
+                "status": "on_time",
+                "delay_minutes": 0,
+                "delay_reason": None,
                 "aircraft_type": aircraft,
                 "flight_type": "arrival" if is_arrival else "departure",
             }
             schedule.append(flight)
+
+    # --- Two-pass delay assignment ---
+    # Assign exact number of delayed flights to match profile delay_rate.
+    delay_rate = profile.delay_rate if profile else 0.15
+    n_delayed = round(len(schedule) * delay_rate)
+    if n_delayed > 0:
+        delayed_indices = random.sample(range(len(schedule)), min(n_delayed, len(schedule)))
+        now = datetime.now(timezone.utc)
+        for idx in delayed_indices:
+            flight = schedule[idx]
+            delay_minutes, delay_code, delay_reason = _generate_delay_details(profile=profile)
+            scheduled_time = datetime.fromisoformat(flight["scheduled_time"])
+            estimated_time = scheduled_time + timedelta(minutes=delay_minutes)
+            flight["delay_minutes"] = delay_minutes
+            flight["delay_reason"] = delay_reason
+            flight["estimated_time"] = estimated_time.isoformat()
+
+    # --- Assign statuses based on time ---
+    now = datetime.now(timezone.utc)
+    for flight in schedule:
+        scheduled_time = datetime.fromisoformat(flight["scheduled_time"])
+        estimated_time = (
+            datetime.fromisoformat(flight["estimated_time"])
+            if flight["estimated_time"]
+            else None
+        )
+        effective_time = estimated_time or scheduled_time
+        is_arrival = flight["flight_type"] == "arrival"
+
+        if effective_time < now - timedelta(minutes=15):
+            flight["status"] = "arrived" if is_arrival else "departed"
+            flight["actual_time"] = effective_time.isoformat()
+        elif effective_time < now:
+            flight["status"] = "boarding" if not is_arrival else "arrived"
+            flight["actual_time"] = effective_time.isoformat() if is_arrival else None
+        elif flight["delay_minutes"] > 0:
+            flight["status"] = "delayed"
+        else:
+            flight["status"] = "on_time"
 
     # Sort by scheduled time
     schedule.sort(key=lambda x: x["scheduled_time"])
