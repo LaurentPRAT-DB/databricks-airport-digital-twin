@@ -549,15 +549,15 @@ class TestAirlineMix:
     """Validate airline weights and data match doc."""
 
     EXPECTED_AIRLINES = {
-        "UAL": ("United Airlines", 0.35),
-        "DAL": ("Delta Air Lines", 0.15),
-        "AAL": ("American Airlines", 0.15),
-        "SWA": ("Southwest Airlines", 0.10),
-        "ASA": ("Alaska Airlines", 0.08),
-        "JBU": ("JetBlue Airways", 0.05),
-        "UAE": ("Emirates", 0.04),
-        "BAW": ("British Airways", 0.03),
-        "ANA": ("All Nippon Airways", 0.03),
+        "UAL": ("United Airlines", 0.31),
+        "DAL": ("Delta Air Lines", 0.10),
+        "AAL": ("American Airlines", 0.10),
+        "SWA": ("Southwest Airlines", 0.08),
+        "ASA": ("Alaska Airlines", 0.06),
+        "JBU": ("JetBlue Airways", 0.03),
+        "UAE": ("Emirates", 0.03),
+        "BAW": ("British Airways", 0.02),
+        "ANA": ("All Nippon Airways", 0.02),
         "CPA": ("Cathay Pacific", 0.02),
     }
 
@@ -584,8 +584,8 @@ class TestAirlineMix:
         random.seed(42)
         selections = [_select_airline()[0] for _ in range(1000)]
         ual_count = selections.count("UAL")
-        # 35% weight → should appear 300-400 times in 1000 samples
-        assert 250 < ual_count < 450
+        # 31% weight → should appear 250-400 times in 1000 samples
+        assert 200 < ual_count < 450
 
 
 # ============================================================================

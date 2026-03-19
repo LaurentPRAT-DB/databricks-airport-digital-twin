@@ -421,6 +421,7 @@ class DataGeneratorService:
             drain_phase_transitions,
             drain_gate_events,
             drain_predictions,
+            drain_turnaround_events,
         )
 
         lakebase = get_lakebase_service()
@@ -435,6 +436,7 @@ class DataGeneratorService:
         transitions = drain_phase_transitions()
         gate_events = drain_gate_events()
         predictions = drain_predictions()
+        turnaround_events = drain_turnaround_events()
 
         # Batch insert
         snap_count = lakebase.insert_flight_snapshots(snapshots, session_id, airport_icao)
@@ -442,11 +444,17 @@ class DataGeneratorService:
         gate_count = lakebase.insert_gate_events(gate_events, session_id, airport_icao)
         pred_count = lakebase.insert_ml_predictions(predictions, session_id, airport_icao)
 
+        # Log turnaround events (Lakebase table pending)
+        ta_count = len(turnaround_events)
+        if ta_count > 0:
+            logger.debug(f"Drained {ta_count} turnaround events for {airport_icao}")
+
         return {
             "snapshots": snap_count,
             "transitions": trans_count,
             "gate_events": gate_count,
             "predictions": pred_count,
+            "turnaround_events": ta_count,
         }
 
     async def _flight_snapshot_refresh_loop(self) -> None:

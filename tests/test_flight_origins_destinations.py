@@ -47,6 +47,7 @@ from src.ingestion.schedule_generator import (
     DOMESTIC_AIRPORTS,
     INTERNATIONAL_AIRPORTS,
 )
+from src.ingestion.fallback import _get_current_airport_profile
 
 
 # ============================================================================
@@ -250,17 +251,27 @@ class TestInternationalDetection:
 class TestAirportPickers:
     """Tests for _pick_random_origin and _pick_random_destination."""
 
+    @staticmethod
+    def _all_valid_airports() -> set:
+        """Build set of all valid airports: static lists + calibrated profile routes."""
+        airports = set(DOMESTIC_AIRPORTS) | set(INTERNATIONAL_AIRPORTS)
+        profile = _get_current_airport_profile()
+        if profile:
+            airports.update(profile.domestic_route_shares.keys())
+            airports.update(profile.international_route_shares.keys())
+        return airports
+
     def test_pick_origin_returns_valid_airport(self):
-        all_airports = set(DOMESTIC_AIRPORTS) | set(INTERNATIONAL_AIRPORTS)
+        all_airports = self._all_valid_airports()
         for _ in range(50):
             origin = _pick_random_origin()
-            assert origin in all_airports
+            assert origin in all_airports, f"{origin} not in valid airports"
 
     def test_pick_destination_returns_valid_airport(self):
-        all_airports = set(DOMESTIC_AIRPORTS) | set(INTERNATIONAL_AIRPORTS)
+        all_airports = self._all_valid_airports()
         for _ in range(50):
             dest = _pick_random_destination()
-            assert dest in all_airports
+            assert dest in all_airports, f"{dest} not in valid airports"
 
     def test_picks_include_both_domestic_and_international(self):
         origins = {_pick_random_origin() for _ in range(200)}

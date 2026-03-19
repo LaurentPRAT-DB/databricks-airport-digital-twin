@@ -17,6 +17,34 @@ logger = logging.getLogger(__name__)
 # Directory where profile JSONs are stored
 _PROFILES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "calibration" / "profiles"
 
+# BTS T-100 AIRCRAFT_TYPE numeric codes → ICAO type designators.
+# BTS uses DOT numeric codes; we map the most common ones to standard ICAO
+# type codes used by the simulation and GSE models.
+BTS_AIRCRAFT_TYPE_MAP: dict[str, str] = {
+    # Airbus single-aisle
+    "06460": "A320", "16461": "A321", "06944": "A320", "06689": "A319",
+    # Airbus wide-body
+    "10260": "A330", "10261": "A330", "10262": "A350",
+    # Boeing 737 family
+    "06725": "B737", "06031": "B738", "16031": "B739", "0A875": "B738",
+    "06700": "B739", "06795": "B738", "16795": "B739", "11033": "B738",
+    # Boeing 757/767
+    "07024": "B767", "06820": "B738", "16820": "B738",
+    # Boeing 777
+    "10874": "B777", "07028": "B777",
+    # Boeing 787
+    "10876": "B787", "10877": "B787", "10875": "A321",
+    "10049": "B787", "10050": "B787", "10052": "A321",
+    # Regional jets
+    "06580": "E175", "11025": "E175", "11027": "CRJ9", "11022": "CRJ7",
+    "11030": "E175",
+    # Other narrowbody
+    "06673": "A320", "16673": "A321", "06830": "A320", "16831": "A321",
+    "06035": "A319", "0A050": "A321", "01260": "B738", "01268": "A320",
+    "06003": "A319", "06918": "A321", "01189": "A320",
+    "07041": "A320", "71072": "A320", "9900Y": "B738",
+}
+
 
 @dataclass
 class AirportProfile:
@@ -63,8 +91,23 @@ class AirportProfile:
 
     @classmethod
     def from_json(cls, data: dict) -> "AirportProfile":
-        """Create profile from a JSON-parsed dict."""
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        """Create profile from a JSON-parsed dict.
+
+        Normalizes BTS numeric aircraft type codes to ICAO designators.
+        """
+        profile = cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        profile._normalize_fleet_mix()
+        return profile
+
+    def _normalize_fleet_mix(self) -> None:
+        """Map BTS numeric aircraft type codes to ICAO type designators."""
+        for airline, fleet in list(self.fleet_mix.items()):
+            normalized: dict[str, float] = {}
+            for code, weight in fleet.items():
+                icao_code = BTS_AIRCRAFT_TYPE_MAP.get(code, code)
+                # Merge weights if multiple BTS codes map to same ICAO type
+                normalized[icao_code] = normalized.get(icao_code, 0.0) + weight
+            self.fleet_mix[airline] = normalized
 
     @classmethod
     def load(cls, path: Path) -> "AirportProfile":

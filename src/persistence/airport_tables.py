@@ -6,9 +6,6 @@ Defines DDL for Unity Catalog tables storing airport configuration data.
 import logging
 from typing import Optional
 
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.sql import StatementState
-
 logger = logging.getLogger(__name__)
 
 # Default catalog and schema
@@ -456,7 +453,7 @@ ALL_TABLES = [
 
 
 def create_tables(
-    client: WorkspaceClient,
+    client: "WorkspaceClient",
     warehouse_id: str,
     catalog: str = DEFAULT_CATALOG,
     schema: str = DEFAULT_SCHEMA,
@@ -494,12 +491,14 @@ def create_tables(
 
 
 def _execute_sql(
-    client: WorkspaceClient,
+    client: "WorkspaceClient",
     warehouse_id: str,
     sql: str,
     timeout_seconds: int = 60,
 ) -> Optional[list[dict]]:
     """Execute SQL statement and return results."""
+    from databricks.sdk.service.sql import StatementState  # noqa: E402
+
     response = client.statement_execution.execute_statement(
         warehouse_id=warehouse_id,
         statement=sql,

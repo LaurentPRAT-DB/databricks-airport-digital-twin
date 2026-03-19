@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 from faker import Faker
 
-from src.ml.gse_model import get_turnaround_timing
+from src.ml.gse_model import get_turnaround_timing, PHASE_DEPENDENCIES
 
 
 fake = Faker()
@@ -148,6 +148,9 @@ _gate_event_lock = threading.Lock()
 _prediction_buffer: List[Dict[str, Any]] = []
 _prediction_lock = threading.Lock()
 
+_turnaround_event_buffer: List[Dict[str, Any]] = []
+_turnaround_event_lock = threading.Lock()
+
 
 def emit_phase_transition(
     icao24: str,
@@ -243,6 +246,38 @@ def drain_predictions() -> List[Dict[str, Any]]:
     return events
 
 
+def emit_turnaround_event(
+    icao24: str,
+    callsign: str,
+    gate: str,
+    phase: str,
+    event_type: str,  # "phase_start" or "phase_complete"
+    aircraft_type: str = "A320",
+) -> None:
+    """Record a turnaround sub-phase event."""
+    event = {
+        "icao24": icao24,
+        "callsign": callsign,
+        "gate": gate,
+        "turnaround_phase": phase,
+        "event_type": event_type,
+        "aircraft_type": aircraft_type,
+        "event_time": datetime.now(timezone.utc).isoformat(),
+    }
+    with _turnaround_event_lock:
+        _turnaround_event_buffer.append(event)
+        if len(_turnaround_event_buffer) > _MAX_BUFFER_SIZE:
+            del _turnaround_event_buffer[: _MAX_BUFFER_SIZE // 2]
+
+
+def drain_turnaround_events() -> List[Dict[str, Any]]:
+    """Drain and return all buffered turnaround events."""
+    with _turnaround_event_lock:
+        events = list(_turnaround_event_buffer)
+        _turnaround_event_buffer.clear()
+    return events
+
+
 def get_flight_turnaround_info(icao24: str) -> Optional[Dict[str, Any]]:
     """Get turnaround info for a flight from simulation state.
 
@@ -258,6 +293,8 @@ def get_flight_turnaround_info(icao24: str) -> Optional[Dict[str, Any]]:
         "aircraft_type": state.aircraft_type,
         "callsign": state.callsign,
         "phase": state.phase.value,
+        "turnaround_phase": state.turnaround_phase,
+        "turnaround_schedule": state.turnaround_schedule,
     }
 
 
@@ -1405,6 +1442,8 @@ class FlightState:
     holding_inbound: bool = True               # True = inbound leg, False = outbound leg
     go_around_count: int = 0                   # Number of go-arounds for this approach
     parked_since: float = 0.0                  # time.time() when aircraft entered PARKED phase
+    turnaround_phase: str = ""                 # Current turnaround sub-phase (e.g. "deboarding")
+    turnaround_schedule: Optional[Dict] = None # {phase: {"start_offset_s", "duration_s", "done", "started"}}
 
 
 # Global state storage
@@ -2037,6 +2076,58 @@ def _pick_random_destination() -> str:
     return _pick_random_airport(exclude=get_current_airport_iata())
 
 
+# Gate-relevant turnaround phases in DAG order (excludes taxi/pushback sim phases)
+_GATE_PHASES = [
+    "chocks_on", "deboarding", "unloading", "cleaning",
+    "catering", "refueling", "loading", "boarding", "chocks_off",
+]
+
+
+def _build_turnaround_schedule(
+    aircraft_type: str,
+    airline_code: str,
+    combined_factor: float,
+) -> Dict[str, Dict]:
+    """Build a critical-path turnaround schedule for gate sub-phases.
+
+    Returns dict: {phase_name: {"start_offset_s", "duration_s", "done", "started"}}
+    All times are in seconds relative to PARKED entry (time_at_gate=0).
+    """
+    timing = get_turnaround_timing(aircraft_type)
+    phases = timing["phases"]
+
+    # Compute jittered durations (minutes) for gate phases only
+    jittered: Dict[str, float] = {}
+    for phase in _GATE_PHASES:
+        nominal = phases.get(phase, 5)
+        jittered[phase] = nominal * combined_factor * random.uniform(0.9, 1.1)
+
+    # Critical-path scheduling: earliest start = max finish of dependencies
+    finish: Dict[str, float] = {}
+    start: Dict[str, float] = {}
+    for phase in _GATE_PHASES:
+        deps = PHASE_DEPENDENCIES.get(phase, [])
+        # Only consider deps that are also gate phases
+        earliest_start = max(
+            (finish[d] for d in deps if d in finish),
+            default=0.0,
+        )
+        start[phase] = earliest_start
+        finish[phase] = earliest_start + jittered[phase]
+
+    # Convert to seconds and build schedule dict
+    schedule: Dict[str, Dict] = {}
+    for phase in _GATE_PHASES:
+        schedule[phase] = {
+            "start_offset_s": start[phase] * 60,
+            "duration_s": jittered[phase] * 60,
+            "done": False,
+            "started": False,
+        }
+
+    return schedule
+
+
 def _create_new_flight(
     icao24: str, callsign: str, phase: FlightPhase,
     origin: Optional[str] = None, destination: Optional[str] = None,
@@ -2145,6 +2236,28 @@ def _create_new_flight(
         lat, lon = _offset_position_by_heading(lat, lon, parked_heading, standoff)
 
         initial_time_at_gate = random.uniform(0, 300)  # Random time already parked
+
+        # Build turnaround schedule and pre-advance to match elapsed time
+        airline_code = callsign[:3] if callsign and len(callsign) >= 3 else ""
+        combined_factor = AIRLINE_TURNAROUND_FACTOR.get(airline_code, _DEFAULT_AIRLINE_FACTOR)
+        schedule = _build_turnaround_schedule(aircraft_type, airline_code, combined_factor)
+        # Pre-advance phases that would already be started/done given initial_time_at_gate
+        current_phase = ""
+        for p_name in _GATE_PHASES:
+            info = schedule[p_name]
+            if initial_time_at_gate >= info["start_offset_s"] + info["duration_s"]:
+                info["done"] = True
+                info["started"] = True
+            elif initial_time_at_gate >= info["start_offset_s"]:
+                info["started"] = True
+                current_phase = p_name
+        if not current_phase:
+            # Find first not-yet-started phase
+            for p_name in _GATE_PHASES:
+                if not schedule[p_name]["done"]:
+                    current_phase = p_name
+                    break
+
         return FlightState(
             icao24=icao24,
             callsign=callsign,
@@ -2162,6 +2275,8 @@ def _create_new_flight(
             origin_airport=origin,
             destination_airport=destination,
             parked_since=time.time() - initial_time_at_gate,
+            turnaround_phase=current_phase,
+            turnaround_schedule=schedule,
         )
 
     elif phase == FlightPhase.ENROUTE:
@@ -2555,11 +2670,49 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude, state.longitude = _offset_position_by_heading(
                     state.latitude, state.longitude, parked_heading, standoff
                 )
+                # Build turnaround schedule
+                airline_code = state.callsign[:3] if state.callsign and len(state.callsign) >= 3 else ""
+                airline_factor = AIRLINE_TURNAROUND_FACTOR.get(airline_code, _DEFAULT_AIRLINE_FACTOR)
+                weather_factor = _get_turnaround_weather_factor()
+                congestion_factor = _get_turnaround_congestion_factor()
+                intl_factor = _get_turnaround_international_factor(state)
+                dow_factor = _get_turnaround_day_of_week_factor()
+                combined = airline_factor * weather_factor * congestion_factor * intl_factor * dow_factor
+                state.turnaround_schedule = _build_turnaround_schedule(
+                    state.aircraft_type, airline_code, combined,
+                )
+                state.turnaround_phase = "chocks_on"
 
     elif state.phase == FlightPhase.PARKED:
         # Stay at gate for some time, then pushback
         state.velocity = 0
         state.time_at_gate += dt
+
+        # Progress turnaround sub-phases based on schedule
+        if state.turnaround_schedule:
+            active_phase = ""
+            for p_name in _GATE_PHASES:
+                info = state.turnaround_schedule.get(p_name)
+                if info is None:
+                    continue
+                phase_end = info["start_offset_s"] + info["duration_s"]
+                if not info["started"] and state.time_at_gate >= info["start_offset_s"]:
+                    info["started"] = True
+                    emit_turnaround_event(
+                        state.icao24, state.callsign,
+                        state.assigned_gate or "", p_name, "phase_start",
+                        state.aircraft_type,
+                    )
+                if info["started"] and not info["done"] and state.time_at_gate >= phase_end:
+                    info["done"] = True
+                    emit_turnaround_event(
+                        state.icao24, state.callsign,
+                        state.assigned_gate or "", p_name, "phase_complete",
+                        state.aircraft_type,
+                    )
+                if info["started"] and not info["done"]:
+                    active_phase = p_name
+            state.turnaround_phase = active_phase
 
         # Realistic turnaround: use total_minutes (accounts for parallel phases)
         # minus arrival/departure taxi and pushback (handled by other sim phases)
@@ -3656,6 +3809,8 @@ def reset_synthetic_state() -> dict:
         _gate_event_buffer.clear()
     with _prediction_lock:
         _prediction_buffer.clear()
+    with _turnaround_event_lock:
+        _turnaround_event_buffer.clear()
 
     return {
         "cleared_flights": cleared_flights,

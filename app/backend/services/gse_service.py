@@ -138,23 +138,43 @@ class GSEService:
                 effective_callsign or "",
             )
 
-            # Calculate turnaround status
-            if scheduled_dep:
-                # We have a schedule — compute estimated departure from it
-                sched_time_str = scheduled_dep.get("estimated_time") or scheduled_dep["scheduled_time"]
-                sched_departure = datetime.fromisoformat(sched_time_str)
-                # Use schedule-based turnaround window for phase fitting
-                total_window_min = max(
-                    30.0,
-                    (sched_departure - arrival_time).total_seconds() / 60,
-                )
-            else:
-                total_window_min = None
+            # Check if we have a real turnaround schedule from the simulation
+            turnaround_schedule = sim_info.get("turnaround_schedule")
+            turnaround_phase = sim_info.get("turnaround_phase", "")
 
-            status = calculate_turnaround_status(
-                arrival_time=arrival_time,
-                aircraft_type=effective_aircraft,
-            )
+            if turnaround_schedule and turnaround_phase:
+                # Use real simulated turnaround phase
+                phase_info = turnaround_schedule.get(turnaround_phase, {})
+                phase_start = phase_info.get("start_offset_s", 0)
+                phase_duration = phase_info.get("duration_s", 1)
+                time_at_gate = sim_info.get("time_at_gate_seconds", 0)
+                phase_elapsed = max(0, time_at_gate - phase_start)
+                phase_progress = min(100, int((phase_elapsed / max(phase_duration, 1)) * 100))
+
+                # Total progress: fraction of phases completed
+                total_phases = len(turnaround_schedule)
+                done_count = sum(1 for p in turnaround_schedule.values() if p.get("done"))
+                # Add fractional progress of current phase
+                total_progress = min(100, int(((done_count + phase_progress / 100) / max(total_phases, 1)) * 100))
+
+                from src.ml.gse_model import get_turnaround_timing
+                timing = get_turnaround_timing(effective_aircraft)
+                estimated_departure = arrival_time + timedelta(minutes=timing["total_minutes"])
+
+                status = {
+                    "current_phase": turnaround_phase,
+                    "phase_progress_pct": phase_progress,
+                    "total_progress_pct": total_progress,
+                    "estimated_departure": estimated_departure,
+                    "elapsed_minutes": time_at_gate / 60,
+                    "remaining_minutes": max(0, timing["total_minutes"] - time_at_gate / 60),
+                }
+            else:
+                # Fallback: compute from elapsed time
+                status = calculate_turnaround_status(
+                    arrival_time=arrival_time,
+                    aircraft_type=effective_aircraft,
+                )
 
             # If we have a schedule, override estimated departure
             if scheduled_dep:
