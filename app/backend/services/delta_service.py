@@ -51,12 +51,15 @@ class DeltaService:
             "schema": self._schema,
         }
 
-        # Use OAuth for Databricks Apps, token for local dev
-        if self._use_oauth:
-            # Databricks Apps use ambient credentials
-            connection_params["credentials_provider"] = None
-        elif self._token:
+        if self._token:
+            # Local dev: use explicit token
             connection_params["access_token"] = self._token
+        else:
+            # Databricks Apps: use ambient M2M credentials from the
+            # service principal.  Setting auth_type prevents the
+            # databricks-sql-connector from falling back to U2M OAuth
+            # which opens a localhost listener that hangs in production.
+            connection_params["auth_type"] = "databricks-oauth"
 
         # Prevent indefinite hang if warehouse is stopped or unreachable
         connection_params["_socket_timeout"] = 10
