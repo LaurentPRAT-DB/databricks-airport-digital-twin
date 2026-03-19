@@ -274,6 +274,7 @@ export interface OSMGate {
   ref: string;
   terminal?: string;
   name?: string;
+  is_remote_stand?: boolean;
   position: Position3D;
   geo: GeoPosition;
 }

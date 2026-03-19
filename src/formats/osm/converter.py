@@ -108,13 +108,15 @@ class OSMConverter:
                 config["osmHelipads"].append(converted)
 
         # Convert parking positions — also add as usable gates (remote stands)
+        # Track refs already present from aeroway=gate nodes to avoid duplicates
+        gate_refs = {g["ref"] for g in config["gates"] if g.get("ref")}
         for pp in doc.parking_positions:
             converted = self._convert_parking_position(pp)
             if converted:
                 config["osmParkingPositions"].append(converted)
                 # Parking positions are legitimate aircraft stands
                 ref = converted.get("ref") or converted.get("id")
-                if ref and converted.get("geo"):
+                if ref and converted.get("geo") and ref not in gate_refs:
                     gate_entry = {
                         "id": ref,
                         "osmId": converted.get("osmId"),
@@ -129,6 +131,7 @@ class OSMConverter:
                         "is_remote_stand": True,
                     }
                     config["gates"].append(gate_entry)
+                    gate_refs.add(ref)
 
         return config
 

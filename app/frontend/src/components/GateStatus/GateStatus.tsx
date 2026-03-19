@@ -11,6 +11,7 @@ interface Gate {
   id: string;
   ref: string;
   terminal: string;
+  isRemoteStand: boolean;
   status: GateStatusLabel;
   flight: Flight | null;
 }
@@ -58,7 +59,8 @@ function naturalSort(a: string, b: string): number {
 }
 
 // Infer terminal from gate ref prefix when terminal field is missing
-function inferTerminal(ref: string): string {
+function inferTerminal(ref: string, isRemoteStand: boolean): string {
+  if (isRemoteStand) return 'PP';
   const match = ref.match(/^([A-Za-z]+)/);
   if (match) {
     return `Terminal ${match[1].toUpperCase()}`;
@@ -103,12 +105,14 @@ function buildGates(osmGates: OSMGate[], gateFlightMap: Map<string, { flight: Fl
     const osmRefs = new Set<string>();
     const gates: Gate[] = osmGates.map((g) => {
       const ref = g.ref || g.id;
+      const isRemoteStand = !!g.is_remote_stand;
       osmRefs.add(ref);
       const info = gateFlightMap.get(ref);
       return {
         id: g.id,
         ref,
-        terminal: g.terminal || inferTerminal(ref),
+        terminal: g.terminal || inferTerminal(ref, isRemoteStand),
+        isRemoteStand,
         status: info?.status ?? 'VACANT',
         flight: info?.flight ?? null,
       };
@@ -120,7 +124,8 @@ function buildGates(osmGates: OSMGate[], gateFlightMap: Map<string, { flight: Fl
         gates.push({
           id: ref,
           ref,
-          terminal: inferTerminal(ref),
+          terminal: inferTerminal(ref, false),
+          isRemoteStand: false,
           status: info.status,
           flight: info.flight,
         });
@@ -137,7 +142,8 @@ function buildGates(osmGates: OSMGate[], gateFlightMap: Map<string, { flight: Fl
     gates.push({
       id: ref,
       ref,
-      terminal: inferTerminal(ref),
+      terminal: inferTerminal(ref, false),
+      isRemoteStand: false,
       status: info.status,
       flight: info.flight,
     });
