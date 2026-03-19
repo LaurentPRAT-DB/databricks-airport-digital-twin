@@ -9,6 +9,7 @@ Supports two execution backends:
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -119,7 +120,13 @@ class AirportRepository:
             cfg = Config()
 
             def _credential_provider():
-                return cfg.authenticate()
+                # credentials_provider must return a HeaderFactory (callable → dict).
+                # cfg.authenticate() may return a dict or a callable depending on
+                # SDK version — wrap it so the connector always gets a callable.
+                result = cfg.authenticate()
+                if callable(result):
+                    return result
+                return lambda: result
 
             connection_params["credentials_provider"] = _credential_provider
         connection_params["_socket_timeout"] = 30
@@ -807,17 +814,33 @@ class AirportRepository:
 
         meta = meta_rows[0]
 
-        # Load all related data
-        gates = self._load_gates(icao_code)
-        terminals = self._load_terminals(icao_code)
-        runways = self._load_runways(icao_code)
-        taxiways = self._load_taxiways(icao_code)
-        aprons = self._load_aprons(icao_code)
-        buildings = self._load_buildings(icao_code)
-        hangars = self._load_hangars(icao_code)
-        helipads = self._load_helipads(icao_code)
-        parking_positions = self._load_parking_positions(icao_code)
-        osm_runways = self._load_osm_runways(icao_code)
+        # Load all 10 tables in parallel (each query ~2-3s, parallel → ~3-5s total)
+        loaders = {
+            "gates": self._load_gates,
+            "terminals": self._load_terminals,
+            "runways": self._load_runways,
+            "taxiways": self._load_taxiways,
+            "aprons": self._load_aprons,
+            "buildings": self._load_buildings,
+            "hangars": self._load_hangars,
+            "helipads": self._load_helipads,
+            "parking_positions": self._load_parking_positions,
+            "osm_runways": self._load_osm_runways,
+        }
+
+        results = {}
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(fn, icao_code): key
+                for key, fn in loaders.items()
+            }
+            for future in as_completed(futures):
+                key = futures[future]
+                try:
+                    results[key] = future.result()
+                except Exception as e:
+                    logger.warning(f"Failed to load {key} for {icao_code}: {e}")
+                    results[key] = []
 
         return {
             "source": "LAKEHOUSE",
@@ -827,16 +850,16 @@ class AirportRepository:
             "airportOperator": meta.get("operator"),
             "sources": meta.get("data_sources", []),
             "osmTimestamp": meta.get("osm_timestamp"),
-            "gates": gates,
-            "terminals": terminals,
-            "runways": runways,
-            "osmTaxiways": taxiways,
-            "osmAprons": aprons,
-            "buildings": buildings,
-            "osmHangars": hangars,
-            "osmHelipads": helipads,
-            "osmParkingPositions": parking_positions,
-            "osmRunways": osm_runways,
+            "gates": results.get("gates", []),
+            "terminals": results.get("terminals", []),
+            "runways": results.get("runways", []),
+            "osmTaxiways": results.get("taxiways", []),
+            "osmAprons": results.get("aprons", []),
+            "buildings": results.get("buildings", []),
+            "osmHangars": results.get("hangars", []),
+            "osmHelipads": results.get("helipads", []),
+            "osmParkingPositions": results.get("parking_positions", []),
+            "osmRunways": results.get("osm_runways", []),
         }
 
     def _load_gates(self, icao_code: str) -> list[dict]:

@@ -49,19 +49,15 @@ class TestDeltaServiceInit:
             assert service._catalog == "main"
             assert service._schema == "airport_digital_twin"
 
-    def test_init_oauth_mode(self):
-        """Test that OAuth mode is detected from environment."""
+    def test_init_no_token_uses_sdk_auth(self):
+        """Test that when no token is set, SDK Config auth is used."""
         with patch.dict(os.environ, {
-            "DATABRICKS_USE_OAUTH": "true",
-        }, clear=False):
+            "DATABRICKS_HOST": "test.databricks.com",
+            "DATABRICKS_HTTP_PATH": "/sql/path",
+        }, clear=True):
             service = DeltaService()
-            assert service._use_oauth is True
-
-        with patch.dict(os.environ, {
-            "DATABRICKS_USE_OAUTH": "false",
-        }, clear=False):
-            service = DeltaService()
-            assert service._use_oauth is False
+            assert service._token is None
+            assert service._host == "test.databricks.com"
 
 
 class TestDeltaServiceIsAvailable:
@@ -128,20 +124,32 @@ class TestDeltaServiceGetConnection:
             assert call_kwargs["access_token"] == "test-token"
 
     @patch('app.backend.services.delta_service.sql', create=True)
-    def test_get_connection_with_oauth(self, mock_sql):
-        """Test connection uses OAuth when configured."""
+    def test_get_connection_with_sdk_auth(self, mock_sql):
+        """Test connection uses SDK Config auth when no token."""
+        mock_config_instance = MagicMock()
+        # Simulate cfg.authenticate() returning a dict (as seen in deployed env)
+        mock_config_instance.authenticate.return_value = {"Authorization": "Bearer test"}
+        mock_config_cls = MagicMock(return_value=mock_config_instance)
+
+        # Mock the import of databricks.sdk.core inside _get_connection
+        mock_sdk_core = MagicMock()
+        mock_sdk_core.Config = mock_config_cls
+
         with patch.dict(os.environ, {
             "DATABRICKS_HOST": "test.databricks.com",
             "DATABRICKS_HTTP_PATH": "/sql/path",
-            "DATABRICKS_USE_OAUTH": "true",
-        }, clear=False):
-            service = DeltaService()
-            service._get_connection()
+        }, clear=True):
+            with patch.dict("sys.modules", {"databricks.sdk": MagicMock(), "databricks.sdk.core": mock_sdk_core}):
+                service = DeltaService()
+                service._get_connection()
 
-            mock_sql.connect.assert_called_once()
-            call_kwargs = mock_sql.connect.call_args.kwargs
-            assert call_kwargs.get("credentials_provider") is None
-            assert "access_token" not in call_kwargs
+                mock_sql.connect.assert_called_once()
+                call_kwargs = mock_sql.connect.call_args.kwargs
+                assert "credentials_provider" in call_kwargs
+                assert "access_token" not in call_kwargs
+                # credentials_provider should return a callable (HeaderFactory)
+                header_factory = call_kwargs["credentials_provider"]()
+                assert callable(header_factory)
 
 
 class TestDeltaServiceGetFlights:
@@ -181,6 +189,7 @@ class TestDeltaServiceGetFlights:
         with patch.dict(os.environ, {
             "DATABRICKS_HOST": "test.databricks.com",
             "DATABRICKS_HTTP_PATH": "/sql/path",
+            "DATABRICKS_TOKEN": "test-token",
         }, clear=False):
             service = DeltaService()
             result = service.get_flights(limit=50)
@@ -241,6 +250,7 @@ class TestDeltaServiceGetFlightByIcao24:
         with patch.dict(os.environ, {
             "DATABRICKS_HOST": "test.databricks.com",
             "DATABRICKS_HTTP_PATH": "/sql/path",
+            "DATABRICKS_TOKEN": "test-token",
         }, clear=False):
             service = DeltaService()
             result = service.get_flight_by_icao24("abc123")
@@ -325,6 +335,7 @@ class TestDeltaServiceGetTrajectory:
         with patch.dict(os.environ, {
             "DATABRICKS_HOST": "test.databricks.com",
             "DATABRICKS_HTTP_PATH": "/sql/path",
+            "DATABRICKS_TOKEN": "test-token",
         }, clear=False):
             service = DeltaService()
             result = service.get_trajectory("abc123", minutes=30, limit=100)
@@ -353,6 +364,7 @@ class TestDeltaServiceGetTrajectory:
         with patch.dict(os.environ, {
             "DATABRICKS_HOST": "test.databricks.com",
             "DATABRICKS_HTTP_PATH": "/sql/path",
+            "DATABRICKS_TOKEN": "test-token",
         }, clear=False):
             service = DeltaService()
 
@@ -406,6 +418,7 @@ class TestDeltaServiceHealthCheck:
         with patch.dict(os.environ, {
             "DATABRICKS_HOST": "test.databricks.com",
             "DATABRICKS_HTTP_PATH": "/sql/path",
+            "DATABRICKS_TOKEN": "test-token",
         }, clear=False):
             service = DeltaService()
             result = service.health_check()

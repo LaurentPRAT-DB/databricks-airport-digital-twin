@@ -58,7 +58,13 @@ class DeltaService:
             cfg = Config()
 
             def _credential_provider():
-                return cfg.authenticate()
+                # credentials_provider must return a HeaderFactory (callable → dict).
+                # cfg.authenticate() may return a dict or a callable depending on
+                # SDK version — wrap it so the connector always gets a callable.
+                result = cfg.authenticate()
+                if callable(result):
+                    return result
+                return lambda: result
 
             connection_params["credentials_provider"] = _credential_provider
 
