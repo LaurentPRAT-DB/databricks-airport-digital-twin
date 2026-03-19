@@ -49,14 +49,18 @@ class DeltaService:
         }
 
         if self._token:
-            # Local dev: use explicit token
             connection_params["access_token"] = self._token
         else:
-            # Databricks Apps: use ambient M2M credentials from the
-            # service principal.  Setting auth_type prevents the
-            # databricks-sql-connector from falling back to U2M OAuth
-            # which opens a localhost listener that hangs in production.
-            connection_params["auth_type"] = "databricks-oauth"
+            # Databricks Apps: wrap the SDK's Config as a credentials
+            # provider.  Config picks up ambient M2M service-principal
+            # credentials without triggering U2M browser OAuth.
+            from databricks.sdk.core import Config
+            cfg = Config()
+
+            def _credential_provider():
+                return cfg.authenticate()
+
+            connection_params["credentials_provider"] = _credential_provider
 
         # Prevent indefinite hang if warehouse is stopped or unreachable
         connection_params["_socket_timeout"] = 10

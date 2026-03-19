@@ -98,7 +98,11 @@ class AirportRepository:
         return self._client
 
     def _get_sql_connection(self):
-        """Create a databricks-sql-connector connection (ambient M2M OAuth)."""
+        """Create a databricks-sql-connector connection.
+
+        Uses explicit token for local dev, or the Databricks SDK's Config
+        credentials provider for deployed Apps (M2M OAuth via service principal).
+        """
         connection_params = {
             "server_hostname": self._host,
             "http_path": self._http_path,
@@ -108,10 +112,16 @@ class AirportRepository:
         if self._token:
             connection_params["access_token"] = self._token
         else:
-            # Databricks Apps: use ambient M2M credentials from the
-            # service principal.  auth_type prevents the connector from
-            # falling back to U2M OAuth (localhost listener).
-            connection_params["auth_type"] = "databricks-oauth"
+            # Databricks Apps: wrap the SDK's Config as a credentials
+            # provider.  Config picks up ambient M2M service-principal
+            # credentials without triggering U2M browser OAuth.
+            from databricks.sdk.core import Config
+            cfg = Config()
+
+            def _credential_provider():
+                return cfg.authenticate()
+
+            connection_params["credentials_provider"] = _credential_provider
         connection_params["_socket_timeout"] = 30
         return databricks_sql.connect(**connection_params)
 
