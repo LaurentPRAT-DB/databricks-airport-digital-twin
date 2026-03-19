@@ -1,0 +1,29 @@
+resources:
+  jobs:
+    realism_scorecard:
+      name: "[${bundle.target}] Airport DT - Realism Scorecard"
+      description: "Weekly scorecard: scores synthetic flight generation against real-world profiles across 7 realism dimensions"
+
+      tasks:
+        - task_key: run_scorecard
+          notebook_task:
+            notebook_path: ../databricks/notebooks/run_realism_scorecard.py
+            base_parameters:
+              schedules_per_airport: "5"
+
+      schedule:
+        quartz_cron_expression: "0 0 9 ? * MON"
+        timezone_id: "America/Los_Angeles"
+
+      email_notifications:
+        on_success:
+          - laurent.prat@databricks.com
+        on_failure:
+          - laurent.prat@databricks.com
+
+      tags:
+        project: airport-digital-twin
+        component: quality
+        target: ${bundle.target}
+
+      timeout_seconds: 1800
