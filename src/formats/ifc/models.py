@@ -14,7 +14,7 @@ Reference: https://standards.buildingsmart.org/IFC/RELEASE/IFC4/ADD2_TC1/HTML/
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class IFCElementType(str, Enum):
@@ -95,8 +95,7 @@ class IFCGeometry(BaseModel):
     def has_mesh(self) -> bool:
         return self.vertices is not None and self.indices is not None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class IFCMaterial(BaseModel):
@@ -127,8 +126,7 @@ class IFCElement(BaseModel):
     location: IFCVector3 = Field(default_factory=IFCVector3)
     rotation: IFCVector3 = Field(default_factory=IFCVector3, description="Euler angles in radians")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class IFCSpace(BaseModel):
@@ -146,8 +144,7 @@ class IFCSpace(BaseModel):
     volume: Optional[float] = Field(None, description="Volume in m³")
     storey_id: Optional[str] = Field(None, alias="storeyId")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class IFCBuildingStorey(BaseModel):
@@ -164,8 +161,7 @@ class IFCBuildingStorey(BaseModel):
     elements: list[IFCElement] = Field(default_factory=list)
     building_id: Optional[str] = Field(None, alias="buildingId")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class IFCBuilding(BaseModel):
@@ -188,8 +184,7 @@ class IFCBuilding(BaseModel):
     # Overall geometry
     bounding_box: Optional[IFCBoundingBox] = Field(None, alias="boundingBox")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class IFCDocument(BaseModel):
@@ -208,5 +203,4 @@ class IFCDocument(BaseModel):
     # All elements (for flat access)
     all_elements: list[IFCElement] = Field(default_factory=list, alias="allElements")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)

@@ -16,7 +16,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SurfaceCondition(str, Enum):
@@ -75,8 +75,7 @@ class GMLPoint(BaseModel):
         parts = self.pos.split()
         return float(parts[2]) if len(parts) > 2 else 0.0
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class GMLLineString(BaseModel):
@@ -100,8 +99,7 @@ class GMLLineString(BaseModel):
             result.append((lat, lon, alt))
         return result
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class GMLPolygon(BaseModel):
@@ -109,8 +107,7 @@ class GMLPolygon(BaseModel):
     srs_name: str = Field(default="EPSG:4326", alias="srsName")
     exterior: GMLLineString
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIXMTimeslice(BaseModel):
@@ -119,8 +116,7 @@ class AIXMTimeslice(BaseModel):
     valid_time_end: Optional[datetime] = Field(None, alias="validTimeEnd")
     interpretation: str = Field(default="BASELINE")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIXMRunwayDirection(BaseModel):
@@ -141,8 +137,7 @@ class AIXMRunwayDirection(BaseModel):
     asda: Optional[float] = Field(None, description="Accelerate-stop distance available (m)")
     lda: Optional[float] = Field(None, description="Landing distance available (m)")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIXMRunway(BaseModel):
@@ -163,8 +158,7 @@ class AIXMRunway(BaseModel):
     directions: list[AIXMRunwayDirection] = Field(default_factory=list)
     time_slice: Optional[AIXMTimeslice] = Field(None, alias="timeSlice")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIXMTaxiway(BaseModel):
@@ -182,8 +176,7 @@ class AIXMTaxiway(BaseModel):
     centre_line: Optional[GMLLineString] = Field(None, alias="centreLine")
     extent: Optional[GMLPolygon] = Field(None, description="Taxiway polygon extent")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIXMApron(BaseModel):
@@ -199,8 +192,7 @@ class AIXMApron(BaseModel):
     surface_type: Optional[RunwaySurfaceType] = Field(None, alias="surfaceType")
     extent: Optional[GMLPolygon] = Field(None, description="Apron polygon extent")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIXMNavaid(BaseModel):
@@ -219,8 +211,7 @@ class AIXMNavaid(BaseModel):
     channel: Optional[str] = Field(None, description="TACAN channel")
     magnetic_variation: Optional[float] = Field(None, alias="magneticVariation")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIXMAirportHeliport(BaseModel):
@@ -240,8 +231,7 @@ class AIXMAirportHeliport(BaseModel):
     magnetic_variation: Optional[float] = Field(None, alias="magneticVariation")
     transition_altitude: Optional[float] = Field(None, alias="transitionAltitude")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIXMDocument(BaseModel):
@@ -258,5 +248,4 @@ class AIXMDocument(BaseModel):
     navaids: list[AIXMNavaid] = Field(default_factory=list)
     effective_date: Optional[datetime] = Field(None, alias="effectiveDate")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)

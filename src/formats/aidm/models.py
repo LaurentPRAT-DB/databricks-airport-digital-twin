@@ -14,7 +14,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FlightType(str, Enum):
@@ -80,8 +80,7 @@ class AIDMCodeContext(BaseModel):
     code: str
     code_context: str = Field(default="IATA", alias="codeContext")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMAirport(BaseModel):
@@ -90,8 +89,7 @@ class AIDMAirport(BaseModel):
     code_context: str = Field(default="IATA", alias="codeContext")
     terminal: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMAirline(BaseModel):
@@ -100,8 +98,7 @@ class AIDMAirline(BaseModel):
     code_context: str = Field(default="IATA", alias="codeContext")
     name: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMAircraft(BaseModel):
@@ -112,8 +109,7 @@ class AIDMAircraft(BaseModel):
     configuration: Optional[str] = None
     owner: Optional[AIDMAirline] = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMFlightId(BaseModel):
@@ -128,8 +124,7 @@ class AIDMFlightId(BaseModel):
         suffix = self.suffix or ""
         return f"{self.airline.code}{self.flight_number}{suffix}"
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMTime(BaseModel):
@@ -137,8 +132,7 @@ class AIDMTime(BaseModel):
     time: datetime
     time_type: AIDMEventType = Field(..., alias="timeType")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMResource(BaseModel):
@@ -150,8 +144,7 @@ class AIDMResource(BaseModel):
     start_time: Optional[datetime] = Field(None, alias="startTime")
     end_time: Optional[datetime] = Field(None, alias="endTime")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMGate(BaseModel):
@@ -161,8 +154,7 @@ class AIDMGate(BaseModel):
     gate_type: Optional[str] = Field(None, alias="gateType")  # Contact, Remote
     position: Optional[dict[str, float]] = None  # lat, lon
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMBaggageClaim(BaseModel):
@@ -172,8 +164,7 @@ class AIDMBaggageClaim(BaseModel):
     first_bag_time: Optional[datetime] = Field(None, alias="firstBagTime")
     last_bag_time: Optional[datetime] = Field(None, alias="lastBagTime")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMCheckIn(BaseModel):
@@ -183,8 +174,7 @@ class AIDMCheckIn(BaseModel):
     open_time: Optional[datetime] = Field(None, alias="openTime")
     close_time: Optional[datetime] = Field(None, alias="closeTime")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMFlightLeg(BaseModel):
@@ -219,8 +209,7 @@ class AIDMFlightLeg(BaseModel):
     diverted: bool = False
     diversion_airport: Optional[AIDMAirport] = Field(None, alias="diversionAirport")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMFlight(BaseModel):
@@ -265,8 +254,7 @@ class AIDMFlight(BaseModel):
         """Check if this is a departure from the local airport."""
         return len(self.legs) > 0 and self.legs[0].departure_airport is not None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMEvent(BaseModel):
@@ -283,8 +271,7 @@ class AIDMEvent(BaseModel):
     description: Optional[str] = None
     source: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMDocument(BaseModel):
@@ -301,5 +288,4 @@ class AIDMDocument(BaseModel):
     events: list[AIDMEvent] = Field(default_factory=list)
     gates: list[AIDMGate] = Field(default_factory=list)
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)

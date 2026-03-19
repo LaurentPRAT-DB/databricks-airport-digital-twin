@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ImportFormat(str, Enum):
@@ -44,8 +44,7 @@ class RunwayConfig(BaseModel):
     length: Optional[float] = None
     surface_type: Optional[str] = Field(None, alias="surfaceType")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class TaxiwayConfig(BaseModel):
@@ -68,8 +67,7 @@ class BuildingPlacement(BaseModel):
     source: Optional[str] = None
     source_global_id: Optional[str] = Field(None, alias="sourceGlobalId")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AirportConfigResponse(BaseModel):
@@ -92,8 +90,7 @@ class ImportRequest(BaseModel):
     reference_lon: Optional[float] = Field(None, alias="referenceLon")
     merge_with_existing: bool = Field(default=True, alias="mergeWithExisting")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class ImportResponse(BaseModel):
@@ -105,8 +102,7 @@ class ImportResponse(BaseModel):
     config: Optional[AirportConfigResponse] = None
     timestamp: datetime
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AIDMImportResponse(BaseModel):
@@ -118,8 +114,7 @@ class AIDMImportResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     timestamp: datetime
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class OSMImportResponse(BaseModel):
@@ -137,8 +132,7 @@ class OSMImportResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     timestamp: datetime
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class FAAImportResponse(BaseModel):
@@ -149,5 +143,4 @@ class FAAImportResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     timestamp: datetime
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
