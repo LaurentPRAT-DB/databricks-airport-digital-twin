@@ -105,10 +105,13 @@ class AirportRepository:
             "catalog": self._catalog,
             "schema": self._schema,
         }
-        if self._use_oauth:
-            connection_params["credentials_provider"] = None
-        elif self._token:
+        if self._token:
             connection_params["access_token"] = self._token
+        else:
+            # Databricks Apps: use ambient M2M credentials from the
+            # service principal.  auth_type prevents the connector from
+            # falling back to U2M OAuth (localhost listener).
+            connection_params["auth_type"] = "databricks-oauth"
         connection_params["_socket_timeout"] = 30
         return databricks_sql.connect(**connection_params)
 

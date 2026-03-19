@@ -28,9 +28,6 @@ class DeltaService:
         self._catalog = os.getenv("DATABRICKS_CATALOG", "main")
         self._schema = os.getenv("DATABRICKS_SCHEMA", "airport_digital_twin")
 
-        # For Databricks Apps, use OAuth
-        self._use_oauth = os.getenv("DATABRICKS_USE_OAUTH", "false").lower() == "true"
-
     @property
     def is_available(self) -> bool:
         """Check if Databricks SQL connection is configured."""
