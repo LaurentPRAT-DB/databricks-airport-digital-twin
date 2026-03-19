@@ -216,7 +216,7 @@ export default function AirportOverlay() {
       })}
 
       {/* Render OSM gates as circle markers (preferred) - top layer so labels are visible */}
-      {useOsmGates && osmGates.map((gate) => {
+      {useOsmGates && osmGates.filter((gate) => gate.geo).map((gate) => {
         const label = gate.ref || gate.name || gate.id;
         return (
           <CircleMarker

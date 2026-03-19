@@ -856,6 +856,130 @@ class LakebaseService:
             return None
 
     # =========================================================================
+    # User Airport Usage Tracking
+    # =========================================================================
+
+    def _ensure_user_usage_table(self) -> bool:
+        """Create user_airport_usage table if it doesn't exist."""
+        if not self.is_available:
+            return False
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS user_airport_usage (
+                            user_email VARCHAR(255),
+                            icao_code VARCHAR(10),
+                            access_count INT DEFAULT 1,
+                            last_accessed_at TIMESTAMPTZ DEFAULT NOW(),
+                            PRIMARY KEY (user_email, icao_code)
+                        )
+                        """
+                    )
+                    conn.commit()
+                    return True
+
+        except Exception as e:
+            logger.warning(f"Failed to create user_airport_usage table: {e}")
+            self._cached_credentials = None
+            return False
+
+    def record_airport_usage(self, user_email: str, icao_code: str) -> bool:
+        """Record that a user accessed an airport (UPSERT).
+
+        Args:
+            user_email: User identifier (email or 'anonymous').
+            icao_code: ICAO airport code.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not self.is_available or user_email == "anonymous":
+            return False
+
+        try:
+            self._ensure_user_usage_table()
+
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO user_airport_usage (user_email, icao_code, access_count, last_accessed_at)
+                        VALUES (%s, %s, 1, NOW())
+                        ON CONFLICT (user_email, icao_code) DO UPDATE SET
+                            access_count = user_airport_usage.access_count + 1,
+                            last_accessed_at = NOW()
+                        """,
+                        (user_email, icao_code),
+                    )
+                    conn.commit()
+                    logger.debug(f"Recorded airport usage: {user_email} -> {icao_code}")
+                    return True
+
+        except Exception as e:
+            logger.warning(f"Failed to record airport usage: {e}")
+            self._cached_credentials = None
+            return False
+
+    def get_user_top_airports(self, user_email: str, limit: int = 5) -> list[str]:
+        """Get user's most-used airport ICAO codes, ordered by access count.
+
+        Args:
+            user_email: User identifier.
+            limit: Max airports to return.
+
+        Returns:
+            List of ICAO codes (most-used first).
+        """
+        if not self.is_available or user_email == "anonymous":
+            return []
+
+        try:
+            self._ensure_user_usage_table()
+
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT icao_code FROM user_airport_usage
+                        WHERE user_email = %s
+                        ORDER BY access_count DESC
+                        LIMIT %s
+                        """,
+                        (user_email, limit),
+                    )
+                    return [row[0] for row in cur.fetchall()]
+
+        except Exception as e:
+            logger.warning(f"Failed to get user top airports: {e}")
+            self._cached_credentials = None
+            return []
+
+    def get_cached_airport_codes(self) -> list[str]:
+        """Get all ICAO codes currently cached in airport_config_cache.
+
+        Returns:
+            List of ICAO codes present in Lakebase cache.
+        """
+        if not self.is_available:
+            return []
+
+        try:
+            self._ensure_airport_config_table()
+
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT icao_code FROM airport_config_cache")
+                    return [row[0] for row in cur.fetchall()]
+
+        except Exception as e:
+            logger.warning(f"Failed to get cached airport codes: {e}")
+            self._cached_credentials = None
+            return []
+
+    # =========================================================================
     # GSE Turnaround Operations (airport-scoped)
     # =========================================================================
 

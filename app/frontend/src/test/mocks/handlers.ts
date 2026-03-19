@@ -389,6 +389,16 @@ export const handlers = [
     return HttpResponse.json({ preloaded: [], already_cached: ['KSFO'], failed: [] })
   }),
 
+  // User pre-warm endpoint
+  http.post('/api/user/prewarm', () => {
+    return HttpResponse.json({ status: 'ok', user: 'anonymous', airports: ['KSFO'], already_cached: 1, warming: 0 })
+  }),
+
+  // Simulation files endpoint
+  http.get('/api/simulation/files', () => {
+    return HttpResponse.json({ files: [] })
+  }),
+
   // Airport config endpoint
   http.get('/api/airport/config', async () => {
     await delay(30)
@@ -398,11 +408,13 @@ export const handlers = [
         id: `gate-a${i + 1}`,
         ref: `A${i + 1}`,
         terminal: 'Terminal A',
+        geo: { latitude: 37.6150 + i * 0.0002, longitude: -122.3900 + i * 0.0003 },
       })),
       ...Array.from({ length: 10 }, (_, i) => ({
         id: `gate-b${i + 1}`,
         ref: `B${i + 1}`,
         terminal: 'Terminal B',
+        geo: { latitude: 37.6130 + i * 0.0002, longitude: -122.3880 + i * 0.0003 },
       })),
     ]
     return HttpResponse.json({

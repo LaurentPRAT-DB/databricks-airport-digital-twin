@@ -44,6 +44,8 @@ from src.ingestion.fallback import generate_synthetic_trajectory, reload_gates, 
 from src.ml.gate_model import reload_gate_recommender
 from src.ml.registry import get_model_registry
 from app.backend.services.prediction_service import get_prediction_service
+from app.backend.api.deps import get_current_user
+from app.backend.services.lakebase_service import get_lakebase_service
 from src.formats.base import ParseError, ValidationError
 
 
@@ -816,7 +818,7 @@ async def get_airport(icao_code: str) -> dict:
 
 
 @router.post("/airports/{icao_code}/activate", tags=["airport"])
-async def activate_airport(icao_code: str) -> dict:
+async def activate_airport(icao_code: str, user: str = Depends(get_current_user)) -> dict:
     """
     Activate an airport: load config, reset state, and ensure synthetic data.
 
@@ -899,6 +901,13 @@ async def activate_airport(icao_code: str) -> dict:
             )
 
         asyncio.create_task(_generate_data_background())
+
+    # Record usage for pre-warming (fire-and-forget, non-blocking)
+    lakebase = get_lakebase_service()
+    if lakebase.is_available:
+        asyncio.create_task(asyncio.to_thread(
+            lakebase.record_airport_usage, user, icao_code
+        ))
 
     return {
         "config": config,
@@ -1155,4 +1164,62 @@ async def preload_airports(
         "preloaded": preloaded,
         "already_cached": already_cached,
         "failed": failed,
+    }
+
+
+@router.post("/user/prewarm", tags=["user"])
+async def prewarm_user_airports(user: str = Depends(get_current_user)) -> dict:
+    """Pre-warm user's most-used airports from UC into Lakebase cache.
+
+    Looks up the user's top airports from usage history. For any that
+    aren't already in Lakebase cache, loads them from Unity Catalog
+    in the background.
+    """
+    lakebase = get_lakebase_service()
+    if not lakebase.is_available:
+        return {"status": "skipped", "reason": "lakebase_unavailable"}
+
+    top_airports = lakebase.get_user_top_airports(user, limit=5)
+
+    if not top_airports:
+        # New user — pre-warm the default airport
+        default = os.getenv("DEMO_DEFAULT_AIRPORT", "KSFO")
+        top_airports = [default]
+
+    cached = set(lakebase.get_cached_airport_codes())
+    to_warm = [icao for icao in top_airports if icao not in cached]
+
+    if not to_warm:
+        return {
+            "status": "ok",
+            "user": user,
+            "airports": top_airports,
+            "already_cached": len(top_airports),
+            "warming": 0,
+        }
+
+    # Warm missing airports in background
+    async def _warm_airports():
+        service = get_airport_config_service()
+        for icao in to_warm:
+            try:
+                loaded = await asyncio.to_thread(
+                    service.initialize_from_lakehouse,
+                    icao_code=icao,
+                    fallback_to_osm=False,  # UC only, don't hit external OSM
+                )
+                if loaded:
+                    await asyncio.to_thread(service.save_to_lakebase_cache, icao)
+                    logger.info(f"Pre-warmed {icao} into Lakebase for {user}")
+            except Exception as e:
+                logger.warning(f"Failed to pre-warm {icao}: {e}")
+
+    asyncio.create_task(_warm_airports())
+
+    return {
+        "status": "warming",
+        "user": user,
+        "airports": top_airports,
+        "already_cached": len(top_airports) - len(to_warm),
+        "warming": len(to_warm),
     }
