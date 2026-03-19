@@ -119,6 +119,14 @@ const EVENT_COLORS: Record<string, string> = {
   capacity: 'bg-purple-400',
 };
 
+const EVENT_LABELS: Record<string, string> = {
+  weather: 'Weather',
+  runway: 'Runway',
+  ground: 'Ground Ops',
+  traffic: 'Traffic',
+  capacity: 'Capacity',
+};
+
 function getEventPosition(event: ScenarioEvent, startTime: string | null, endTime: string | null): number | null {
   if (!startTime || !endTime) return null;
   const first = new Date(startTime).getTime();
@@ -136,8 +144,29 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
     ? (sim.currentFrameIndex / (sim.totalFrames - 1)) * 100
     : 0;
 
+  // Collect unique visible event types for the legend
+  const visibleEventTypes = [
+    ...new Set(
+      sim.scenarioEvents
+        .filter((e) => e.event_type !== 'capacity')
+        .map((e) => e.event_type)
+    ),
+  ];
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[1500] bg-slate-900/95 backdrop-blur text-white px-4 py-2 shadow-lg">
+      {/* Event legend — only shown when scenario events exist */}
+      {visibleEventTypes.length > 0 && (
+        <div className="flex items-center gap-3 max-w-screen-xl mx-auto mb-1.5 pl-[136px]">
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider">Events</span>
+          {visibleEventTypes.map((type) => (
+            <div key={type} className="flex items-center gap-1">
+              <div className={`w-2 h-2 rounded-sm ${EVENT_COLORS[type] || 'bg-gray-400'}`} />
+              <span className="text-[10px] text-slate-400">{EVENT_LABELS[type] || type}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-4 max-w-screen-xl mx-auto">
         {/* Play/Pause */}
         <button
