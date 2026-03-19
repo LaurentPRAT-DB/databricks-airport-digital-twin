@@ -620,6 +620,43 @@ def get_cached_schedule(airport: str = "SFO") -> list[dict]:
     return _schedule_cache[airport]
 
 
+def find_scheduled_departure(callsign: str, airport: str = "SFO") -> Optional[dict]:
+    """Find a scheduled departure matching a callsign.
+
+    Searches the cached schedule for a departure whose flight number
+    shares the same airline prefix (first 3 chars) as the callsign.
+    Returns the best match dict with 'scheduled_time' and 'estimated_time',
+    or None if no match found.
+    """
+    schedule = get_cached_schedule(airport=airport)
+    if not callsign or len(callsign) < 3:
+        return None
+
+    airline_prefix = callsign[:3]
+
+    # First try exact match on flight_number
+    for f in schedule:
+        if f["flight_type"] != "departure":
+            continue
+        if f["flight_number"] == callsign:
+            return f
+
+    # Fall back to next departure by same airline prefix
+    now = datetime.now(timezone.utc)
+    best = None
+    for f in schedule:
+        if f["flight_type"] != "departure":
+            continue
+        if not f["flight_number"].startswith(airline_prefix):
+            continue
+        sched_time = datetime.fromisoformat(f["scheduled_time"])
+        if sched_time > now:
+            if best is None or sched_time < datetime.fromisoformat(best["scheduled_time"]):
+                best = f
+
+    return best
+
+
 def get_future_schedule(
     airport: str = "SFO",
     after: datetime | None = None,

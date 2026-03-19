@@ -243,6 +243,24 @@ def drain_predictions() -> List[Dict[str, Any]]:
     return events
 
 
+def get_flight_turnaround_info(icao24: str) -> Optional[Dict[str, Any]]:
+    """Get turnaround info for a flight from simulation state.
+
+    Returns None if the flight is not found in the simulation.
+    """
+    state = _flight_states.get(icao24)
+    if state is None:
+        return None
+    return {
+        "parked_since": datetime.fromtimestamp(state.parked_since, tz=timezone.utc) if state.parked_since > 0 else None,
+        "time_at_gate_seconds": state.time_at_gate,
+        "assigned_gate": state.assigned_gate,
+        "aircraft_type": state.aircraft_type,
+        "callsign": state.callsign,
+        "phase": state.phase.value,
+    }
+
+
 def get_current_flight_states() -> List[Dict[str, Any]]:
     """Snapshot current flight states for persistence."""
     snapshots = []
@@ -1386,6 +1404,7 @@ class FlightState:
     holding_phase_time: float = 0.0            # Elapsed time in current holding leg (seconds)
     holding_inbound: bool = True               # True = inbound leg, False = outbound leg
     go_around_count: int = 0                   # Number of go-arounds for this approach
+    parked_since: float = 0.0                  # time.time() when aircraft entered PARKED phase
 
 
 # Global state storage
@@ -2125,6 +2144,7 @@ def _create_new_flight(
         standoff = _compute_gate_standoff(lat, lon, parked_heading, aircraft_type)
         lat, lon = _offset_position_by_heading(lat, lon, parked_heading, standoff)
 
+        initial_time_at_gate = random.uniform(0, 300)  # Random time already parked
         return FlightState(
             icao24=icao24,
             callsign=callsign,
@@ -2138,9 +2158,10 @@ def _create_new_flight(
             phase=phase,
             aircraft_type=aircraft_type,
             assigned_gate=gate,
-            time_at_gate=random.uniform(0, 300),  # Random time already parked
+            time_at_gate=initial_time_at_gate,
             origin_airport=origin,
             destination_airport=destination,
+            parked_since=time.time() - initial_time_at_gate,
         )
 
     elif phase == FlightPhase.ENROUTE:
@@ -2523,6 +2544,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.phase = FlightPhase.PARKED
                 state.velocity = 0
                 state.time_at_gate = 0
+                state.parked_since = time.time()
                 _occupy_gate(state.icao24, state.assigned_gate)
                 # Offset aircraft away from terminal based on OSM geometry + aircraft dimensions
                 parked_heading = _get_parked_heading(state.latitude, state.longitude)

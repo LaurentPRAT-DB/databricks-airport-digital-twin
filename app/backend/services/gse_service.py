@@ -26,6 +26,8 @@ from app.backend.models.gse import (
     GSEFleetStatus,
 )
 from app.backend.services.lakebase_service import get_lakebase_service
+from src.ingestion.fallback import get_flight_turnaround_info
+from src.ingestion.schedule_generator import find_scheduled_departure
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +110,10 @@ class GSEService:
         """
         Get turnaround status for an aircraft.
 
+        Uses real simulation state when available (parked_since, assigned_gate,
+        aircraft_type) and looks up scheduled departure from the FIDS schedule.
+        Falls back to random fabrication only when the flight is not in the sim.
+
         Args:
             icao24: Aircraft ICAO24 address
             flight_number: Flight number
@@ -117,43 +123,92 @@ class GSEService:
         Returns:
             TurnaroundResponse with current status
         """
-        # Check if we have an existing turnaround
-        if icao24 not in self._active_turnarounds:
-            # Create a new turnaround starting 10-30 minutes ago
-            arrival_offset = random.randint(10, 30)
-            arrival_time = datetime.now(timezone.utc) - timedelta(minutes=arrival_offset)
+        # Try to get real data from simulation state
+        sim_info = get_flight_turnaround_info(icao24)
+
+        if sim_info is not None and sim_info.get("parked_since"):
+            # Use real simulation data
+            arrival_time = sim_info["parked_since"]
+            effective_gate = sim_info["assigned_gate"] or gate or "A1"
+            effective_aircraft = sim_info["aircraft_type"] or aircraft_type
+            effective_callsign = sim_info["callsign"] or flight_number
+
+            # Look up scheduled departure from FIDS
+            scheduled_dep = find_scheduled_departure(
+                effective_callsign or "",
+            )
+
+            # Calculate turnaround status
+            if scheduled_dep:
+                # We have a schedule — compute estimated departure from it
+                sched_time_str = scheduled_dep.get("estimated_time") or scheduled_dep["scheduled_time"]
+                sched_departure = datetime.fromisoformat(sched_time_str)
+                # Use schedule-based turnaround window for phase fitting
+                total_window_min = max(
+                    30.0,
+                    (sched_departure - arrival_time).total_seconds() / 60,
+                )
+            else:
+                total_window_min = None
+
+            status = calculate_turnaround_status(
+                arrival_time=arrival_time,
+                aircraft_type=effective_aircraft,
+            )
+
+            # If we have a schedule, override estimated departure
+            if scheduled_dep:
+                sched_time_str = scheduled_dep.get("estimated_time") or scheduled_dep["scheduled_time"]
+                status["estimated_departure"] = datetime.fromisoformat(sched_time_str)
+
+            # Update cache so clear_turnaround works
             self._active_turnarounds[icao24] = {
                 "arrival_time": arrival_time,
-                "gate": gate or f"{random.choice(['A', 'B', 'C'])}{random.randint(1, 20)}",
-                "aircraft_type": aircraft_type,
-                "flight_number": flight_number,
+                "gate": effective_gate,
+                "aircraft_type": effective_aircraft,
+                "flight_number": effective_callsign,
             }
+        else:
+            # Fallback: fabricate turnaround data (flight not in sim)
+            if icao24 not in self._active_turnarounds:
+                arrival_offset = random.randint(10, 30)
+                arrival_time = datetime.now(timezone.utc) - timedelta(minutes=arrival_offset)
+                self._active_turnarounds[icao24] = {
+                    "arrival_time": arrival_time,
+                    "gate": gate or f"{random.choice(['A', 'B', 'C'])}{random.randint(1, 20)}",
+                    "aircraft_type": aircraft_type,
+                    "flight_number": flight_number,
+                }
 
-        turnaround_info = self._active_turnarounds[icao24]
-        status = calculate_turnaround_status(
-            arrival_time=turnaround_info["arrival_time"],
-            aircraft_type=turnaround_info.get("aircraft_type", aircraft_type),
-        )
+            effective_gate = self._active_turnarounds[icao24]["gate"]
+            effective_aircraft = self._active_turnarounds[icao24].get("aircraft_type", aircraft_type)
+            effective_callsign = self._active_turnarounds[icao24].get("flight_number", flight_number)
+            arrival_time = self._active_turnarounds[icao24]["arrival_time"]
+
+            status = calculate_turnaround_status(
+                arrival_time=arrival_time,
+                aircraft_type=effective_aircraft,
+            )
 
         # Generate GSE positions
         gse_positions = generate_gse_positions(
-            gate=turnaround_info["gate"],
-            aircraft_type=turnaround_info.get("aircraft_type", aircraft_type),
+            gate=effective_gate,
+            aircraft_type=effective_aircraft,
             current_phase=status["current_phase"],
         )
         gse_units = [_dict_to_gse_unit(g) for g in gse_positions]
 
         turnaround = TurnaroundStatus(
             icao24=icao24,
-            flight_number=turnaround_info.get("flight_number", flight_number),
-            gate=turnaround_info["gate"],
-            arrival_time=turnaround_info["arrival_time"],
+            flight_number=effective_callsign or flight_number,
+            gate=effective_gate,
+            arrival_time=arrival_time,
             current_phase=_map_turnaround_phase(status["current_phase"]),
             phase_progress_pct=status["phase_progress_pct"],
             total_progress_pct=status["total_progress_pct"],
             estimated_departure=status["estimated_departure"],
             assigned_gse=gse_units,
-            aircraft_type=turnaround_info.get("aircraft_type", aircraft_type),
+            aircraft_type=effective_aircraft,
         )
 
         logger.info(f"GSE service: {icao24} at {turnaround.gate}, phase: {turnaround.current_phase}")
