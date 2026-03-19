@@ -320,6 +320,9 @@ export function Map3D({
         {/* Ambient light for base illumination */}
         <ambientLight intensity={lighting.ambient.intensity} />
 
+        {/* Hemisphere light for natural sky/ground color blending */}
+        <hemisphereLight args={[0x87ceeb, 0x228b22, 0.3]} />
+
         {/* Directional light for shadows and depth */}
         <directionalLight
           position={[

@@ -149,7 +149,7 @@ export default function FlightDetail() {
               <div className="text-lg font-bold font-mono text-slate-800">
                 {origin_airport || '---'}
               </div>
-              <div className="text-xs text-slate-400">Origin</div>
+              <div className="text-xs text-slate-400">{flight_phase === 'ground' ? 'Arrived from' : 'Origin'}</div>
             </div>
             <div className="px-3 text-slate-300">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -160,7 +160,7 @@ export default function FlightDetail() {
               <div className="text-lg font-bold font-mono text-slate-800">
                 {destination_airport || '---'}
               </div>
-              <div className="text-xs text-slate-400">Destination</div>
+              <div className="text-xs text-slate-400">{flight_phase === 'ground' ? 'Departing to' : 'Destination'}</div>
             </div>
           </div>
           {aircraft_type && (

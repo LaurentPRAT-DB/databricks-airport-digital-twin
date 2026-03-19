@@ -61,9 +61,16 @@ function naturalSort(a: string, b: string): number {
 // Infer terminal from gate ref prefix when terminal field is missing
 function inferTerminal(ref: string, isRemoteStand: boolean): string {
   if (isRemoteStand) return 'PP';
-  const match = ref.match(/^([A-Za-z]+)/);
-  if (match) {
-    return `Terminal ${match[1].toUpperCase()}`;
+  // Letter prefix: "A12" → "Terminal A"
+  const letterMatch = ref.match(/^([A-Za-z]+)/);
+  if (letterMatch) {
+    return `Terminal ${letterMatch[1].toUpperCase()}`;
+  }
+  // Numeric prefix: "17B" or "4" → "Terminal 1" (first digit = terminal)
+  // Common at JFK (Terminal 1,2,4,5,7,8) and some international airports
+  const digitMatch = ref.match(/^(\d)/);
+  if (digitMatch) {
+    return `Terminal ${digitMatch[1]}`;
   }
   return 'Other';
 }

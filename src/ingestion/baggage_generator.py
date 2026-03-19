@@ -231,9 +231,13 @@ def get_flight_baggage_stats(
         if status == "misconnect":
             misconnects += 1
 
-    # Calculate loading progress for departures
+    # Calculate loading/unloading progress
     if is_arrival:
-        loading_progress = 100 if status_counts.get("claimed", 0) > 0 else 0
+        # For arrivals: progress = bags that have been unloaded/on_carousel/claimed
+        processed = (status_counts.get("unloaded", 0)
+                     + status_counts.get("on_carousel", 0)
+                     + status_counts.get("claimed", 0))
+        loading_progress = int((processed / total) * 100) if total > 0 else 0
     else:
         loaded = status_counts.get("loaded", 0) + status_counts.get("in_transit", 0)
         loading_progress = int((loaded / total) * 100) if total > 0 else 0

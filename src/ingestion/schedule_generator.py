@@ -20,44 +20,54 @@ from src.ingestion.fallback import get_gates
 if TYPE_CHECKING:
     from src.calibration.profile import AirportProfile, AirportProfileLoader
 
-# Airline data with ICAO codes, names, and hub weighting
+# Airline data with ICAO codes, names, hub weighting, and route scope.
+# scope: "domestic" = US-only, "regional_eu" = intra-Europe,
+#        "regional_me" = Middle East/regional, "international" = long-haul only,
+#        "full" = any route.
 AIRLINES = {
     # US carriers (~75% of SFO traffic)
-    "UAL": {"name": "United Airlines", "weight": 0.31, "hubs": ["SFO", "ORD", "IAH", "EWR"]},
-    "DAL": {"name": "Delta Air Lines", "weight": 0.10, "hubs": ["ATL", "DTW", "MSP", "SLC"]},
-    "AAL": {"name": "American Airlines", "weight": 0.10, "hubs": ["DFW", "CLT", "MIA", "PHX"]},
-    "SWA": {"name": "Southwest Airlines", "weight": 0.08, "hubs": ["DAL", "HOU", "BWI", "MDW"]},
-    "ASA": {"name": "Alaska Airlines", "weight": 0.06, "hubs": ["SEA", "SFO", "LAX", "PDX"]},
-    "JBU": {"name": "JetBlue Airways", "weight": 0.03, "hubs": ["JFK", "BOS", "FLL"]},
-    "NKS": {"name": "Spirit Airlines", "weight": 0.02, "hubs": ["FLL", "LAS", "MCO"]},
-    "FFT": {"name": "Frontier Airlines", "weight": 0.02, "hubs": ["DEN", "LAS", "MCO"]},
-    "HAL": {"name": "Hawaiian Airlines", "weight": 0.01, "hubs": ["HNL"]},
-    "AAY": {"name": "Allegiant Air", "weight": 0.01, "hubs": ["LAS"]},
-    "SCX": {"name": "Sun Country Airlines", "weight": 0.01, "hubs": ["MSP"]},
+    "UAL": {"name": "United Airlines", "weight": 0.31, "hubs": ["SFO", "ORD", "IAH", "EWR"], "scope": "full"},
+    "DAL": {"name": "Delta Air Lines", "weight": 0.10, "hubs": ["ATL", "DTW", "MSP", "SLC"], "scope": "full"},
+    "AAL": {"name": "American Airlines", "weight": 0.10, "hubs": ["DFW", "CLT", "MIA", "PHX"], "scope": "full"},
+    "SWA": {"name": "Southwest Airlines", "weight": 0.08, "hubs": ["DAL", "HOU", "BWI", "MDW"], "scope": "domestic"},
+    "ASA": {"name": "Alaska Airlines", "weight": 0.06, "hubs": ["SEA", "SFO", "LAX", "PDX"], "scope": "domestic"},
+    "JBU": {"name": "JetBlue Airways", "weight": 0.03, "hubs": ["JFK", "BOS", "FLL"], "scope": "domestic"},
+    "NKS": {"name": "Spirit Airlines", "weight": 0.02, "hubs": ["FLL", "LAS", "MCO"], "scope": "domestic"},
+    "FFT": {"name": "Frontier Airlines", "weight": 0.02, "hubs": ["DEN", "LAS", "MCO"], "scope": "domestic"},
+    "HAL": {"name": "Hawaiian Airlines", "weight": 0.01, "hubs": ["HNL"], "scope": "domestic"},
+    "AAY": {"name": "Allegiant Air", "weight": 0.01, "hubs": ["LAS"], "scope": "domestic"},
+    "SCX": {"name": "Sun Country Airlines", "weight": 0.01, "hubs": ["MSP"], "scope": "domestic"},
     # International carriers (~25% of SFO traffic)
-    "UAE": {"name": "Emirates", "weight": 0.03, "hubs": ["DXB"]},
-    "BAW": {"name": "British Airways", "weight": 0.02, "hubs": ["LHR"]},
-    "ANA": {"name": "All Nippon Airways", "weight": 0.02, "hubs": ["HND", "NRT"]},
-    "CPA": {"name": "Cathay Pacific", "weight": 0.02, "hubs": ["HKG"]},
-    "DLH": {"name": "Lufthansa", "weight": 0.02, "hubs": ["FRA", "MUC"]},
-    "AFR": {"name": "Air France", "weight": 0.01, "hubs": ["CDG"]},
-    "KLM": {"name": "KLM Royal Dutch", "weight": 0.01, "hubs": ["AMS"]},
-    "JAL": {"name": "Japan Airlines", "weight": 0.01, "hubs": ["NRT", "HND"]},
-    "SIA": {"name": "Singapore Airlines", "weight": 0.01, "hubs": ["SIN"]},
-    "QFA": {"name": "Qantas", "weight": 0.01, "hubs": ["SYD", "MEL"]},
-    "KAL": {"name": "Korean Air", "weight": 0.01, "hubs": ["ICN"]},
-    "THY": {"name": "Turkish Airlines", "weight": 0.01, "hubs": ["IST"]},
-    "ETD": {"name": "Etihad Airways", "weight": 0.01, "hubs": ["AUH"]},
-    "ACA": {"name": "Air Canada", "weight": 0.01, "hubs": ["YYZ", "YVR"]},
-    "AMX": {"name": "Aeromexico", "weight": 0.01, "hubs": ["MEX"]},
-    "TAM": {"name": "LATAM Airlines", "weight": 0.01, "hubs": ["GRU", "SCL"]},
-    "SAA": {"name": "South African Airways", "weight": 0.005, "hubs": ["JNB"]},
-    "EVA": {"name": "EVA Air", "weight": 0.005, "hubs": ["TPE"]},
-    "FDB": {"name": "flydubai", "weight": 0.005, "hubs": ["DXB"]},
-    "VIR": {"name": "Virgin Atlantic", "weight": 0.005, "hubs": ["LHR"]},
-    "RYR": {"name": "Ryanair", "weight": 0.005, "hubs": ["STN", "DUB"]},
-    "EZY": {"name": "easyJet", "weight": 0.005, "hubs": ["LGW", "LTN"]},
+    "UAE": {"name": "Emirates", "weight": 0.03, "hubs": ["DXB"], "scope": "international"},
+    "BAW": {"name": "British Airways", "weight": 0.02, "hubs": ["LHR"], "scope": "international"},
+    "ANA": {"name": "All Nippon Airways", "weight": 0.02, "hubs": ["HND", "NRT"], "scope": "international"},
+    "CPA": {"name": "Cathay Pacific", "weight": 0.02, "hubs": ["HKG"], "scope": "international"},
+    "DLH": {"name": "Lufthansa", "weight": 0.02, "hubs": ["FRA", "MUC"], "scope": "international"},
+    "AFR": {"name": "Air France", "weight": 0.01, "hubs": ["CDG"], "scope": "international"},
+    "KLM": {"name": "KLM Royal Dutch", "weight": 0.01, "hubs": ["AMS"], "scope": "international"},
+    "JAL": {"name": "Japan Airlines", "weight": 0.01, "hubs": ["NRT", "HND"], "scope": "international"},
+    "SIA": {"name": "Singapore Airlines", "weight": 0.01, "hubs": ["SIN"], "scope": "international"},
+    "QFA": {"name": "Qantas", "weight": 0.01, "hubs": ["SYD", "MEL"], "scope": "international"},
+    "KAL": {"name": "Korean Air", "weight": 0.01, "hubs": ["ICN"], "scope": "international"},
+    "THY": {"name": "Turkish Airlines", "weight": 0.01, "hubs": ["IST"], "scope": "international"},
+    "ETD": {"name": "Etihad Airways", "weight": 0.01, "hubs": ["AUH"], "scope": "international"},
+    "ACA": {"name": "Air Canada", "weight": 0.01, "hubs": ["YYZ", "YVR"], "scope": "full"},
+    "AMX": {"name": "Aeromexico", "weight": 0.01, "hubs": ["MEX"], "scope": "full"},
+    "TAM": {"name": "LATAM Airlines", "weight": 0.01, "hubs": ["GRU", "SCL"], "scope": "international"},
+    "SAA": {"name": "South African Airways", "weight": 0.005, "hubs": ["JNB"], "scope": "international"},
+    "EVA": {"name": "EVA Air", "weight": 0.005, "hubs": ["TPE"], "scope": "international"},
+    "FDB": {"name": "flydubai", "weight": 0.005, "hubs": ["DXB"], "scope": "regional_me"},
+    "VIR": {"name": "Virgin Atlantic", "weight": 0.005, "hubs": ["LHR"], "scope": "international"},
+    "RYR": {"name": "Ryanair", "weight": 0.005, "hubs": ["STN", "DUB"], "scope": "regional_eu"},
+    "EZY": {"name": "easyJet", "weight": 0.005, "hubs": ["LGW", "LTN"], "scope": "regional_eu"},
 }
+
+# Regional airport sets for scope validation (populated after DOMESTIC_AIRPORTS defined)
+_EU_AIRPORTS = {"LHR", "CDG", "FRA", "AMS", "STN", "DUB", "LGW", "LTN", "MUC",
+                "MAN", "EDI", "BHX", "GLA", "BRS", "ORY", "NCE", "LYS", "MRS",
+                "TLS", "BOD", "DUS", "HAM", "BER", "STR", "CGN", "EIN", "RTM", "MST"}
+_ME_AIRPORTS = {"DXB", "AUH", "DOH", "BAH", "KWI", "MCT", "AMM", "CAI", "RUH",
+                "JED", "SHJ", "DWC"}
 
 # Destination airports with distance category
 DOMESTIC_AIRPORTS = [
@@ -202,6 +212,25 @@ def _generate_flight_number(airline_code: str) -> str:
     return f"{airline_code}{num}"
 
 
+def _is_destination_compatible(destination: str, airline_code: str) -> bool:
+    """Check if a destination is compatible with the airline's route scope."""
+    airline = AIRLINES.get(airline_code)
+    if not airline:
+        return True  # Unknown airline — allow anything
+    scope = airline.get("scope", "full")
+    if scope == "full":
+        return True
+    if scope == "domestic":
+        return destination in DOMESTIC_AIRPORTS
+    if scope == "regional_eu":
+        return destination in _EU_AIRPORTS
+    if scope == "regional_me":
+        return destination in _ME_AIRPORTS
+    if scope == "international":
+        return destination in INTERNATIONAL_AIRPORTS or destination not in DOMESTIC_AIRPORTS
+    return True
+
+
 def _select_destination(
     flight_type: str, airline_code: str,
     profile: AirportProfile | None = None,
@@ -211,10 +240,32 @@ def _select_destination(
 
     If a calibrated profile is provided, sample from its route shares
     and domestic_ratio. Otherwise fall back to uniform random choice.
+    Validates against airline route scope and re-picks if mismatched.
 
     When domestic_route_shares is empty (common for international hubs like
     FRA, CDG, NRT, ICN), falls back to country-based domestic airports.
     """
+    dest = _select_destination_unchecked(flight_type, airline_code, profile, airport)
+
+    # Validate against airline scope — retry up to 3 times
+    for _ in range(3):
+        if _is_destination_compatible(dest, airline_code):
+            return dest
+        dest = _select_destination_unchecked(flight_type, airline_code, profile, airport)
+
+    # Final fallback: pick from airline hubs if scope mismatch persists
+    airline = AIRLINES.get(airline_code)
+    if airline and airline.get("hubs"):
+        return random.choice(airline["hubs"])
+    return dest
+
+
+def _select_destination_unchecked(
+    flight_type: str, airline_code: str,
+    profile: AirportProfile | None = None,
+    airport: str | None = None,
+) -> str:
+    """Select destination without scope validation (inner helper)."""
     if profile and (profile.domestic_route_shares or profile.international_route_shares):
         is_domestic = random.random() < profile.domestic_ratio
         if is_domestic and profile.domestic_route_shares:
@@ -676,6 +727,16 @@ def get_departures(
 # Cache for consistent schedule within same minute
 _schedule_cache: dict = {}
 _cache_minute: Optional[int] = None
+
+
+def invalidate_schedule_cache() -> None:
+    """Clear the schedule cache, forcing regeneration on next access.
+
+    Called after airport switch to ensure FIDS uses the new airport's gates.
+    """
+    global _schedule_cache, _cache_minute
+    _schedule_cache.clear()
+    _cache_minute = None
 
 # Lazy-loaded profile loader singleton
 _profile_loader: Optional["AirportProfileLoader"] = None

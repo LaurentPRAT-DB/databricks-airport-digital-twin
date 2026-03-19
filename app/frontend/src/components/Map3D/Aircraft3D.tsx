@@ -142,6 +142,7 @@ export function Aircraft3D({ flight, selected = false, onClick, airportCenter }:
         modelConfig={modelConfig}
         airline={airline}
         selected={selected}
+        flightPhase={flight.flight_phase}
       />
 
       {/* Selection ring - scaled to match aircraft in scene coordinates */}
@@ -160,10 +161,10 @@ export function Aircraft3D({ flight, selected = false, onClick, airportCenter }:
         </mesh>
       )}
 
-      {/* Label - shows on hover OR when selected */}
+      {/* Label - shows on hover OR when selected, offset by altitude for separation */}
       {(hovered || selected) && (
         <Html
-          position={[0, 2, 0]}
+          position={[0, 2 + Math.min(effectiveAltitude * 0.0001, 3), 0]}
           center
           style={{
             pointerEvents: 'none',

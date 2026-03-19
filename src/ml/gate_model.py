@@ -552,23 +552,28 @@ class GateRecommender:
         Estimate taxi time to gate in minutes.
 
         Uses geographic coordinates when available (OSM data) for more
-        accurate estimates based on distance from runway.
+        accurate estimates based on haversine distance from runway.
+        Taxi speed assumed ~15 kts (7.7 m/s) average with taxiway routing.
         """
-        base_time = 5  # Base taxi time
+        import math
 
-        # If we have coordinates, estimate based on distance from runway
+        # If we have coordinates, compute haversine distance to runway
         if gate.latitude and gate.longitude:
             runway_lat, runway_lon = self._runway_coords
 
-            # Simple distance calculation (degrees to approximate minutes)
-            lat_diff = abs(gate.latitude - runway_lat)
-            lon_diff = abs(gate.longitude - runway_lon)
-            distance = (lat_diff**2 + lon_diff**2) ** 0.5
+            # Haversine distance in meters
+            R = 6371000  # Earth radius in meters
+            lat1, lat2 = math.radians(gate.latitude), math.radians(runway_lat)
+            dlat = lat2 - lat1
+            dlon = math.radians(gate.longitude - runway_lon)
+            a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            dist_m = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-            # Convert distance to taxi time (rough estimate)
-            # ~0.01 degrees = ~1km = ~2 minutes taxi
-            additional_time = int(distance * 200)
-            return min(base_time + additional_time, 15)  # Cap at 15 minutes
+            # Taxi routing factor: actual taxi path ~1.5x straight-line distance
+            taxi_dist_m = dist_m * 1.5
+            # 15 kts = 7.72 m/s average taxi speed
+            taxi_time_min = taxi_dist_m / (7.72 * 60)
+            return max(3, min(int(round(taxi_time_min)), 18))
 
         # Fallback: estimate from gate number
         try:
@@ -576,12 +581,11 @@ class GateRecommender:
             if numeric_part:
                 gate_number = int(numeric_part)
                 # Rough estimate: higher numbers = further from runway
-                additional_time = min(gate_number // 10, 8)
-                return base_time + additional_time
+                return max(4, min(5 + gate_number // 10, 15))
         except (ValueError, IndexError):
             pass
 
-        return base_time
+        return 7  # Default mid-range estimate
 
     def recommend(self, flight: dict, top_k: int = 3) -> List[GateRecommendation]:
         """

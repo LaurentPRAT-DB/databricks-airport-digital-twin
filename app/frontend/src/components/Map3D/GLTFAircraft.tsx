@@ -7,10 +7,21 @@ import { AircraftModelConfig, AirlineConfig, AIRCRAFT_MODELS } from '../../confi
 // The decoder is loaded on-demand when a Draco-compressed model is detected
 const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.6/';
 
+type FlightPhase = 'ground' | 'climbing' | 'descending' | 'cruising';
+
+// Phase-based emissive tints to distinguish flight state in 3D
+const PHASE_EMISSIVE: Record<FlightPhase, number> = {
+  ground: 0x003300,     // Green tint
+  descending: 0x332200, // Orange tint
+  climbing: 0x001133,   // Blue tint
+  cruising: 0x111111,   // Subtle white
+};
+
 interface GLTFAircraftProps {
   modelConfig: AircraftModelConfig;
   airline: AirlineConfig;
   selected?: boolean;
+  flightPhase?: FlightPhase;
 }
 
 /**
@@ -48,7 +59,7 @@ class GLTFErrorBoundary extends Component<
  * Clones the scene to allow multiple instances with different materials.
  * Supports Draco-compressed models for faster loading.
  */
-function GLTFAircraftInner({ modelConfig, airline, selected = false }: GLTFAircraftProps) {
+function GLTFAircraftInner({ modelConfig, airline, selected = false, flightPhase }: GLTFAircraftProps) {
   // useGLTF with Draco decoder path - drei handles Draco decompression automatically
   const { scene } = useGLTF(modelConfig.url, DRACO_DECODER_PATH);
 
@@ -84,10 +95,13 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false }: GLTFAircr
           material.color.setHex(airline.primaryColor);
         }
 
-        // Add selection glow
+        // Add selection glow or phase-based emissive tint
         if (selected) {
           material.emissive = new THREE.Color(0x002200);
           material.emissiveIntensity = 0.3;
+        } else if (flightPhase && PHASE_EMISSIVE[flightPhase]) {
+          material.emissive = new THREE.Color(PHASE_EMISSIVE[flightPhase]);
+          material.emissiveIntensity = 0.4;
         }
 
         child.material = material;
@@ -97,7 +111,7 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false }: GLTFAircr
     });
 
     return clone;
-  }, [scene, airline, selected]);
+  }, [scene, airline, selected, flightPhase]);
 
   const { scale, rotationOffset } = modelConfig;
 
@@ -113,13 +127,14 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false }: GLTFAircr
 /**
  * Fallback aircraft using generic-jet.glb when primary model fails to load
  */
-function FallbackAircraft({ airline, selected = false }: Omit<GLTFAircraftProps, 'modelConfig'>) {
+function FallbackAircraft({ airline, selected = false, flightPhase }: Omit<GLTFAircraftProps, 'modelConfig'>) {
   const defaultConfig = AIRCRAFT_MODELS['DEFAULT'];
   return (
     <GLTFAircraftInner
       modelConfig={defaultConfig}
       airline={airline}
       selected={selected}
+      flightPhase={flightPhase}
     />
   );
 }
@@ -156,7 +171,7 @@ export function GLTFAircraft(props: GLTFAircraftProps) {
   // For non-default models, use generic-jet.glb as fallback
   const fallbackAircraft = (
     <Suspense fallback={<LoadingPlaceholder />}>
-      <FallbackAircraft airline={props.airline} selected={props.selected} />
+      <FallbackAircraft airline={props.airline} selected={props.selected} flightPhase={props.flightPhase} />
     </Suspense>
   );
 

@@ -433,10 +433,10 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
             status = "on_time"
 
         # Estimate a scheduled time based on phase progression.
-        # Use a deterministic offset derived from icao24 so times stay stable
-        # across FIDS refreshes (hash gives consistent per-flight jitter).
-        _h = hash(icao24) & 0xFFFF
-        jitter_min = (_h % 13) + 2  # 2-14 min deterministic offset per flight
+        # Use a deterministic offset derived from icao24 + airline so times
+        # stay stable across FIDS refreshes but are well-spread across flights.
+        _h = (hash(icao24) ^ hash(airline_code)) & 0xFFFF
+        jitter_min = (_h % 25) + 2  # 2-26 min deterministic offset per flight
 
         if is_arrival:
             if phase in (FlightPhase.PARKED,):
@@ -446,9 +446,9 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
             elif phase == FlightPhase.LANDING:
                 scheduled_time = (now + timedelta(minutes=5 + jitter_min % 7)).isoformat()
             elif phase == FlightPhase.APPROACHING:
-                # ETA from altitude: assume ~800 fpm descent + 5 min taxi buffer
+                # ETA from altitude + per-flight jitter for spread
                 descent_min = state.altitude / 800.0 if state.altitude > 0 else 2.0
-                eta_min = max(3, int(descent_min + 5))
+                eta_min = max(3, int(descent_min + 5 + (_h % 8)))
                 scheduled_time = (now + timedelta(minutes=eta_min)).isoformat()
             elif phase == FlightPhase.ENROUTE:
                 scheduled_time = (now + timedelta(minutes=20 + (_h % 40))).isoformat()
@@ -825,6 +825,8 @@ def reload_gates() -> Dict[str, tuple]:
     Force reload of gates from airport config service.
 
     Call this after importing new OSM data to refresh the gate positions.
+    Also invalidates the FIDS schedule cache so schedules regenerate with
+    the new airport's gate names.
 
     Returns:
         Updated dictionary mapping gate refs to (latitude, longitude) tuples
@@ -835,6 +837,9 @@ def reload_gates() -> Dict[str, tuple]:
     # Reset gate states and flight states to use new gates
     _reset_gate_states()
     _flight_states.clear()  # Clear flights so they regenerate with new gates
+    # Invalidate FIDS schedule cache so it regenerates with the correct gates
+    from src.ingestion.schedule_generator import invalidate_schedule_cache
+    invalidate_schedule_cache()
     return gates
 
 
@@ -2424,7 +2429,7 @@ def _create_new_flight(
             altitude=alt,
             velocity=random.uniform(400, 500),
             heading=heading,
-            vertical_rate=random.uniform(-200, 200),
+            vertical_rate=random.uniform(-500, -100),  # Enroute descending toward airport
             on_ground=False,
             phase=phase,
             aircraft_type=aircraft_type,
@@ -2576,7 +2581,16 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 else:
                     progress = 1.0
                 state.velocity = 180 - progress * (180 - vref)  # Smooth decel to Vref
-                state.vertical_rate = -800 if state.altitude > target_alt else 0
+                # Compute vertical rate from actual altitude difference to target
+                alt_diff = state.altitude - target_alt
+                if alt_diff > 500:
+                    state.vertical_rate = -800
+                elif alt_diff > 100:
+                    state.vertical_rate = -400
+                elif alt_diff > 0:
+                    state.vertical_rate = -200
+                else:
+                    state.vertical_rate = 0
             else:
                 # Too close to aircraft ahead - slow down / hold speed
                 state.velocity = max(140, state.velocity - 10 * dt)  # Reduce speed

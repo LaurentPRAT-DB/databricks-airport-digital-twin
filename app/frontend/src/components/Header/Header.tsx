@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
 import { useFlightContext } from '../../context/FlightContext';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import PlatformLinks from '../PlatformLinks/PlatformLinks';
@@ -12,8 +12,14 @@ interface HeaderProps {
 }
 
 export default function Header({ onShowFIDS, simulationControls }: HeaderProps) {
-  const { flights, isLoading, error, lastUpdated, dataSource } = useFlightContext();
+  const { flights, isLoading, error, lastUpdated, dataSource, setSelectedFlight } = useFlightContext();
   const { currentAirport, isLoading: isLoadingAirport, error: airportError, loadAirport, switchProgress } = useAirportConfigContext();
+
+  // Clear flight selection before switching airports to avoid stale data
+  const handleAirportChange = useCallback((icaoCode: string) => {
+    setSelectedFlight(null);
+    return loadAirport(icaoCode);
+  }, [setSelectedFlight, loadAirport]);
 
   return (
     <header className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between shadow-lg z-[1002] relative">
@@ -36,7 +42,7 @@ export default function Header({ onShowFIDS, simulationControls }: HeaderProps) 
         {/* Airport Selector */}
         <AirportSelector
           currentAirport={currentAirport || undefined}
-          onAirportChange={loadAirport}
+          onAirportChange={handleAirportChange}
           isLoading={isLoadingAirport}
         />
 
