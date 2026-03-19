@@ -107,7 +107,7 @@ export default function FlightDetail() {
     );
   }
 
-  const { flight_phase, callsign, icao24, latitude, longitude, altitude, velocity, heading, vertical_rate, last_seen, data_source, aircraft_type, origin_airport, destination_airport } = selectedFlight;
+  const { flight_phase, callsign, icao24, latitude, longitude, altitude, velocity, heading, vertical_rate, last_seen, data_source, aircraft_type, origin_airport, destination_airport, assigned_gate } = selectedFlight;
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
@@ -325,7 +325,7 @@ export default function FlightDetail() {
         <div className="mb-4">
           <TurnaroundTimeline
             icao24={icao24}
-            gate={recommendations.length > 0 ? recommendations[0].gate_id : undefined}
+            gate={assigned_gate || (recommendations.length > 0 ? recommendations[0].gate_id : undefined)}
             aircraftType={aircraft_type || 'A320'}
           />
         </div>

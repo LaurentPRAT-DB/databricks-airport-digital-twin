@@ -43,6 +43,8 @@ BTS_AIRCRAFT_TYPE_MAP: dict[str, str] = {
     "06035": "A319", "0A050": "A321", "01260": "B738", "01268": "A320",
     "06003": "A319", "06918": "A321", "01189": "A320",
     "07041": "A320", "71072": "A320", "9900Y": "B738",
+    # Boeing 757
+    "06024": "B752",
 }
 
 
@@ -100,11 +102,27 @@ class AirportProfile:
         return profile
 
     def _normalize_fleet_mix(self) -> None:
-        """Map BTS numeric aircraft type codes to ICAO type designators."""
+        """Map BTS numeric aircraft type codes to ICAO type designators.
+
+        Unknown numeric codes that don't match any entry in BTS_AIRCRAFT_TYPE_MAP
+        and don't look like standard ICAO type designators (e.g. "A320") are
+        mapped to A320 as a narrowbody default, with a warning logged.
+        """
+        import re
+        icao_pattern = re.compile(r"^[A-Z][A-Z0-9]{2,3}$")
         for airline, fleet in list(self.fleet_mix.items()):
             normalized: dict[str, float] = {}
             for code, weight in fleet.items():
-                icao_code = BTS_AIRCRAFT_TYPE_MAP.get(code, code)
+                if code in BTS_AIRCRAFT_TYPE_MAP:
+                    icao_code = BTS_AIRCRAFT_TYPE_MAP[code]
+                elif icao_pattern.match(code):
+                    icao_code = code  # Already looks like an ICAO type
+                else:
+                    logger.warning(
+                        "Unknown BTS fleet code '%s' for airline %s — mapping to A320",
+                        code, airline,
+                    )
+                    icao_code = "A320"
                 # Merge weights if multiple BTS codes map to same ICAO type
                 normalized[icao_code] = normalized.get(icao_code, 0.0) + weight
             self.fleet_mix[airline] = normalized
