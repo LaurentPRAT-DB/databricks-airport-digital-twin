@@ -1,15 +1,16 @@
 """Airport data repository for Unity Catalog persistence.
 
 Provides CRUD operations for airport configuration data stored in Delta tables.
+Supports two execution backends:
+1. databricks-sql-connector (preferred in Databricks Apps — uses ambient M2M OAuth)
+2. WorkspaceClient statement execution (fallback for notebooks, local dev)
 """
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Optional
-
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.sql import StatementState
 
 from src.persistence.airport_tables import (
     DEFAULT_CATALOG,
@@ -19,16 +20,28 @@ from src.persistence.airport_tables import (
 
 logger = logging.getLogger(__name__)
 
+# Try to import databricks-sql-connector (preferred for Apps)
+try:
+    from databricks import sql as databricks_sql
+    DATABRICKS_SQL_AVAILABLE = True
+except ImportError:
+    DATABRICKS_SQL_AVAILABLE = False
+
 
 class AirportRepository:
     """Repository for airport configuration persistence."""
 
     def __init__(
         self,
-        client: Optional[WorkspaceClient] = None,
+        client=None,
         warehouse_id: Optional[str] = None,
         catalog: str = DEFAULT_CATALOG,
         schema: str = DEFAULT_SCHEMA,
+        use_sql_connector: bool = False,
+        host: Optional[str] = None,
+        http_path: Optional[str] = None,
+        use_oauth: bool = False,
+        token: Optional[str] = None,
     ):
         """
         Initialize repository.
@@ -38,21 +51,32 @@ class AirportRepository:
             warehouse_id: SQL warehouse ID
             catalog: Unity Catalog name
             schema: Schema name
+            use_sql_connector: If True, prefer databricks-sql-connector over WorkspaceClient
+            host: Databricks host (for SQL connector mode)
+            http_path: SQL warehouse HTTP path (for SQL connector mode)
+            use_oauth: Use ambient OAuth credentials (for Databricks Apps)
+            token: PAT token (for local dev with SQL connector)
         """
         self._client = client
         self._warehouse_id = warehouse_id or "b868e84cedeb4262"  # Default warehouse
         self._catalog = catalog
         self._schema = schema
         self._tables_initialized = False
+        self._use_sql_connector = use_sql_connector and DATABRICKS_SQL_AVAILABLE
+        self._host = host
+        self._http_path = http_path
+        self._use_oauth = use_oauth
+        self._token = token
 
     @property
-    def client(self) -> WorkspaceClient:
+    def client(self):
         """Get or create workspace client.
 
         Uses a threaded timeout to prevent WorkspaceClient() from hanging
         on U2M browser-based OAuth in headless environments (Databricks Apps).
         """
         if self._client is None:
+            from databricks.sdk import WorkspaceClient
             import threading
 
             result: list = []
@@ -73,27 +97,41 @@ class AirportRepository:
                 raise RuntimeError("WorkspaceClient creation timed out (headless env)")
         return self._client
 
-    def _ensure_tables(self) -> None:
-        """Ensure all tables exist."""
-        if not self._tables_initialized:
-            create_tables(
-                self.client,
-                self._warehouse_id,
-                self._catalog,
-                self._schema,
-            )
-            self._tables_initialized = True
+    def _get_sql_connection(self):
+        """Create a databricks-sql-connector connection (ambient M2M OAuth)."""
+        connection_params = {
+            "server_hostname": self._host,
+            "http_path": self._http_path,
+            "catalog": self._catalog,
+            "schema": self._schema,
+        }
+        if self._use_oauth:
+            connection_params["credentials_provider"] = None
+        elif self._token:
+            connection_params["access_token"] = self._token
+        connection_params["_socket_timeout"] = 30
+        return databricks_sql.connect(**connection_params)
 
-    def _table(self, name: str) -> str:
-        """Get fully qualified table name."""
-        return f"{self._catalog}.{self._schema}.{name}"
+    def _execute_via_connector(self, sql: str) -> Optional[list[dict]]:
+        """Execute SQL via databricks-sql-connector."""
+        with self._get_sql_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(sql)
+                if cursor.description:
+                    columns = [desc[0] for desc in cursor.description]
+                    rows = cursor.fetchall()
+                    if rows:
+                        return [dict(zip(columns, row)) for row in rows]
+                return None
 
-    def _execute(
+    def _execute_via_workspace_client(
         self,
         sql: str,
         timeout_seconds: int = 60,
     ) -> Optional[list[dict]]:
-        """Execute SQL and return results."""
+        """Execute SQL via WorkspaceClient statement execution."""
+        from databricks.sdk.service.sql import StatementState
+
         response = self.client.statement_execution.execute_statement(
             warehouse_id=self._warehouse_id,
             statement=sql,
@@ -124,6 +162,56 @@ class AirportRepository:
             time.sleep(0.5)
 
         raise TimeoutError(f"SQL timed out after {timeout_seconds}s")
+
+    def _ensure_tables(self) -> None:
+        """Ensure all tables exist."""
+        if not self._tables_initialized:
+            if self._use_sql_connector:
+                # With SQL connector, run DDL directly using format strings
+                from src.persistence.airport_tables import ALL_TABLES
+                # Create schema first
+                try:
+                    self._execute_via_connector(
+                        f"CREATE SCHEMA IF NOT EXISTS {self._catalog}.{self._schema}"
+                    )
+                except Exception as e:
+                    logger.debug(f"Schema creation via connector: {e}")
+                for table_name, ddl in ALL_TABLES:
+                    try:
+                        sql = ddl.format(catalog=self._catalog, schema=self._schema)
+                        self._execute_via_connector(sql)
+                    except Exception as e:
+                        logger.debug(f"Table creation via connector ({table_name}): {e}")
+            else:
+                create_tables(
+                    self.client,
+                    self._warehouse_id,
+                    self._catalog,
+                    self._schema,
+                )
+            self._tables_initialized = True
+
+    def _table(self, name: str) -> str:
+        """Get fully qualified table name."""
+        return f"{self._catalog}.{self._schema}.{name}"
+
+    def _execute(
+        self,
+        sql: str,
+        timeout_seconds: int = 60,
+    ) -> Optional[list[dict]]:
+        """Execute SQL and return results.
+
+        Tries SQL connector first (works in Databricks Apps with ambient OAuth),
+        falls back to WorkspaceClient statement execution.
+        """
+        if self._use_sql_connector:
+            try:
+                return self._execute_via_connector(sql)
+            except Exception as e:
+                logger.warning(f"SQL connector execution failed, falling back to WorkspaceClient: {e}")
+
+        return self._execute_via_workspace_client(sql, timeout_seconds)
 
     # =========================================================================
     # Airport Metadata Operations
@@ -1133,8 +1221,46 @@ _repository: Optional[AirportRepository] = None
 
 
 def get_airport_repository() -> AirportRepository:
-    """Get or create AirportRepository singleton."""
+    """Get or create AirportRepository singleton.
+
+    Auto-detects environment:
+    - If DATABRICKS_USE_OAUTH=true and host/http_path set → SQL connector mode
+      (works in Databricks Apps with ambient M2M OAuth)
+    - Otherwise → WorkspaceClient mode (notebooks, local dev with PAT)
+    """
     global _repository
     if _repository is None:
-        _repository = AirportRepository()
+        host = os.getenv("DATABRICKS_HOST") or os.getenv("DATABRICKS_SERVER_HOSTNAME")
+        http_path = os.getenv("DATABRICKS_HTTP_PATH") or os.getenv("DATABRICKS_WAREHOUSE_HTTP_PATH")
+        use_oauth = os.getenv("DATABRICKS_USE_OAUTH", "false").lower() == "true"
+        token = os.getenv("DATABRICKS_TOKEN") or os.getenv("DATABRICKS_ACCESS_TOKEN")
+        catalog = os.getenv("DATABRICKS_CATALOG", DEFAULT_CATALOG)
+        schema = os.getenv("DATABRICKS_SCHEMA", DEFAULT_SCHEMA)
+        warehouse_id = os.getenv("DATABRICKS_WAREHOUSE_ID", "b868e84cedeb4262")
+
+        # Prefer SQL connector when host/http_path are available
+        can_use_connector = DATABRICKS_SQL_AVAILABLE and bool(host and http_path)
+
+        if can_use_connector:
+            logger.info(
+                f"AirportRepository using databricks-sql-connector "
+                f"(oauth={use_oauth}, host={host})"
+            )
+            _repository = AirportRepository(
+                catalog=catalog,
+                schema=schema,
+                warehouse_id=warehouse_id,
+                use_sql_connector=True,
+                host=host,
+                http_path=http_path,
+                use_oauth=use_oauth,
+                token=token,
+            )
+        else:
+            logger.info("AirportRepository using WorkspaceClient statement execution")
+            _repository = AirportRepository(
+                catalog=catalog,
+                schema=schema,
+                warehouse_id=warehouse_id,
+            )
     return _repository

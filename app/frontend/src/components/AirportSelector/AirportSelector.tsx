@@ -35,6 +35,7 @@ export default function AirportSelector({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [airports, setAirports] = useState<AirportInfo[]>([]);
   const [preloading, setPreloading] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -132,6 +133,26 @@ export default function AirportSelector({
     }
   };
 
+  const handleReload = async () => {
+    if (!currentAirport || reloading) return;
+    setReloading(true);
+    setLoadError(null);
+    try {
+      const res = await fetch(`/api/airports/${currentAirport}/reload`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ detail: 'Reload failed' }));
+        throw new Error(data.detail || `Reload failed (${res.status})`);
+      }
+      // Re-activate airport to pick up new config
+      await onAirportChange(currentAirport);
+      await fetchCacheStatus();
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Reload failed');
+    } finally {
+      setReloading(false);
+    }
+  };
+
   // Group airports by region
   const groupedAirports = REGION_ORDER.reduce<Record<string, AirportInfo[]>>((acc, region) => {
     const regionAirports = airports.filter((a) => a.region === region);
@@ -151,7 +172,7 @@ export default function AirportSelector({
   const totalCount = airports.length;
 
   return (
-    <div ref={dropdownRef} className="relative">
+    <div ref={dropdownRef} className="relative flex items-center gap-1">
       <button
         onClick={() => { if (!isOpen) setLoadError(null); setIsOpen(!isOpen); }}
         disabled={isLoading}
@@ -182,6 +203,30 @@ export default function AirportSelector({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
+
+      {/* Reload button */}
+      {currentAirport && (
+        <button
+          onClick={handleReload}
+          disabled={isLoading || reloading}
+          className={`
+            p-1.5 rounded-lg transition-colors
+            ${reloading
+              ? 'bg-slate-600 text-slate-400 cursor-wait'
+              : 'bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white'
+            }
+          `}
+          title="Reload airport from OSM (force refresh)"
+        >
+          <svg
+            className={`w-4 h-4 ${reloading ? 'animate-spin' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      )}
 
       {/* Error toast — visible even when dropdown is closed */}
       {loadError && !isOpen && (

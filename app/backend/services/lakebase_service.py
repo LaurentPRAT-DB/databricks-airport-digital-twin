@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 def _get_oauth_token(endpoint_name: str) -> Optional[tuple[str, str]]:
     """Get OAuth token for Lakebase Autoscaling using Databricks SDK.
 
+    Tries two approaches:
+    1. WorkspaceClient with ambient M2M OAuth (works in Databricks Apps)
+    2. Thread-wrapped WorkspaceClient with timeout (safety net for U2M hang)
+
     Args:
         endpoint_name: Full endpoint resource name
             (e.g., 'projects/my-app/branches/production/endpoints/primary')
@@ -37,28 +41,41 @@ def _get_oauth_token(endpoint_name: str) -> Optional[tuple[str, str]]:
         from databricks.sdk import WorkspaceClient
         import threading
 
-        # Use a timeout to prevent WorkspaceClient() from hanging on U2M
-        # browser-based OAuth flow in headless environments (Databricks Apps).
+        # Attempt 1: Direct call with short socket timeout.
+        # In Databricks Apps, ambient M2M credentials are injected via env vars
+        # and WorkspaceClient() picks them up without triggering U2M browser flow.
+        try:
+            w = WorkspaceClient()
+            # Quick test — if this hangs, the thread fallback catches it
+            cred = w.postgres.generate_database_credential(endpoint=endpoint_name)
+            me = w.current_user.me()
+            logger.info("Lakebase OAuth: got token via direct WorkspaceClient (M2M)")
+            return (cred.token, me.user_name)
+        except Exception as e:
+            logger.debug(f"Direct WorkspaceClient OAuth failed: {e}")
+
+        # Attempt 2: Thread-wrapped with timeout (safety net for U2M hang)
         result: list = []
         error: list = []
 
         def _try_get_token():
             try:
-                w = WorkspaceClient()
-                cred = w.postgres.generate_database_credential(endpoint=endpoint_name)
-                me = w.current_user.me()
-                result.append((cred.token, me.user_name))
-            except Exception as e:
-                error.append(e)
+                w2 = WorkspaceClient()
+                cred2 = w2.postgres.generate_database_credential(endpoint=endpoint_name)
+                me2 = w2.current_user.me()
+                result.append((cred2.token, me2.user_name))
+            except Exception as e2:
+                error.append(e2)
 
         thread = threading.Thread(target=_try_get_token, daemon=True)
         thread.start()
-        thread.join(timeout=10)  # 10s max — if U2M kicks in it will hang
+        thread.join(timeout=10)
 
         if result:
+            logger.info("Lakebase OAuth: got token via threaded WorkspaceClient")
             return result[0]
         if error:
-            logger.debug(f"OAuth token generation failed: {error[0]}")
+            logger.debug(f"Threaded OAuth token generation failed: {error[0]}")
         else:
             logger.warning("OAuth token generation timed out (possible U2M flow in headless env)")
         return None

@@ -913,6 +913,68 @@ async def activate_airport(icao_code: str) -> dict:
     }
 
 
+@router.post("/airports/{icao_code}/reload", tags=["airport"])
+async def reload_airport(icao_code: str) -> dict:
+    """
+    Force-reload airport from OSM and update all caches.
+
+    Clears cached config, re-fetches from OSM Overpass API, then
+    persists to UC and caches to Lakebase.
+
+    Args:
+        icao_code: ICAO airport code (e.g., "KSFO")
+
+    Returns:
+        Updated airport configuration
+    """
+    service = get_airport_config_service()
+
+    try:
+        # Fetch fresh from OSM (full import)
+        osm_config, warnings = await asyncio.to_thread(
+            service.import_osm,
+            icao_code,
+            include_gates=True,
+            include_terminals=True,
+            include_taxiways=True,
+            include_aprons=True,
+            include_runways=True,
+            include_hangars=True,
+            include_helipads=True,
+            include_parking_positions=True,
+            merge=False,
+        )
+
+        # For US airports, also import FAA runway data
+        faa_warnings = []
+        if icao_code.startswith("K"):
+            try:
+                await asyncio.to_thread(service.import_faa, icao_code, True)
+            except Exception:
+                faa_warnings.append(f"FAA data not available for {icao_code}")
+
+        # Persist to Unity Catalog
+        await asyncio.to_thread(service.persist_config, icao_code)
+
+        # Cache to Lakebase
+        await asyncio.to_thread(service.save_to_lakebase_cache, icao_code)
+
+        return {
+            "success": True,
+            "icaoCode": icao_code,
+            "source": "osm_reload",
+            "elementCounts": service.get_element_counts(),
+            "warnings": warnings + faa_warnings,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reload airport {icao_code}: {str(e)}"
+        )
+
+
 @router.post("/airports/{icao_code}/refresh", tags=["airport"])
 async def refresh_airport(
     icao_code: str,
