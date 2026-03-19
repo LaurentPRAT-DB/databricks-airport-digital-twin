@@ -31,7 +31,8 @@ def _compute_deltas(
     New flights are sent in full.
     """
     deltas: list[dict] = []
-    removed = [k for k in prev_flights if not any(f["icao24"] == k for f in current_flights)]
+    current_ids = {f["icao24"] for f in current_flights}
+    removed = [k for k in prev_flights if k not in current_ids]
 
     for flight in current_flights:
         icao24 = flight["icao24"]

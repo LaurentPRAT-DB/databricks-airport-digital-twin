@@ -21,6 +21,7 @@ from src.ingestion.fallback import (
     MIN_APPROACH_SEPARATION_DEG,
     MIN_TAXI_SEPARATION_DEG,
     AIRLINE_FLEET,
+    MAX_APPROACH_AIRCRAFT,
     FlightPhase,
     FlightState,
     _get_wake_category,
@@ -431,14 +432,14 @@ class TestApproachSeparation:
         assert _check_approach_separation(follow) is True
 
     def test_max_simultaneous_approaches_limited(self):
-        """Doc says max 4-5 in approach sequence."""
+        """Approach sequence capped at MAX_APPROACH_AIRCRAFT."""
         # _create_new_flight redirects to ENROUTE when approach is full
         _flight_states.clear()
         from src.ingestion.fallback import _reset_gate_states
         _reset_gate_states()
 
         # Fill approach slots
-        for i in range(4):
+        for i in range(MAX_APPROACH_AIRCRAFT):
             state = FlightState(
                 icao24=f"app{i}", callsign=f"TST{i:03d}",
                 latitude=37.58, longitude=-122.10 + i * 0.12,
@@ -448,8 +449,8 @@ class TestApproachSeparation:
             )
             _flight_states[f"app{i}"] = state
 
-        # 5th aircraft should be redirected (not approach)
-        new = _create_new_flight("app4", "TST004", FlightPhase.APPROACHING)
+        # Next aircraft should be redirected (not approach)
+        new = _create_new_flight(f"app{MAX_APPROACH_AIRCRAFT}", "TST999", FlightPhase.APPROACHING)
         assert new.phase != FlightPhase.APPROACHING, "Should redirect when approach full"
         _flight_states.clear()
 

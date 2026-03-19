@@ -44,6 +44,7 @@ from src.ingestion.fallback import (
     set_airport_center,
     APPROACH_WAYPOINTS,
     DEPARTURE_WAYPOINTS,
+    MAX_APPROACH_AIRCRAFT,
     NM_TO_DEG,
     MIN_GATES_FOR_OPERATIONS,
     MAX_SPEED_BELOW_FL100_KTS,
@@ -396,11 +397,11 @@ class TestApproachCapacityRuntime:
 
     def test_enroute_holds_when_approach_full(self):
         """An enroute arriving flight should NOT transition to APPROACHING
-        when 4+ aircraft are already approaching."""
+        when MAX_APPROACH_AIRCRAFT are already approaching."""
         center = get_airport_center()
 
-        # Create 4 aircraft already on approach
-        for i in range(4):
+        # Create MAX_APPROACH_AIRCRAFT aircraft already on approach
+        for i in range(MAX_APPROACH_AIRCRAFT):
             icao24 = f"app_{i}"
             state = FlightState(
                 icao24=icao24,
@@ -439,13 +440,13 @@ class TestApproachCapacityRuntime:
         # Update — should NOT transition to approaching
         result = _update_flight_state(enroute, 1.0)
         assert result.phase == FlightPhase.ENROUTE, (
-            f"Should hold as ENROUTE when approach is full (4 aircraft), "
+            f"Should hold as ENROUTE when approach is full ({MAX_APPROACH_AIRCRAFT} aircraft), "
             f"but transitioned to {result.phase.value}"
         )
 
     def test_enroute_transitions_when_approach_has_room(self):
         """An enroute flight should transition to APPROACHING when fewer
-        than 4 aircraft are on approach."""
+        than MAX_APPROACH_AIRCRAFT are on approach."""
         center = get_airport_center()
 
         # Create 2 aircraft on approach (below limit)
@@ -833,8 +834,8 @@ class TestRacetrackHolding:
         """Create an arriving enroute flight that should enter holding."""
         center = get_airport_center()
 
-        # Fill approach to capacity (4 aircraft)
-        for i in range(4):
+        # Fill approach to capacity
+        for i in range(MAX_APPROACH_AIRCRAFT):
             icao24 = f"hold_app_{i}"
             state = FlightState(
                 icao24=icao24,

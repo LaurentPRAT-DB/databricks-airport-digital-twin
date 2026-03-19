@@ -1446,9 +1446,47 @@ class FlightState:
     turnaround_schedule: Optional[Dict] = None # {phase: {"start_offset_s", "duration_s", "done", "started"}}
 
 
+# Maximum simultaneous aircraft on approach (approach + landing)
+MAX_APPROACH_AIRCRAFT = 8
+
+# Phase index — maintained automatically by _FlightStateDict and _set_phase
+_flights_by_phase: Dict[FlightPhase, Set[str]] = {phase: set() for phase in FlightPhase}
+
+
+class _FlightStateDict(dict):
+    """Dict subclass that auto-syncs _flights_by_phase on insert/delete/clear."""
+
+    def __setitem__(self, key: str, value: FlightState):
+        old = self.get(key)
+        if old is not None:
+            _flights_by_phase[old.phase].discard(key)
+        super().__setitem__(key, value)
+        _flights_by_phase[value.phase].add(key)
+
+    def __delitem__(self, key: str):
+        old = self.get(key)
+        if old is not None:
+            _flights_by_phase[old.phase].discard(key)
+        super().__delitem__(key)
+
+    def clear(self):
+        super().clear()
+        for s in _flights_by_phase.values():
+            s.clear()
+
+
 # Global state storage
-_flight_states: Dict[str, FlightState] = {}
+_flight_states: Dict[str, FlightState] = _FlightStateDict()
 _last_update: float = 0.0
+
+
+def _set_phase(state: FlightState, new_phase: FlightPhase):
+    """Update a flight's phase and keep the _flights_by_phase index in sync."""
+    old = state.phase
+    if old != new_phase:
+        _flights_by_phase[old].discard(state.icao24)
+        _flights_by_phase[new_phase].add(state.icao24)
+        state.phase = new_phase
 
 # ============================================================================
 # SEPARATION MANAGEMENT
@@ -1529,11 +1567,11 @@ def _find_aircraft_ahead_on_approach(state: FlightState) -> Optional[FlightState
     closest_ahead = None
     closest_gap = float('inf')
 
-    for icao24, other in _flight_states.items():
+    approach_ids = _flights_by_phase[FlightPhase.APPROACHING] | _flights_by_phase[FlightPhase.LANDING]
+    for icao24 in approach_ids:
         if icao24 == state.icao24:
             continue
-        if other.phase not in [FlightPhase.APPROACHING, FlightPhase.LANDING]:
-            continue
+        other = _flight_states[icao24]
 
         other_dist_to_center = _distance_between(
             (other.latitude, other.longitude), center
@@ -1561,10 +1599,9 @@ def _find_last_aircraft_on_approach() -> Optional[FlightState]:
     last_aircraft = None
     max_dist = -1.0
 
-    for icao24, state in _flight_states.items():
-        if state.phase not in [FlightPhase.APPROACHING, FlightPhase.LANDING]:
-            continue
-
+    approach_ids = _flights_by_phase[FlightPhase.APPROACHING] | _flights_by_phase[FlightPhase.LANDING]
+    for icao24 in approach_ids:
+        state = _flight_states[icao24]
         dist = _distance_between((state.latitude, state.longitude), center)
         if dist > max_dist:
             max_dist = dist
@@ -1661,7 +1698,7 @@ def _check_taxi_separation(state: FlightState) -> bool:
 
 def _count_aircraft_in_phase(phase: FlightPhase) -> int:
     """Count how many aircraft are currently in a specific phase."""
-    return sum(1 for s in _flight_states.values() if s.phase == phase)
+    return len(_flights_by_phase[phase])
 
 def _get_approach_queue_position(icao24: str) -> int:
     """Get position in approach queue (0 = first/next to land)."""
@@ -2146,7 +2183,7 @@ def _create_new_flight(
         landing_count = _count_aircraft_in_phase(FlightPhase.LANDING)
 
         # Limit simultaneous approaches (realistic: max 4-5 in sequence)
-        if approaching_count + landing_count >= 4:
+        if approaching_count + landing_count >= MAX_APPROACH_AIRCRAFT:
             # Too many on approach - start as enroute instead
             return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
 
@@ -2504,7 +2541,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.latitude, state.longitude, state.altitude,
                     state.aircraft_type, state.assigned_gate,
                 )
-                state.phase = FlightPhase.LANDING
+                _set_phase(state, FlightPhase.LANDING)
                 state.waypoint_index = 0
                 _occupy_runway(state.icao24, "28R")
             else:
@@ -2554,7 +2591,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude, state.longitude, state.altitude,
                 state.aircraft_type, state.assigned_gate,
             )
-            state.phase = FlightPhase.TAXI_TO_GATE
+            _set_phase(state, FlightPhase.TAXI_TO_GATE)
             state.waypoint_index = 0
             state.taxi_route = None  # Will be computed below
             # Release runway when exiting to taxiway
@@ -2656,7 +2693,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.aircraft_type, state.assigned_gate,
                 )
                 emit_gate_event(state.icao24, state.callsign, state.assigned_gate, "occupy", state.aircraft_type)
-                state.phase = FlightPhase.PARKED
+                _set_phase(state, FlightPhase.PARKED)
                 state.velocity = 0
                 state.time_at_gate = 0
                 state.parked_since = time.time()
@@ -2749,7 +2786,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude, state.longitude, state.altitude,
                 state.aircraft_type, state.assigned_gate,
             )
-            state.phase = FlightPhase.PUSHBACK
+            _set_phase(state, FlightPhase.PUSHBACK)
             state.phase_progress = 0
 
     elif state.phase == FlightPhase.PUSHBACK:
@@ -2781,7 +2818,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude, state.longitude, state.altitude,
                 state.aircraft_type, state.assigned_gate,
             )
-            state.phase = FlightPhase.TAXI_TO_RUNWAY
+            _set_phase(state, FlightPhase.TAXI_TO_RUNWAY)
             state.waypoint_index = 0
             state.taxi_route = _get_taxi_waypoints_departure(state.assigned_gate) if state.assigned_gate else None
 
@@ -2824,7 +2861,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                         state.latitude, state.longitude, state.altitude,
                         state.aircraft_type, state.assigned_gate,
                     )
-                    state.phase = FlightPhase.TAKEOFF
+                    _set_phase(state, FlightPhase.TAKEOFF)
                     _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
                     state.heading = dep_hdg
                     state.takeoff_subphase = "lineup"
@@ -2935,7 +2972,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.latitude, state.longitude, state.altitude,
                     state.aircraft_type, state.assigned_gate,
                 )
-                state.phase = FlightPhase.DEPARTING
+                _set_phase(state, FlightPhase.DEPARTING)
                 state.waypoint_index = 0
                 state.takeoff_subphase = "lineup"  # Reset for next use
                 state.takeoff_roll_dist_ft = 0.0
@@ -2966,7 +3003,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude, state.longitude, state.altitude,
                 state.aircraft_type, state.assigned_gate,
             )
-            state.phase = FlightPhase.ENROUTE
+            _set_phase(state, FlightPhase.ENROUTE)
             if state.destination_airport:
                 state.heading = _bearing_to_airport(state.destination_airport)
 
@@ -2993,7 +3030,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # Enforce approach capacity at runtime (max 4 on approach)
             approach_count = (_count_aircraft_in_phase(FlightPhase.APPROACHING)
                               + _count_aircraft_in_phase(FlightPhase.LANDING))
-            can_start_approach = approach_count < 4
+            can_start_approach = approach_count < MAX_APPROACH_AIRCRAFT
 
             if can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
                 # Close enough — transition to approach
@@ -3003,7 +3040,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.latitude, state.longitude, state.altitude,
                     state.aircraft_type, state.assigned_gate,
                 )
-                state.phase = FlightPhase.APPROACHING
+                _set_phase(state, FlightPhase.APPROACHING)
                 state.waypoint_index = 0
             elif can_start_approach and random.random() < 0.01 * dt and dist_from_airport < 0.35:
                 emit_phase_transition(
@@ -3012,7 +3049,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.latitude, state.longitude, state.altitude,
                     state.aircraft_type, state.assigned_gate,
                 )
-                state.phase = FlightPhase.APPROACHING
+                _set_phase(state, FlightPhase.APPROACHING)
                 state.waypoint_index = 0
             elif not can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
                 # Approach full — FAA standard racetrack holding pattern
@@ -3075,7 +3112,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.heading = state.heading % 360
 
             if random.random() < 0.005 * dt:
-                state.phase = FlightPhase.APPROACHING
+                _set_phase(state, FlightPhase.APPROACHING)
                 state.waypoint_index = 0
 
         # 14 CFR 91.117: 250 kts IAS below 10,000 ft MSL
@@ -3181,14 +3218,15 @@ def generate_synthetic_flights(
             taxi_count = (_count_aircraft_in_phase(FlightPhase.TAXI_TO_GATE) +
                          _count_aircraft_in_phase(FlightPhase.TAXI_TO_RUNWAY))
 
-            max_parked = len(get_gates())
-            approach_weight = 0.15 if approach_count < 4 else 0.0
-            parked_weight = 0.20 if parked_count < max_parked else 0.0
-            taxi_in_weight = 0.05 if taxi_count < 3 else 0.0
-            taxi_out_weight = 0.05 if taxi_count < 3 else 0.0
+            max_parked = int(len(get_gates()) * 0.8)  # 80% cap — buffer for arrivals
+            approach_weight = 0.15 if approach_count < MAX_APPROACH_AIRCRAFT else 0.0
+            parked_weight = 0.25 if parked_count < max_parked else 0.0
+            taxi_in_weight = 0.08 if taxi_count < 6 else 0.0
+            taxi_out_weight = 0.08 if taxi_count < 6 else 0.0
+            departing_weight = 0.08
 
             total_ground = approach_weight + parked_weight + taxi_in_weight + taxi_out_weight
-            enroute_weight = 1.0 - total_ground - 0.05
+            enroute_weight = max(0.0, 1.0 - total_ground - departing_weight)
 
             phase_weights = [
                 (FlightPhase.ENROUTE, enroute_weight),
@@ -3196,7 +3234,7 @@ def generate_synthetic_flights(
                 (FlightPhase.PARKED, parked_weight),
                 (FlightPhase.TAXI_TO_GATE, taxi_in_weight),
                 (FlightPhase.TAXI_TO_RUNWAY, taxi_out_weight),
-                (FlightPhase.DEPARTING, 0.05),
+                (FlightPhase.DEPARTING, departing_weight),
             ]
 
             r = random.random()

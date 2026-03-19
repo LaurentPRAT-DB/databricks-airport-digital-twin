@@ -6,7 +6,7 @@ Override via app.yaml env section or shell environment.
 Environment variables:
     DEMO_MODE: "true" to start in demo mode with synthetic data (default: "true")
     DEMO_DEFAULT_AIRPORT: ICAO code for the default airport (default: "KSFO")
-    DEMO_FLIGHT_COUNT: Number of synthetic flights to generate (default: 50)
+    DEMO_FLIGHT_COUNT: Number of synthetic flights to generate (default: 100)
 """
 
 import os
@@ -14,9 +14,9 @@ import os
 DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "yes")
 DEFAULT_AIRPORT_ICAO: str = os.getenv("DEMO_DEFAULT_AIRPORT", "KSFO")
 try:
-    DEFAULT_FLIGHT_COUNT: int = int(os.getenv("DEMO_FLIGHT_COUNT", "50"))
+    DEFAULT_FLIGHT_COUNT: int = int(os.getenv("DEMO_FLIGHT_COUNT", "100"))
 except (ValueError, TypeError):
-    DEFAULT_FLIGHT_COUNT: int = 50
+    DEFAULT_FLIGHT_COUNT: int = 100
 
 # Derive IATA from ICAO for convenience
 _ICAO_TO_IATA = {

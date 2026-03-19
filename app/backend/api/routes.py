@@ -293,7 +293,7 @@ async def get_web_vitals_summary() -> dict:
 async def get_arrivals(
     hours_ahead: int = Query(default=2, ge=1, le=12, description="Hours into future"),
     hours_behind: int = Query(default=1, ge=0, le=6, description="Hours into past"),
-    limit: int = Query(default=50, ge=1, le=200, description="Max flights"),
+    limit: int = Query(default=100, ge=1, le=200, description="Max flights"),
 ) -> ScheduleResponse:
     """
     Get scheduled arrivals for FIDS display.
@@ -313,7 +313,7 @@ async def get_arrivals(
 async def get_departures(
     hours_ahead: int = Query(default=2, ge=1, le=12, description="Hours into future"),
     hours_behind: int = Query(default=1, ge=0, le=6, description="Hours into past"),
-    limit: int = Query(default=50, ge=1, le=200, description="Max flights"),
+    limit: int = Query(default=100, ge=1, le=200, description="Max flights"),
 ) -> ScheduleResponse:
     """
     Get scheduled departures for FIDS display.
