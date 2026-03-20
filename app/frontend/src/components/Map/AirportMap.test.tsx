@@ -14,19 +14,28 @@ const mockMap = {
   getZoom: mockGetZoom,
 };
 
-vi.mock('react-leaflet', () => ({
-  MapContainer: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="map-container">{children}</div>
-  ),
-  TileLayer: () => <div data-testid="tile-layer" />,
-  useMap: () => mockMap,
-  GeoJSON: () => null,
-  CircleMarker: () => null,
-  Tooltip: () => null,
-  Polygon: () => null,
-  Polyline: () => null,
-  useMapEvents: () => null,
-}));
+vi.mock('react-leaflet', () => {
+  const LayersControlMock = ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="layers-control">{children}</div>
+  );
+  LayersControlMock.BaseLayer = ({ children }: { children: React.ReactNode }) => <>{children}</>;
+  LayersControlMock.Overlay = ({ children }: { children: React.ReactNode }) => <>{children}</>;
+
+  return {
+    MapContainer: ({ children }: { children: React.ReactNode }) => (
+      <div data-testid="map-container">{children}</div>
+    ),
+    TileLayer: () => <div data-testid="tile-layer" />,
+    LayersControl: LayersControlMock,
+    useMap: () => mockMap,
+    GeoJSON: () => null,
+    CircleMarker: () => null,
+    Tooltip: () => null,
+    Polygon: () => null,
+    Polyline: () => null,
+    useMapEvents: () => null,
+  };
+});
 
 // ── Airport config context mock ────────────────────────────────────
 let mockCurrentAirport = 'KSFO';
