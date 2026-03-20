@@ -17,7 +17,7 @@ export default function AirportSwitchProgress({ progress, error }: AirportSwitch
   const pct = hasSteps ? Math.round((progress.step / progress.total) * 100) : 0;
 
   return (
-    <div className={`absolute top-full left-0 right-0 ${hasError ? 'bg-red-800' : 'bg-slate-700'} border-t ${hasError ? 'border-red-600' : 'border-slate-600'} px-4 py-2 shadow-lg z-[1001] flex items-center gap-3`}>
+    <div className={`${hasError ? 'bg-red-800' : 'bg-slate-700'} ${hasError ? 'border-red-600' : 'border-slate-600'} border rounded-lg px-6 py-4 shadow-2xl flex items-center gap-3 min-w-[360px]`}>
       {/* Icon: error or spinner */}
       {hasError ? (
         <svg className="w-4 h-4 text-red-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>

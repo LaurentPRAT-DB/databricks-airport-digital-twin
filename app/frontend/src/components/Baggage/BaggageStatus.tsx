@@ -6,6 +6,8 @@ interface FlightBaggageStats {
   loaded: number;
   unloaded: number;
   on_carousel: number;
+  claimed: number;
+  delivered: number;
   loading_progress_pct: number;
   connecting_bags: number;
   misconnects: number;
@@ -109,7 +111,7 @@ export default function BaggageStatus({
         </div>
         <div className="bg-slate-50 rounded p-2">
           <div className="text-lg font-bold text-slate-800">
-            {isArrival ? stats.on_carousel || stats.unloaded : stats.loaded}
+            {isArrival ? stats.delivered : stats.loaded}
           </div>
           <div className="text-xs text-slate-500">
             {isArrival ? 'Delivered' : 'Loaded'}

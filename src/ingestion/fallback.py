@@ -308,7 +308,7 @@ def get_current_flight_states() -> List[Dict[str, Any]]:
             "latitude": state.latitude,
             "longitude": state.longitude,
             "altitude": state.altitude,
-            "velocity": state.velocity,
+            "velocity": 0 if state.phase == FlightPhase.PARKED else state.velocity,
             "heading": state.heading,
             "vertical_rate": state.vertical_rate,
             "on_ground": state.on_ground,
@@ -3382,21 +3382,9 @@ def generate_synthetic_flights(
 
     # Initialize flights if needed (fill up to target count)
     if len(_flight_states) < count:
-        # Predefined test flights - diversified phases to avoid conflicts
         local_iata = get_current_airport_iata()
-        test_flights = [
-            ("a12345", "UAL123", FlightPhase.APPROACHING, "ORD", local_iata),
-            ("b67890", "DAL456", FlightPhase.ENROUTE, "NRT", local_iata),
-            ("c11111", "SWA789", FlightPhase.ENROUTE, "LAX", local_iata),
-            ("d22222", "AAL100", FlightPhase.PARKED, "JFK", "DEN"),
-            ("e33333", "JBU555", FlightPhase.DEPARTING, local_iata, "BOS"),
-        ]
 
-        for icao24, callsign, phase, origin, dest in test_flights:
-            if icao24 not in _flight_states:
-                _flight_states[icao24] = _create_new_flight(icao24, callsign, phase, origin=origin, destination=dest)
-
-        # Generate additional random flights
+        # Generate random flights
         while len(_flight_states) < count:
             icao24 = fake.hexify(text="^^^^^^", upper=False)
             if icao24 in _flight_states:
@@ -3416,19 +3404,36 @@ def generate_synthetic_flights(
             if prefix == "OTH":
                 prefix = random.choice(_OTH_REPLACEMENTS)
 
-            # Validate airline scope: reject EU/ME-only carriers at non-matching airports
+            # Validate airline scope: reject carriers that don't match the airport region
+            _US_DOMESTIC_CARRIERS = {"SWA", "JBU", "ASA", "HAL"}
+            _US_REGIONAL_CARRIERS = {"SKW", "RPA", "ENY", "PDT", "EDV"}
+            _US_IATA_CODES = {
+                "SFO", "LAX", "ORD", "DFW", "JFK", "ATL", "DEN", "SEA", "BOS",
+                "PHX", "LAS", "MCO", "MIA", "CLT", "MSP", "DTW", "EWR", "PHL",
+                "IAH", "SAN", "PDX", "HNL", "AUS", "TPA", "SLC", "BNA", "DCA",
+                "IAD", "FLL", "STL", "BWI", "RDU", "SJC", "DAL", "MDW", "OAK",
+                "SMF", "IND", "CLE", "MCI", "CMH", "PIT", "SAT", "MKE", "CVG",
+            }
+            _is_us_airport = local_iata in _US_IATA_CODES
+
+            # Filter domestic-only US carriers at non-US airports
+            if prefix in _US_DOMESTIC_CARRIERS and not _is_us_airport:
+                prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
+
+            # Filter US regional carriers at non-US airports
+            if prefix in _US_REGIONAL_CARRIERS and not _is_us_airport:
+                prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
+
             try:
                 from src.ingestion.schedule_generator import AIRLINES as _SG_AIRLINES
                 _airline_info = _SG_AIRLINES.get(prefix)
                 if _airline_info:
                     _scope = _airline_info.get("scope", "full")
                     if _scope == "regional_eu" and not _is_international_airport(local_iata):
-                        # EU-only carrier at non-EU airport — swap to safe carrier
-                        prefix = random.choice(CALLSIGN_PREFIXES)
+                        prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
                     elif _scope == "regional_me":
-                        # ME-only carrier at non-ME airport
                         if not any(local_iata.startswith(p) for p in ("DXB", "DOH", "AUH", "BAH", "KWI", "MCT")):
-                            prefix = random.choice(CALLSIGN_PREFIXES)
+                            prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
             except ImportError:
                 pass
 
@@ -3540,14 +3545,6 @@ def generate_synthetic_flights(
     }
 
 
-# Keep the test flights list for backward compatibility
-TEST_FLIGHTS_WITH_TRAJECTORY = [
-    {"icao24": "a12345", "callsign": "UAL123"},
-    {"icao24": "b67890", "callsign": "DAL456"},
-    {"icao24": "c11111", "callsign": "SWA789"},
-    {"icao24": "d22222", "callsign": "AAL100"},
-    {"icao24": "e33333", "callsign": "JBU555"},
-]
 
 
 def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1000) -> List[Dict[str, Any]]:
@@ -3573,15 +3570,9 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     """
     from datetime import datetime, timedelta, timezone
 
-    # Find the flight in our test flights list
+    # Find the flight in the flight states manager
     flight_info = None
-    for f in TEST_FLIGHTS_WITH_TRAJECTORY:
-        if f["icao24"] == icao24:
-            flight_info = f
-            break
-
-    # If not found, check in the flight states manager
-    if flight_info is None and icao24 in _flight_states:
+    if icao24 in _flight_states:
         state = _flight_states[icao24]
         flight_info = {"icao24": icao24, "callsign": state.callsign}
 

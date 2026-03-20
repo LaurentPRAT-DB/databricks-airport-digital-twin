@@ -572,15 +572,12 @@ class TestGenerateSyntheticFlightsOriginDest:
         generate_synthetic_flights(count=20)
         assert "exit_test" not in _flight_states, "Exited flight should be removed"
 
-    def test_test_flights_have_origin_destination(self):
-        """The predefined test flights should have origin/destination."""
+    def test_generated_flights_have_origin_destination(self):
+        """Randomly generated flights should have origin/destination."""
         generate_synthetic_flights(count=5)
-        # a12345 = UAL123 approaching from ORD
-        if "a12345" in _flight_states:
-            assert _flight_states["a12345"].origin_airport == "ORD"
-        # e33333 = JBU555 departing to BOS
-        if "e33333" in _flight_states:
-            assert _flight_states["e33333"].destination_airport == "BOS"
+        for icao24, state in _flight_states.items():
+            assert state.origin_airport is not None, f"{icao24} missing origin"
+            assert state.destination_airport is not None, f"{icao24} missing destination"
 
 
 # ============================================================================

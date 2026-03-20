@@ -224,6 +224,8 @@ def get_flight_baggage_stats(
             "loaded": bag_count,
             "unloaded": 0,
             "on_carousel": 0,
+            "claimed": 0,
+            "delivered": 0,
             "loading_progress_pct": 0,
             "connecting_bags": connecting_count,
             "misconnects": 0,
@@ -270,13 +272,19 @@ def get_flight_baggage_stats(
                 carousel = bag["carousel"]
                 break
 
+    unloaded = status_counts.get("unloaded", 0)
+    on_carousel = status_counts.get("on_carousel", 0)
+    claimed = status_counts.get("claimed", 0)
+
     return {
         "flight_number": flight_number,
         "total_bags": total,
         "checked_in": status_counts.get("checked_in", 0),
         "loaded": status_counts.get("loaded", 0) + status_counts.get("in_transit", 0),
-        "unloaded": status_counts.get("unloaded", 0),
-        "on_carousel": status_counts.get("on_carousel", 0),
+        "unloaded": unloaded,
+        "on_carousel": on_carousel,
+        "claimed": claimed,
+        "delivered": unloaded + on_carousel + claimed,
         "loading_progress_pct": loading_progress,
         "connecting_bags": connecting_count,
         "misconnects": misconnects,

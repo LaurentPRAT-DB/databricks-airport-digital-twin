@@ -5,10 +5,28 @@ Converts parsed OSM documents to the internal airport configuration format
 used by the Airport Digital Twin visualization.
 """
 
+import re
 from typing import Any
 
 from src.formats.base import CoordinateConverter, GeoPosition
 from src.formats.osm.models import OSMDocument, OSMNode, OSMWay
+
+# Terminal name overrides for airports with inconsistent OSM naming.
+# Each entry maps a regex pattern (matched against the raw OSM name) to the
+# corrected terminal name.  Patterns are tried in order; first match wins.
+TERMINAL_NAME_OVERRIDES: dict[str, list[tuple[str, str]]] = {
+    "EGLL": [
+        (r"(?i)terminal\s*2", "Terminal 2"),
+        (r"(?i)terminal\s*3", "Terminal 3"),
+        (r"(?i)terminal\s*4", "Terminal 4"),
+        (r"(?i)terminal\s*5", "Terminal 5"),
+    ],
+    "RJTT": [
+        (r"(?i)terminal\s*1", "Terminal 1"),
+        (r"(?i)terminal\s*2", "Terminal 2"),
+        (r"(?i)(terminal\s*3|international)", "Terminal 3 (International)"),
+    ],
+}
 
 
 class OSMConverter:
@@ -45,6 +63,8 @@ class OSMConverter:
         Returns:
             Configuration dictionary
         """
+        self._icao_code = doc.icao_code
+
         config: dict[str, Any] = {
             "source": "OSM",
             "icaoCode": doc.icao_code,
@@ -254,10 +274,17 @@ class OSMConverter:
         depth = max(zs) - min(zs) if zs else 50
         height = terminal.tags.height or 15.0  # Default terminal height
 
+        raw_name = terminal.tags.name or f"Terminal {terminal.id}"
+        overrides = TERMINAL_NAME_OVERRIDES.get(self._icao_code or "", [])
+        for pattern, replacement in overrides:
+            if re.search(pattern, raw_name):
+                raw_name = replacement
+                break
+
         return {
             "id": f"terminal_{terminal.id}",
             "osmId": terminal.id,
-            "name": terminal.tags.name or f"Terminal {terminal.id}",
+            "name": raw_name,
             "type": "terminal",
             "operator": terminal.tags.operator,  # Airport authority or airline operator
             "level": terminal.tags.level,  # Number of levels/floors
