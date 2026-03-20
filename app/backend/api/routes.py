@@ -107,6 +107,8 @@ WELL_KNOWN_AIRPORT_INFO: dict[str, dict] = {
     "EDDF": {"iata": "FRA", "name": "Frankfurt Airport", "city": "Frankfurt, DE", "region": "Europe"},
     "LEMD": {"iata": "MAD", "name": "Adolfo Suarez Madrid-Barajas", "city": "Madrid, ES", "region": "Europe"},
     "LIRF": {"iata": "FCO", "name": "Leonardo da Vinci (Fiumicino)", "city": "Rome, IT", "region": "Europe"},
+    "LSGG": {"iata": "GVA", "name": "Geneva Cointrin", "city": "Geneva, CH", "region": "Europe"},
+    "LGAV": {"iata": "ATH", "name": "Eleftherios Venizelos", "city": "Athens, GR", "region": "Europe"},
     # Middle East
     "OMAA": {"iata": "AUH", "name": "Abu Dhabi International", "city": "Abu Dhabi, AE", "region": "Middle East"},
     "OMDB": {"iata": "DXB", "name": "Dubai International", "city": "Dubai, AE", "region": "Middle East"},
