@@ -13,6 +13,7 @@ _activation_lock = asyncio.Lock()
 _ACTIVATION_TIMEOUT_S = 45
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ from app.backend.models.airport_config import (
     AirportConfigResponse,
     OSMImportResponse,
     FAAImportResponse,
+    MSFSImportResponse,
 )
 from src.ingestion.fallback import generate_synthetic_trajectory, get_airport_center, get_current_airport_iata, reload_gates, reset_synthetic_state, set_airport_center
 from src.ml.gate_model import reload_gate_recommender
@@ -804,6 +806,70 @@ async def import_faa(
         raise HTTPException(status_code=500, detail=f"FAA import error: {str(e)}")
 
 
+@router.post("/airport/import/msfs", response_model=MSFSImportResponse, tags=["airport"])
+async def import_msfs(
+    request: Request,
+    merge: bool = Query(default=True, description="Merge with existing config"),
+    icao_code: Optional[str] = Query(default=None, description="ICAO airport code (auto-detected from filename if omitted)"),
+    filename: Optional[str] = Query(default=None, description="Original filename for ICAO extraction from BGL/ZIP names"),
+):
+    """
+    Import MSFS scenery data.
+
+    Accepts MSFS airport scenery XML, compiled BGL, or ZIP archive
+    containing gate positions, taxi paths, runways, and apron areas.
+    Community scenery packages from flightsim.to provide detailed
+    airport definitions that complement OSM data.
+
+    For BGL files where the ICAO code is embedded in the filename
+    (e.g. lgav-airport.zip), pass the original filename or icao_code
+    so the config can be persisted correctly.
+
+    Args:
+        request: HTTP request with XML, BGL, or ZIP body
+        merge: Whether to merge with existing configuration
+        icao_code: Explicit ICAO code (overrides filename extraction)
+        filename: Original filename hint for ICAO extraction
+
+    Returns:
+        Import result with element counts and warnings
+    """
+    service = get_airport_config_service()
+    file = await request.body()
+
+    # Build source_path hint from filename or Content-Disposition header
+    source_path = filename or ""
+    if not source_path:
+        cd = request.headers.get("content-disposition", "")
+        if "filename=" in cd:
+            # Extract filename from Content-Disposition header
+            import re
+            match = re.search(r'filename="?([^";]+)"?', cd)
+            if match:
+                source_path = match.group(1)
+
+    try:
+        config, warnings = service.import_msfs(
+            file, merge=merge, icao_code=icao_code, source_path=source_path,
+        )
+
+        return MSFSImportResponse(
+            success=True,
+            icaoCode=config.get("icaoCode", ""),
+            gatesImported=len(config.get("gates", [])),
+            taxiwaysImported=len(config.get("osmTaxiways", [])),
+            runwaysImported=len(config.get("osmRunways", [])),
+            apronsImported=len(config.get("osmAprons", [])),
+            warnings=warnings,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    except ParseError as e:
+        raise HTTPException(status_code=400, detail=f"MSFS parsing error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"MSFS import error: {str(e)}")
+
+
 # ==============================================================================
 # Airport Persistence Routes
 # ==============================================================================
@@ -863,18 +929,19 @@ async def get_airport(icao_code: str) -> dict:
 
 
 @router.post("/airports/{icao_code}/activate", tags=["airport"])
-async def activate_airport(icao_code: str, user: str = Depends(get_current_user)) -> dict:
+async def activate_airport(icao_code: str, user: str = Depends(get_current_user)):
     """
     Activate an airport: load config, reset state, and ensure synthetic data.
 
-    Returns the config immediately once loaded, then generates synthetic data
-    in the background while broadcasting progress via WebSocket.
+    Returns 202 immediately and runs activation in the background.
+    Progress and completion are broadcast via WebSocket so the frontend
+    can update without waiting for the HTTP response.
 
     Args:
         icao_code: ICAO airport code (e.g., "KSFO", "KJFK")
 
     Returns:
-        Airport configuration with data readiness info
+        202 Accepted with {"status": "activating", "icaoCode": icao_code}
     """
     from app.backend.api.websocket import broadcaster
 
@@ -885,12 +952,20 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
             detail="Another airport activation is in progress. Please wait.",
         )
 
-    async with _activation_lock:
-        return await _activate_airport_inner(icao_code, user, broadcaster)
+    # Acquire lock manually so we can hold it across the background task
+    await _activation_lock.acquire()
+
+    # Fire-and-forget: background task releases lock when done
+    asyncio.create_task(_activate_airport_inner(icao_code, user, broadcaster))
+
+    return JSONResponse(
+        status_code=202,
+        content={"status": "activating", "icaoCode": icao_code},
+    )
 
 
-async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> dict:
-    """Inner activation logic, called under _activation_lock."""
+async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> None:
+    """Inner activation logic, runs as background task. Releases _activation_lock on exit."""
     total_steps = 7
     service = get_airport_config_service()
 
@@ -900,152 +975,163 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> dic
     prev_icao = f"K{prev_iata}" if len(prev_iata) == 3 else prev_iata
 
     try:
-        # Step 1: Load airport config with timeout (prevents Tier 2/3 hangs from causing 502)
-        await broadcaster.broadcast_progress(1, total_steps, "Loading airport configuration...", icao_code)
         try:
-            loaded = await asyncio.wait_for(
-                asyncio.to_thread(
-                    service.initialize_from_lakehouse,
-                    icao_code=icao_code,
-                    fallback_to_osm=True,
-                ),
-                timeout=_ACTIVATION_TIMEOUT_S,
-            )
-        except asyncio.TimeoutError:
-            logger.error(
-                f"Airport config load for {icao_code} timed out after {_ACTIVATION_TIMEOUT_S}s",
-                exc_info=True,
-            )
-            await broadcaster.broadcast_progress(1, total_steps, "Timeout loading config", icao_code, done=True)
-            raise HTTPException(
-                status_code=504,
-                detail=f"Airport {icao_code} config load timed out after {_ACTIVATION_TIMEOUT_S}s. "
-                       "This airport may not be cached yet — try again (the cache will be populated).",
-            )
-
-        if not loaded:
-            await broadcaster.broadcast_progress(1, total_steps, "Airport not found", icao_code, done=True)
-            raise HTTPException(
-                status_code=404,
-                detail=f"Airport {icao_code} not found (tried lakehouse and OSM)"
-            )
-
-        config = service.get_config()
-        source = "lakehouse" if config.get("source") == "LAKEHOUSE" else "osm"
-
-        # Step 2: Reload gates and swap ML models (fast)
-        await broadcaster.broadcast_progress(2, total_steps, "Reloading gate positions and ML models...", icao_code)
-        gates = reload_gates()
-        gate_recommender_count = reload_gate_recommender()
-
-        # Swap ML models to airport-specific instances
-        registry = get_model_registry()
-        registry.retrain(icao_code)
-        prediction_service = get_prediction_service()
-        prediction_service.set_airport(icao_code)
-
-        # Step 3: Set airport center BEFORE resetting state, so any concurrent
-        # flight generation uses the new center immediately
-        await broadcaster.broadcast_progress(3, total_steps, "Resetting flight state...", icao_code)
-        from src.ingestion.schedule_generator import AIRPORT_COORDINATES
-        from src.calibration.profile import _icao_to_iata
-        iata_code = _icao_to_iata(icao_code)
-        if iata_code in AIRPORT_COORDINATES:
-            lat, lon = AIRPORT_COORDINATES[iata_code]
-        elif config.get("center"):
-            lat = config["center"]["latitude"]
-            lon = config["center"]["longitude"]
-        else:
-            # Compute center from gate/terminal geo coordinates as last resort
-            lat, lon = _compute_center_from_config(config)
-            if lat is None or lon is None:
-                raise ValueError(f"No coordinates available for {icao_code}")
-
-        set_airport_center(lat, lon, iata_code)
-        reset_result = reset_synthetic_state()
-
-        # Force full WS update (clear delta cache so clients get a full refresh)
-        broadcaster._prev_flights.clear()
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            f"Airport switch to {icao_code} failed, rolling back:\n"
-            f"{traceback.format_exc()}"
-        )
-        # Rollback to previous airport state (restore ALL components)
-        try:
-            await asyncio.to_thread(
-                service.initialize_from_lakehouse,
-                icao_code=prev_icao,
-                fallback_to_osm=True,
-            )
-            reload_gates()
-            set_airport_center(prev_center[0], prev_center[1], prev_iata)
-            # Restore ML models and schedule service to previous airport
-            registry = get_model_registry()
-            registry.retrain(prev_icao)
-            prediction_service = get_prediction_service()
-            prediction_service.set_airport(prev_icao)
-            schedule_svc = get_schedule_service()
-            schedule_svc.set_airport(prev_iata, prev_icao)
-            reset_synthetic_state()
-            broadcaster._prev_flights.clear()
-        except Exception as rb_err:
-            logger.error(
-                f"Rollback to {prev_icao} also failed:\n"
-                f"{traceback.format_exc()}"
-            )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Airport switch failed: {e}. Rolled back to {prev_iata}.",
-        )
-
-    # Check if data generation is needed
-    data_generator = get_data_generator_service()
-    already_initialized = icao_code in data_generator._initialized_airports
-
-    if already_initialized:
-        await broadcaster.broadcast_progress(total_steps, total_steps, "Airport ready", icao_code, done=True)
-    else:
-        # Launch data generation as background task with progress
-        async def _generate_data_background():
-            async def _progress(step, total, message, done):
-                await broadcaster.broadcast_progress(step, total, message, icao_code, done)
-
+            # Step 1: Load airport config with timeout (prevents Tier 2/3 hangs)
+            await broadcaster.broadcast_progress(1, total_steps, "Loading airport configuration...", icao_code)
             try:
-                await data_generator.switch_airport(icao_code, progress_callback=_progress)
-            except Exception as e:
-                logger.error(f"Background data generation failed for {icao_code}: {e}")
+                loaded = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        service.initialize_from_lakehouse,
+                        icao_code=icao_code,
+                        fallback_to_osm=True,
+                    ),
+                    timeout=_ACTIVATION_TIMEOUT_S,
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    f"Airport config load for {icao_code} timed out after {_ACTIVATION_TIMEOUT_S}s",
+                    exc_info=True,
+                )
                 await broadcaster.broadcast_progress(
-                    total_steps, total_steps, f"Failed: {e}", icao_code, done=True, error=True
+                    1, total_steps,
+                    f"Timeout loading config after {_ACTIVATION_TIMEOUT_S}s",
+                    icao_code, done=True, error=True,
                 )
                 return
-            await broadcaster.broadcast_progress(
-                total_steps, total_steps, "Airport ready", icao_code, done=True
+
+            if not loaded:
+                await broadcaster.broadcast_progress(
+                    1, total_steps, "Airport not found", icao_code, done=True, error=True,
+                )
+                return
+
+            config = service.get_config()
+            source = "lakehouse" if config.get("source") == "LAKEHOUSE" else "osm"
+
+            # Step 2: Set airport center FIRST so any concurrent flight generation
+            # (e.g. WS broadcast loop) uses the new coordinates immediately
+            await broadcaster.broadcast_progress(2, total_steps, "Setting airport center...", icao_code)
+            from src.ingestion.schedule_generator import AIRPORT_COORDINATES
+            from src.calibration.profile import _icao_to_iata
+            iata_code = _icao_to_iata(icao_code)
+            if iata_code in AIRPORT_COORDINATES:
+                lat, lon = AIRPORT_COORDINATES[iata_code]
+            elif config.get("center"):
+                lat = config["center"]["latitude"]
+                lon = config["center"]["longitude"]
+            else:
+                # Compute center from gate/terminal geo coordinates as last resort
+                lat, lon = _compute_center_from_config(config)
+                if lat is None or lon is None:
+                    raise ValueError(f"No coordinates available for {icao_code}")
+
+            set_airport_center(lat, lon, iata_code)
+
+            # Step 3: Reload gates, swap ML models, and reset state
+            await broadcaster.broadcast_progress(3, total_steps, "Reloading gate positions and ML models...", icao_code)
+            gates = reload_gates()
+            gate_recommender_count = reload_gate_recommender()
+
+            # Swap ML models to airport-specific instances
+            registry = get_model_registry()
+            registry.retrain(icao_code)
+            prediction_service = get_prediction_service()
+            prediction_service.set_airport(icao_code)
+
+            reset_result = reset_synthetic_state()
+
+            # Force full WS update (clear delta cache so clients get a full refresh)
+            broadcaster._prev_flights.clear()
+
+        except Exception as e:
+            logger.error(
+                f"Airport switch to {icao_code} failed, rolling back:\n"
+                f"{traceback.format_exc()}"
             )
+            # Rollback to previous airport state (restore ALL components)
+            try:
+                await asyncio.to_thread(
+                    service.initialize_from_lakehouse,
+                    icao_code=prev_icao,
+                    fallback_to_osm=True,
+                )
+                reload_gates()
+                set_airport_center(prev_center[0], prev_center[1], prev_iata)
+                # Restore ML models and schedule service to previous airport
+                registry = get_model_registry()
+                registry.retrain(prev_icao)
+                prediction_service = get_prediction_service()
+                prediction_service.set_airport(prev_icao)
+                schedule_svc = get_schedule_service()
+                schedule_svc.set_airport(prev_iata, prev_icao)
+                reset_synthetic_state()
+                broadcaster._prev_flights.clear()
+            except Exception:
+                logger.error(
+                    f"Rollback to {prev_icao} also failed:\n"
+                    f"{traceback.format_exc()}"
+                )
+            await broadcaster.broadcast_progress(
+                total_steps, total_steps,
+                f"Airport switch failed: {e}. Rolled back to {prev_iata}.",
+                icao_code, done=True, error=True,
+            )
+            return
 
-        asyncio.create_task(_generate_data_background())
+        # Check if data generation is needed
+        data_generator = get_data_generator_service()
+        already_initialized = icao_code in data_generator._initialized_airports
 
-    # Record usage for pre-warming (fire-and-forget, non-blocking)
-    lakebase = get_lakebase_service()
-    if lakebase.is_available:
-        asyncio.create_task(asyncio.to_thread(
-            lakebase.record_airport_usage, user, icao_code
-        ))
+        # Build the config payload to send via WS (same shape as old HTTP response)
+        config_payload = {
+            "config": config,
+            "source": source,
+            "icaoCode": icao_code,
+            "elementCounts": service.get_element_counts(),
+            "dataReady": already_initialized,
+            "dataGenerating": not already_initialized,
+            "gatesLoaded": len(gates),
+            "gateRecommenderCount": gate_recommender_count,
+            "stateReset": reset_result,
+        }
 
-    return {
-        "config": config,
-        "source": source,
-        "icaoCode": icao_code,
-        "elementCounts": service.get_element_counts(),
-        "dataReady": already_initialized,
-        "dataGenerating": not already_initialized,
-        "gatesLoaded": len(gates),
-        "gateRecommenderCount": gate_recommender_count,
-        "stateReset": reset_result,
-    }
+        # Broadcast completion with full config so frontend can update state
+        await broadcaster.broadcast({
+            "type": "airport_switch_complete",
+            "data": config_payload,
+        })
+
+        if already_initialized:
+            await broadcaster.broadcast_progress(total_steps, total_steps, "Airport ready", icao_code, done=True)
+        else:
+            # Launch data generation as background task with progress
+            async def _generate_data_background():
+                async def _progress(step, total, message, done):
+                    await broadcaster.broadcast_progress(step, total, message, icao_code, done)
+
+                try:
+                    await data_generator.switch_airport(icao_code, progress_callback=_progress)
+                except Exception as e:
+                    logger.error(f"Background data generation failed for {icao_code}: {e}")
+                    await broadcaster.broadcast_progress(
+                        total_steps, total_steps, f"Failed: {e}", icao_code, done=True, error=True
+                    )
+                    return
+                await broadcaster.broadcast_progress(
+                    total_steps, total_steps, "Airport ready", icao_code, done=True
+                )
+
+            asyncio.create_task(_generate_data_background())
+
+        # Record usage for pre-warming (fire-and-forget, non-blocking)
+        lakebase = get_lakebase_service()
+        if lakebase.is_available:
+            asyncio.create_task(asyncio.to_thread(
+                lakebase.record_airport_usage, user, icao_code
+            ))
+
+    finally:
+        _activation_lock.release()
 
 
 @router.post("/airports/{icao_code}/reload", tags=["airport"])

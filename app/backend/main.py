@@ -23,7 +23,8 @@ from app.backend.demo_config import (
 from app.backend.services.data_generator_service import get_data_generator_service
 from app.backend.services.airport_config_service import get_airport_config_service
 from app.backend.services.prediction_service import get_prediction_service
-from src.ingestion.fallback import reload_gates, set_airport_center, AIRPORT_CENTER
+from src.ingestion.fallback import reload_gates, set_airport_center
+from src.ingestion.schedule_generator import AIRPORT_COORDINATES
 from src.ml.gate_model import reload_gate_recommender
 from src.ml.registry import get_model_registry
 from app.backend.services.weather_service import get_weather_service
@@ -164,7 +165,12 @@ async def _background_init(app: FastAPI):
             app.state.startup_status = f"Airport data loaded from {source_label} in {load_ms:.0f}ms"
 
             # Set airport center for synthetic data generation
-            set_airport_center(AIRPORT_CENTER[0], AIRPORT_CENTER[1], airport_iata)
+            if airport_iata in AIRPORT_COORDINATES:
+                _lat, _lon = AIRPORT_COORDINATES[airport_iata]
+            else:
+                from src.ingestion.fallback import AIRPORT_CENTER
+                _lat, _lon = AIRPORT_CENTER[0], AIRPORT_CENTER[1]
+            set_airport_center(_lat, _lon, airport_iata)
             gates = reload_gates()
             logger.info(f"INIT |   Reloaded {len(gates)} gates for synthetic data generation")
 

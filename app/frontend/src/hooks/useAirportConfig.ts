@@ -164,7 +164,10 @@ export function useAirportConfig(): UseAirportConfigReturn {
   const [switchProgress, setSwitchProgress] = useState<SwitchProgress | null>(null);
   const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Listen for airport_switch_progress on the existing WS connection
+  // Track previous airport for rollback on error
+  const prevAirportRef = useRef<string | null>('KSFO');
+
+  // Listen for airport_switch_progress and airport_switch_complete on the existing WS connection
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsBase = API_BASE
@@ -175,14 +178,41 @@ export function useAirportConfig(): UseAirportConfigReturn {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
+
+        // Handle async activation completion (config payload delivered via WS)
+        if (msg.type === 'airport_switch_complete') {
+          const data = msg.data;
+          if (data.config && Object.keys(data.config).length > 0) {
+            setConfig((prev) => ({
+              ...prev,
+              ...data.config,
+              sources: (data.config.sources as AirportConfig['sources']) || prev.sources,
+              lastUpdated: new Date().toISOString(),
+            }));
+            if (data.icaoCode) {
+              setCurrentAirport(data.icaoCode);
+              prevAirportRef.current = data.icaoCode;
+              // Cache the config for future use
+              configCache.set(data.icaoCode, { config: data.config, lastUpdated: new Date().toISOString() } as ConfigResponse);
+            }
+          }
+          setIsLoading(false);
+          return;
+        }
+
         if (msg.type === 'airport_switch_progress') {
           const data = msg.data as SwitchProgress;
           setSwitchProgress(data);
           // Set error state when backend reports failure
           if (data.error && data.message) {
             setError(data.message);
+            setIsLoading(false);
+            // Revert to previous airport on error (backend rolls back too)
+            if (prevAirportRef.current) {
+              setCurrentAirport(prevAirportRef.current);
+            }
           }
-          // Auto-clear after done
+          // Auto-clear progress overlay after done
           if (data.done) {
             if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
             progressTimerRef.current = setTimeout(() => setSwitchProgress(null), data.error ? 3000 : 1500);
@@ -278,11 +308,23 @@ export function useAirportConfig(): UseAirportConfigReturn {
     setIsLoading(true);
     setError(null);
 
+    // Save previous airport for rollback on error
+    prevAirportRef.current = currentAirport;
+
     try {
-      // Activate endpoint: loads config, resets state, and ensures synthetic data
+      // Activate endpoint: returns 202 immediately, does work in background
       const response = await fetch(`${API_BASE}/api/airports/${icaoCode}/activate`, {
         method: 'POST',
       });
+
+      if (response.status === 202) {
+        // Async activation: backend is working in background.
+        // Config will arrive via WS `airport_switch_complete` message.
+        // Keep isLoading=true; WS handler will clear it.
+        setCurrentAirport(icaoCode);
+        return;
+      }
+
       if (!response.ok) {
         let detail = `Failed to activate airport: ${response.statusText}`;
         try {
@@ -296,6 +338,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
         throw new Error(detail);
       }
 
+      // Backward compat: 200 with config in body (shouldn't happen with new backend)
       const data = await response.json();
 
       if (data.config && Object.keys(data.config).length > 0) {
@@ -306,15 +349,16 @@ export function useAirportConfig(): UseAirportConfigReturn {
           lastUpdated: new Date().toISOString(),
         }));
         setCurrentAirport(icaoCode);
+        prevAirportRef.current = icaoCode;
       }
+      setIsLoading(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to activate airport';
       setError(message);
-      throw err;
-    } finally {
       setIsLoading(false);
+      throw err;
     }
-  }, []);
+  }, [currentAirport]);
 
   /**
    * Import AIXM data

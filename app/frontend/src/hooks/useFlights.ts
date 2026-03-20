@@ -45,7 +45,7 @@ interface WsDeltaMessage {
   };
 }
 
-type WsFlightMessage = WsFullMessage | WsDeltaMessage | { type: 'airport_switch_progress'; data: unknown };
+type WsFlightMessage = WsFullMessage | WsDeltaMessage | { type: 'airport_switch_progress'; data: unknown } | { type: 'airport_switch_complete'; data: unknown };
 
 export function useFlights(): UseFlightsResult {
   const [wsData, setWsData] = useState<FlightsResponse | null>(null);
@@ -70,6 +70,13 @@ export function useFlights(): UseFlightsResult {
       ws.onmessage = (event) => {
         try {
           const msg: WsFlightMessage = JSON.parse(event.data);
+
+          // Handle airport switch completion — clear stale flights
+          if (msg.type === 'airport_switch_complete') {
+            flightsMapRef.current = new Map();
+            setWsData({ flights: [], count: 0, timestamp: new Date().toISOString(), data_source: 'synthetic' });
+            return;
+          }
 
           // Handle airport switch progress (including errors)
           if (msg.type === 'airport_switch_progress') {

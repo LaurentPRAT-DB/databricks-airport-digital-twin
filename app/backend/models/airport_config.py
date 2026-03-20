@@ -18,6 +18,7 @@ class ImportFormat(str, Enum):
     AIDM = "aidm"
     OSM = "osm"
     FAA = "faa"
+    MSFS = "msfs"
 
 
 class Position3D(BaseModel):
@@ -140,6 +141,20 @@ class FAAImportResponse(BaseModel):
     success: bool
     facility_id: str = Field(alias="facilityId")
     runways_imported: int = Field(alias="runwaysImported")
+    warnings: list[str] = Field(default_factory=list)
+    timestamp: datetime
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class MSFSImportResponse(BaseModel):
+    """Response from MSFS scenery import."""
+    success: bool
+    icao_code: str = Field(alias="icaoCode")
+    gates_imported: int = Field(alias="gatesImported")
+    taxiways_imported: int = Field(alias="taxiwaysImported")
+    runways_imported: int = Field(alias="runwaysImported")
+    aprons_imported: int = Field(alias="apronsImported")
     warnings: list[str] = Field(default_factory=list)
     timestamp: datetime
 

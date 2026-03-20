@@ -285,8 +285,62 @@ class AirportConfigService:
         self._config_ready = True
         self._build_taxiway_graph()
 
-        # Auto-persist to lakehouse
+        # Auto-persist to both Unity Catalog and Lakebase cache
         self.persist_config(icao_code)
+        self.save_to_lakebase_cache(icao_code)
+
+        return config, warnings
+
+    def import_msfs(
+        self,
+        source: bytes,
+        merge: bool = True,
+        icao_code: Optional[str] = None,
+        source_path: str = "",
+    ) -> tuple[dict[str, Any], list[str]]:
+        """
+        Import MSFS scenery data from XML, BGL, or ZIP file content.
+
+        Args:
+            source: Raw bytes of XML, BGL, or ZIP archive
+            merge: Whether to merge with existing config
+            icao_code: Explicit ICAO code (takes precedence over parser extraction)
+            source_path: Original filename hint for ICAO extraction from filename
+
+        Returns:
+            Tuple of (imported config, warnings)
+
+        Raises:
+            ParseError: If parsing fails
+        """
+        from src.formats.msfs import MSFSParser, merge_msfs_config
+
+        parser = MSFSParser(self._converter)
+        doc = parser.parse(source, source_path=source_path)
+        warnings = parser.validate(doc)
+        config = parser.to_config(doc)
+
+        # Resolve ICAO: explicit param > parser-extracted > config field
+        icao = icao_code or doc.icao_code or config.get("icaoCode")
+        if icao:
+            config["icaoCode"] = icao
+
+        # Update reference point from MSFS airport center
+        if doc.lat != 0 and doc.lon != 0:
+            self.set_reference_point(doc.lat, doc.lon, doc.alt)
+
+        if merge and self._current_config:
+            config = merge_msfs_config(self._current_config, config)
+
+        self._current_config = config
+        self._last_updated = datetime.now(timezone.utc)
+        self._config_ready = True
+        self._build_taxiway_graph()
+
+        # Auto-persist to both Unity Catalog and Lakebase cache
+        if icao:
+            self.persist_config(icao)
+            self.save_to_lakebase_cache(icao)
 
         return config, warnings
 
