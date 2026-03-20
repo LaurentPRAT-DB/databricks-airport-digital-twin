@@ -1067,6 +1067,378 @@ def _pdx() -> AirportProfile:
     )
 
 
+def _gva() -> AirportProfile:
+    return AirportProfile(
+        icao_code="LSGG", iata_code="GVA",
+        airline_shares={
+            "SWR": 0.25, "EZY": 0.20, "AFR": 0.08, "DLH": 0.05,
+            "BAW": 0.05, "TAP": 0.04, "VLG": 0.04, "AUA": 0.03,
+            "RYR": 0.03, "THY": 0.03, "UAE": 0.03, "QTR": 0.03,
+        },
+        domestic_route_shares={},
+        international_route_shares={
+            "LHR": 0.08, "CDG": 0.07, "FRA": 0.06, "AMS": 0.05,
+            "LIS": 0.05, "BCN": 0.05, "IST": 0.04, "DXB": 0.04,
+            "FCO": 0.04, "MAD": 0.04,
+        },
+        domestic_ratio=0.05,
+        fleet_mix={
+            "SWR": {"A320": 0.35, "A321": 0.25, "A220": 0.20, "B777": 0.10, "A330": 0.10},
+            "EZY": {"A320": 0.60, "A319": 0.25, "A321": 0.15},
+        },
+        hourly_profile=[
+            0.002, 0.001, 0.001, 0.001, 0.005, 0.018,
+            0.060, 0.070, 0.072, 0.062, 0.050, 0.045,
+            0.042, 0.045, 0.050, 0.055, 0.062, 0.068,
+            0.065, 0.058, 0.045, 0.035, 0.020, 0.008,
+        ],
+        delay_rate=0.16,
+        delay_distribution={
+            "71": 0.18, "81": 0.18, "68": 0.16, "72": 0.14,
+            "62": 0.12, "63": 0.08, "67": 0.06, "61": 0.04, "41": 0.04,
+        },
+        mean_delay_minutes=20.0,
+        data_source="known_stats",
+        sample_size=80000,
+    )
+
+
+def _ath() -> AirportProfile:
+    return AirportProfile(
+        icao_code="LGAV", iata_code="ATH",
+        airline_shares={
+            "AEE": 0.35, "RYR": 0.12, "EZY": 0.08, "VLG": 0.05,
+            "DLH": 0.04, "BAW": 0.04, "AFR": 0.03, "THY": 0.04,
+            "UAE": 0.03, "KLM": 0.03,
+        },
+        domestic_route_shares={
+            "SKG": 0.20, "HER": 0.15, "RHO": 0.10, "CFU": 0.08,
+            "CHQ": 0.08, "JMK": 0.05, "JTR": 0.05,
+        },
+        international_route_shares={
+            "LHR": 0.08, "FRA": 0.07, "CDG": 0.06, "AMS": 0.05,
+            "IST": 0.05, "FCO": 0.05, "MUC": 0.04, "DXB": 0.04,
+        },
+        domestic_ratio=0.35,
+        fleet_mix={
+            "AEE": {"A320": 0.35, "A321": 0.30, "A320neo": 0.15, "DHC8": 0.10, "ATR72": 0.10},
+        },
+        hourly_profile=[
+            0.003, 0.002, 0.001, 0.001, 0.005, 0.018,
+            0.058, 0.068, 0.072, 0.062, 0.050, 0.045,
+            0.042, 0.045, 0.050, 0.055, 0.062, 0.068,
+            0.065, 0.058, 0.045, 0.035, 0.020, 0.008,
+        ],
+        delay_rate=0.14,
+        delay_distribution={
+            "81": 0.20, "68": 0.18, "71": 0.16, "72": 0.12,
+            "62": 0.12, "63": 0.08, "67": 0.06, "61": 0.04, "41": 0.04,
+        },
+        mean_delay_minutes=18.0,
+        data_source="known_stats",
+        sample_size=100000,
+    )
+
+
+def _mad() -> AirportProfile:
+    return AirportProfile(
+        icao_code="LEMD", iata_code="MAD",
+        airline_shares={
+            "IBE": 0.30, "VLG": 0.15, "RYR": 0.10, "AEA": 0.08,
+            "UAL": 0.03, "AAL": 0.03, "BAW": 0.03, "AFR": 0.03,
+            "DLH": 0.03, "UAE": 0.03, "TAP": 0.03,
+        },
+        domestic_route_shares={
+            "BCN": 0.15, "AGP": 0.08, "PMI": 0.08, "ACE": 0.06,
+            "TFS": 0.06, "LPA": 0.06, "SVQ": 0.05, "BIO": 0.05,
+        },
+        international_route_shares={
+            "LHR": 0.08, "CDG": 0.07, "FRA": 0.06, "AMS": 0.05,
+            "FCO": 0.05, "LIS": 0.05, "JFK": 0.04, "MIA": 0.04,
+            "GRU": 0.04, "BOG": 0.04,
+        },
+        domestic_ratio=0.40,
+        fleet_mix={
+            "IBE": {"A320": 0.25, "A321": 0.20, "A350": 0.15, "B787": 0.15, "A330": 0.15, "A319": 0.10},
+            "VLG": {"A320": 0.50, "A321": 0.30, "A319": 0.20},
+        },
+        hourly_profile=[
+            0.002, 0.001, 0.001, 0.001, 0.005, 0.018,
+            0.058, 0.068, 0.072, 0.062, 0.050, 0.045,
+            0.042, 0.045, 0.050, 0.058, 0.065, 0.070,
+            0.068, 0.058, 0.045, 0.035, 0.020, 0.008,
+        ],
+        delay_rate=0.18,
+        delay_distribution={
+            "81": 0.20, "68": 0.18, "71": 0.16, "72": 0.12,
+            "62": 0.12, "63": 0.08, "67": 0.06, "61": 0.04, "41": 0.04,
+        },
+        mean_delay_minutes=22.0,
+        data_source="known_stats",
+        sample_size=200000,
+    )
+
+
+def _fco() -> AirportProfile:
+    return AirportProfile(
+        icao_code="LIRF", iata_code="FCO",
+        airline_shares={
+            "AZA": 0.25, "RYR": 0.15, "EZY": 0.10, "VLG": 0.05,
+            "WZZ": 0.05, "DLH": 0.04, "BAW": 0.04, "AFR": 0.03,
+            "UAE": 0.03, "THY": 0.03, "KLM": 0.03,
+        },
+        domestic_route_shares={
+            "MXP": 0.12, "CTA": 0.10, "PMO": 0.08, "NAP": 0.08,
+            "BLQ": 0.06, "VCE": 0.06, "CAG": 0.05,
+        },
+        international_route_shares={
+            "LHR": 0.08, "CDG": 0.07, "FRA": 0.06, "AMS": 0.05,
+            "MAD": 0.05, "BCN": 0.05, "IST": 0.04, "JFK": 0.04,
+        },
+        domestic_ratio=0.35,
+        fleet_mix={
+            "AZA": {"A320": 0.30, "A321": 0.25, "A330": 0.15, "B787": 0.15, "E190": 0.15},
+            "RYR": {"B738": 0.70, "B737": 0.30},
+        },
+        hourly_profile=[
+            0.002, 0.001, 0.001, 0.001, 0.005, 0.018,
+            0.058, 0.068, 0.072, 0.062, 0.050, 0.045,
+            0.042, 0.045, 0.050, 0.055, 0.062, 0.068,
+            0.065, 0.058, 0.045, 0.035, 0.020, 0.008,
+        ],
+        delay_rate=0.20,
+        delay_distribution={
+            "81": 0.18, "68": 0.18, "71": 0.16, "72": 0.14,
+            "62": 0.12, "63": 0.08, "67": 0.06, "61": 0.04, "41": 0.04,
+        },
+        mean_delay_minutes=24.0,
+        data_source="known_stats",
+        sample_size=170000,
+    )
+
+
+def _auh() -> AirportProfile:
+    return AirportProfile(
+        icao_code="OMAA", iata_code="AUH",
+        airline_shares={
+            "ETD": 0.40, "UAE": 0.10, "WZZ": 0.08, "AIC": 0.05,
+            "BAW": 0.04, "DLH": 0.03, "SIA": 0.03, "THA": 0.03,
+            "KAL": 0.03, "CPA": 0.03, "QTR": 0.03,
+        },
+        domestic_route_shares={},
+        international_route_shares={
+            "LHR": 0.08, "JFK": 0.05, "SIN": 0.05, "BKK": 0.05,
+            "BOM": 0.06, "DEL": 0.05, "CDG": 0.04, "FRA": 0.04,
+            "NRT": 0.03, "SYD": 0.03, "ICN": 0.03,
+        },
+        domestic_ratio=0.02,
+        fleet_mix={
+            "ETD": {"B787": 0.30, "A350": 0.25, "B777": 0.25, "A321": 0.20},
+        },
+        hourly_profile=[
+            0.020, 0.025, 0.030, 0.035, 0.038, 0.035,
+            0.050, 0.058, 0.058, 0.045, 0.035, 0.030,
+            0.030, 0.038, 0.050, 0.055, 0.058, 0.048,
+            0.035, 0.042, 0.050, 0.055, 0.042, 0.030,
+        ],
+        delay_rate=0.10,
+        delay_distribution={
+            "68": 0.22, "81": 0.18, "71": 0.12, "62": 0.15,
+            "63": 0.10, "72": 0.08, "67": 0.06, "61": 0.05, "41": 0.04,
+        },
+        mean_delay_minutes=16.0,
+        data_source="known_stats",
+        sample_size=120000,
+    )
+
+
+def _hnd() -> AirportProfile:
+    return AirportProfile(
+        icao_code="RJTT", iata_code="HND",
+        airline_shares={
+            "ANA": 0.40, "JAL": 0.35, "SKY": 0.08, "ADO": 0.05,
+            "SFJ": 0.04, "CPA": 0.02, "KAL": 0.02, "CES": 0.02,
+        },
+        domestic_route_shares={
+            "CTS": 0.12, "FUK": 0.10, "OKA": 0.10, "KIX": 0.08,
+            "ITM": 0.08, "NGO": 0.06, "KOJ": 0.05, "HIJ": 0.05,
+        },
+        international_route_shares={
+            "ICN": 0.10, "PVG": 0.08, "HKG": 0.06, "TPE": 0.06,
+            "BKK": 0.05, "SIN": 0.05, "SFO": 0.04, "LAX": 0.04,
+        },
+        domestic_ratio=0.70,
+        fleet_mix={
+            "ANA": {"B777": 0.30, "B787": 0.30, "A321": 0.20, "B738": 0.20},
+            "JAL": {"B777": 0.30, "B787": 0.25, "A350": 0.25, "B738": 0.20},
+        },
+        hourly_profile=[
+            0.000, 0.000, 0.000, 0.000, 0.000, 0.005,
+            0.060, 0.075, 0.080, 0.068, 0.055, 0.048,
+            0.045, 0.048, 0.055, 0.065, 0.072, 0.078,
+            0.070, 0.060, 0.045, 0.030, 0.012, 0.000,
+        ],
+        delay_rate=0.08,
+        delay_distribution={
+            "71": 0.20, "68": 0.18, "81": 0.15, "62": 0.15,
+            "63": 0.10, "72": 0.08, "67": 0.06, "61": 0.05, "41": 0.03,
+        },
+        mean_delay_minutes=12.0,
+        data_source="known_stats",
+        sample_size=200000,
+    )
+
+
+def _pek() -> AirportProfile:
+    return AirportProfile(
+        icao_code="ZBAA", iata_code="PEK",
+        airline_shares={
+            "CCA": 0.35, "CES": 0.15, "CSN": 0.10, "HNA": 0.08,
+            "UAE": 0.03, "DLH": 0.03, "BAW": 0.03, "AFR": 0.03,
+            "KAL": 0.03, "ANA": 0.02, "SIA": 0.02,
+        },
+        domestic_route_shares={
+            "PVG": 0.10, "CAN": 0.08, "CTU": 0.07, "SZX": 0.06,
+            "SHA": 0.06, "WUH": 0.05, "CKG": 0.05, "XIY": 0.05,
+        },
+        international_route_shares={
+            "ICN": 0.10, "NRT": 0.08, "HKG": 0.06, "SIN": 0.05,
+            "LHR": 0.05, "FRA": 0.05, "LAX": 0.04, "JFK": 0.04,
+        },
+        domestic_ratio=0.70,
+        fleet_mix={
+            "CCA": {"A320": 0.25, "A321": 0.20, "B777": 0.20, "B787": 0.15, "A330": 0.10, "A350": 0.10},
+        },
+        hourly_profile=[
+            0.005, 0.003, 0.002, 0.002, 0.005, 0.018,
+            0.060, 0.072, 0.078, 0.068, 0.055, 0.048,
+            0.045, 0.048, 0.055, 0.062, 0.068, 0.075,
+            0.070, 0.060, 0.045, 0.035, 0.018, 0.008,
+        ],
+        delay_rate=0.22,
+        delay_distribution={
+            "71": 0.22, "81": 0.20, "68": 0.16, "72": 0.12,
+            "62": 0.10, "63": 0.08, "67": 0.06, "61": 0.04, "41": 0.02,
+        },
+        mean_delay_minutes=28.0,
+        data_source="known_stats",
+        sample_size=280000,
+    )
+
+
+def _bkk() -> AirportProfile:
+    return AirportProfile(
+        icao_code="VTBS", iata_code="BKK",
+        airline_shares={
+            "THA": 0.30, "TVJ": 0.10, "AXM": 0.08, "CPA": 0.05,
+            "SIA": 0.05, "UAE": 0.04, "KAL": 0.03, "ANA": 0.03,
+            "JAL": 0.03, "EVA": 0.03, "CES": 0.03, "CSN": 0.03,
+        },
+        domestic_route_shares={
+            "CNX": 0.15, "HKT": 0.15, "HDY": 0.08, "USM": 0.08,
+            "KBV": 0.06, "CEI": 0.05,
+        },
+        international_route_shares={
+            "HKG": 0.08, "SIN": 0.07, "NRT": 0.06, "ICN": 0.06,
+            "PVG": 0.05, "DXB": 0.05, "LHR": 0.04, "SYD": 0.04,
+        },
+        domestic_ratio=0.35,
+        fleet_mix={
+            "THA": {"B777": 0.30, "A350": 0.25, "B787": 0.20, "A330": 0.15, "A320": 0.10},
+        },
+        hourly_profile=[
+            0.020, 0.018, 0.015, 0.010, 0.012, 0.020,
+            0.050, 0.060, 0.065, 0.058, 0.048, 0.042,
+            0.040, 0.042, 0.048, 0.055, 0.060, 0.065,
+            0.060, 0.055, 0.048, 0.042, 0.035, 0.025,
+        ],
+        delay_rate=0.14,
+        delay_distribution={
+            "71": 0.20, "68": 0.18, "81": 0.16, "72": 0.12,
+            "62": 0.12, "63": 0.08, "67": 0.06, "61": 0.04, "41": 0.04,
+        },
+        mean_delay_minutes=18.0,
+        data_source="known_stats",
+        sample_size=180000,
+    )
+
+
+def _cmn() -> AirportProfile:
+    return AirportProfile(
+        icao_code="GMMN", iata_code="CMN",
+        airline_shares={
+            "RAM": 0.50, "TAR": 0.10, "RYR": 0.08, "AFR": 0.05,
+            "DLH": 0.03, "BAW": 0.03, "UAE": 0.03, "THY": 0.03,
+            "QTR": 0.03, "IBE": 0.03,
+        },
+        domestic_route_shares={
+            "RAK": 0.15, "AGA": 0.10, "FEZ": 0.08, "TNG": 0.08,
+            "OUD": 0.06, "NDR": 0.05,
+        },
+        international_route_shares={
+            "CDG": 0.10, "ORY": 0.08, "LHR": 0.06, "MAD": 0.06,
+            "FRA": 0.05, "AMS": 0.05, "IST": 0.05, "DXB": 0.04,
+        },
+        domestic_ratio=0.35,
+        fleet_mix={
+            "RAM": {"B738": 0.30, "B787": 0.20, "A321": 0.20, "E190": 0.15, "ATR72": 0.15},
+        },
+        hourly_profile=[
+            0.005, 0.003, 0.002, 0.002, 0.005, 0.018,
+            0.058, 0.068, 0.072, 0.062, 0.050, 0.045,
+            0.042, 0.045, 0.050, 0.055, 0.062, 0.068,
+            0.065, 0.058, 0.045, 0.035, 0.020, 0.010,
+        ],
+        delay_rate=0.16,
+        delay_distribution={
+            "68": 0.20, "71": 0.18, "81": 0.16, "72": 0.12,
+            "62": 0.12, "63": 0.08, "67": 0.06, "61": 0.04, "41": 0.04,
+        },
+        mean_delay_minutes=20.0,
+        data_source="known_stats",
+        sample_size=60000,
+    )
+
+
+def _mex() -> AirportProfile:
+    return AirportProfile(
+        icao_code="MMMX", iata_code="MEX",
+        airline_shares={
+            "AMX": 0.30, "VOI": 0.20, "VIV": 0.10, "UAL": 0.05,
+            "AAL": 0.05, "DAL": 0.04, "SWA": 0.03, "JBU": 0.03,
+            "AFR": 0.02, "BAW": 0.02, "IBE": 0.03, "DLH": 0.02,
+        },
+        domestic_route_shares={
+            "CUN": 0.10, "GDL": 0.10, "MTY": 0.08, "TIJ": 0.06,
+            "CJS": 0.05, "MID": 0.05, "SJD": 0.05, "PVR": 0.05,
+        },
+        international_route_shares={
+            "LAX": 0.08, "JFK": 0.06, "MIA": 0.06, "IAH": 0.05,
+            "ORD": 0.04, "DFW": 0.04, "MAD": 0.04, "CDG": 0.03,
+            "GRU": 0.03, "BOG": 0.04,
+        },
+        domestic_ratio=0.55,
+        fleet_mix={
+            "AMX": {"B738": 0.30, "B787": 0.20, "E190": 0.20, "A321": 0.15, "B737": 0.15},
+            "VOI": {"A320": 0.45, "A321": 0.35, "A319": 0.20},
+        },
+        hourly_profile=[
+            0.005, 0.003, 0.002, 0.002, 0.005, 0.018,
+            0.058, 0.068, 0.072, 0.062, 0.050, 0.045,
+            0.042, 0.045, 0.050, 0.055, 0.062, 0.068,
+            0.065, 0.058, 0.045, 0.035, 0.020, 0.010,
+        ],
+        delay_rate=0.20,
+        delay_distribution={
+            "81": 0.20, "68": 0.18, "71": 0.16, "72": 0.12,
+            "62": 0.12, "63": 0.08, "67": 0.06, "61": 0.04, "41": 0.04,
+        },
+        mean_delay_minutes=24.0,
+        data_source="known_stats",
+        sample_size=150000,
+    )
+
+
 # Registry of all known airports
 _KNOWN_PROFILES: dict[str, callable] = {
     "SFO": _sfo, "JFK": _jfk, "ATL": _atl, "ORD": _ord, "LAX": _lax,
@@ -1077,6 +1449,9 @@ _KNOWN_PROFILES: dict[str, callable] = {
     "LHR": _lhr, "DXB": _dxb, "NRT": _nrt, "SIN": _sin, "HKG": _hkg,
     "CDG": _cdg, "FRA": _fra, "AMS": _ams, "SYD": _syd, "ICN": _icn,
     "GRU": _gru, "JNB": _jnb,
+    # New international profiles
+    "GVA": _gva, "ATH": _ath, "MAD": _mad, "FCO": _fco, "AUH": _auh,
+    "HND": _hnd, "PEK": _pek, "BKK": _bkk, "CMN": _cmn, "MEX": _mex,
 }
 
 

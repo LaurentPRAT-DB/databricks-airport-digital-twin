@@ -202,6 +202,56 @@ def _format_raw_metar(
     return " ".join(parts)
 
 
+# Per-station weather defaults (base temperature °C, prevailing wind direction °)
+# Sources: historical averages from weather stations at each airport
+STATION_WEATHER_PARAMS: dict[str, dict[str, int]] = {
+    "KSFO": {"base_temp": 15, "base_wind_dir": 280},
+    "KJFK": {"base_temp": 14, "base_wind_dir": 290},
+    "KATL": {"base_temp": 18, "base_wind_dir": 300},
+    "KORD": {"base_temp": 12, "base_wind_dir": 270},
+    "KLAX": {"base_temp": 19, "base_wind_dir": 250},
+    "KDFW": {"base_temp": 20, "base_wind_dir": 180},
+    "KDEN": {"base_temp": 12, "base_wind_dir": 200},
+    "KSEA": {"base_temp": 12, "base_wind_dir": 200},
+    "KMIA": {"base_temp": 26, "base_wind_dir": 140},
+    "KEWR": {"base_temp": 14, "base_wind_dir": 280},
+    "KBOS": {"base_temp": 12, "base_wind_dir": 270},
+    "KPHX": {"base_temp": 28, "base_wind_dir": 240},
+    "KLAS": {"base_temp": 24, "base_wind_dir": 210},
+    "KMCO": {"base_temp": 24, "base_wind_dir": 290},
+    "KCLT": {"base_temp": 17, "base_wind_dir": 230},
+    "KMSP": {"base_temp": 8, "base_wind_dir": 310},
+    "KDTW": {"base_temp": 10, "base_wind_dir": 250},
+    "KPHL": {"base_temp": 14, "base_wind_dir": 270},
+    "KIAH": {"base_temp": 22, "base_wind_dir": 170},
+    "KSAN": {"base_temp": 19, "base_wind_dir": 280},
+    "KPDX": {"base_temp": 13, "base_wind_dir": 190},
+    # International
+    "EGLL": {"base_temp": 12, "base_wind_dir": 260},  # London Heathrow
+    "LSGG": {"base_temp": 10, "base_wind_dir": 220},  # Geneva
+    "LFPG": {"base_temp": 13, "base_wind_dir": 250},  # Paris CDG
+    "EDDF": {"base_temp": 11, "base_wind_dir": 240},  # Frankfurt
+    "EHAM": {"base_temp": 11, "base_wind_dir": 230},  # Amsterdam
+    "OMDB": {"base_temp": 32, "base_wind_dir": 330},  # Dubai
+    "RJAA": {"base_temp": 16, "base_wind_dir": 200},  # Narita
+    "RJTT": {"base_temp": 17, "base_wind_dir": 190},  # Haneda
+    "WSSS": {"base_temp": 28, "base_wind_dir": 0},    # Singapore
+    "VHHH": {"base_temp": 25, "base_wind_dir": 90},   # Hong Kong
+    "YSSY": {"base_temp": 20, "base_wind_dir": 230},  # Sydney
+    "RKSI": {"base_temp": 13, "base_wind_dir": 270},  # Incheon
+    "SBGR": {"base_temp": 22, "base_wind_dir": 150},  # Sao Paulo
+    "FAOR": {"base_temp": 18, "base_wind_dir": 350},  # Johannesburg
+    "LEMD": {"base_temp": 16, "base_wind_dir": 230},  # Madrid
+    "LGAV": {"base_temp": 19, "base_wind_dir": 340},  # Athens
+    "LIRF": {"base_temp": 17, "base_wind_dir": 250},  # Rome FCO
+    "OMAA": {"base_temp": 30, "base_wind_dir": 320},  # Abu Dhabi
+    "ZBAA": {"base_temp": 13, "base_wind_dir": 180},  # Beijing
+    "VTBS": {"base_temp": 30, "base_wind_dir": 180},  # Bangkok
+    "GMMN": {"base_temp": 20, "base_wind_dir": 340},  # Casablanca
+    "MMMX": {"base_temp": 18, "base_wind_dir": 180},  # Mexico City
+}
+
+
 def generate_metar(
     station: str = "KSFO",
     obs_time: Optional[datetime] = None,
@@ -222,6 +272,12 @@ def generate_metar(
     """
     if obs_time is None:
         obs_time = datetime.now(timezone.utc)
+
+    # Override defaults with per-station weather params if available
+    station_params = STATION_WEATHER_PARAMS.get(station)
+    if station_params:
+        base_temp = station_params["base_temp"]
+        base_wind_dir = station_params["base_wind_dir"]
 
     hour = obs_time.hour
 

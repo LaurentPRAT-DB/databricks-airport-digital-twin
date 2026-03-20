@@ -36,7 +36,11 @@ const FLIGHT_CATEGORY_LABELS = {
   LIFR: 'LIFR - Low Instrument',
 };
 
-export default function WeatherWidget() {
+interface WeatherWidgetProps {
+  station?: string;
+}
+
+export default function WeatherWidget({ station }: WeatherWidgetProps) {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +49,10 @@ export default function WeatherWidget() {
   useEffect(() => {
     async function fetchWeather() {
       try {
-        const response = await fetch('/api/weather/current');
+        const url = station
+          ? `/api/weather/current?station=${encodeURIComponent(station)}`
+          : '/api/weather/current';
+        const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to fetch weather');
         const data = await response.json();
         setWeather(data);
@@ -61,7 +68,7 @@ export default function WeatherWidget() {
     // Refresh every 5 minutes
     const interval = setInterval(fetchWeather, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [station]);
 
   if (loading) {
     return (

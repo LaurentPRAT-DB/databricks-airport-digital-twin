@@ -65,7 +65,7 @@ export default function Header({ onShowFIDS, simulationControls }: HeaderProps) 
 
       <div className="flex items-center gap-6">
         {/* Weather Widget */}
-        <WeatherWidget />
+        <WeatherWidget station={currentAirport || undefined} />
 
         {/* Simulation Controls */}
         {simulationControls}

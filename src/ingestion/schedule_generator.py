@@ -213,11 +213,98 @@ DELAY_CODES = {
 }
 
 
-def _select_airline(profile: AirportProfile | None = None) -> tuple[str, str]:
+# ── Regional airline pools for non-US airports without calibration profiles ──
+REGIONAL_AIRLINES: dict[str, list[dict[str, object]]] = {
+    "europe": [
+        {"code": "SWR", "name": "Swiss International", "weight": 0.12},
+        {"code": "EZY", "name": "easyJet", "weight": 0.12},
+        {"code": "DLH", "name": "Lufthansa", "weight": 0.10},
+        {"code": "AFR", "name": "Air France", "weight": 0.10},
+        {"code": "BAW", "name": "British Airways", "weight": 0.10},
+        {"code": "KLM", "name": "KLM Royal Dutch", "weight": 0.08},
+        {"code": "VLG", "name": "Vueling", "weight": 0.07},
+        {"code": "RYR", "name": "Ryanair", "weight": 0.08},
+        {"code": "SAS", "name": "SAS Scandinavian", "weight": 0.05},
+        {"code": "TAP", "name": "TAP Air Portugal", "weight": 0.05},
+        {"code": "AUA", "name": "Austrian Airlines", "weight": 0.04},
+        {"code": "LOT", "name": "LOT Polish", "weight": 0.04},
+        {"code": "IBE", "name": "Iberia", "weight": 0.05},
+    ],
+    "asia": [
+        {"code": "ANA", "name": "All Nippon Airways", "weight": 0.15},
+        {"code": "JAL", "name": "Japan Airlines", "weight": 0.14},
+        {"code": "CPA", "name": "Cathay Pacific", "weight": 0.10},
+        {"code": "SIA", "name": "Singapore Airlines", "weight": 0.10},
+        {"code": "THA", "name": "Thai Airways", "weight": 0.08},
+        {"code": "KAL", "name": "Korean Air", "weight": 0.08},
+        {"code": "CSN", "name": "China Southern", "weight": 0.08},
+        {"code": "CES", "name": "China Eastern", "weight": 0.08},
+        {"code": "EVA", "name": "EVA Air", "weight": 0.06},
+        {"code": "MAS", "name": "Malaysia Airlines", "weight": 0.06},
+        {"code": "CCA", "name": "Air China", "weight": 0.07},
+    ],
+    "middle_east": [
+        {"code": "UAE", "name": "Emirates", "weight": 0.25},
+        {"code": "QTR", "name": "Qatar Airways", "weight": 0.20},
+        {"code": "ETD", "name": "Etihad Airways", "weight": 0.15},
+        {"code": "SVA", "name": "Saudia", "weight": 0.10},
+        {"code": "MEA", "name": "Middle East Airlines", "weight": 0.08},
+        {"code": "GFA", "name": "Gulf Air", "weight": 0.08},
+        {"code": "KAC", "name": "Kuwait Airways", "weight": 0.07},
+        {"code": "FDB", "name": "flydubai", "weight": 0.07},
+    ],
+    "africa": [
+        {"code": "SAA", "name": "South African Airways", "weight": 0.20},
+        {"code": "RAM", "name": "Royal Air Maroc", "weight": 0.20},
+        {"code": "MSR", "name": "EgyptAir", "weight": 0.18},
+        {"code": "ETH", "name": "Ethiopian Airlines", "weight": 0.18},
+        {"code": "KQA", "name": "Kenya Airways", "weight": 0.12},
+        {"code": "TAR", "name": "Tunisair", "weight": 0.06},
+        {"code": "AFR", "name": "Air France", "weight": 0.06},
+    ],
+    "americas": [],  # Reuses AIRLINES dict directly
+}
+
+# Map IATA codes to world regions for the regional airline fallback
+AIRPORT_REGION: dict[str, str] = {
+    # Europe
+    "LHR": "europe", "LGW": "europe", "STN": "europe", "MAN": "europe",
+    "CDG": "europe", "ORY": "europe", "FRA": "europe", "MUC": "europe",
+    "AMS": "europe", "BRU": "europe", "ZRH": "europe", "GVA": "europe",
+    "FCO": "europe", "MXP": "europe", "MAD": "europe", "BCN": "europe",
+    "LIS": "europe", "ATH": "europe", "VIE": "europe", "OSL": "europe",
+    "ARN": "europe", "CPH": "europe", "HEL": "europe", "DUB": "europe",
+    "WAW": "europe", "PRG": "europe", "BUD": "europe", "BER": "europe",
+    "HAM": "europe", "DUS": "europe", "EDI": "europe",
+    # Asia
+    "NRT": "asia", "HND": "asia", "KIX": "asia", "ICN": "asia",
+    "HKG": "asia", "SIN": "asia", "BKK": "asia", "KUL": "asia",
+    "PEK": "asia", "PVG": "asia", "CAN": "asia", "TPE": "asia",
+    "DEL": "asia", "BOM": "asia", "CCU": "asia",
+    # Middle East
+    "DXB": "middle_east", "AUH": "middle_east", "DOH": "middle_east",
+    "RUH": "middle_east", "JED": "middle_east", "BAH": "middle_east",
+    "KWI": "middle_east", "MCT": "middle_east", "AMM": "middle_east",
+    # Africa
+    "JNB": "africa", "CPT": "africa", "CMN": "africa", "CAI": "africa",
+    "ADD": "africa", "NBO": "africa", "LOS": "africa", "ACC": "africa",
+    # Oceania uses Asia pool
+    "SYD": "asia", "MEL": "asia", "AKL": "asia",
+    # Americas (default)
+    "GRU": "americas", "MEX": "americas", "BOG": "americas", "SCL": "americas",
+}
+
+
+def _select_airline(
+    profile: AirportProfile | None = None,
+    airport_iata: str | None = None,
+) -> tuple[str, str]:
     """Select an airline based on weighted distribution.
 
     If a calibrated profile is provided, sample from its airline_shares.
-    Otherwise fall back to the hardcoded AIRLINES dict.
+    If an airport_iata is given and the airport maps to a known region,
+    sample from REGIONAL_AIRLINES for that region.
+    Otherwise fall back to the hardcoded AIRLINES dict (US-centric).
     """
     if profile and profile.airline_shares:
         codes = list(profile.airline_shares.keys())
@@ -226,6 +313,18 @@ def _select_airline(profile: AirportProfile | None = None) -> tuple[str, str]:
         # Look up full name from AIRLINES dict, fall back to code
         name = AIRLINES[code]["name"] if code in AIRLINES else code
         return code, name
+
+    # Regional fallback for non-US airports without profiles
+    if airport_iata:
+        region = AIRPORT_REGION.get(airport_iata)
+        if region and region != "americas":
+            pool = REGIONAL_AIRLINES.get(region, [])
+            if pool:
+                codes_pool = [a["code"] for a in pool]
+                weights_pool = [a["weight"] for a in pool]
+                code = random.choices(codes_pool, weights=weights_pool, k=1)[0]
+                name = next((a["name"] for a in pool if a["code"] == code), code)
+                return code, name
 
     codes = list(AIRLINES.keys())
     weights = [AIRLINES[code]["weight"] for code in codes]
@@ -628,7 +727,7 @@ def generate_daily_schedule(
             # 50% arrivals, 50% departures
             is_arrival = random.random() < 0.5
 
-            airline_code, airline_name = _select_airline(profile=profile)
+            airline_code, airline_name = _select_airline(profile=profile, airport_iata=airport)
             flight_number = _generate_flight_number(airline_code)
 
             if is_arrival:

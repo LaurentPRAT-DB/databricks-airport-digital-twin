@@ -1781,6 +1781,16 @@ def _find_available_gate() -> Optional[str]:
         return random.choice(terminal_gates)
     return random.choice(available)
 
+def _find_overflow_gate() -> Optional[str]:
+    """Find the gate expected to free soonest (overflow when all are occupied)."""
+    _init_gate_states()
+    if not _gate_states:
+        return None
+    # Pick gate with the soonest available_at time
+    best_gate = min(_gate_states, key=lambda g: _gate_states[g].available_at)
+    return best_gate
+
+
 def _occupy_gate(icao24: str, gate: str):
     """Mark gate as occupied."""
     _init_gate_states()
@@ -2803,10 +2813,23 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     emit_gate_event(state.icao24, state.callsign, available_gate, "assign", state.aircraft_type)
                     state.taxi_route = _get_taxi_waypoints_arrival(available_gate)
                 else:
-                    # All gates occupied - hold position until gate available
-                    state.assigned_gate = None
-                    state.velocity = 0  # Hold on runway exit
-                    return state
+                    # All gates occupied — assign overflow gate (soonest to free)
+                    overflow_gate = _find_overflow_gate()
+                    if overflow_gate:
+                        state.assigned_gate = overflow_gate
+                        emit_gate_event(state.icao24, state.callsign, overflow_gate, "assign", state.aircraft_type)
+                        state.taxi_route = _get_taxi_waypoints_arrival(overflow_gate)
+                    else:
+                        # Absolute fallback: first gate in registry
+                        _init_gate_states()
+                        if _gate_states:
+                            fallback_gate = next(iter(_gate_states))
+                            state.assigned_gate = fallback_gate
+                            state.taxi_route = _get_taxi_waypoints_arrival(fallback_gate)
+                        else:
+                            state.assigned_gate = None
+                            state.velocity = 0
+                            return state
 
     elif state.phase == FlightPhase.TAXI_TO_GATE:
         # Taxi along waypoints to assigned gate WITH SEPARATION
@@ -2814,6 +2837,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         # First, ensure we have an assigned gate before proceeding
         if state.assigned_gate is None:
             available_gate = _find_available_gate()
+            if not available_gate:
+                available_gate = _find_overflow_gate()
             if available_gate:
                 state.assigned_gate = available_gate
                 _occupy_gate(state.icao24, available_gate)
@@ -3216,6 +3241,26 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             heading_diff = (target_heading - state.heading + 540) % 360 - 180
             state.heading += max(-3, min(3, heading_diff)) * dt
             state.heading = state.heading % 360
+
+            # Progressive descent & speed envelope for arriving flights
+            # dist_from_airport is in degrees; ~0.5° ≈ 30 NM, ~0.25° ≈ 15 NM
+            # Start descent around 0.5° out (~30 NM), reach ~3000 ft at 0.17° (~10 NM)
+            if dist_from_airport < EXIT_RADIUS_DEG and state.altitude > 3000:
+                frac = max(0.0, (dist_from_airport - 0.17) / (EXIT_RADIUS_DEG - 0.17))
+                target_alt = max(3000.0, 3000.0 + frac * (35000.0 - 3000.0))
+                if state.altitude > target_alt:
+                    descent_rate = min(2000.0, (state.altitude - target_alt) * 2.0)
+                    state.altitude -= descent_rate * dt / 60.0
+                    state.altitude = max(target_alt, state.altitude)
+                    state.vertical_rate = -descent_rate
+
+            # Speed envelope based on altitude (realistic deceleration)
+            if state.altitude < 3000:
+                state.velocity = min(state.velocity, 180)
+            elif state.altitude < 5000:
+                state.velocity = min(state.velocity, 210)
+            elif state.altitude < 10000:
+                state.velocity = min(state.velocity, MAX_SPEED_BELOW_FL100_KTS)
 
             # Enforce approach capacity at runtime (max 4 on approach)
             approach_count = (_count_aircraft_in_phase(FlightPhase.APPROACHING)

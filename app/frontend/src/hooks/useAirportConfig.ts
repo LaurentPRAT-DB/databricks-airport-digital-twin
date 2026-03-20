@@ -22,6 +22,7 @@ import {
 import { AIRPORT_3D_CONFIG, RunwayConfig, TaxiwayConfig } from '../constants/airport3D';
 import { BuildingPlacement } from '../config/buildingModels';
 import { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON } from '../utils/map3d-calculations';
+import { getCachedConfig, setCachedConfig } from '../utils/airportConfigCache';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -192,8 +193,9 @@ export function useAirportConfig(): UseAirportConfigReturn {
             if (data.icaoCode) {
               setCurrentAirport(data.icaoCode);
               prevAirportRef.current = data.icaoCode;
-              // Cache the config for future use
+              // Cache the config for future use (L1 in-memory + L2 IndexedDB)
               configCache.set(data.icaoCode, { config: data.config, lastUpdated: new Date().toISOString() } as ConfigResponse);
+              setCachedConfig(data.icaoCode, data.config).catch(() => {});
             }
           }
           setIsLoading(false);
@@ -303,7 +305,49 @@ export function useAirportConfig(): UseAirportConfigReturn {
    * Load airport (lakehouse first, OSM fallback, auto-persists)
    */
   const loadAirport = useCallback(async (icaoCode: string) => {
-    // Invalidate cache for this airport since activation resets state
+    // Check L1 in-memory cache first
+    if (configCache.has(icaoCode)) {
+      const cached = configCache.get(icaoCode)!;
+      const configData = cached.config as AirportConfig & { icaoCode?: string };
+      if (configData && Object.keys(configData).length > 0) {
+        setConfig((prev) => ({
+          ...prev,
+          ...configData,
+          sources: configData.sources || prev.sources,
+          lastUpdated: cached.lastUpdated || undefined,
+        }));
+        setCurrentAirport(icaoCode);
+        prevAirportRef.current = icaoCode;
+        return;
+      }
+    }
+
+    // Check L2 IndexedDB cache (persists across reloads)
+    try {
+      const idbCached = await getCachedConfig(icaoCode);
+      if (idbCached && typeof idbCached === 'object') {
+        const configData = idbCached as AirportConfig & { icaoCode?: string };
+        if (Object.keys(configData).length > 0) {
+          setConfig((prev) => ({
+            ...prev,
+            ...configData,
+            sources: configData.sources || prev.sources,
+            lastUpdated: new Date().toISOString(),
+          }));
+          setCurrentAirport(icaoCode);
+          prevAirportRef.current = icaoCode;
+          // Also populate L1 cache
+          configCache.set(icaoCode, { config: configData, lastUpdated: new Date().toISOString() } as ConfigResponse);
+          // Fire activation in background to refresh backend state (non-blocking)
+          fetch(`${API_BASE}/api/airports/${icaoCode}/activate`, { method: 'POST' }).catch(() => {});
+          return;
+        }
+      }
+    } catch {
+      // IndexedDB not available — proceed to network
+    }
+
+    // No cache hit — activate via network
     configCache.delete(icaoCode);
     setIsLoading(true);
     setError(null);
