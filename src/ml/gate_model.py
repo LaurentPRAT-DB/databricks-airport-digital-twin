@@ -335,13 +335,24 @@ class GateRecommender:
 
         elif self._profile and airline_code:
             # No OSM operator, but profile has airline shares — use affinity
-            # Dominant airlines get a slight bonus (they'd occupy more gates)
             share = self._profile.airline_shares.get(airline_code, 0.0)
-            # Scale: 0% share → 0.08, 50% share → 0.16
             score += 0.08 + min(share, 0.5) * 0.16
         else:
-            # No operator assigned - neutral score
-            score += 0.10
+            # Check airline-terminal affinity (known carrier preferences)
+            _AIRLINE_TERMINAL_AFFINITY = {
+                "UAL": {"C", "E", "F"},   # United hubs: SFO T3, EWR C, ORD T1
+                "AAL": {"B", "8"},         # American: JFK T8, DFW
+                "DAL": {"2", "4", "D"},    # Delta: JFK T4, ATL
+                "SWA": {"1", "A"},         # Southwest: midfield
+                "JBU": {"5", "B"},         # JetBlue: JFK T5
+                "ASA": {"D", "N"},         # Alaska: SEA N
+            }
+            terminal_letter = (gate.terminal or gate.gate_id)[:1].upper()
+            preferred = _AIRLINE_TERMINAL_AFFINITY.get(airline_code, set())
+            if terminal_letter in preferred:
+                score += 0.18
+            else:
+                score += 0.10
 
         # 3. Terminal type matching (15% weight)
         # If profile has domestic routes, check against known domestic destinations
@@ -367,17 +378,28 @@ class GateRecommender:
         score += size_score * 0.15
 
         # 5. Proximity bonus (10% weight)
-        # Extract numeric portion for proximity estimate
-        try:
-            # Handle various gate ID formats (A1, G92, 1A, etc.)
-            numeric_part = "".join(c for c in gate.gate_id if c.isdigit())
-            if numeric_part:
-                gate_number = int(numeric_part)
-                # Normalize: lower numbers get higher scores
-                proximity_score = max(0, 1.0 - (gate_number / 100))
-                score += proximity_score * 0.10
-        except (ValueError, IndexError):
-            score += 0.05  # Default if can't parse
+        # Use geo-coordinates distance to runway if available for real differentiation
+        if gate.latitude and gate.longitude:
+            import math
+            runway_lat, runway_lon = self._runway_coords
+            R = 6371000
+            lat1, lat2 = math.radians(gate.latitude), math.radians(runway_lat)
+            dlat = lat2 - lat1
+            dlon = math.radians(gate.longitude - runway_lon)
+            a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            dist_m = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            # Normalize: 0m → 1.0, 3000m → 0.0
+            proximity_score = max(0, 1.0 - (dist_m / 3000))
+            score += proximity_score * 0.10
+        else:
+            try:
+                numeric_part = "".join(c for c in gate.gate_id if c.isdigit())
+                if numeric_part:
+                    gate_number = int(numeric_part)
+                    proximity_score = max(0, 1.0 - (gate_number / 100))
+                    score += proximity_score * 0.10
+            except (ValueError, IndexError):
+                score += 0.05
 
         # Penalty for delayed flights
         delay_minutes = flight.get("delay_minutes", 0)
@@ -553,9 +575,20 @@ class GateRecommender:
 
         Uses geographic coordinates when available (OSM data) for more
         accurate estimates based on haversine distance from runway.
+        Applies per-terminal routing multipliers for more realistic variation.
         Taxi speed assumed ~15 kts (7.7 m/s) average with taxiway routing.
         """
         import math
+
+        # Per-terminal routing multiplier: terminals further from runways
+        # need more taxi routing through complex taxiway networks
+        terminal_prefix = (gate.terminal or gate.gate_id[0:1]).upper()
+        _terminal_multipliers = {
+            "A": 1.6, "B": 1.4, "C": 1.3, "D": 1.5, "E": 1.2,
+            "F": 1.1, "G": 1.7, "1": 1.5, "2": 1.4, "3": 1.3,
+            "4": 1.2, "5": 1.6, "6": 1.5, "7": 1.4, "8": 1.3,
+        }
+        routing_factor = _terminal_multipliers.get(terminal_prefix[:1], 1.5)
 
         # If we have coordinates, compute haversine distance to runway
         if gate.latitude and gate.longitude:
@@ -569,19 +602,19 @@ class GateRecommender:
             a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
             dist_m = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-            # Taxi routing factor: actual taxi path ~1.5x straight-line distance
-            taxi_dist_m = dist_m * 1.5
+            # Taxi routing factor: actual taxi path varies by terminal location
+            taxi_dist_m = dist_m * routing_factor
             # 15 kts = 7.72 m/s average taxi speed
             taxi_time_min = taxi_dist_m / (7.72 * 60)
             return max(3, min(int(round(taxi_time_min)), 18))
 
-        # Fallback: estimate from gate number
+        # Fallback: estimate from gate number + terminal
         try:
             numeric_part = "".join(c for c in gate.gate_id if c.isdigit())
             if numeric_part:
                 gate_number = int(numeric_part)
-                # Rough estimate: higher numbers = further from runway
-                return max(4, min(5 + gate_number // 10, 15))
+                base = 4 + gate_number // 8
+                return max(3, min(int(base * routing_factor / 1.5), 18))
         except (ValueError, IndexError):
             pass
 

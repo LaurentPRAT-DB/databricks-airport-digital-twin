@@ -410,6 +410,10 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
 
         # Determine flight type: arrival if destination is local airport
         is_arrival = (destination == local_iata)
+
+        # Guard against self-referencing: arrival origin must not be local airport
+        if is_arrival and origin == local_iata:
+            origin = _pick_random_origin()
         flight_type = "arrival" if is_arrival else "departure"
 
         # Map flight phase to FIDS status
@@ -432,35 +436,41 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
         else:
             status = "on_time"
 
-        # Estimate a scheduled time based on phase progression.
-        # Use a deterministic offset derived from icao24 + airline so times
-        # stay stable across FIDS refreshes but are well-spread across flights.
+        # Spread scheduled times across a 3-hour window centered on now.
+        # Deterministic hash per icao24 ensures stability across FIDS refreshes.
         _h = (hash(icao24) ^ hash(airline_code)) & 0xFFFF
-        jitter_min = (_h % 25) + 2  # 2-26 min deterministic offset per flight
+        spread_minutes = (_h % 180) - 90  # -90 to +90 min from now
+
+        # Delay jitter: ~20% of flights have 5-45 min delay
+        delay_minutes = 0
+        if (_h >> 4) % 5 == 0:  # deterministic 20% chance
+            delay_minutes = 5 + ((_h >> 8) % 41)  # 5-45 min
 
         if is_arrival:
             if phase in (FlightPhase.PARKED,):
-                scheduled_time = (now - timedelta(minutes=jitter_min)).isoformat()
+                # Already arrived: scheduled in the past
+                scheduled_time = (now - timedelta(minutes=abs(spread_minutes) + 5)).isoformat()
             elif phase in (FlightPhase.TAXI_TO_GATE,):
-                scheduled_time = (now + timedelta(minutes=2 + jitter_min % 6)).isoformat()
+                scheduled_time = (now - timedelta(minutes=abs(spread_minutes) % 10)).isoformat()
             elif phase == FlightPhase.LANDING:
-                scheduled_time = (now + timedelta(minutes=5 + jitter_min % 7)).isoformat()
+                scheduled_time = (now + timedelta(minutes=2 + abs(spread_minutes) % 8)).isoformat()
             elif phase == FlightPhase.APPROACHING:
-                # ETA from altitude + per-flight jitter for spread
                 descent_min = state.altitude / 800.0 if state.altitude > 0 else 2.0
-                eta_min = max(3, int(descent_min + 5 + (_h % 8)))
+                eta_min = max(3, int(descent_min + 5 + (_h % 15)))
                 scheduled_time = (now + timedelta(minutes=eta_min)).isoformat()
             elif phase == FlightPhase.ENROUTE:
-                scheduled_time = (now + timedelta(minutes=20 + (_h % 40))).isoformat()
+                # Spread enroute arrivals into the future
+                scheduled_time = (now + timedelta(minutes=20 + abs(spread_minutes))).isoformat()
             else:
                 scheduled_time = now.isoformat()
         else:
             if phase == FlightPhase.PARKED:
-                scheduled_time = (now + timedelta(minutes=10 + (_h % 30))).isoformat()
+                # Departures waiting: spread into the future
+                scheduled_time = (now + timedelta(minutes=10 + abs(spread_minutes))).isoformat()
             elif phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY):
-                scheduled_time = (now - timedelta(minutes=jitter_min % 5)).isoformat()
+                scheduled_time = (now - timedelta(minutes=abs(spread_minutes) % 10)).isoformat()
             elif phase in (FlightPhase.TAKEOFF, FlightPhase.DEPARTING):
-                scheduled_time = (now - timedelta(minutes=5 + jitter_min)).isoformat()
+                scheduled_time = (now - timedelta(minutes=5 + abs(spread_minutes) % 20)).isoformat()
             else:
                 scheduled_time = now.isoformat()
 
@@ -475,8 +485,8 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
             "actual_time": now.isoformat() if status in ("arrived", "departed") else None,
             "gate": state.assigned_gate,
             "status": status,
-            "delay_minutes": 0,
-            "delay_reason": None,
+            "delay_minutes": delay_minutes,
+            "delay_reason": "Late arrival" if delay_minutes > 0 and is_arrival else ("Gate hold" if delay_minutes > 0 else None),
             "aircraft_type": state.aircraft_type,
             "flight_type": flight_type,
         })
@@ -617,6 +627,12 @@ AIRLINE_FLEET = {
     "UAE": ["A380", "B777", "A345"],                          # Emirates
     "AFR": ["A320", "A318", "A319", "A330"],                  # Air France
     "CPA": ["A330", "B777", "A350"],                          # Cathay Pacific
+    # US regional carriers (used as OTH replacements)
+    "SKW": ["CRJ9", "E175"],                                   # SkyWest Airlines
+    "RPA": ["E175", "A319"],                                    # Republic Airways
+    "ENY": ["E175", "CRJ9"],                                    # Envoy Air
+    "PDT": ["E175", "CRJ9"],                                    # Piedmont Airlines
+    "EDV": ["CRJ9", "E175"],                                    # Endeavor Air
 }
 
 CALLSIGN_PREFIXES = list(AIRLINE_FLEET.keys())
@@ -788,7 +804,13 @@ def get_gates() -> Dict[str, tuple]:
                 lat = geo.get("latitude")
                 lon = geo.get("longitude")
                 if ref and lat and lon:
-                    gates[ref] = (float(lat), float(lon))
+                    # Validate gate ID: reject malformed refs
+                    ref_str = str(ref)
+                    numeric_part = "".join(c for c in ref_str if c.isdigit())
+                    if numeric_part and int(numeric_part) > 200:
+                        logger.debug(f"Rejected malformed gate ref: {ref_str}")
+                        continue
+                    gates[ref_str] = (float(lat), float(lon))
 
             if not gates:
                 gates = None
@@ -2589,6 +2611,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.vertical_rate = -400
                 elif alt_diff > 0:
                     state.vertical_rate = -200
+                elif state.altitude > 0:
+                    # Still airborne but at/below target — maintain minimum descent
+                    state.vertical_rate = -100
                 else:
                     state.vertical_rate = 0
             else:
@@ -3291,6 +3316,28 @@ def generate_synthetic_flights(
                 prefix = random.choices(_codes, weights=_weights, k=1)[0]
             else:
                 prefix = random.choice(CALLSIGN_PREFIXES)
+
+            # Replace "OTH" catch-all with a real regional carrier
+            _OTH_REPLACEMENTS = ["SKW", "RPA", "ENY", "PDT", "EDV"]
+            if prefix == "OTH":
+                prefix = random.choice(_OTH_REPLACEMENTS)
+
+            # Validate airline scope: reject EU/ME-only carriers at non-matching airports
+            try:
+                from src.ingestion.schedule_generator import AIRLINES as _SG_AIRLINES
+                _airline_info = _SG_AIRLINES.get(prefix)
+                if _airline_info:
+                    _scope = _airline_info.get("scope", "full")
+                    if _scope == "regional_eu" and not _is_international_airport(local_iata):
+                        # EU-only carrier at non-EU airport — swap to safe carrier
+                        prefix = random.choice(CALLSIGN_PREFIXES)
+                    elif _scope == "regional_me":
+                        # ME-only carrier at non-ME airport
+                        if not any(local_iata.startswith(p) for p in ("DXB", "DOH", "AUH", "BAH", "KWI", "MCT")):
+                            prefix = random.choice(CALLSIGN_PREFIXES)
+            except ImportError:
+                pass
+
             flight_num = random.randint(100, 9999)
             callsign = f"{prefix}{flight_num}"
 

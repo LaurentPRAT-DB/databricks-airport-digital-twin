@@ -20,7 +20,7 @@ interface UseWebSocketResult<T> {
 export function useWebSocket<T = unknown>({
   url,
   reconnectAttempts = 5,
-  reconnectInterval = 3000,
+  reconnectInterval = 10000,
   onOpen,
   onClose,
   onError,
@@ -32,9 +32,14 @@ export function useWebSocket<T = unknown>({
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectCountRef = useRef(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const permanentFailureRef = useRef(false);
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    if (permanentFailureRef.current) {
       return;
     }
 
@@ -45,19 +50,38 @@ export function useWebSocket<T = unknown>({
         setIsConnected(true);
         setError(null);
         reconnectCountRef.current = 0;
+        permanentFailureRef.current = false;
         onOpen?.();
       };
 
-      wsRef.current.onclose = () => {
+      wsRef.current.onclose = (event) => {
         setIsConnected(false);
         onClose?.();
 
-        // Attempt to reconnect
-        if (reconnectCountRef.current < reconnectAttempts) {
+        // 403 = permanent auth/proxy error, don't retry
+        if (event.code === 1006 || event.code === 403) {
+          // Check if we got a 403-like rejection (WebSocket proxy rejection
+          // often manifests as code 1006 with no prior open)
+          if (!event.wasClean && reconnectCountRef.current === 0) {
+            // First unclean close without ever connecting — likely proxy rejection
+            permanentFailureRef.current = true;
+            console.warn('WebSocket connection rejected (likely 403/proxy). Retries disabled.');
+            return;
+          }
+        }
+
+        // Attempt to reconnect with exponential backoff
+        if (reconnectCountRef.current < reconnectAttempts && !permanentFailureRef.current) {
+          const backoff = Math.min(
+            reconnectInterval * Math.pow(2, reconnectCountRef.current),
+            60000
+          );
           reconnectCountRef.current += 1;
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
-          }, reconnectInterval);
+          }, backoff);
+        } else if (reconnectCountRef.current >= reconnectAttempts) {
+          console.warn(`WebSocket: max reconnect attempts (${reconnectAttempts}) reached. Giving up.`);
         }
       };
 
@@ -102,6 +126,7 @@ export function useWebSocket<T = unknown>({
   const reconnect = useCallback(() => {
     disconnect();
     reconnectCountRef.current = 0;
+    permanentFailureRef.current = false;
     connect();
   }, [connect, disconnect]);
 

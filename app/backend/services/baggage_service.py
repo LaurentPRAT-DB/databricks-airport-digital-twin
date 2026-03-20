@@ -107,6 +107,7 @@ class BaggageService:
         is_arrival: bool = True,
         include_bags: bool = False,
         bag_limit: int = 10,
+        flight_phase: str | None = None,
     ) -> FlightBaggageResponse:
         """
         Get baggage information for a flight.
@@ -143,6 +144,7 @@ class BaggageService:
                 origin=origin,
                 destination=destination,
                 is_arrival=is_arrival,
+                flight_phase=flight_phase,
             )
 
         stats = _dict_to_stats(stats_dict)

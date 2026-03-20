@@ -200,6 +200,7 @@ def get_flight_baggage_stats(
     destination: str = "LAX",
     scheduled_time: Optional[datetime] = None,
     is_arrival: bool = True,
+    flight_phase: Optional[str] = None,
 ) -> dict:
     """
     Get baggage statistics for a flight.
@@ -208,6 +209,26 @@ def get_flight_baggage_stats(
     """
     if scheduled_time is None:
         scheduled_time = datetime.now(timezone.utc)
+
+    # Airborne flights: bags are in transit, not processed
+    _AIRBORNE_PHASES = {"cruising", "descending", "climbing", "approaching", "enroute"}
+    if flight_phase and flight_phase.lower() in _AIRBORNE_PHASES:
+        capacity = _get_aircraft_capacity(aircraft_type)
+        passenger_count = int(capacity * 0.82)
+        bag_count = int(passenger_count * 1.2)
+        connecting_count = int(bag_count * 0.15)
+        return {
+            "flight_number": flight_number,
+            "total_bags": bag_count,
+            "checked_in": 0,
+            "loaded": bag_count,
+            "unloaded": 0,
+            "on_carousel": 0,
+            "loading_progress_pct": 0,
+            "connecting_bags": connecting_count,
+            "misconnects": 0,
+            "carousel": None,
+        }
 
     bags = generate_bags_for_flight(
         flight_number=flight_number,

@@ -411,11 +411,23 @@ async def get_flight_baggage(
     Returns loading/unloading progress, bag counts, and optionally
     a sample of individual bags.
     """
+    # Look up flight phase from synthetic state so airborne flights show 0% baggage
+    flight_phase = None
+    try:
+        from src.ingestion.fallback import _flight_states
+        for state in _flight_states.values():
+            if state.callsign and state.callsign.strip() == flight_number:
+                flight_phase = state.phase.value if state.phase else None
+                break
+    except Exception:
+        pass
+
     service = get_baggage_service()
     return service.get_flight_baggage(
         flight_number=flight_number,
         aircraft_type=aircraft_type,
         include_bags=include_bags,
+        flight_phase=flight_phase,
     )
 
 
