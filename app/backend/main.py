@@ -399,7 +399,11 @@ if FRONTEND_DIST.exists():
         """Serve service worker with correct JavaScript MIME type."""
         sw_file = FRONTEND_DIST / "sw.js"
         if sw_file.exists():
-            return FileResponse(sw_file, media_type="application/javascript")
+            return FileResponse(
+                sw_file,
+                media_type="application/javascript",
+                headers={"Cache-Control": "no-cache, must-revalidate"},
+            )
         return {"error": "Service worker not found"}
 
     # Catch-all route for SPA - serves index.html for all non-API routes
@@ -412,7 +416,10 @@ if FRONTEND_DIST.exists():
 
         index_file = FRONTEND_DIST / "index.html"
         if index_file.exists():
-            return FileResponse(index_file)
+            return FileResponse(
+                index_file,
+                headers={"Cache-Control": "no-cache, must-revalidate"},
+            )
         return {"error": "Frontend not built"}
 else:
     logger.warning(f"Frontend dist not found at {FRONTEND_DIST}")
