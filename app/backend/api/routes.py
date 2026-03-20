@@ -3,8 +3,14 @@
 import asyncio
 import logging
 import os
+import traceback
 from datetime import datetime, timezone
 from typing import Optional
+
+# Serialize concurrent airport activations to prevent global state corruption
+_activation_lock = asyncio.Lock()
+# Timeout for the entire activation flow (config load + gate reload + ML retrain)
+_ACTIVATION_TIMEOUT_S = 45
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
@@ -872,6 +878,19 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
     """
     from app.backend.api.websocket import broadcaster
 
+    # Serialize concurrent activations (prevents global state corruption from multiple tabs)
+    if _activation_lock.locked():
+        raise HTTPException(
+            status_code=409,
+            detail="Another airport activation is in progress. Please wait.",
+        )
+
+    async with _activation_lock:
+        return await _activate_airport_inner(icao_code, user, broadcaster)
+
+
+async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> dict:
+    """Inner activation logic, called under _activation_lock."""
     total_steps = 7
     service = get_airport_config_service()
 
@@ -881,13 +900,28 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
     prev_icao = f"K{prev_iata}" if len(prev_iata) == 3 else prev_iata
 
     try:
-        # Step 1: Load airport config (runs sync HTTP/SQL in thread pool to avoid blocking event loop)
+        # Step 1: Load airport config with timeout (prevents Tier 2/3 hangs from causing 502)
         await broadcaster.broadcast_progress(1, total_steps, "Loading airport configuration...", icao_code)
-        loaded = await asyncio.to_thread(
-            service.initialize_from_lakehouse,
-            icao_code=icao_code,
-            fallback_to_osm=True,
-        )
+        try:
+            loaded = await asyncio.wait_for(
+                asyncio.to_thread(
+                    service.initialize_from_lakehouse,
+                    icao_code=icao_code,
+                    fallback_to_osm=True,
+                ),
+                timeout=_ACTIVATION_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Airport config load for {icao_code} timed out after {_ACTIVATION_TIMEOUT_S}s",
+                exc_info=True,
+            )
+            await broadcaster.broadcast_progress(1, total_steps, "Timeout loading config", icao_code, done=True)
+            raise HTTPException(
+                status_code=504,
+                detail=f"Airport {icao_code} config load timed out after {_ACTIVATION_TIMEOUT_S}s. "
+                       "This airport may not be cached yet — try again (the cache will be populated).",
+            )
 
         if not loaded:
             await broadcaster.broadcast_progress(1, total_steps, "Airport not found", icao_code, done=True)
@@ -936,7 +970,10 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Airport switch to {icao_code} failed, rolling back: {e}")
+        logger.error(
+            f"Airport switch to {icao_code} failed, rolling back:\n"
+            f"{traceback.format_exc()}"
+        )
         # Rollback to previous airport state (restore ALL components)
         try:
             await asyncio.to_thread(
@@ -956,7 +993,10 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
             reset_synthetic_state()
             broadcaster._prev_flights.clear()
         except Exception as rb_err:
-            logger.error(f"Rollback to {prev_icao} also failed: {rb_err}")
+            logger.error(
+                f"Rollback to {prev_icao} also failed:\n"
+                f"{traceback.format_exc()}"
+            )
         raise HTTPException(
             status_code=500,
             detail=f"Airport switch failed: {e}. Rolled back to {prev_iata}.",

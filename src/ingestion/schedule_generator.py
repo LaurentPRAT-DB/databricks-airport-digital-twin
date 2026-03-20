@@ -724,9 +724,10 @@ def get_departures(
     return departures
 
 
-# Cache for consistent schedule within same minute
-_schedule_cache: dict = {}
-_cache_minute: Optional[int] = None
+# Per-airport schedule cache with individual TTLs (prevents stampede at minute rollover)
+_schedule_cache: dict = {}  # airport -> schedule list
+_schedule_cache_timestamps: dict = {}  # airport -> datetime of last generation
+_SCHEDULE_CACHE_TTL_S = 60  # seconds before a cached schedule is considered stale
 
 
 def invalidate_schedule_cache() -> None:
@@ -734,9 +735,8 @@ def invalidate_schedule_cache() -> None:
 
     Called after airport switch to ensure FIDS uses the new airport's gates.
     """
-    global _schedule_cache, _cache_minute
     _schedule_cache.clear()
-    _cache_minute = None
+    _schedule_cache_timestamps.clear()
 
 # Lazy-loaded profile loader singleton
 _profile_loader: Optional["AirportProfileLoader"] = None
@@ -752,20 +752,27 @@ def _get_profile_loader() -> "AirportProfileLoader":
 
 
 def get_cached_schedule(airport: str = "SFO") -> list[dict]:
-    """Get cached schedule (regenerates every minute for freshness).
+    """Get cached schedule (regenerates per-airport after TTL expires).
+
+    Each airport's schedule has its own TTL, so minute rollovers only
+    regenerate the specific airport being requested — not all cached airports.
 
     Automatically loads the calibrated AirportProfile for the requested
     airport, falling back gracefully if no profile is available.
     """
-    global _schedule_cache, _cache_minute
-    current_minute = datetime.now(timezone.utc).minute
+    now = datetime.now(timezone.utc)
+    last_generated = _schedule_cache_timestamps.get(airport)
 
-    if _cache_minute != current_minute or airport not in _schedule_cache:
+    if (
+        airport not in _schedule_cache
+        or last_generated is None
+        or (now - last_generated).total_seconds() >= _SCHEDULE_CACHE_TTL_S
+    ):
         profile = _get_profile_loader().get_profile(airport)
         _schedule_cache[airport] = generate_daily_schedule(
             airport=airport, profile=profile,
         )
-        _cache_minute = current_minute
+        _schedule_cache_timestamps[airport] = now
 
     return _schedule_cache[airport]
 
