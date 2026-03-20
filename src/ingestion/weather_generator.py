@@ -299,22 +299,30 @@ def generate_taf(
     }
 
 
-# Cache for consistent weather within same 10 minutes
-_weather_cache: dict = {}
-_cache_time_slot: Optional[int] = None
+# Per-station weather cache with individual TTLs (prevents stampede at slot boundary)
+_weather_cache: dict = {}  # station -> weather dict
+_weather_cache_timestamps: dict = {}  # station -> datetime of last generation
+_WEATHER_CACHE_TTL_S = 600  # 10 minutes
 
 
 def get_cached_weather(station: str = "KSFO") -> dict:
-    """Get cached weather (regenerates every 10 minutes for freshness)."""
-    global _weather_cache, _cache_time_slot
-    now = datetime.now(timezone.utc)
-    current_slot = now.hour * 6 + now.minute // 10  # 10-minute slots
+    """Get cached weather (regenerates per-station after TTL expires).
 
-    if _cache_time_slot != current_slot or station not in _weather_cache:
+    Each station has its own TTL, so slot boundaries only regenerate
+    the specific station being requested — not all cached stations.
+    """
+    now = datetime.now(timezone.utc)
+    last_generated = _weather_cache_timestamps.get(station)
+
+    if (
+        station not in _weather_cache
+        or last_generated is None
+        or (now - last_generated).total_seconds() >= _WEATHER_CACHE_TTL_S
+    ):
         _weather_cache[station] = {
             "metar": generate_metar(station=station),
             "taf": generate_taf(station=station),
         }
-        _cache_time_slot = current_slot
+        _weather_cache_timestamps[station] = now
 
     return _weather_cache[station]
