@@ -48,7 +48,7 @@ export function Aircraft3D({ flight, selected = false, onClick, airportCenter }:
   // Ground-phase aircraft (taxi, parked, pushback) must stay at ground level —
   // their altitude field may contain airport elevation which would make them float.
   const isGroundPhase = flight.flight_phase === 'ground';
-  const effectiveAltitude = isGroundPhase ? 0 : flight.altitude;
+  const effectiveAltitude = isGroundPhase ? 0 : (flight.altitude ?? 0);
   const targetPosition = useMemo(() =>
     latLonTo3D(flight.latitude, flight.longitude, effectiveAltitude, airportCenter?.lat, airportCenter?.lon),
     [flight.latitude, flight.longitude, effectiveAltitude, airportCenter?.lat, airportCenter?.lon]
