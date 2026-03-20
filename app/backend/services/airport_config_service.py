@@ -6,6 +6,7 @@ Coordinates between format parsers and the configuration cache.
 Supports persistence to Unity Catalog tables for fast loading.
 """
 
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -440,13 +441,13 @@ class AirportConfigService:
             from src.persistence import get_airport_repository
             repo = get_airport_repository()
             repo.save_airport_config(icao, self._current_config)
-            logger.info(f"Persisted airport config for {icao} to lakehouse")
+            logger.info(f"[DIAG] persist_config OK for {icao}")
             return True
-        except ImportError:
-            logger.warning("Persistence module not available")
+        except ImportError as e:
+            logger.warning(f"Persistence module not available: {e}")
             return False
         except Exception as e:
-            logger.error(f"Failed to persist airport config: {e}")
+            logger.error(f"[DIAG] persist_config FAILED for {icao}: {type(e).__name__}: {e}", exc_info=True)
             return False
 
     def load_from_lakehouse(self, icao_code: str) -> bool:
@@ -462,23 +463,35 @@ class AirportConfigService:
         try:
             from src.persistence import get_airport_repository
             repo = get_airport_repository()
+            logger.info(
+                f"[DIAG] UC repo: use_sql_connector={repo._use_sql_connector}, "
+                f"host={repo._host}, http_path={repo._http_path}, "
+                f"use_oauth={repo._use_oauth}, has_token={bool(repo._token)}, "
+                f"catalog={repo._catalog}, schema={repo._schema}"
+            )
 
             config = repo.load_airport_config(icao_code)
             if config:
+                keys = list(config.keys())[:10]
+                gates = len(config.get("gates", []))
+                terminals = len(config.get("terminals", []))
+                logger.info(
+                    f"Loaded airport config for {icao_code} from lakehouse "
+                    f"(gates={gates}, terminals={terminals}, keys={keys})"
+                )
                 self._current_config = config
                 self._last_updated = datetime.now(timezone.utc)
                 self._config_ready = True
                 self._build_taxiway_graph()
-                logger.info(f"Loaded airport config for {icao_code} from lakehouse")
                 return True
             else:
-                logger.info(f"Airport {icao_code} not found in lakehouse")
+                logger.info(f"[DIAG] Airport {icao_code} not found in lakehouse (query returned None)")
                 return False
-        except ImportError:
-            logger.warning("Persistence module not available")
+        except ImportError as e:
+            logger.warning(f"Persistence module not available: {e}")
             return False
         except Exception as e:
-            logger.error(f"Failed to load from lakehouse: {e}")
+            logger.error(f"Failed to load from lakehouse: {type(e).__name__}: {e}", exc_info=True)
             return False
 
     def list_persisted_airports(self) -> list[dict]:
@@ -534,9 +547,11 @@ class AirportConfigService:
         try:
             from app.backend.services.lakebase_service import get_lakebase_service
             lakebase = get_lakebase_service()
-            return lakebase.upsert_airport_config(icao_code, self._current_config)
+            result = lakebase.upsert_airport_config(icao_code, self._current_config)
+            logger.info(f"[DIAG] save_to_lakebase_cache {icao_code}: result={result}")
+            return result
         except Exception as e:
-            logger.warning(f"Failed to cache config in Lakebase: {e}")
+            logger.warning(f"[DIAG] save_to_lakebase_cache FAILED for {icao_code}: {type(e).__name__}: {e}", exc_info=True)
             return False
 
     def load_from_lakebase_cache(self, icao_code: str) -> bool:
@@ -552,6 +567,7 @@ class AirportConfigService:
         try:
             from app.backend.services.lakebase_service import get_lakebase_service
             lakebase = get_lakebase_service()
+            logger.info(f"[DIAG] Lakebase service available={lakebase.is_available}, pool={getattr(lakebase, '_pool', 'N/A')}")
             config = lakebase.get_airport_config(icao_code)
             if config:
                 self._current_config = config
@@ -560,9 +576,10 @@ class AirportConfigService:
                 self._build_taxiway_graph()
                 logger.info(f"Loaded airport config for {icao_code} from Lakebase cache")
                 return True
+            logger.info(f"[DIAG] Lakebase returned no config for {icao_code}")
             return False
         except Exception as e:
-            logger.warning(f"Lakebase cache load failed: {e}")
+            logger.warning(f"Lakebase cache load failed: {type(e).__name__}: {e}", exc_info=True)
             return False
 
     def initialize_from_lakehouse(
@@ -584,22 +601,32 @@ class AirportConfigService:
             Source string ("lakebase_cache", "unity_catalog", "osm_api") on success,
             False on failure. Also truthy for backward compat.
         """
+        t_total = time.monotonic()
+        logger.info(f"[DIAG] ========== initialize_from_lakehouse({icao_code}) START ==========")
+
         # Tier 1: Lakebase cache (fastest)
+        t0 = time.monotonic()
         logger.info(f"Tier 1: Trying Lakebase cache for {icao_code}...")
         if self.load_from_lakebase_cache(icao_code):
-            logger.info(f"Loaded {icao_code} from Lakebase cache (Tier 1)")
+            elapsed = time.monotonic() - t0
+            logger.info(f"[DIAG] Tier 1 HIT in {elapsed:.3f}s — loaded {icao_code} from Lakebase cache")
             return "lakebase_cache"
+        logger.info(f"[DIAG] Tier 1 MISS in {time.monotonic() - t0:.3f}s")
 
         # Tier 2: Unity Catalog (SQL Warehouse)
+        t1 = time.monotonic()
         logger.info(f"Tier 2: Trying Unity Catalog for {icao_code}...")
         if self.load_from_lakehouse(icao_code):
+            elapsed = time.monotonic() - t1
+            logger.info(f"[DIAG] Tier 2 HIT in {elapsed:.3f}s — loaded {icao_code} from UC")
             # Write-through to Lakebase for next startup
             self.save_to_lakebase_cache(icao_code)
-            logger.info(f"Loaded {icao_code} from Unity Catalog (Tier 2)")
             return "unity_catalog"
+        logger.info(f"[DIAG] Tier 2 MISS in {time.monotonic() - t1:.3f}s")
 
         # Tier 3: OSM fallback
         if fallback_to_osm:
+            t2 = time.monotonic()
             logger.info(f"Tier 3: Falling back to OSM Overpass API for {icao_code}...")
             try:
                 self.import_osm(
@@ -623,15 +650,26 @@ class AirportConfigService:
                     except Exception as e:
                         logger.warning(f"FAA import failed for {icao_code}: {e}")
 
+                osm_elapsed = time.monotonic() - t2
+                logger.info(f"[DIAG] Tier 3 OSM fetch done in {osm_elapsed:.3f}s")
+
                 # Persist to both Unity Catalog and Lakebase cache
+                t_persist = time.monotonic()
                 self.persist_config(icao_code)
                 self.save_to_lakebase_cache(icao_code)
-                logger.info(f"Loaded {icao_code} from OSM Overpass API (Tier 3)")
+                persist_elapsed = time.monotonic() - t_persist
+                total_elapsed = time.monotonic() - t_total
+                logger.info(
+                    f"[DIAG] Tier 3 persist done in {persist_elapsed:.3f}s — "
+                    f"total initialize_from_lakehouse: {total_elapsed:.3f}s"
+                )
                 return "osm_api"
             except Exception as e:
-                logger.error(f"OSM fallback failed: {e}")
+                logger.error(f"OSM fallback failed: {type(e).__name__}: {e}", exc_info=True)
                 return False
 
+        total_elapsed = time.monotonic() - t_total
+        logger.info(f"[DIAG] initialize_from_lakehouse({icao_code}) FAILED all tiers in {total_elapsed:.3f}s")
         return False
 
 

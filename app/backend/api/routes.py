@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import traceback
+from collections import deque
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -16,6 +17,44 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
+
+
+# ── In-memory ring-buffer log handler for /api/debug/logs ──
+class _RingBufferHandler(logging.Handler):
+    """Keeps the last N log records in memory for diagnostic retrieval."""
+
+    def __init__(self, capacity: int = 500):
+        super().__init__()
+        self._buffer: deque[str] = deque(maxlen=capacity)
+
+    def emit(self, record: logging.LogRecord):
+        try:
+            self._buffer.append(self.format(record))
+        except Exception:
+            pass
+
+    def get_lines(self, pattern: str | None = None) -> list[str]:
+        lines = list(self._buffer)
+        if pattern:
+            lines = [l for l in lines if pattern in l]
+        return lines
+
+
+_ring_handler = _RingBufferHandler(capacity=1000)
+_ring_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+_ring_handler.setLevel(logging.DEBUG)
+# Attach to root AND the specific loggers that emit [DIAG] lines
+for _logger_name in (
+    None,  # root
+    "app.backend.services.airport_config_service",
+    "app.backend.api.routes",
+    "src.persistence.airport_repository",
+    "app.backend.services.lakebase_service",
+):
+    _lg = logging.getLogger(_logger_name)
+    _lg.addHandler(_ring_handler)
+    if _lg.level > logging.DEBUG:
+        _lg.setLevel(logging.DEBUG)
 
 from app.backend.models.flight import (
     FlightListResponse,
@@ -968,17 +1007,22 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
 
 async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> None:
     """Inner activation logic, runs as background task. Releases _activation_lock on exit."""
+    import time as _time
     total_steps = 7
     service = get_airport_config_service()
+    _t_activate_start = _time.monotonic()
 
     # Save rollback state before modifying anything
     prev_iata = get_current_airport_iata()
     prev_center = get_airport_center()
     prev_icao = f"K{prev_iata}" if len(prev_iata) == 3 else prev_iata
 
+    logger.info(f"[DIAG] ===== _activate_airport_inner({icao_code}) START =====")
+
     try:
         try:
             # Step 1: Load airport config with timeout (prevents Tier 2/3 hangs)
+            _t_step = _time.monotonic()
             await broadcaster.broadcast_progress(1, total_steps, "Loading airport configuration...", icao_code)
             try:
                 loaded = await asyncio.wait_for(
@@ -1007,11 +1051,14 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
                 )
                 return
 
+            logger.info(f"[DIAG] Step 1 (config load) done in {_time.monotonic() - _t_step:.3f}s — source={loaded}")
+
             config = service.get_config()
             source = "lakehouse" if config.get("source") == "LAKEHOUSE" else "osm"
 
             # Step 2: Set airport center FIRST so any concurrent flight generation
             # (e.g. WS broadcast loop) uses the new coordinates immediately
+            _t_step = _time.monotonic()
             await broadcaster.broadcast_progress(2, total_steps, "Setting airport center...", icao_code)
             from src.ingestion.schedule_generator import AIRPORT_COORDINATES
             from src.calibration.profile import _icao_to_iata
@@ -1028,22 +1075,38 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
                     raise ValueError(f"No coordinates available for {icao_code}")
 
             set_airport_center(lat, lon, iata_code)
+            logger.info(f"[DIAG] Step 2 (set center) done in {_time.monotonic() - _t_step:.3f}s")
 
             # Step 3: Reload gates, swap ML models, and reset state
+            _t_step = _time.monotonic()
             await broadcaster.broadcast_progress(3, total_steps, "Reloading gate positions and ML models...", icao_code)
+
+            _t_sub = _time.monotonic()
             gates = reload_gates()
+            logger.info(f"[DIAG]   reload_gates: {_time.monotonic() - _t_sub:.3f}s ({len(gates)} gates)")
+
+            _t_sub = _time.monotonic()
             gate_recommender_count = reload_gate_recommender()
+            logger.info(f"[DIAG]   reload_gate_recommender: {_time.monotonic() - _t_sub:.3f}s ({gate_recommender_count} entries)")
 
             # Swap ML models to airport-specific instances
+            _t_sub = _time.monotonic()
             registry = get_model_registry()
             registry.retrain(icao_code)
+            logger.info(f"[DIAG]   ML retrain: {_time.monotonic() - _t_sub:.3f}s")
+
+            _t_sub = _time.monotonic()
             prediction_service = get_prediction_service()
             prediction_service.set_airport(icao_code)
+            logger.info(f"[DIAG]   prediction_service.set_airport: {_time.monotonic() - _t_sub:.3f}s")
 
+            _t_sub = _time.monotonic()
             reset_result = reset_synthetic_state()
+            logger.info(f"[DIAG]   reset_synthetic_state: {_time.monotonic() - _t_sub:.3f}s")
 
             # Force full WS update (clear delta cache so clients get a full refresh)
             broadcaster._prev_flights.clear()
+            logger.info(f"[DIAG] Step 3 (gates+ML+reset) done in {_time.monotonic() - _t_step:.3f}s")
 
         except Exception as e:
             logger.error(
@@ -1436,4 +1499,27 @@ async def prewarm_user_airports(user: str = Depends(get_current_user)) -> dict:
         "airports": top_airports,
         "already_cached": len(top_airports) - len(to_warm),
         "warming": len(to_warm),
+    }
+
+
+# ==============================================================================
+# Debug / Diagnostics
+# ==============================================================================
+
+@router.get("/debug/logs", tags=["debug"])
+async def get_debug_logs(
+    pattern: Optional[str] = Query(default="DIAG", description="Filter pattern (default: DIAG)"),
+    limit: int = Query(default=200, ge=1, le=1000),
+) -> dict:
+    """Return recent log lines matching a pattern.
+
+    Hit /api/debug/logs after an airport switch to see tier timings
+    and failure reasons. Default filter is [DIAG] lines.
+    """
+    lines = _ring_handler.get_lines(pattern if pattern else None)
+    return {
+        "pattern": pattern,
+        "total_buffered": len(_ring_handler._buffer),
+        "matched": len(lines),
+        "lines": lines[-limit:],
     }

@@ -98,27 +98,37 @@ class DataGeneratorService:
 
         total_steps = 7
 
+        import time as _time
+
         try:
+            _t_data_start = _time.monotonic()
+
             if progress_callback:
                 await progress_callback(4, total_steps, "Generating flight schedule...", False)
+            _t_sub = _time.monotonic()
             schedule_count = await self._generate_schedule() if has_lakebase else 0
-            logger.info(f"  Schedule: {schedule_count} flights")
+            logger.info(f"[DIAG] Step 4 (schedule): {_time.monotonic() - _t_sub:.3f}s — {schedule_count} flights")
 
             if progress_callback:
                 await progress_callback(5, total_steps, "Generating weather data...", False)
+            _t_sub = _time.monotonic()
             weather_count = await self._generate_weather() if has_lakebase else 0
-            logger.info(f"  Weather: {weather_count} station(s)")
+            logger.info(f"[DIAG] Step 5 (weather): {_time.monotonic() - _t_sub:.3f}s — {weather_count} station(s)")
 
             if progress_callback:
                 await progress_callback(6, total_steps, "Generating baggage data...", False)
+            _t_sub = _time.monotonic()
             baggage_count = await self._generate_baggage() if has_lakebase else 0
-            logger.info(f"  Baggage: {baggage_count} flight stats")
+            logger.info(f"[DIAG] Step 6 (baggage): {_time.monotonic() - _t_sub:.3f}s — {baggage_count} flight stats")
 
             if progress_callback:
                 await progress_callback(7, total_steps, "Generating GSE fleet data...", False)
+            _t_sub = _time.monotonic()
             gse_count = await self._generate_gse_fleet() if has_lakebase else 0
-            logger.info(f"  GSE Fleet: {gse_count} units")
+            logger.info(f"[DIAG] Step 7 (GSE): {_time.monotonic() - _t_sub:.3f}s — {gse_count} units")
 
+            total_data = _time.monotonic() - _t_data_start
+            logger.info(f"[DIAG] Steps 4-7 (data gen) total: {total_data:.3f}s")
             logger.info("=" * 60)
             logger.info(f"Data initialization complete for {airport_icao}")
             logger.info("=" * 60)
