@@ -11,6 +11,7 @@ real-data-calibrated profiles instead of hardcoded constants.
 
 from __future__ import annotations
 
+import math
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Optional, TYPE_CHECKING
@@ -121,46 +122,73 @@ AIRPORT_COUNTRY: dict[str, str] = {
     "SCL": "CL",
 }
 
-# Real airport coordinates (lat, lon) for all origin/destination airports
-AIRPORT_COORDINATES = {
-    # Home airport
-    "SFO": (37.6213, -122.379),
-    # Domestic
-    "LAX": (33.9425, -118.408),
-    "ORD": (41.9742, -87.9073),
-    "DFW": (32.8998, -97.0403),
-    "JFK": (40.6413, -73.7781),
-    "ATL": (33.6407, -84.4277),
-    "DEN": (39.8561, -104.6737),
-    "SEA": (47.4502, -122.3088),
-    "BOS": (42.3656, -71.0096),
-    "PHX": (33.4373, -112.0078),
-    "LAS": (36.0840, -115.1537),
-    "MCO": (28.4312, -81.3081),
-    "MIA": (25.7959, -80.2870),
-    "CLT": (35.2140, -80.9431),
-    "MSP": (44.8848, -93.2223),
-    "DTW": (42.2124, -83.3534),
-    "EWR": (40.6895, -74.1745),
-    "PHL": (39.8744, -75.2424),
-    "IAH": (29.9902, -95.3368),
-    "SAN": (32.7338, -117.1933),
-    "PDX": (45.5898, -122.5951),
-    # International
-    "LHR": (51.4700, -0.4543),
-    "CDG": (49.0097, 2.5479),
-    "FRA": (50.0379, 8.5622),
-    "AMS": (52.3105, 4.7683),
-    "HKG": (22.3080, 113.9185),
-    "NRT": (35.7647, 140.3864),
-    "SIN": (1.3644, 103.9915),
-    "SYD": (-33.9461, 151.1772),
-    "DXB": (25.2532, 55.3657),
-    "ICN": (37.4602, 126.4407),
-    "GRU": (-23.4356, -46.4731),
-    "JNB": (-26.1367, 28.2411),
-    "CPT": (-33.9715, 18.6021),
+# ── Airport coordinates ──────────────────────────────────────────────
+# Delegated to the global airport table (1,180 large airports from OurAirports).
+# AIRPORT_COORDINATES is kept as a backward-compatible alias used by
+# fallback.py and other callers — it maps IATA -> (lat, lon).
+from src.ingestion.airport_table import AIRPORTS as _AIRPORT_TABLE
+
+AIRPORT_COORDINATES: dict[str, tuple[float, float]] = {
+    iata: (lat, lon)
+    for iata, (lat, lon, _icao, _cc) in _AIRPORT_TABLE.items()
 }
+
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two points in kilometres."""
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def get_nearby_airports(
+    iata: str,
+    max_distance_km: float = 3000.0,
+    ref_lat: float | None = None,
+    ref_lon: float | None = None,
+) -> tuple[list[str], list[str]]:
+    """Split known airports into nearby (<= max_distance_km) and far (> max_distance_km).
+
+    Returns ``(nearby, far)``, both excluding *iata* itself.
+    Uses the global airport table for coordinates and same-country grouping.
+    Falls back to COUNTRY_DOMESTIC_AIRPORTS for airports not yet in the table.
+    """
+    from src.ingestion.airport_table import find_nearby as _find_nearby
+
+    # Use the global airport table which covers 1,180 large airports
+    if iata in _AIRPORT_TABLE:
+        nearby, far = _find_nearby(iata, max_distance_km=max_distance_km)
+        # Also include any COUNTRY_DOMESTIC_AIRPORTS entries not in the table
+        entry = _AIRPORT_TABLE[iata]
+        country = entry[3]
+        for code in COUNTRY_DOMESTIC_AIRPORTS.get(country, []):
+            if code != iata and code not in _AIRPORT_TABLE:
+                nearby.append(code)
+        return nearby, far
+
+    # Fallback for unknown airports: use ref_lat/ref_lon if provided
+    if ref_lat is not None and ref_lon is not None:
+        nearby: list[str] = []
+        far: list[str] = []
+        for code, (lat, lon) in AIRPORT_COORDINATES.items():
+            if code == iata:
+                continue
+            d = _haversine_km(ref_lat, ref_lon, lat, lon)
+            if d <= max_distance_km:
+                nearby.append(code)
+            else:
+                far.append(code)
+        return nearby, far
+
+    # No reference point — return all airports as "far"
+    all_codes = [c for c in AIRPORT_COORDINATES if c != iata]
+    return [], all_codes
+
 
 # Aircraft types by category
 NARROW_BODY = ["A320", "A321", "B737", "B738", "A319", "E175"]
@@ -286,9 +314,12 @@ def _select_destination_unchecked(
             weights = list(profile.international_route_shares.values())
             return random.choices(routes, weights=weights, k=1)[0]
 
-    # Fallback: 70% domestic, 30% international, uniform random
-    if random.random() < 0.7:
-        return random.choice(DOMESTIC_AIRPORTS)
+    # Fallback: proximity-based — 70% nearby, 30% far
+    nearby, far = get_nearby_airports(airport or "SFO")
+    if random.random() < 0.7 and nearby:
+        return random.choice(nearby)
+    if far:
+        return random.choice(far)
     return random.choice(INTERNATIONAL_AIRPORTS)
 
 

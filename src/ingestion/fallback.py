@@ -2126,10 +2126,11 @@ def _compute_gate_standoff(gate_lat: float, gate_lon: float,
 
 
 def _get_parked_heading(gate_lat: float, gate_lon: float) -> float:
-    """Compute heading for a parked aircraft: nose toward nearest terminal center.
+    """Compute heading for a parked aircraft: nose perpendicular to nearest terminal edge.
 
-    Falls back to airport center if no terminal data is available,
-    or 180° as a last resort.
+    This ensures the aircraft wings are parallel to the terminal building face,
+    matching real-world gate orientation. Falls back to airport center if no
+    terminal data is available, or 180 deg as a last resort.
     """
     try:
         from app.backend.services.airport_config_service import get_airport_config_service
@@ -2137,22 +2138,46 @@ def _get_parked_heading(gate_lat: float, gate_lon: float) -> float:
         config = service.get_config()
         terminals = config.get("terminals", [])
         if terminals:
-            # Find nearest terminal centroid
             best_dist = float('inf')
-            best_target = None
+            best_edge = None  # (a_lat, a_lon, b_lat, b_lon) of nearest edge
+            best_centroid = None
             for terminal in terminals:
                 geo_polygon = terminal.get("geoPolygon", [])
-                if not geo_polygon:
+                if not geo_polygon or len(geo_polygon) < 3:
                     continue
-                # Compute centroid of terminal polygon
-                t_lat = sum(float(p.get("latitude", 0)) for p in geo_polygon) / len(geo_polygon)
-                t_lon = sum(float(p.get("longitude", 0)) for p in geo_polygon) / len(geo_polygon)
-                d = _distance_between((gate_lat, gate_lon), (t_lat, t_lon))
-                if d < best_dist:
-                    best_dist = d
-                    best_target = (t_lat, t_lon)
-            if best_target:
-                return _calculate_heading((gate_lat, gate_lon), best_target)
+                # Compute centroid for inward-direction check
+                c_lat = sum(float(p.get("latitude", 0)) for p in geo_polygon) / len(geo_polygon)
+                c_lon = sum(float(p.get("longitude", 0)) for p in geo_polygon) / len(geo_polygon)
+                for i in range(len(geo_polygon)):
+                    j = (i + 1) % len(geo_polygon)
+                    a_lat = float(geo_polygon[i].get("latitude", 0))
+                    a_lon = float(geo_polygon[i].get("longitude", 0))
+                    b_lat = float(geo_polygon[j].get("latitude", 0))
+                    b_lon = float(geo_polygon[j].get("longitude", 0))
+                    d = _point_to_segment_distance_m(gate_lat, gate_lon,
+                                                      a_lat, a_lon, b_lat, b_lon)
+                    if d < best_dist:
+                        best_dist = d
+                        best_edge = (a_lat, a_lon, b_lat, b_lon)
+                        best_centroid = (c_lat, c_lon)
+            if best_edge and best_centroid:
+                a_lat, a_lon, b_lat, b_lon = best_edge
+                # Edge direction vector in local meter space
+                cos_lat = math.cos(math.radians(gate_lat))
+                dx = (b_lon - a_lon) * 111_000 * cos_lat
+                dy = (b_lat - a_lat) * 111_000
+                edge_len = math.sqrt(dx * dx + dy * dy)
+                if edge_len > 0.01:
+                    # Normal to the edge (two possible directions)
+                    nx, ny = -dy / edge_len, dx / edge_len
+                    # Pick the normal that points toward the terminal centroid
+                    cx = (best_centroid[1] - gate_lon) * 111_000 * cos_lat
+                    cy = (best_centroid[0] - gate_lat) * 111_000
+                    if nx * cx + ny * cy < 0:
+                        nx, ny = -nx, -ny
+                    # Convert normal to heading (0=north, 90=east, clockwise)
+                    heading = math.degrees(math.atan2(nx, ny)) % 360
+                    return heading
     except Exception:
         pass
     # Fallback: face toward airport center
@@ -2181,13 +2206,41 @@ _AIRPORT_COUNTRY = {
     "AMS": "Netherlands", "HKG": "Hong Kong", "NRT": "Japan",
     "SIN": "Singapore", "SYD": "Australia", "DXB": "UAE", "ICN": "South Korea",
     "HND": "Japan",
+    # European
+    "GVA": "Switzerland", "MUC": "Germany", "DUS": "Germany",
+    "HAM": "Germany", "BER": "Germany", "STR": "Germany", "CGN": "Germany",
+    "ORY": "France", "NCE": "France", "LYS": "France", "MRS": "France",
+    "TLS": "France", "BOD": "France",
+    "LGW": "United Kingdom", "MAN": "United Kingdom", "EDI": "United Kingdom",
+    "STN": "United Kingdom",
+    "EIN": "Netherlands", "RTM": "Netherlands",
+    "ATH": "Greece", "IST": "Turkey",
+    # Asia-Pacific
+    "KIX": "Japan", "FUK": "Japan", "CTS": "Japan",
+    "GMP": "South Korea", "PUS": "South Korea", "CJU": "South Korea",
+    "MEL": "Australia", "BNE": "Australia",
+    # Americas
+    "GIG": "Brazil", "CGH": "Brazil", "GRU": "Brazil",
+    "YYZ": "Canada", "YVR": "Canada",
+    "MEX": "Mexico", "CUN": "Mexico",
+    "SCL": "Chile",
+    # Middle East / Africa
+    "AUH": "UAE", "DOH": "Qatar",
+    "CMN": "Morocco", "CAI": "Egypt",
+    "JNB": "South Africa", "CPT": "South Africa",
 }
 
 
 def _get_origin_country(origin_iata: Optional[str]) -> str:
     """Get the country for an airport IATA code."""
-    if origin_iata and origin_iata in _AIRPORT_COUNTRY:
-        return _AIRPORT_COUNTRY[origin_iata]
+    if origin_iata:
+        from src.ingestion.airport_table import get_country_name
+        name = get_country_name(origin_iata)
+        if name != "Unknown":
+            return name
+        # Fallback to legacy dict for any codes not in the global table
+        if origin_iata in _AIRPORT_COUNTRY:
+            return _AIRPORT_COUNTRY[origin_iata]
     return "United States"
 
 
@@ -2215,10 +2268,14 @@ def _pick_random_airport(exclude: Optional[str] = None) -> str:
             if routes:
                 return random.choices(list(routes.keys()), weights=list(routes.values()), k=1)[0]
 
-    from src.ingestion.schedule_generator import DOMESTIC_AIRPORTS, INTERNATIONAL_AIRPORTS
+    from src.ingestion.schedule_generator import get_nearby_airports, INTERNATIONAL_AIRPORTS
+    local_iata = get_current_airport_iata()
+    nearby, far = get_nearby_airports(local_iata)
     if random.random() < 0.7:
-        pool = [a for a in DOMESTIC_AIRPORTS if a != exclude] or DOMESTIC_AIRPORTS
+        pool = [a for a in nearby if a != exclude]
     else:
+        pool = [a for a in far if a != exclude]
+    if not pool:
         pool = [a for a in INTERNATIONAL_AIRPORTS if a != exclude] or INTERNATIONAL_AIRPORTS
     return random.choice(pool)
 
