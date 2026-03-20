@@ -49,6 +49,33 @@ from app.backend.services.lakebase_service import get_lakebase_service
 from src.formats.base import ParseError, ValidationError
 
 
+def _compute_center_from_config(config: dict) -> tuple[float | None, float | None]:
+    """Compute airport center from gate/terminal geo coordinates.
+
+    Falls back through gates → terminals → None.
+    """
+    # Try gates first
+    lats, lons = [], []
+    for gate in config.get("gates", []):
+        geo = gate.get("geo")
+        if geo and geo.get("latitude") is not None and geo.get("longitude") is not None:
+            lats.append(float(geo["latitude"]))
+            lons.append(float(geo["longitude"]))
+    if lats and lons:
+        return sum(lats) / len(lats), sum(lons) / len(lons)
+
+    # Try terminals
+    for terminal in config.get("terminals", []):
+        geo = terminal.get("geo")
+        if geo and geo.get("latitude") is not None and geo.get("longitude") is not None:
+            lats.append(float(geo["latitude"]))
+            lons.append(float(geo["longitude"]))
+    if lats and lons:
+        return sum(lats) / len(lats), sum(lons) / len(lons)
+
+    return None, None
+
+
 router = APIRouter(prefix="/api", tags=["flights"])
 
 # Well-known airports with metadata — single source of truth for frontend dropdown
@@ -895,7 +922,10 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
             lat = config["center"]["latitude"]
             lon = config["center"]["longitude"]
         else:
-            raise ValueError(f"No coordinates available for {icao_code}")
+            # Compute center from gate/terminal geo coordinates as last resort
+            lat, lon = _compute_center_from_config(config)
+            if lat is None or lon is None:
+                raise ValueError(f"No coordinates available for {icao_code}")
 
         set_airport_center(lat, lon, iata_code)
         reset_result = reset_synthetic_state()

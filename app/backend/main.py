@@ -284,8 +284,17 @@ app.include_router(simulation_router)
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy"}
+    """Health check endpoint with service status."""
+    from app.backend.services.lakebase_service import get_lakebase_service
+    lakebase = get_lakebase_service()
+    config_service = get_airport_config_service()
+    config = config_service.get_config() if config_service else {}
+    return {
+        "status": "healthy",
+        "lakebase": lakebase.health_check() if lakebase and lakebase.is_available else False,
+        "airport": config.get("icaoCode", "unknown"),
+        "airport_source": config.get("source", "unknown"),
+    }
 
 
 @app.get("/api/ready")

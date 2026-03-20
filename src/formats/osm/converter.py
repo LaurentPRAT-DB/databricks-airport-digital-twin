@@ -63,7 +63,9 @@ class OSMConverter:
         }
 
         # Update converter reference point from centroid of all elements
-        self._update_reference_point(doc)
+        ref_lat, ref_lon = self._update_reference_point(doc)
+        if ref_lat is not None and ref_lon is not None:
+            config["center"] = {"latitude": ref_lat, "longitude": ref_lon}
 
         # Convert gates
         for gate in doc.gates:
@@ -135,8 +137,12 @@ class OSMConverter:
 
         return config
 
-    def _update_reference_point(self, doc: OSMDocument) -> None:
-        """Update converter reference point from document centroid."""
+    def _update_reference_point(self, doc: OSMDocument) -> tuple[float | None, float | None]:
+        """Update converter reference point from document centroid.
+
+        Returns:
+            Tuple of (ref_lat, ref_lon) or (None, None) if no geometry.
+        """
         lats = []
         lons = []
 
@@ -158,6 +164,8 @@ class OSMConverter:
                 reference_lon=ref_lon,
                 reference_alt=self.coord_converter.reference_alt,
             )
+            return ref_lat, ref_lon
+        return None, None
 
     @staticmethod
     def _is_valid_gate_ref(ref: str) -> bool:

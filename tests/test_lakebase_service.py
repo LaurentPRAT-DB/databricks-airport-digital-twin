@@ -570,3 +570,309 @@ class TestLakebaseConnectionErrorHandling:
 
                 result = service.health_check()
                 assert result is False
+
+
+class TestLakebaseConnectionPool:
+    """Tests for connection pool management."""
+
+    @patch("app.backend.services.lakebase_service.ThreadedConnectionPool", create=True)
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_pool_created_on_first_connection(self, mock_psycopg2, mock_pool_cls):
+        """Test that ThreadedConnectionPool is created on first use."""
+        mock_pool = MagicMock()
+        mock_pool.closed = False
+        mock_conn = MagicMock()
+        mock_pool.getconn.return_value = mock_conn
+        mock_pool_cls.return_value = mock_pool
+
+        env_vars = {
+            "LAKEBASE_HOST": "host",
+            "LAKEBASE_USER": "user",
+            "LAKEBASE_PASSWORD": "pass",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+
+                with service._get_connection() as conn:
+                    assert conn is mock_conn
+
+                mock_pool_cls.assert_called_once()
+                assert mock_pool_cls.call_args.kwargs["minconn"] == 2
+                assert mock_pool_cls.call_args.kwargs["maxconn"] == 10
+
+    @patch("app.backend.services.lakebase_service.ThreadedConnectionPool", create=True)
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_pool_reuses_connections(self, mock_psycopg2, mock_pool_cls):
+        """Test that pool.getconn/putconn are used instead of psycopg2.connect."""
+        mock_pool = MagicMock()
+        mock_pool.closed = False
+        mock_conn = MagicMock()
+        mock_pool.getconn.return_value = mock_conn
+        mock_pool_cls.return_value = mock_pool
+
+        env_vars = {
+            "LAKEBASE_HOST": "host",
+            "LAKEBASE_USER": "user",
+            "LAKEBASE_PASSWORD": "pass",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+
+                with service._get_connection():
+                    pass
+                with service._get_connection():
+                    pass
+
+                # Pool created once, getconn called twice
+                mock_pool_cls.assert_called_once()
+                assert mock_pool.getconn.call_count == 2
+                assert mock_pool.putconn.call_count == 2
+                # psycopg2.connect should NOT be called
+                mock_psycopg2.connect.assert_not_called()
+
+    @patch("app.backend.services.lakebase_service.ThreadedConnectionPool", create=True)
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_pool_invalidated_on_auth_error(self, mock_psycopg2, mock_pool_cls):
+        """Test pool is torn down on auth failure."""
+        mock_pool = MagicMock()
+        mock_pool.closed = False
+        mock_pool_cls.return_value = mock_pool
+
+        env_vars = {
+            "LAKEBASE_HOST": "host",
+            "LAKEBASE_USER": "user",
+            "LAKEBASE_PASSWORD": "pass",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+                # Manually set up a pool
+                service._pool = mock_pool
+
+                service._invalidate_credentials_if_auth_error(
+                    Exception("password authentication failed")
+                )
+
+                mock_pool.closeall.assert_called_once()
+                assert service._pool is None
+
+    @patch("app.backend.services.lakebase_service.ThreadedConnectionPool", create=True)
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_connection_returned_on_error(self, mock_psycopg2, mock_pool_cls):
+        """Test putconn(close=True) called on query error."""
+        mock_pool = MagicMock()
+        mock_pool.closed = False
+        mock_conn = MagicMock()
+        mock_pool.getconn.return_value = mock_conn
+        mock_pool_cls.return_value = mock_pool
+
+        env_vars = {
+            "LAKEBASE_HOST": "host",
+            "LAKEBASE_USER": "user",
+            "LAKEBASE_PASSWORD": "pass",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+
+                with pytest.raises(RuntimeError):
+                    with service._get_connection() as conn:
+                        raise RuntimeError("query failed")
+
+                # Should have called putconn with close=True for the bad conn
+                mock_pool.putconn.assert_called_once_with(mock_conn, close=True)
+
+    @patch("app.backend.services.lakebase_service.ThreadedConnectionPool", create=True)
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_close_pool(self, mock_psycopg2, mock_pool_cls):
+        """Test close_pool calls closeall."""
+        mock_pool = MagicMock()
+        mock_pool.closed = False
+        mock_pool_cls.return_value = mock_pool
+
+        env_vars = {
+            "LAKEBASE_HOST": "host",
+            "LAKEBASE_USER": "user",
+            "LAKEBASE_PASSWORD": "pass",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+                service._pool = mock_pool
+
+                service.close_pool()
+
+                mock_pool.closeall.assert_called_once()
+                assert service._pool is None
+
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_connection_string_bypasses_pool(self, mock_psycopg2):
+        """Test that connection string mode doesn't use pooling."""
+        mock_conn = MagicMock()
+        mock_psycopg2.connect.return_value = mock_conn
+
+        env_vars = {
+            "LAKEBASE_CONNECTION_STRING": "postgresql://user:pass@host:5432/db",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+
+                with service._get_connection() as conn:
+                    assert conn is mock_conn
+
+                mock_psycopg2.connect.assert_called_once()
+                assert service._pool is None
+
+
+class TestSchemaMigrationRetry:
+    """Tests for schema migration retry logic."""
+
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_migration_retries_on_failure(self, mock_psycopg2):
+        """Test flag NOT set after failure, allowing retry."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.__enter__ = Mock(return_value=mock_conn)
+        mock_conn.__exit__ = Mock(return_value=False)
+        mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+        mock_cursor.__exit__ = Mock(return_value=False)
+        mock_cursor.execute.side_effect = Exception("connection lost")
+        mock_conn.cursor.return_value = mock_cursor
+        mock_psycopg2.connect.return_value = mock_conn
+
+        env_vars = {
+            "LAKEBASE_CONNECTION_STRING": "postgresql://user:pass@host:5432/db",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+
+                service._ensure_airport_columns()
+
+                # Flag should NOT be set after single failure
+                assert service._airport_columns_ensured is False
+                assert service._airport_columns_retries == 1
+
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_migration_succeeds_after_retry(self, mock_psycopg2):
+        """Test migration succeeds on second attempt."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.__enter__ = Mock(return_value=mock_conn)
+        mock_conn.__exit__ = Mock(return_value=False)
+        mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+        mock_cursor.__exit__ = Mock(return_value=False)
+        mock_conn.cursor.return_value = mock_cursor
+        mock_psycopg2.connect.return_value = mock_conn
+
+        env_vars = {
+            "LAKEBASE_CONNECTION_STRING": "postgresql://user:pass@host:5432/db",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+
+                # First call fails
+                mock_cursor.execute.side_effect = Exception("connection lost")
+                service._ensure_airport_columns()
+                assert service._airport_columns_ensured is False
+
+                # Second call succeeds
+                mock_cursor.execute.side_effect = None
+                service._ensure_airport_columns()
+                assert service._airport_columns_ensured is True
+
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_migration_stops_after_max_retries(self, mock_psycopg2):
+        """Test migration gives up after 3 failures."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.__enter__ = Mock(return_value=mock_conn)
+        mock_conn.__exit__ = Mock(return_value=False)
+        mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+        mock_cursor.__exit__ = Mock(return_value=False)
+        mock_cursor.execute.side_effect = Exception("persistent failure")
+        mock_conn.cursor.return_value = mock_cursor
+        mock_psycopg2.connect.return_value = mock_conn
+
+        env_vars = {
+            "LAKEBASE_CONNECTION_STRING": "postgresql://user:pass@host:5432/db",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+
+                for _ in range(3):
+                    service._ensure_airport_columns()
+
+                # After 3 retries, should give up and mark as ensured
+                assert service._airport_columns_ensured is True
+                assert service._airport_columns_retries == 3
+
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_migration_flag_set_on_success(self, mock_psycopg2):
+        """Test flag set after successful commit."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.__enter__ = Mock(return_value=mock_conn)
+        mock_conn.__exit__ = Mock(return_value=False)
+        mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+        mock_cursor.__exit__ = Mock(return_value=False)
+        mock_conn.cursor.return_value = mock_cursor
+        mock_psycopg2.connect.return_value = mock_conn
+
+        env_vars = {
+            "LAKEBASE_CONNECTION_STRING": "postgresql://user:pass@host:5432/db",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+
+                service._ensure_airport_columns()
+
+                assert service._airport_columns_ensured is True
+                mock_conn.commit.assert_called_once()
+
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_ml_tables_migration_retries(self, mock_psycopg2):
+        """Test ML tables migration has same retry logic."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.__enter__ = Mock(return_value=mock_conn)
+        mock_conn.__exit__ = Mock(return_value=False)
+        mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+        mock_cursor.__exit__ = Mock(return_value=False)
+        mock_cursor.execute.side_effect = Exception("connection lost")
+        mock_conn.cursor.return_value = mock_cursor
+        mock_psycopg2.connect.return_value = mock_conn
+
+        env_vars = {
+            "LAKEBASE_CONNECTION_STRING": "postgresql://user:pass@host:5432/db",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+
+                service._ensure_ml_tables()
+                assert service._ml_tables_ensured is False
+                assert service._ml_tables_retries == 1
+
+                # After 3 failures, gives up
+                service._ensure_ml_tables()
+                service._ensure_ml_tables()
+                assert service._ml_tables_ensured is True
+                assert service._ml_tables_retries == 3

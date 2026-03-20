@@ -10,6 +10,7 @@ Supports two authentication modes:
 
 import os
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from contextlib import contextmanager
@@ -17,6 +18,7 @@ from contextlib import contextmanager
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor, execute_values
+    from psycopg2.pool import ThreadedConnectionPool
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -127,7 +129,12 @@ class LakebaseService:
         self._cached_credentials: Optional[tuple[str, str]] = None
         self._credential_expiry: Optional[datetime] = None
         self._airport_columns_ensured = False
+        self._airport_columns_retries = 0
         self._ml_tables_ensured = False
+        self._ml_tables_retries = 0
+        # Connection pool
+        self._pool: Optional["ThreadedConnectionPool"] = None
+        self._pool_lock = threading.Lock()
 
     @property
     def is_available(self) -> bool:
@@ -199,39 +206,120 @@ class LakebaseService:
         )):
             self._cached_credentials = None
             self._credential_expiry = None
+            self._invalidate_pool()
+
+    def _get_pool_kwargs(self) -> Optional[dict]:
+        """Build connection kwargs for pool creation. Returns None if using connection string."""
+        if self._connection_string:
+            return None  # Connection string mode doesn't use pool
+        creds = self._get_credentials()
+        if not creds:
+            return None
+        password, user = creds
+        return {
+            "host": self._host,
+            "port": self._port,
+            "database": self._database,
+            "user": user,
+            "password": password,
+            "sslmode": "require",
+            "options": f"-c search_path={self._schema}",
+            "connect_timeout": 5,
+        }
+
+    def _get_or_create_pool(self) -> Optional["ThreadedConnectionPool"]:
+        """Get or lazily create the connection pool."""
+        with self._pool_lock:
+            if self._pool is not None and not self._pool.closed:
+                return self._pool
+            kwargs = self._get_pool_kwargs()
+            if kwargs is None:
+                return None
+            try:
+                self._pool = ThreadedConnectionPool(minconn=2, maxconn=10, **kwargs)
+                logger.info("Lakebase connection pool created (min=2, max=10)")
+                return self._pool
+            except Exception as e:
+                logger.warning(f"Failed to create connection pool: {e}")
+                return None
+
+    def _invalidate_pool(self) -> None:
+        """Tear down the connection pool (e.g. on auth failure)."""
+        with self._pool_lock:
+            if self._pool is not None:
+                try:
+                    self._pool.closeall()
+                except Exception:
+                    pass
+                self._pool = None
+                logger.info("Lakebase connection pool invalidated")
+
+    def close_pool(self) -> None:
+        """Cleanly shut down the connection pool."""
+        self._invalidate_pool()
 
     @contextmanager
     def _get_connection(self):
-        """Context manager for database connections with auto-cleanup."""
+        """Context manager for database connections with auto-cleanup.
+
+        Uses connection pooling when credentials-based (non-connection-string) mode.
+        Falls back to direct connect for connection string mode.
+        """
         conn = None
+        from_pool = False
+        pool = None
         try:
             if self._connection_string:
+                # Connection string mode: no pooling (DSN may vary)
                 conn = psycopg2.connect(self._connection_string)
             else:
-                creds = self._get_credentials()
-                if not creds:
-                    raise RuntimeError("No Lakebase credentials available")
-
-                password, user = creds
-                conn = psycopg2.connect(
-                    host=self._host,
-                    port=self._port,
-                    database=self._database,
-                    user=user,
-                    password=password,
-                    sslmode="require",
-                    options=f"-c search_path={self._schema}",
-                    connect_timeout=5,
-                )
+                pool = self._get_or_create_pool()
+                if pool is not None:
+                    conn = pool.getconn()
+                    from_pool = True
+                else:
+                    # Fallback: direct connection if pool creation failed
+                    creds = self._get_credentials()
+                    if not creds:
+                        raise RuntimeError("No Lakebase credentials available")
+                    password, user = creds
+                    conn = psycopg2.connect(
+                        host=self._host,
+                        port=self._port,
+                        database=self._database,
+                        user=user,
+                        password=password,
+                        sslmode="require",
+                        options=f"-c search_path={self._schema}",
+                        connect_timeout=5,
+                    )
             yield conn
+        except Exception:
+            # On error, discard the connection from pool (don't return a broken one)
+            if from_pool and pool is not None and conn is not None:
+                try:
+                    pool.putconn(conn, close=True)
+                except Exception:
+                    pass
+                conn = None  # Prevent double-return in finally
+            raise
         finally:
-            if conn:
-                conn.close()
+            if conn is not None:
+                if from_pool and pool is not None:
+                    try:
+                        pool.putconn(conn)
+                    except Exception:
+                        pass
+                else:
+                    conn.close()
+
+    _MAX_MIGRATION_RETRIES = 3
 
     def _ensure_airport_columns(self) -> None:
         """Run ALTER TABLE ADD COLUMN IF NOT EXISTS for airport_icao migration.
 
         Safe to call multiple times — only runs once per service lifetime.
+        Retries up to 3 times on transient failures.
         """
         if self._airport_columns_ensured or not self.is_available:
             return
@@ -246,13 +334,15 @@ class LakebaseService:
                             f"airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO'"
                         )
                     conn.commit()
+            self._airport_columns_ensured = True
             logger.debug("Ensured airport_icao columns exist on all tables")
         except Exception as e:
-            # Mark as ensured even on failure — columns likely already exist
-            # in the schema. Retrying on every request just adds noise.
-            logger.debug(f"Airport column migration check: {e}")
-        finally:
-            self._airport_columns_ensured = True
+            self._airport_columns_retries += 1
+            if self._airport_columns_retries >= self._MAX_MIGRATION_RETRIES:
+                self._airport_columns_ensured = True
+                logger.error(f"Airport column migration failed after {self._MAX_MIGRATION_RETRIES} retries: {e}")
+            else:
+                logger.warning(f"Airport column migration failed (attempt {self._airport_columns_retries}, will retry): {e}")
 
     def get_flights(self, limit: int = 100) -> Optional[list[dict]]:
         """
@@ -1271,11 +1361,15 @@ class LakebaseService:
                         ON ml_predictions (session_id, airport_icao, event_time)
                     """)
                     conn.commit()
+            self._ml_tables_ensured = True
             logger.debug("Ensured ML training data tables exist")
         except Exception as e:
-            logger.debug(f"ML tables creation check: {e}")
-        finally:
-            self._ml_tables_ensured = True
+            self._ml_tables_retries += 1
+            if self._ml_tables_retries >= self._MAX_MIGRATION_RETRIES:
+                self._ml_tables_ensured = True
+                logger.error(f"ML tables migration failed after {self._MAX_MIGRATION_RETRIES} retries: {e}")
+            else:
+                logger.warning(f"ML tables migration failed (attempt {self._ml_tables_retries}, will retry): {e}")
 
     def insert_flight_snapshots(
         self, snapshots: list[dict], session_id: str, airport_icao: str

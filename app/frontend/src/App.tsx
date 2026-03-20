@@ -106,32 +106,54 @@ type ViewMode = '2d' | '3d';
 function ViewToggle({
   viewMode,
   onToggle,
+  satellite,
+  onSatelliteToggle,
 }: {
   viewMode: ViewMode;
   onToggle: (mode: ViewMode) => void;
+  satellite: boolean;
+  onSatelliteToggle: (on: boolean) => void;
 }) {
   return (
-    <div className="absolute top-4 right-4 z-[1001] flex bg-white rounded-lg shadow-md overflow-hidden">
-      <button
-        onClick={() => onToggle('2d')}
-        className={`px-4 py-2 text-sm font-medium transition-colors ${
-          viewMode === '2d'
-            ? 'bg-blue-600 text-white'
-            : 'bg-white text-gray-700 hover:bg-gray-100'
-        }`}
-      >
-        2D
-      </button>
-      <button
-        onClick={() => onToggle('3d')}
-        className={`px-4 py-2 text-sm font-medium transition-colors ${
-          viewMode === '3d'
-            ? 'bg-blue-600 text-white'
-            : 'bg-white text-gray-700 hover:bg-gray-100'
-        }`}
-      >
-        3D
-      </button>
+    <div className="absolute top-4 right-4 z-[1001] flex items-center gap-2">
+      <div className="flex bg-white rounded-lg shadow-md overflow-hidden">
+        <button
+          onClick={() => onToggle('2d')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            viewMode === '2d'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          2D
+        </button>
+        <button
+          onClick={() => onToggle('3d')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            viewMode === '3d'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          3D
+        </button>
+      </div>
+      {viewMode === '2d' && (
+        <button
+          onClick={() => onSatelliteToggle(!satellite)}
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg shadow-md transition-colors ${
+            satellite
+              ? 'bg-blue-600 text-white'
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+          }`}
+          title={satellite ? 'Switch to street map' : 'Switch to satellite view'}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M8.157 2.176a1.5 1.5 0 0 0-1.147 0l-4.084 1.69A1.5 1.5 0 0 0 2 5.25v10.877a1.5 1.5 0 0 0 2.074 1.386l3.51-1.452 4.26 1.762a1.5 1.5 0 0 0 1.147 0l4.083-1.69A1.5 1.5 0 0 0 18 14.75V3.872a1.5 1.5 0 0 0-2.073-1.386l-3.51 1.452-4.26-1.762ZM7.58 5a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0v-6.5A.75.75 0 0 1 7.58 5Zm5.59 2.75a.75.75 0 0 0-1.5 0v6.5a.75.75 0 0 0 1.5 0v-6.5Z" clipRule="evenodd" />
+          </svg>
+          Satellite
+        </button>
+      )}
     </div>
   );
 }
@@ -152,6 +174,7 @@ declare global {
 
 function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (flights: Flight[] | null) => void }) {
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
+  const [satellite, setSatellite] = useState(false);
   const [showFIDS, setShowFIDS] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Initializing');
@@ -277,13 +300,14 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
 
         {/* Center: Airport Map (2D or 3D) */}
         <div className="flex-1 overflow-hidden relative">
-          <ViewToggle viewMode={viewMode} onToggle={setViewMode} />
+          <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} />
           {/* Keep 2D map mounted (hidden) once loaded to avoid Leaflet re-init */}
           <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
             <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>
               <AirportMap
                 sharedViewport={viewport}
                 onViewportChange={handle2DViewportChange}
+                satellite={satellite}
               />
             </Suspense>
           </div>

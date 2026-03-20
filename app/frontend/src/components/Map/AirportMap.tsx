@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { MapContainer, TileLayer, LayersControl, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { AIRPORT_CENTER, DEFAULT_ZOOM } from '../../constants/airportLayout';
 import AirportOverlay from './AirportOverlay';
@@ -14,6 +14,8 @@ interface AirportMapProps {
   sharedViewport?: SharedViewport | null;
   /** Callback to save viewport on unmount */
   onViewportChange?: (vp: SharedViewport) => void;
+  /** Show satellite imagery instead of street map */
+  satellite?: boolean;
 }
 
 /**
@@ -118,7 +120,12 @@ function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
   return null;
 }
 
-export default function AirportMap({ sharedViewport, onViewportChange }: AirportMapProps) {
+const STREET_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const STREET_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const SAT_ATTR = '&copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, GIS User Community';
+
+export default function AirportMap({ sharedViewport, onViewportChange, satellite = false }: AirportMapProps) {
   const { flights, isLoading, error, lastUpdated } = useFlightContext();
   const [zoom, setZoom] = useState(sharedViewport?.zoom ?? DEFAULT_ZOOM);
 
@@ -135,20 +142,11 @@ export default function AirportMap({ sharedViewport, onViewportChange }: Airport
         zoom={initialZoom}
         className="h-full w-full"
       >
-        <LayersControl position="topright">
-          <LayersControl.BaseLayer checked name="Street">
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-          </LayersControl.BaseLayer>
-          <LayersControl.BaseLayer name="Satellite">
-            <TileLayer
-              attribution='&copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, GIS User Community'
-              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            />
-          </LayersControl.BaseLayer>
-        </LayersControl>
+        <TileLayer
+          key={satellite ? 'sat' : 'street'}
+          attribution={satellite ? SAT_ATTR : STREET_ATTR}
+          url={satellite ? SAT_URL : STREET_URL}
+        />
         <MapRecenter sharedViewport={sharedViewport} />
         <MapViewportSaver onViewportChange={onViewportChange} />
         <ZoomTracker onZoom={setZoom} />

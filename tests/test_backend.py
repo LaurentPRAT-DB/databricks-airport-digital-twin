@@ -24,6 +24,34 @@ class TestHealthEndpoint:
         data = response.json()
         assert data["status"] == "healthy"
 
+    def test_health_endpoint_includes_lakebase_status(self, client):
+        """Test that health endpoint includes lakebase status."""
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert "lakebase" in data
+        assert isinstance(data["lakebase"], bool)
+
+    def test_health_endpoint_includes_airport_info(self, client):
+        """Test that health endpoint includes airport and source info."""
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert "airport" in data
+        assert "airport_source" in data
+
+    def test_health_endpoint_lakebase_unavailable(self, client):
+        """Test health endpoint gracefully handles unavailable lakebase."""
+        from unittest.mock import patch, MagicMock
+        mock_service = MagicMock()
+        mock_service.is_available = False
+        with patch("app.backend.services.lakebase_service.get_lakebase_service", return_value=mock_service):
+            response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy"
+        assert data["lakebase"] is False
+
 
 class TestFlightsEndpoint:
     """Tests for the flights API endpoints."""
