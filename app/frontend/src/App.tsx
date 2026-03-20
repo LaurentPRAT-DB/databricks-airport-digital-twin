@@ -180,6 +180,11 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
   const [statusMessage, setStatusMessage] = useState('Initializing');
   const [, setSimulationActive] = useState(false);
 
+  // Close FIDS when switching between 2D/3D views
+  useEffect(() => {
+    setShowFIDS(false);
+  }, [viewMode]);
+
   // Expose view control API on window for headless video renderer (Playwright)
   useEffect(() => {
     window.__viewControl = {

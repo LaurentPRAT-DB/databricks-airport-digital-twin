@@ -1,11 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useFlightContext } from '../../context/FlightContext';
+import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import FlightRow from './FlightRow';
 
 type SortOption = 'callsign' | 'altitude';
 
 export default function FlightList() {
   const { flights, selectedFlight, setSelectedFlight, isLoading } = useFlightContext();
+  const { switchProgress } = useAirportConfigContext();
+  const isAirportSwitching = switchProgress !== null && !switchProgress.done;
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('callsign');
 
@@ -84,7 +87,12 @@ export default function FlightList() {
 
       {/* Flight list */}
       <div className="flex-1 overflow-y-auto">
-        {isLoading && flights.length === 0 ? (
+        {isAirportSwitching ? (
+          <div className="p-4 text-center text-slate-500">
+            <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
+            Switching airport...
+          </div>
+        ) : isLoading && flights.length === 0 ? (
           <div className="p-4 text-center text-slate-500">
             <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
             Loading flights...
