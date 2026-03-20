@@ -103,6 +103,9 @@ app/frontend/dist/
 # Claude Code local config
 .claude/
 
+# Debug/review/audit plans (local only)
+.planning/debug/
+
 # Generated service worker
 app/frontend/public/sw.js
 
