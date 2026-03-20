@@ -159,7 +159,7 @@ describe('useFlights', () => {
       expect(result.current.lastUpdated).not.toBeNull()
     })
 
-    it('ignores airport_switch_progress messages', async () => {
+    it('ignores in-progress airport_switch_progress messages', async () => {
       const { result } = renderHook(() => useFlights(), {
         wrapper: createWrapper(),
       })
@@ -173,6 +173,30 @@ describe('useFlights', () => {
 
       // Should still have no flights
       expect(result.current.flights).toEqual([])
+    })
+
+    it('clears flights on airport_switch_progress done', async () => {
+      const { result } = renderHook(() => useFlights(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => expect(mockWsInstances.length).toBe(1))
+
+      // Populate flights first
+      mockWsInstances[0].simulateMessage({
+        type: 'initial',
+        data: { flights: mockFlights, count: mockFlights.length, timestamp: new Date().toISOString() },
+      })
+
+      await waitFor(() => expect(result.current.flights.length).toBe(mockFlights.length))
+
+      // Airport switch completes — should clear old flights
+      mockWsInstances[0].simulateMessage({
+        type: 'airport_switch_progress',
+        data: { step: 3, total: 3, message: 'Airport ready', icaoCode: 'KJFK', done: true },
+      })
+
+      await waitFor(() => expect(result.current.flights).toEqual([]))
     })
   })
 

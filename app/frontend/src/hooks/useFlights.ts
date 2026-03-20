@@ -74,8 +74,8 @@ export function useFlights(): UseFlightsResult {
           // Handle airport switch progress (including errors)
           if (msg.type === 'airport_switch_progress') {
             const progress = (msg as any).data;
-            if (progress.error) {
-              // Switch failed — clear stale flights from partial switch
+            if (progress.done || progress.error) {
+              // Airport switched or failed — clear stale flights so next delta starts fresh
               flightsMapRef.current = new Map();
               setWsData({ flights: [], count: 0, timestamp: new Date().toISOString(), data_source: 'synthetic' });
             }
