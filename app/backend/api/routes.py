@@ -1171,6 +1171,29 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
 
         asyncio.create_task(_retrain_ml_background())
 
+        # Auto-calibrate if this airport has no real profile (runs in background)
+        registry = get_model_registry()
+        profile_loader = registry._profile_loader
+        current_profile = profile_loader.get_profile(icao_code)
+        if current_profile.data_source == "fallback":
+            async def _auto_calibrate_background():
+                try:
+                    _t0 = _time.monotonic()
+                    from src.calibration.auto_calibrate import auto_calibrate_airport
+                    profile = await asyncio.to_thread(auto_calibrate_airport, icao_code, True)
+                    if profile:
+                        profile_loader.update_cache(icao_code, profile)
+                        # Retrain ML with the calibrated profile
+                        await asyncio.to_thread(registry.retrain, icao_code)
+                        logger.info(
+                            f"[DIAG] Background auto-calibrate for {icao_code}: "
+                            f"{_time.monotonic() - _t0:.1f}s (source={profile.data_source})"
+                        )
+                except Exception:
+                    logger.error(f"Background auto-calibrate failed for {icao_code}:\n{traceback.format_exc()}")
+
+            asyncio.create_task(_auto_calibrate_background())
+
         if already_initialized:
             await broadcaster.broadcast_progress(total_steps, total_steps, "Airport ready", icao_code, done=True)
         else:

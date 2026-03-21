@@ -76,6 +76,7 @@ class AirportProfile:
 
     # Metadata
     data_source: str = "fallback"
+    region: str = ""
     profile_date: str = ""
     sample_size: int = 0
 
@@ -235,6 +236,11 @@ class AirportProfileLoader:
             logger.debug("UC profile lookup for %s failed: %s", icao, e)
 
         return None
+
+    def update_cache(self, icao: str, profile: AirportProfile) -> None:
+        """Inject an auto-calibrated profile into the in-memory cache."""
+        self._cache[icao] = profile
+        logger.info("Updated cache for %s (source: %s)", icao, profile.data_source)
 
     def clear_cache(self) -> None:
         """Clear cached profiles."""
