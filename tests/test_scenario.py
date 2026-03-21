@@ -694,13 +694,11 @@ class TestFlightDynamics:
         path = tmp_path / "lifr_test.yaml"
         path.write_text(yaml.dump(scenario_yaml))
 
-        # Try multiple seeds — go-arounds are probabilistic (10% per approach)
-        # and sensitive to global RNG state from earlier tests. Reset the global
-        # random state before each attempt to ensure deterministic behavior.
-        import random as _random
+        # Go-arounds are probabilistic (10% per APPROACHING→LANDING transition)
+        # and the LIFR capacity constraint means few flights complete approaches.
+        # Try many seeds to statistically guarantee at least one go-around.
         any_go_around = False
-        for seed in [42, 123, 7, 999, 2024, 314, 55, 8080]:
-            _random.seed(seed)
+        for seed in range(50):
             config = SimulationConfig(
                 airport="SFO",
                 arrivals=50,
@@ -717,7 +715,7 @@ class TestFlightDynamics:
                 any_go_around = True
                 break
 
-        assert any_go_around, "No go-arounds in extreme LIFR across multiple seeds"
+        assert any_go_around, "No go-arounds in extreme LIFR across 50 seeds"
 
     def test_diversion_on_all_runways_closed(self, tmp_path):
         """Close both runways → APPROACHING flights get diverted."""

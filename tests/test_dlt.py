@@ -314,40 +314,42 @@ class TestBaggageWriter:
 
 
 class TestDLTPipelineConfig:
-    """Tests for the DLT pipeline configuration."""
+    """Tests for the DLT pipeline configuration (DABs resource YAML)."""
 
     @pytest.fixture
     def pipeline_config(self) -> dict:
-        """Load the DLT pipeline configuration."""
+        """Load the DLT pipeline configuration from DABs resource YAML."""
+        import yaml
         config_path = (
-            Path(__file__).parent.parent / "databricks" / "dlt_pipeline_config.json"
+            Path(__file__).parent.parent / "resources" / "pipeline.yml"
         )
-        return json.loads(config_path.read_text())
+        raw = yaml.safe_load(config_path.read_text())
+        return raw["resources"]["pipelines"]["airport_dlt_pipeline"]
 
     def test_pipeline_has_required_fields(self, pipeline_config: dict) -> None:
-        """Validate pipeline config has required fields."""
+        """Validate pipeline config has name and serverless mode."""
         assert "name" in pipeline_config
-        assert pipeline_config["name"] == "airport_digital_twin_pipeline"
+        assert "Airport Digital Twin DLT" in pipeline_config["name"]
+        assert pipeline_config.get("serverless") is True
 
-    def test_pipeline_has_cluster_config(self, pipeline_config: dict) -> None:
-        """Validate pipeline config has cluster configuration."""
-        assert "clusters" in pipeline_config
-        clusters = pipeline_config["clusters"]
-        assert len(clusters) > 0
-
-        # Check for autoscale
-        cluster = clusters[0]
-        assert "autoscale" in cluster
-        assert "min_workers" in cluster["autoscale"]
-        assert "max_workers" in cluster["autoscale"]
+    def test_pipeline_is_serverless(self, pipeline_config: dict) -> None:
+        """Validate pipeline uses serverless compute (no cluster config)."""
+        assert pipeline_config.get("serverless") is True
+        assert "clusters" not in pipeline_config
 
     def test_pipeline_targets_catalog(self, pipeline_config: dict) -> None:
-        """Validate pipeline targets the correct catalog."""
-        assert "target" in pipeline_config
+        """Validate pipeline targets catalog and schema."""
         assert "catalog" in pipeline_config
+        assert "target" in pipeline_config
 
     def test_pipeline_has_libraries(self, pipeline_config: dict) -> None:
         """Validate pipeline config has library references."""
-        assert "libraries" in pipeline_config
         libraries = pipeline_config["libraries"]
         assert len(libraries) >= 6  # bronze, silver, gold + baggage bronze, silver, gold
+        paths = [lib["file"]["path"] for lib in libraries]
+        assert any("bronze.py" in p for p in paths)
+        assert any("silver.py" in p for p in paths)
+        assert any("gold.py" in p for p in paths)
+        assert any("baggage_bronze.py" in p for p in paths)
+        assert any("baggage_silver.py" in p for p in paths)
+        assert any("baggage_gold.py" in p for p in paths)

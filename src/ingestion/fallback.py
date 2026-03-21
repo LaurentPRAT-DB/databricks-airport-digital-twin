@@ -1691,7 +1691,9 @@ def _find_aircraft_ahead_on_approach(state: FlightState) -> Optional[FlightState
     for icao24 in approach_ids:
         if icao24 == state.icao24:
             continue
-        other = _flight_states[icao24]
+        other = _flight_states.get(icao24)
+        if other is None:
+            continue  # flight removed mid-iteration (diverted/completed)
 
         other_dist_to_center = _distance_between(
             (other.latitude, other.longitude), center
@@ -1721,7 +1723,9 @@ def _find_last_aircraft_on_approach() -> Optional[FlightState]:
 
     approach_ids = _flights_by_phase[FlightPhase.APPROACHING] | _flights_by_phase[FlightPhase.LANDING]
     for icao24 in approach_ids:
-        state = _flight_states[icao24]
+        state = _flight_states.get(icao24)
+        if state is None:
+            continue
         dist = _distance_between((state.latitude, state.longitude), center)
         if dist > max_dist:
             max_dist = dist
