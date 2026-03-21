@@ -1138,31 +1138,35 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
             )
             return
 
-        # Check if data generation is needed
+        # Build the config payload to send via WS (same shape as old HTTP response)
         data_generator = get_data_generator_service()
         already_initialized = icao_code in data_generator._initialized_airports
-
-        # Build the config payload to send via WS (same shape as old HTTP response)
         config_payload = {
             "config": config,
             "source": source,
             "icaoCode": icao_code,
             "elementCounts": service.get_element_counts(),
-            "dataReady": already_initialized,
+            "dataReady": True,
             "dataGenerating": not already_initialized,
             "gatesLoaded": len(gates),
             "gateRecommenderCount": gate_recommender_count,
             "stateReset": reset_result,
         }
 
-        # Broadcast completion with full config so frontend can update state
+        # Broadcast completion immediately — in-memory sim is ready, Lakebase
+        # data gen runs in background and is not needed for the UI to work.
         await broadcaster.broadcast({
             "type": "airport_switch_complete",
             "data": config_payload,
         })
 
-        # Retrain ML models in background — not needed until a prediction is
-        # requested, so this avoids blocking the airport switch UI (saves ~2-7s).
+        _t_ready = _time.monotonic() - _t_activate_start
+        await broadcaster.broadcast_progress(total_steps, total_steps, "Airport ready", icao_code, done=True)
+        logger.info(f"[DIAG] Airport {icao_code} ready in {_t_ready:.3f}s (UI unblocked)")
+
+        # === Everything below is background work — UI is already unblocked ===
+
+        # Retrain ML models in background
         async def _retrain_ml_background():
             try:
                 _t0 = _time.monotonic()
@@ -1176,7 +1180,7 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
 
         asyncio.create_task(_retrain_ml_background())
 
-        # Auto-calibrate if this airport has no real profile (runs in background)
+        # Auto-calibrate if this airport has no real profile
         registry = get_model_registry()
         profile_loader = registry._profile_loader
         current_profile = profile_loader.get_profile(icao_code)
@@ -1188,7 +1192,6 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
                     profile = await asyncio.to_thread(auto_calibrate_airport, icao_code, True)
                     if profile:
                         profile_loader.update_cache(icao_code, profile)
-                        # Retrain ML with the calibrated profile
                         await asyncio.to_thread(registry.retrain, icao_code)
                         logger.info(
                             f"[DIAG] Background auto-calibrate for {icao_code}: "
@@ -1199,25 +1202,15 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
 
             asyncio.create_task(_auto_calibrate_background())
 
-        if already_initialized:
-            await broadcaster.broadcast_progress(total_steps, total_steps, "Airport ready", icao_code, done=True)
-        else:
-            # Launch data generation as background task with progress
+        # Lakebase data generation (fully background, non-blocking)
+        if not already_initialized:
             async def _generate_data_background():
-                async def _progress(step, total, message, done):
-                    await broadcaster.broadcast_progress(step, total, message, icao_code, done)
-
                 try:
-                    await data_generator.switch_airport(icao_code, progress_callback=_progress)
+                    _t0 = _time.monotonic()
+                    await data_generator.switch_airport(icao_code)
+                    logger.info(f"[DIAG] Background data gen for {icao_code}: {_time.monotonic() - _t0:.3f}s")
                 except Exception as e:
                     logger.error(f"Background data generation failed for {icao_code}: {e}")
-                    await broadcaster.broadcast_progress(
-                        total_steps, total_steps, f"Failed: {e}", icao_code, done=True, error=True
-                    )
-                    return
-                await broadcaster.broadcast_progress(
-                    total_steps, total_steps, "Airport ready", icao_code, done=True
-                )
 
             asyncio.create_task(_generate_data_background())
 
