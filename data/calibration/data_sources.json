@@ -1,0 +1,61 @@
+{
+  "_comment": "External data sources used by the calibration pipeline. The code auto-downloads files listed here on first use and caches them in data/calibration/raw/.",
+  "sources": {
+    "openflights_routes": {
+      "url": "https://raw.githubusercontent.com/jpatokal/openflights/master/data/routes.dat",
+      "local_file": "openflights_routes.dat",
+      "description": "OpenFlights airline routes (~67,663 routes worldwide)",
+      "license": "ODbL (Open Database License)",
+      "project_url": "https://github.com/jpatokal/openflights",
+      "last_downloaded": "2026-03-21",
+      "notes": "CSV with no header: airline, airline_id, src_airport, src_id, dst_airport, dst_id, codeshare, stops, equipment"
+    },
+    "openflights_airlines": {
+      "url": "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airlines.dat",
+      "local_file": "openflights_airlines.dat",
+      "description": "OpenFlights airline IATA/ICAO code mappings (~6,000 airlines)",
+      "license": "ODbL (Open Database License)",
+      "project_url": "https://github.com/jpatokal/openflights",
+      "last_downloaded": "2026-03-21",
+      "notes": "CSV with no header: id, name, alias, iata, icao, callsign, country, active"
+    },
+    "ourairports_airports": {
+      "url": "https://ourairports.com/data/airports.csv",
+      "local_file": "airports.csv",
+      "description": "OurAirports worldwide airport database (~80,000 airports)",
+      "license": "Public domain",
+      "project_url": "https://ourairports.com/data/",
+      "last_downloaded": "2026-03-15",
+      "notes": "CSV with header. Includes IATA/ICAO codes, coordinates, elevation, type, country"
+    },
+    "ourairports_runways": {
+      "url": "https://ourairports.com/data/runways.csv",
+      "local_file": "runways.csv",
+      "description": "OurAirports runway data (~45,000 runways)",
+      "license": "Public domain",
+      "project_url": "https://ourairports.com/data/",
+      "last_downloaded": "2026-03-15",
+      "notes": "CSV with header. Includes length, width, surface, lighting, heading"
+    },
+    "bts_ontime_performance": {
+      "url": "https://transtats.bts.gov/PREZIP/",
+      "local_dir": "otp/",
+      "description": "BTS On-Time Performance monthly ZIP archives (US domestic)",
+      "license": "US Government public domain",
+      "project_url": "https://www.transtats.bts.gov/DL_SelectFields.aspx?gnoession_VQ=FGJ",
+      "last_downloaded": "2026-03-15",
+      "notes": "Monthly ZIPs named otp_YYYY_M.zip. Fields: reporting carrier, origin, dest, dep_delay, arr_delay, cancelled, diverted, carrier_delay, weather_delay, etc."
+    },
+    "opensky_api": {
+      "url": "https://opensky-network.org/api",
+      "local_file": null,
+      "description": "OpenSky Network live flight tracking API (for international airports not in BTS)",
+      "license": "CC BY-NC 4.0 (non-commercial)",
+      "project_url": "https://openskynetwork.github.io/opensky-api/",
+      "last_downloaded": null,
+      "notes": "REST API, queried on demand. Rate-limited. Optional auth for higher limits."
+    }
+  },
+  "raw_dir": "data/calibration/raw/",
+  "check_update_days": 90
+}

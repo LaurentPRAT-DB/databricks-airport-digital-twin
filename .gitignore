@@ -69,9 +69,10 @@ env/
 data/*
 # Exception: keep fallback sample data for offline mode
 !data/fallback/
-# Exception: keep calibration profile JSONs (small, ~2KB each)
+# Exception: keep calibration profile JSONs (small, ~2KB each) and data sources config
 !data/calibration/
 data/calibration/*
+!data/calibration/data_sources.json
 !data/calibration/profiles/
 data/calibration/profiles/*
 !data/calibration/profiles/*.json

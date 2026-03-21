@@ -26,13 +26,54 @@ from src.calibration.profile import AirportProfile, _iata_to_icao, _icao_to_iata
 
 logger = logging.getLogger(__name__)
 
-_RAW_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "calibration" / "raw"
+_CALIBRATION_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "calibration"
+_RAW_DIR = _CALIBRATION_DIR / "raw"
+_DATA_SOURCES_FILE = _CALIBRATION_DIR / "data_sources.json"
 
+# Defaults — overridden by data_sources.json if present
 _ROUTES_URL = "https://raw.githubusercontent.com/jpatokal/openflights/master/data/routes.dat"
 _AIRLINES_URL = "https://raw.githubusercontent.com/jpatokal/openflights/master/data/airlines.dat"
 
 _ROUTES_FILENAME = "openflights_routes.dat"
 _AIRLINES_FILENAME = "openflights_airlines.dat"
+
+
+def _load_source_config(key: str) -> dict | None:
+    """Load a data source entry from data_sources.json."""
+    if not _DATA_SOURCES_FILE.exists():
+        return None
+    try:
+        import json
+        with open(_DATA_SOURCES_FILE) as f:
+            cfg = json.load(f)
+        return cfg.get("sources", {}).get(key)
+    except Exception:
+        return None
+
+
+def _get_routes_url() -> str:
+    cfg = _load_source_config("openflights_routes")
+    return cfg["url"] if cfg else _ROUTES_URL
+
+
+def _get_airlines_url() -> str:
+    cfg = _load_source_config("openflights_airlines")
+    return cfg["url"] if cfg else _AIRLINES_URL
+
+
+def _check_staleness(local_path: Path, max_days: int = 90) -> bool:
+    """Return True if the file is older than max_days and should be refreshed."""
+    if not local_path.exists():
+        return True
+    import time
+    age_days = (time.time() - local_path.stat().st_mtime) / 86400
+    if age_days > max_days:
+        logger.info(
+            "Data file %s is %.0f days old (threshold: %d). Consider re-downloading.",
+            local_path.name, age_days, max_days,
+        )
+        return True
+    return False
 
 # Map common IATA equipment codes to ICAO type designators
 _EQUIPMENT_MAP: dict[str, str] = {
@@ -55,35 +96,57 @@ _EQUIPMENT_MAP: dict[str, str] = {
 
 
 def _download_file(url: str, dest: Path) -> Path:
-    """Download a file if it doesn't already exist locally."""
-    if dest.exists():
-        logger.debug("Using cached %s", dest)
-        return dest
+    """Download a file, overwriting if it already exists."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Downloading %s → %s", url, dest)
     urllib.request.urlretrieve(url, dest)
+    _update_last_downloaded(dest.name)
     return dest
 
 
+def _update_last_downloaded(local_filename: str) -> None:
+    """Stamp last_downloaded in data_sources.json for the matching source."""
+    if not _DATA_SOURCES_FILE.exists():
+        return
+    try:
+        import json
+        from datetime import date
+        with open(_DATA_SOURCES_FILE) as f:
+            cfg = json.load(f)
+        for entry in cfg.get("sources", {}).values():
+            if entry.get("local_file") == local_filename:
+                entry["last_downloaded"] = date.today().isoformat()
+        with open(_DATA_SOURCES_FILE, "w") as f:
+            json.dump(cfg, f, indent=2)
+            f.write("\n")
+    except Exception as e:
+        logger.debug("Could not update last_downloaded in data_sources.json: %s", e)
+
+
 def _ensure_routes_file(raw_dir: Path | None = None, download: bool = True) -> Path | None:
-    """Ensure routes.dat exists locally, downloading if needed."""
+    """Ensure routes.dat exists locally, downloading if needed or stale."""
     d = raw_dir or _RAW_DIR
     path = d / _ROUTES_FILENAME
+    if path.exists() and not _check_staleness(path):
+        return path
     if path.exists():
+        # File exists but is stale — still usable, just log a warning
         return path
     if download:
-        return _download_file(_ROUTES_URL, path)
+        return _download_file(_get_routes_url(), path)
     return None
 
 
 def _ensure_airlines_file(raw_dir: Path | None = None, download: bool = True) -> Path | None:
-    """Ensure airlines.dat exists locally, downloading if needed."""
+    """Ensure airlines.dat exists locally, downloading if needed or stale."""
     d = raw_dir or _RAW_DIR
     path = d / _AIRLINES_FILENAME
+    if path.exists() and not _check_staleness(path):
+        return path
     if path.exists():
         return path
     if download:
-        return _download_file(_AIRLINES_URL, path)
+        return _download_file(_get_airlines_url(), path)
     return None
 
 
