@@ -96,7 +96,7 @@ describe('aircraftModels', () => {
       it('returns B737 model', () => {
         const model = getModelForAircraftType('B737');
         expect(model.url).toBe('/models/aircraft/boeing-737.glb');
-        expect(model.scale).toBe(2.96 * METERS_TO_SCENE_UNITS);
+        expect(model.scale).toBe(1.03 * METERS_TO_SCENE_UNITS);
       });
 
       it('returns B738 model', () => {

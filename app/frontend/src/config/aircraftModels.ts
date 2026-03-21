@@ -37,18 +37,22 @@ export interface AirlineConfig {
  * (sized in real meters) match the latLonTo3D landscape coordinate system
  * where 1 scene unit ≈ 11.13 meters.
  *
- * Native model sizes (measured from GLB accessor bounds):
- * - generic-jet.glb: 2.0 units → base scale 17.5 × 0.0898 = 1.572
- * - boeing-737.glb: 12.1 units (X) → base scale 2.96 × 0.0898 = 0.266
- * - airbus-a320.glb: 28.0 units (X) → base scale 1.28 × 0.0898 = 0.115
- * - air_france_airbus_a318-100.glb: 34.0 units → base scale 1.0 × 0.0898
- * - airbus_a380.glb: 79.7 units → base scale 1.0 × 0.0898
+ * Effective model sizes (bounding box after internal node transforms):
+ * - generic-jet.glb: 2.0m → base scale 17.5 × 0.0898 = 1.572
+ * - boeing-737.glb: 34.9m (Z, length) — node scales [1,17,1.91] inflate raw 12.1→34.9
+ *   base scale 1.03 × 0.0898 = 0.0925 (targets 35.8m wingspan)
+ * - airbus_a320.glb: 37.7m (Z, length) → base scale 1.05 × 0.0898 = 0.0943
+ * - air_france_airbus_a318-100.glb: 34.0m → base scale 1.0 × 0.0898
+ * - cathay_pacific_airbus_a330-300.glb: 64.2m (Z) → base scale 1.0 × 0.0898
+ * - airbus_a345.glb: 67.9m (Y, length) → base scale 1.0 × 0.0898
+ * - airbus_a380.glb: 79.7m → base scale 1.0 × 0.0898
  */
 export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   // Boeing narrow body (wingspan ~35.8m)
-  'B737': { url: '/models/aircraft/boeing-737.glb', scale: 2.96 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'B738': { url: '/models/aircraft/boeing-737.glb', scale: 2.96 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'B739': { url: '/models/aircraft/boeing-737.glb', scale: 3.1 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  // boeing-737.glb has internal node scales [1,17,1.91] — effective size ~34.9m, not raw 12.1m
+  'B737': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'B738': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'B739': { url: '/models/aircraft/boeing-737.glb', scale: 1.08 * METERS_TO_SCENE_UNITS, rotationOffset: { x: 0, y: 0, z: 0 } },
 
   // Airbus narrow body (wingspan ~34-36m)
   // airbus_a320.glb native wingspan 34.2 units (1:1 meters)
