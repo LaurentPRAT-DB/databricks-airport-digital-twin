@@ -47,6 +47,7 @@ _ring_handler.setLevel(logging.DEBUG)
 for _logger_name in (
     None,  # root
     "app.backend.services.airport_config_service",
+    "app.backend.services.data_generator_service",
     "app.backend.api.routes",
     "src.persistence.airport_repository",
     "app.backend.services.lakebase_service",
@@ -1077,9 +1078,9 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
             set_airport_center(lat, lon, iata_code)
             logger.info(f"[DIAG] Step 2 (set center) done in {_time.monotonic() - _t_step:.3f}s")
 
-            # Step 3: Reload gates, swap ML models, and reset state
+            # Step 3: Reload gates and reset state (ML retrain deferred to background)
             _t_step = _time.monotonic()
-            await broadcaster.broadcast_progress(3, total_steps, "Reloading gate positions and ML models...", icao_code)
+            await broadcaster.broadcast_progress(3, total_steps, "Reloading gate positions...", icao_code)
 
             _t_sub = _time.monotonic()
             gates = reload_gates()
@@ -1089,24 +1090,13 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
             gate_recommender_count = reload_gate_recommender()
             logger.info(f"[DIAG]   reload_gate_recommender: {_time.monotonic() - _t_sub:.3f}s ({gate_recommender_count} entries)")
 
-            # Swap ML models to airport-specific instances
-            _t_sub = _time.monotonic()
-            registry = get_model_registry()
-            registry.retrain(icao_code)
-            logger.info(f"[DIAG]   ML retrain: {_time.monotonic() - _t_sub:.3f}s")
-
-            _t_sub = _time.monotonic()
-            prediction_service = get_prediction_service()
-            prediction_service.set_airport(icao_code)
-            logger.info(f"[DIAG]   prediction_service.set_airport: {_time.monotonic() - _t_sub:.3f}s")
-
             _t_sub = _time.monotonic()
             reset_result = reset_synthetic_state()
             logger.info(f"[DIAG]   reset_synthetic_state: {_time.monotonic() - _t_sub:.3f}s")
 
             # Force full WS update (clear delta cache so clients get a full refresh)
             broadcaster._prev_flights.clear()
-            logger.info(f"[DIAG] Step 3 (gates+ML+reset) done in {_time.monotonic() - _t_step:.3f}s")
+            logger.info(f"[DIAG] Step 3 (gates+reset) done in {_time.monotonic() - _t_step:.3f}s")
 
         except Exception as e:
             logger.error(
@@ -1165,6 +1155,21 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
             "type": "airport_switch_complete",
             "data": config_payload,
         })
+
+        # Retrain ML models in background — not needed until a prediction is
+        # requested, so this avoids blocking the airport switch UI (saves ~2-7s).
+        async def _retrain_ml_background():
+            try:
+                _t0 = _time.monotonic()
+                registry = get_model_registry()
+                await asyncio.to_thread(registry.retrain, icao_code)
+                prediction_service = get_prediction_service()
+                prediction_service.set_airport(icao_code)
+                logger.info(f"[DIAG] Background ML retrain for {icao_code}: {_time.monotonic() - _t0:.3f}s")
+            except Exception:
+                logger.error(f"Background ML retrain failed for {icao_code}:\n{traceback.format_exc()}")
+
+        asyncio.create_task(_retrain_ml_background())
 
         if already_initialized:
             await broadcaster.broadcast_progress(total_steps, total_steps, "Airport ready", icao_code, done=True)
