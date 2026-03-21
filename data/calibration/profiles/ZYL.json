@@ -1,0 +1,32 @@
+{
+  "icao_code": "ZYL",
+  "iata_code": "ZYL",
+  "airline_shares": {
+    "BBC": 0.4,
+    "UBD": 0.2,
+    "RPO": 0.2,
+    "VKH": 0.2
+  },
+  "domestic_route_shares": {
+    "DAC": 1.0
+  },
+  "international_route_shares": {
+    "AUH": 0.3333333333333333,
+    "DXB": 0.3333333333333333,
+    "LHR": 0.3333333333333333
+  },
+  "domestic_ratio": 0.7,
+  "fleet_mix": {
+    "BBC": {
+      "B777": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

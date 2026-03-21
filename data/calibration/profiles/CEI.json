@@ -1,0 +1,41 @@
+{
+  "icao_code": "CEI",
+  "iata_code": "CEI",
+  "airline_shares": {
+    "NOK": 0.2,
+    "AIQ": 0.2,
+    "CES": 0.2,
+    "BKP": 0.2,
+    "THA": 0.2
+  },
+  "domestic_route_shares": {
+    "DMK": 0.5,
+    "BKK": 0.5
+  },
+  "international_route_shares": {
+    "KMG": 1.0
+  },
+  "domestic_ratio": 0.8,
+  "fleet_mix": {
+    "NOK": {
+      "B738": 1.0
+    },
+    "AIQ": {
+      "A320": 1.0
+    },
+    "CES": {
+      "B737": 1.0
+    },
+    "BKP": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

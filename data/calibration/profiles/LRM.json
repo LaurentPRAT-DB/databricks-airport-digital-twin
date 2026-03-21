@@ -1,0 +1,49 @@
+{
+  "icao_code": "LRM",
+  "iata_code": "LRM",
+  "airline_shares": {
+    "BPA": 0.2222222222222222,
+    "7I": 0.1111111111111111,
+    "JBU": 0.1111111111111111,
+    "SBS": 0.1111111111111111,
+    "ISS": 0.1111111111111111,
+    "TSC": 0.1111111111111111,
+    "USA": 0.1111111111111111,
+    "AEA": 0.1111111111111111
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "FCO": 0.2222222222222222,
+    "AUA": 0.1111111111111111,
+    "JFK": 0.1111111111111111,
+    "SJU": 0.1111111111111111,
+    "MXP": 0.1111111111111111,
+    "MIA": 0.1111111111111111,
+    "MAD": 0.1111111111111111,
+    "YHZ": 0.05555555555555555,
+    "POP": 0.05555555555555555
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "JBU": {
+      "A320": 1.0
+    },
+    "BPA": {
+      "B767": 1.0
+    },
+    "ISS": {
+      "B767": 1.0
+    },
+    "AEA": {
+      "A330": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

@@ -1,0 +1,56 @@
+{
+  "icao_code": "VAR",
+  "iata_code": "VAR",
+  "airline_shares": {
+    "LZB": 0.375,
+    "HMY": 0.125,
+    "ASL": 0.125,
+    "LGL": 0.125,
+    "SBI": 0.125,
+    "WZZ": 0.125
+  },
+  "domestic_route_shares": {
+    "BOJ": 0.5,
+    "SOF": 0.5
+  },
+  "international_route_shares": {
+    "SVO": 0.16666666666666666,
+    "BRU": 0.16666666666666666,
+    "BEG": 0.16666666666666666,
+    "LUX": 0.16666666666666666,
+    "DME": 0.16666666666666666,
+    "LTN": 0.16666666666666666
+  },
+  "domestic_ratio": 0.25,
+  "fleet_mix": {
+    "LZB": {
+      "E190": 0.4,
+      "A320": 0.4,
+      "A319": 0.2
+    },
+    "HMY": {
+      "A320": 1.0
+    },
+    "ASL": {
+      "AT76": 1.0
+    },
+    "LGL": {
+      "B738": 1.0
+    },
+    "SBI": {
+      "A320": 0.5,
+      "B767": 0.5
+    },
+    "WZZ": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

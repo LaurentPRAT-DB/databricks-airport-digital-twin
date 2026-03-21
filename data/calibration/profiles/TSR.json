@@ -1,0 +1,41 @@
+{
+  "icao_code": "TSR",
+  "iata_code": "TSR",
+  "airline_shares": {
+    "WZZ": 0.9090909090909091,
+    "ROT": 0.09090909090909091
+  },
+  "domestic_route_shares": {
+    "OTP": 1.0
+  },
+  "international_route_shares": {
+    "BCN": 0.1,
+    "BGY": 0.1,
+    "BLQ": 0.1,
+    "BVA": 0.1,
+    "CIA": 0.1,
+    "DTM": 0.1,
+    "LTN": 0.1,
+    "MAD": 0.1,
+    "TSF": 0.1,
+    "VLC": 0.1
+  },
+  "domestic_ratio": 0.091,
+  "fleet_mix": {
+    "ROT": {
+      "AT76": 0.6666666666666666,
+      "A318": 0.3333333333333333
+    },
+    "WZZ": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

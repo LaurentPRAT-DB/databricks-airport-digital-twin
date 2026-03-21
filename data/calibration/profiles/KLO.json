@@ -1,0 +1,63 @@
+{
+  "icao_code": "KLO",
+  "iata_code": "KLO",
+  "airline_shares": {
+    "PAL": 0.2222222222222222,
+    "Z2": 0.2222222222222222,
+    "CEB": 0.16666666666666666,
+    "SRQ": 0.16666666666666666,
+    "GAP": 0.05555555555555555,
+    "AXM": 0.05555555555555555,
+    "LOO": 0.05555555555555555,
+    "TGW": 0.05555555555555555
+  },
+  "domestic_route_shares": {
+    "MNL": 0.75,
+    "CEB": 0.125,
+    "CRK": 0.125
+  },
+  "international_route_shares": {
+    "ICN": 0.3,
+    "SIN": 0.2,
+    "PUS": 0.2,
+    "TPE": 0.2,
+    "KUL": 0.1
+  },
+  "domestic_ratio": 0.444,
+  "fleet_mix": {
+    "GAP": {
+      "A320": 1.0
+    },
+    "CEB": {
+      "A320": 0.75,
+      "A319": 0.25
+    },
+    "AXM": {
+      "A320": 1.0
+    },
+    "SRQ": {
+      "A320": 1.0
+    },
+    "LOO": {
+      "A320": 1.0
+    },
+    "PAL": {
+      "A320": 1.0
+    },
+    "TGW": {
+      "A320": 1.0
+    },
+    "Z2": {
+      "A320": 0.8,
+      "A319": 0.2
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 36
+}

@@ -1,0 +1,37 @@
+{
+  "icao_code": "APL",
+  "iata_code": "APL",
+  "airline_shares": {
+    "TM": 0.75,
+    "KQA": 0.25
+  },
+  "domestic_route_shares": {
+    "BEW": 0.3333333333333333,
+    "MPM": 0.3333333333333333,
+    "TET": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "POL": 0.4,
+    "NBO": 0.2,
+    "JNB": 0.2,
+    "VXC": 0.2
+  },
+  "domestic_ratio": 0.375,
+  "fleet_mix": {
+    "KQA": {
+      "E190": 0.5,
+      "E175": 0.5
+    },
+    "TM": {
+      "E190": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

@@ -1,0 +1,35 @@
+{
+  "icao_code": "ROS",
+  "iata_code": "ROS",
+  "airline_shares": {
+    "TIB": 0.6,
+    "SEH": 0.2,
+    "TAM": 0.2
+  },
+  "domestic_route_shares": {
+    "AEP": 0.5,
+    "COR": 0.5
+  },
+  "international_route_shares": {
+    "GRU": 0.6666666666666666,
+    "PDP": 0.3333333333333333
+  },
+  "domestic_ratio": 0.4,
+  "fleet_mix": {
+    "SEH": {
+      "B738": 0.5,
+      "B737": 0.5
+    },
+    "TAM": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

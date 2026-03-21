@@ -1,0 +1,39 @@
+{
+  "icao_code": "AWZ",
+  "iata_code": "AWZ",
+  "airline_shares": {
+    "IRA": 0.4583333333333333,
+    "BGD": 0.25,
+    "IRC": 0.20833333333333334,
+    "SVA": 0.041666666666666664,
+    "IRK": 0.041666666666666664
+  },
+  "domestic_route_shares": {
+    "THR": 0.26666666666666666,
+    "MHD": 0.2,
+    "SYZ": 0.2,
+    "IFN": 0.13333333333333333,
+    "KIH": 0.13333333333333333,
+    "BND": 0.06666666666666667
+  },
+  "international_route_shares": {
+    "SRY": 0.2222222222222222,
+    "KWI": 0.2222222222222222,
+    "PGU": 0.1111111111111111,
+    "DXB": 0.1111111111111111,
+    "RAS": 0.1111111111111111,
+    "TBZ": 0.1111111111111111,
+    "MED": 0.05555555555555555,
+    "JED": 0.05555555555555555
+  },
+  "domestic_ratio": 0.625,
+  "fleet_mix": {},
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 48
+}

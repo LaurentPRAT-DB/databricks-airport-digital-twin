@@ -1,0 +1,34 @@
+{
+  "icao_code": "PUQ",
+  "iata_code": "PUQ",
+  "airline_shares": {
+    "LAN": 0.6,
+    "SKU": 0.4
+  },
+  "domestic_route_shares": {
+    "PMC": 0.6666666666666666,
+    "SCL": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "BBA": 0.5,
+    "MPN": 0.25,
+    "RGL": 0.25
+  },
+  "domestic_ratio": 0.6,
+  "fleet_mix": {
+    "SKU": {
+      "A319": 1.0
+    },
+    "LAN": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

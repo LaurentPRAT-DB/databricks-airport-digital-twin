@@ -1,0 +1,67 @@
+{
+  "icao_code": "GOI",
+  "iata_code": "GOI",
+  "airline_shares": {
+    "AIC": 0.24,
+    "SEJ": 0.24,
+    "IGO": 0.2,
+    "GUJ": 0.12,
+    "JAI": 0.08,
+    "ABY": 0.04,
+    "QTR": 0.04,
+    "TSO": 0.04
+  },
+  "domestic_route_shares": {
+    "BOM": 0.25,
+    "BLR": 0.2,
+    "DEL": 0.15,
+    "MAA": 0.15,
+    "HYD": 0.1,
+    "PNQ": 0.1,
+    "AMD": 0.05
+  },
+  "international_route_shares": {
+    "DXB": 0.2,
+    "KWI": 0.2,
+    "SHJ": 0.2,
+    "DOH": 0.2,
+    "DME": 0.2
+  },
+  "domestic_ratio": 0.8,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "JAI": {
+      "B738": 1.0
+    },
+    "AIC": {
+      "A319": 0.5,
+      "A320": 0.3333333333333333,
+      "A321": 0.16666666666666666
+    },
+    "GUJ": {
+      "A320": 1.0
+    },
+    "ABY": {
+      "A320": 1.0
+    },
+    "QTR": {
+      "A321": 1.0
+    },
+    "SEJ": {
+      "B737": 1.0
+    },
+    "TSO": {
+      "B777": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 50
+}

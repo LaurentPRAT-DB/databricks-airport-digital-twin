@@ -1,0 +1,43 @@
+{
+  "icao_code": "SPN",
+  "iata_code": "SPN",
+  "airline_shares": {
+    "OZR": 0.4,
+    "CSC": 0.26666666666666666,
+    "DAL": 0.2,
+    "CES": 0.13333333333333333
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "CAN": 0.13333333333333333,
+    "PVG": 0.13333333333333333,
+    "NRT": 0.13333333333333333,
+    "PEK": 0.13333333333333333,
+    "ICN": 0.13333333333333333,
+    "KIX": 0.13333333333333333,
+    "PUS": 0.13333333333333333,
+    "NGO": 0.06666666666666667
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "DAL": {
+      "B752": 1.0
+    },
+    "CES": {
+      "A330": 1.0
+    },
+    "OZR": {
+      "B767": 0.5,
+      "A330": 0.25,
+      "A320": 0.25
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 15
+}

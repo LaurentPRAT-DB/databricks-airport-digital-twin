@@ -1,0 +1,36 @@
+{
+  "icao_code": "INN",
+  "iata_code": "INN",
+  "airline_shares": {
+    "TRA": 0.5,
+    "NLY": 0.25,
+    "EZY": 0.25
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "PMI": 0.25,
+    "AMS": 0.25,
+    "EIN": 0.25,
+    "LGW": 0.25
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "NLY": {
+      "A320": 1.0
+    },
+    "TRA": {
+      "B738": 1.0
+    },
+    "EZY": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

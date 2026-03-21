@@ -1,0 +1,37 @@
+{
+  "icao_code": "RAR",
+  "iata_code": "RAR",
+  "airline_shares": {
+    "RAR": 0.5555555555555556,
+    "ANZ": 0.3333333333333333,
+    "VTA": 0.1111111111111111
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "AIT": 0.1111111111111111,
+    "AIU": 0.1111111111111111,
+    "MGS": 0.1111111111111111,
+    "MOI": 0.1111111111111111,
+    "MUK": 0.1111111111111111,
+    "AKL": 0.1111111111111111,
+    "LAX": 0.1111111111111111,
+    "SYD": 0.1111111111111111,
+    "PPT": 0.1111111111111111
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "ANZ": {
+      "B767": 0.6,
+      "A320": 0.2,
+      "B777": 0.2
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

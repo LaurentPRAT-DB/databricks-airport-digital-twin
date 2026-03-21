@@ -1,0 +1,62 @@
+{
+  "icao_code": "CZM",
+  "iata_code": "CZM",
+  "airline_shares": {
+    "AAL": 0.25,
+    "USA": 0.25,
+    "4O": 0.08333333333333333,
+    "ZTF": 0.08333333333333333,
+    "ACA": 0.08333333333333333,
+    "DAL": 0.08333333333333333,
+    "FFT": 0.08333333333333333,
+    "UAL": 0.08333333333333333
+  },
+  "domestic_route_shares": {
+    "MEX": 0.5,
+    "CUN": 0.5
+  },
+  "international_route_shares": {
+    "CLT": 0.2,
+    "DFW": 0.2,
+    "MIA": 0.2,
+    "YUL": 0.1,
+    "ATL": 0.1,
+    "DEN": 0.1,
+    "IAH": 0.1
+  },
+  "domestic_ratio": 0.167,
+  "fleet_mix": {
+    "4O": {
+      "A320": 1.0
+    },
+    "AAL": {
+      "B738": 0.6666666666666666,
+      "A319": 0.3333333333333333
+    },
+    "ACA": {
+      "A319": 1.0
+    },
+    "DAL": {
+      "A319": 1.0
+    },
+    "FFT": {
+      "A319": 1.0
+    },
+    "UAL": {
+      "B738": 0.5,
+      "B739": 0.5
+    },
+    "USA": {
+      "B738": 0.6666666666666666,
+      "A319": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 24
+}

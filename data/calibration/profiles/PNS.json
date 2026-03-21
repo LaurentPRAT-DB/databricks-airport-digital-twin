@@ -1,0 +1,40 @@
+{
+  "icao_code": "PNS",
+  "iata_code": "PNS",
+  "airline_shares": {
+    "USA": 0.3157894736842105,
+    "3M": 0.21052631578947367,
+    "SWA": 0.21052631578947367,
+    "AAL": 0.15789473684210525,
+    "DAL": 0.10526315789473684
+  },
+  "domestic_route_shares": {
+    "DFW": 0.21052631578947367,
+    "MCO": 0.10526315789473684,
+    "TPA": 0.10526315789473684,
+    "ATL": 0.10526315789473684,
+    "DCA": 0.10526315789473684,
+    "MIA": 0.10526315789473684,
+    "BNA": 0.10526315789473684,
+    "HOU": 0.10526315789473684,
+    "CLT": 0.05263157894736842
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AAL": {
+      "CRJ9": 1.0
+    },
+    "USA": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 19
+}

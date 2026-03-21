@@ -1,0 +1,46 @@
+{
+  "icao_code": "VIX",
+  "iata_code": "VIX",
+  "airline_shares": {
+    "SEH": 0.375,
+    "TAM": 0.3125,
+    "AZU": 0.25,
+    "LIL": 0.0625
+  },
+  "domestic_route_shares": {
+    "SDU": 0.2,
+    "CNF": 0.13333333333333333,
+    "SSA": 0.13333333333333333,
+    "CGH": 0.13333333333333333,
+    "GIG": 0.13333333333333333,
+    "GRU": 0.13333333333333333,
+    "VCP": 0.06666666666666667,
+    "BSB": 0.06666666666666667
+  },
+  "international_route_shares": {
+    "CAW": 1.0
+  },
+  "domestic_ratio": 0.938,
+  "fleet_mix": {
+    "AZU": {
+      "E190": 0.8888888888888888,
+      "AT76": 0.1111111111111111
+    },
+    "SEH": {
+      "B737": 0.5,
+      "B738": 0.5
+    },
+    "TAM": {
+      "A320": 0.6666666666666666,
+      "A319": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 32
+}

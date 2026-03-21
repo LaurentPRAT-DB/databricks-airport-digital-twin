@@ -1,0 +1,44 @@
+{
+  "icao_code": "BUR",
+  "iata_code": "BUR",
+  "airline_shares": {
+    "SWA": 0.6666666666666666,
+    "ASA": 0.1111111111111111,
+    "JBU": 0.1111111111111111,
+    "SQH": 0.1111111111111111
+  },
+  "domestic_route_shares": {
+    "SEA": 0.125,
+    "JFK": 0.125,
+    "DEN": 0.125,
+    "LAS": 0.125,
+    "OAK": 0.125,
+    "PHX": 0.125,
+    "SJC": 0.125,
+    "SMF": 0.125
+  },
+  "international_route_shares": {
+    "IPL": 1.0
+  },
+  "domestic_ratio": 0.889,
+  "fleet_mix": {
+    "ASA": {
+      "B738": 0.5,
+      "B737": 0.5
+    },
+    "JBU": {
+      "A320": 1.0
+    },
+    "SWA": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

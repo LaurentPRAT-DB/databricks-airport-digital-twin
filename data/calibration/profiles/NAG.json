@@ -1,0 +1,45 @@
+{
+  "icao_code": "NAG",
+  "iata_code": "NAG",
+  "airline_shares": {
+    "IGO": 0.46153846153846156,
+    "GUJ": 0.3076923076923077,
+    "AIC": 0.15384615384615385,
+    "ABY": 0.07692307692307693
+  },
+  "domestic_route_shares": {
+    "BOM": 0.2608695652173913,
+    "DEL": 0.21739130434782608,
+    "CCU": 0.17391304347826086,
+    "PNQ": 0.17391304347826086,
+    "BLR": 0.08695652173913043,
+    "IDR": 0.08695652173913043
+  },
+  "international_route_shares": {
+    "SHJ": 0.6666666666666666,
+    "RPR": 0.3333333333333333
+  },
+  "domestic_ratio": 0.885,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "AIC": {
+      "A319": 1.0
+    },
+    "GUJ": {
+      "A320": 1.0
+    },
+    "ABY": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 26
+}

@@ -1,0 +1,44 @@
+{
+  "icao_code": "JPA",
+  "iata_code": "JPA",
+  "airline_shares": {
+    "AZU": 0.2727272727272727,
+    "SEH": 0.2727272727272727,
+    "TAM": 0.2727272727272727,
+    "ONE": 0.18181818181818182
+  },
+  "domestic_route_shares": {
+    "BSB": 0.2727272727272727,
+    "GIG": 0.2727272727272727,
+    "GRU": 0.18181818181818182,
+    "FOR": 0.09090909090909091,
+    "SSA": 0.09090909090909091,
+    "VCP": 0.09090909090909091
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AZU": {
+      "AT76": 0.6666666666666666,
+      "E190": 0.3333333333333333
+    },
+    "SEH": {
+      "B738": 1.0
+    },
+    "TAM": {
+      "A320": 1.0
+    },
+    "ONE": {
+      "A319": 0.5,
+      "A318": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

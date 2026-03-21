@@ -1,0 +1,47 @@
+{
+  "icao_code": "PWM",
+  "iata_code": "PWM",
+  "airline_shares": {
+    "AAL": 0.2,
+    "JBU": 0.2,
+    "DAL": 0.2,
+    "USA": 0.2,
+    "UAL": 0.1,
+    "SWA": 0.1
+  },
+  "domestic_route_shares": {
+    "CLT": 0.2,
+    "PHL": 0.2,
+    "JFK": 0.2,
+    "ATL": 0.1,
+    "LGA": 0.1,
+    "EWR": 0.1,
+    "BWI": 0.1
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AAL": {
+      "A319": 0.5,
+      "E190": 0.5
+    },
+    "JBU": {
+      "E190": 1.0
+    },
+    "UAL": {
+      "DH8D": 1.0
+    },
+    "USA": {
+      "A319": 0.5,
+      "E190": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

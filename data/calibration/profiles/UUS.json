@@ -1,0 +1,55 @@
+{
+  "icao_code": "UUS",
+  "iata_code": "UUS",
+  "airline_shares": {
+    "SOZ": 0.45454545454545453,
+    "AFL": 0.30303030303030304,
+    "SBI": 0.12121212121212122,
+    "OZR": 0.06060606060606061,
+    "TSO": 0.06060606060606061
+  },
+  "domestic_route_shares": {
+    "VVO": 0.5,
+    "SVO": 0.25,
+    "DME": 0.25
+  },
+  "international_route_shares": {
+    "ICN": 0.2,
+    "KHV": 0.2,
+    "HRB": 0.12,
+    "BVV": 0.08,
+    "CTS": 0.08,
+    "DEE": 0.08,
+    "EKS": 0.08,
+    "NRT": 0.08,
+    "OHH": 0.08
+  },
+  "domestic_ratio": 0.242,
+  "fleet_mix": {
+    "SOZ": {
+      "B737": 1.0
+    },
+    "OZR": {
+      "A321": 1.0
+    },
+    "SBI": {
+      "A320": 1.0
+    },
+    "AFL": {
+      "B737": 0.5,
+      "A319": 0.25,
+      "A330": 0.25
+    },
+    "TSO": {
+      "B777": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 33
+}

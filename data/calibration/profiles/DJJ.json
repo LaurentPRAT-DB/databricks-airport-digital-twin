@@ -1,0 +1,50 @@
+{
+  "icao_code": "DJJ",
+  "iata_code": "DJJ",
+  "airline_shares": {
+    "GIA": 0.36363636363636365,
+    "SJY": 0.30303030303030304,
+    "LNI": 0.15151515151515152,
+    "ILY": 0.12121212121212122,
+    "ITK": 0.06060606060606061
+  },
+  "domestic_route_shares": {
+    "UPG": 0.5454545454545454,
+    "CGK": 0.45454545454545453
+  },
+  "international_route_shares": {
+    "MKQ": 0.2727272727272727,
+    "BIK": 0.18181818181818182,
+    "MKW": 0.18181818181818182,
+    "TIM": 0.18181818181818182,
+    "OKL": 0.09090909090909091,
+    "WMX": 0.09090909090909091
+  },
+  "domestic_ratio": 0.333,
+  "fleet_mix": {
+    "GIA": {
+      "B738": 1.0
+    },
+    "ITK": {
+      "B739": 1.0
+    },
+    "ILY": {
+      "AT76": 1.0
+    },
+    "LNI": {
+      "B738": 0.6666666666666666,
+      "B739": 0.3333333333333333
+    },
+    "SJY": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 33
+}

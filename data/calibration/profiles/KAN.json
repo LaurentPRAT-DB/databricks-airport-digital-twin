@@ -1,0 +1,49 @@
+{
+  "icao_code": "KAN",
+  "iata_code": "KAN",
+  "airline_shares": {
+    "WSS": 0.2857142857142857,
+    "MEA": 0.14285714285714285,
+    "MSR": 0.14285714285714285,
+    "SUD": 0.14285714285714285,
+    "SVA": 0.14285714285714285,
+    "THY": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "ABV": 0.5,
+    "LOS": 0.5
+  },
+  "international_route_shares": {
+    "BEY": 0.2,
+    "CAI": 0.2,
+    "NDJ": 0.2,
+    "JED": 0.2,
+    "KRT": 0.1,
+    "IST": 0.1
+  },
+  "domestic_ratio": 0.286,
+  "fleet_mix": {
+    "MEA": {
+      "A330": 1.0
+    },
+    "MSR": {
+      "A320": 1.0
+    },
+    "THY": {
+      "B738": 0.6666666666666666,
+      "B739": 0.3333333333333333
+    },
+    "WSS": {
+      "CRJ9": 0.5,
+      "DH8D": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

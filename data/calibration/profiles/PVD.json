@@ -1,0 +1,63 @@
+{
+  "icao_code": "PVD",
+  "iata_code": "PVD",
+  "airline_shares": {
+    "SWA": 0.375,
+    "AAL": 0.125,
+    "JBU": 0.125,
+    "DAL": 0.125,
+    "USA": 0.125,
+    "TRS": 0.0625,
+    "UAL": 0.0625
+  },
+  "domestic_route_shares": {
+    "MCO": 0.15625,
+    "CLT": 0.125,
+    "PHL": 0.125,
+    "FLL": 0.125,
+    "ATL": 0.0625,
+    "DTW": 0.0625,
+    "ORD": 0.0625,
+    "BWI": 0.0625,
+    "MDW": 0.0625,
+    "RSW": 0.0625,
+    "TPA": 0.0625,
+    "BNA": 0.03125
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AAL": {
+      "A321": 0.25,
+      "A320": 0.25,
+      "A319": 0.25,
+      "E190": 0.25
+    },
+    "JBU": {
+      "A320": 1.0
+    },
+    "DAL": {
+      "A319": 1.0
+    },
+    "UAL": {
+      "A320": 1.0
+    },
+    "USA": {
+      "A321": 0.25,
+      "A320": 0.25,
+      "A319": 0.25,
+      "E190": 0.25
+    },
+    "SWA": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 32
+}

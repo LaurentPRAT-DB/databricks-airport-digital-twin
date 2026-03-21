@@ -1,0 +1,36 @@
+{
+  "icao_code": "SCU",
+  "iata_code": "SCU",
+  "airline_shares": {
+    "CUB": 0.8,
+    "BPA": 0.2
+  },
+  "domestic_route_shares": {
+    "HAV": 1.0
+  },
+  "international_route_shares": {
+    "SDQ": 0.2857142857142857,
+    "FCO": 0.14285714285714285,
+    "CYO": 0.14285714285714285,
+    "MAD": 0.14285714285714285,
+    "ORY": 0.14285714285714285,
+    "YUL": 0.14285714285714285
+  },
+  "domestic_ratio": 0.3,
+  "fleet_mix": {
+    "BPA": {
+      "B767": 1.0
+    },
+    "CUB": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

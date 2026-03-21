@@ -1,0 +1,46 @@
+{
+  "icao_code": "ATZ",
+  "iata_code": "ATZ",
+  "airline_shares": {
+    "KNE": 0.3333333333333333,
+    "ABY": 0.16666666666666666,
+    "JZR": 0.16666666666666666,
+    "1QA": 0.16666666666666666,
+    "MSR": 0.16666666666666666
+  },
+  "domestic_route_shares": {
+    "CAI": 1.0
+  },
+  "international_route_shares": {
+    "SHJ": 0.25,
+    "KWI": 0.25,
+    "JED": 0.25,
+    "RUH": 0.25
+  },
+  "domestic_ratio": 0.333,
+  "fleet_mix": {
+    "ABY": {
+      "A320": 1.0
+    },
+    "JZR": {
+      "A320": 1.0
+    },
+    "1QA": {
+      "DH8D": 1.0
+    },
+    "MSR": {
+      "E175": 1.0
+    },
+    "KNE": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 12
+}

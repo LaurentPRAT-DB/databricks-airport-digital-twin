@@ -1,0 +1,44 @@
+{
+  "icao_code": "NOU",
+  "iata_code": "NOU",
+  "airline_shares": {
+    "ACI": 0.72,
+    "QFA": 0.16,
+    "AVN": 0.08,
+    "ANZ": 0.04
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "VLI": 0.16,
+    "BNE": 0.16,
+    "SYD": 0.16,
+    "AKL": 0.12,
+    "KIX": 0.08,
+    "NAN": 0.08,
+    "NRT": 0.08,
+    "PPT": 0.08,
+    "WLS": 0.08
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "ANZ": {
+      "A320": 1.0
+    },
+    "QFA": {
+      "B738": 0.6666666666666666,
+      "B767": 0.3333333333333333
+    },
+    "ACI": {
+      "A320": 0.5714285714285714,
+      "A330": 0.42857142857142855
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 25
+}

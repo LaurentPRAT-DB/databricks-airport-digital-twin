@@ -1,0 +1,54 @@
+{
+  "icao_code": "SKT",
+  "iata_code": "SKT",
+  "airline_shares": {
+    "PIA": 0.5217391304347826,
+    "SAI": 0.13043478260869565,
+    "UAE": 0.08695652173913043,
+    "FDB": 0.08695652173913043,
+    "ABY": 0.08695652173913043,
+    "GBA": 0.08695652173913043
+  },
+  "domestic_route_shares": {
+    "ISB": 1.0
+  },
+  "international_route_shares": {
+    "DXB": 0.19047619047619047,
+    "SHJ": 0.19047619047619047,
+    "MCT": 0.14285714285714285,
+    "BAH": 0.09523809523809523,
+    "DMM": 0.09523809523809523,
+    "JED": 0.09523809523809523,
+    "KWI": 0.09523809523809523,
+    "RUH": 0.09523809523809523
+  },
+  "domestic_ratio": 0.087,
+  "fleet_mix": {
+    "UAE": {
+      "A330": 1.0
+    },
+    "FDB": {
+      "B738": 1.0
+    },
+    "ABY": {
+      "A320": 1.0
+    },
+    "GBA": {
+      "A321": 1.0
+    },
+    "SAI": {
+      "A320": 1.0
+    },
+    "PIA": {
+      "B777": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 23
+}

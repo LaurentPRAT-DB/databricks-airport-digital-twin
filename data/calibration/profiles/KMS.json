@@ -1,0 +1,28 @@
+{
+  "icao_code": "KMS",
+  "iata_code": "KMS",
+  "airline_shares": {
+    "SSV": 0.25,
+    "AWM": 0.25,
+    "O4": 0.25,
+    "HSA": 0.25
+  },
+  "domestic_route_shares": {
+    "ACC": 1.0
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "SSV": {
+      "AT76": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

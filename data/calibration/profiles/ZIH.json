@@ -1,0 +1,42 @@
+{
+  "icao_code": "ZIH",
+  "iata_code": "ZIH",
+  "airline_shares": {
+    "4O": 0.3333333333333333,
+    "AAL": 0.16666666666666666,
+    "ASA": 0.16666666666666666,
+    "USA": 0.16666666666666666,
+    "TAO": 0.16666666666666666
+  },
+  "domestic_route_shares": {
+    "MEX": 0.6666666666666666,
+    "TLC": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "PHX": 0.6666666666666666,
+    "LAX": 0.3333333333333333
+  },
+  "domestic_ratio": 0.5,
+  "fleet_mix": {
+    "4O": {
+      "A320": 1.0
+    },
+    "AAL": {
+      "A320": 1.0
+    },
+    "ASA": {
+      "B739": 1.0
+    },
+    "USA": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 12
+}

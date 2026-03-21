@@ -1,0 +1,48 @@
+{
+  "icao_code": "CJB",
+  "iata_code": "CJB",
+  "airline_shares": {
+    "IGO": 0.3,
+    "SEJ": 0.3,
+    "AIC": 0.2,
+    "ABY": 0.1,
+    "SLK": 0.1
+  },
+  "domestic_route_shares": {
+    "BOM": 0.375,
+    "MAA": 0.25,
+    "DEL": 0.125,
+    "CCJ": 0.125,
+    "HYD": 0.125
+  },
+  "international_route_shares": {
+    "SHJ": 0.5,
+    "SIN": 0.5
+  },
+  "domestic_ratio": 0.8,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "AIC": {
+      "A321": 1.0
+    },
+    "ABY": {
+      "A320": 1.0
+    },
+    "SLK": {
+      "A320": 1.0
+    },
+    "SEJ": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

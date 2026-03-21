@@ -1,0 +1,36 @@
+{
+  "icao_code": "PZO",
+  "iata_code": "PZO",
+  "airline_shares": {
+    "VCV": 0.45454545454545453,
+    "OCA": 0.2727272727272727,
+    "VC9": 0.18181818181818182,
+    "VNP": 0.09090909090909091
+  },
+  "domestic_route_shares": {
+    "CCS": 0.5,
+    "BLA": 0.25,
+    "PMV": 0.25
+  },
+  "international_route_shares": {
+    "CAJ": 0.3333333333333333,
+    "GEO": 0.3333333333333333,
+    "SNV": 0.3333333333333333
+  },
+  "domestic_ratio": 0.727,
+  "fleet_mix": {
+    "VCV": {
+      "E190": 0.6,
+      "A320": 0.2,
+      "CRJ9": 0.2
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

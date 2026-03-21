@@ -7,7 +7,7 @@ import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { GeoPosition } from '../../types/airportFormats';
 
 // Zoom thresholds for gate rendering (exported for testing)
-export const GATE_LABEL_ZOOM = 16; // Show permanent text labels at this zoom and above
+export const GATE_LABEL_ZOOM = 17; // Show permanent text labels at this zoom and above (17 avoids overlap at medium zoom)
 const GATE_DOT_RADIUS_BY_ZOOM: Record<number, number> = {
   12: 2,
   13: 2,

@@ -1,0 +1,35 @@
+{
+  "icao_code": "PMC",
+  "iata_code": "PMC",
+  "airline_shares": {
+    "SKU": 0.5,
+    "LAN": 0.5
+  },
+  "domestic_route_shares": {
+    "PUQ": 0.4,
+    "SCL": 0.4,
+    "CCP": 0.2
+  },
+  "international_route_shares": {
+    "BBA": 0.6666666666666666,
+    "MHC": 0.3333333333333333
+  },
+  "domestic_ratio": 0.625,
+  "fleet_mix": {
+    "SKU": {
+      "A319": 0.5714285714285714,
+      "A320": 0.42857142857142855
+    },
+    "LAN": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

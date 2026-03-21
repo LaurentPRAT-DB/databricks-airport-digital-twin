@@ -1,0 +1,41 @@
+{
+  "icao_code": "SZZ",
+  "iata_code": "SZZ",
+  "airline_shares": {
+    "RYR": 0.42857142857142855,
+    "WZZ": 0.2857142857142857,
+    "NAX": 0.14285714285714285,
+    "LOT": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "WAW": 1.0
+  },
+  "international_route_shares": {
+    "OSL": 0.16666666666666666,
+    "DUB": 0.16666666666666666,
+    "LPL": 0.16666666666666666,
+    "STN": 0.16666666666666666,
+    "SVG": 0.16666666666666666,
+    "TRF": 0.16666666666666666
+  },
+  "domestic_ratio": 0.143,
+  "fleet_mix": {
+    "RYR": {
+      "B738": 1.0
+    },
+    "LOT": {
+      "E175": 1.0
+    },
+    "WZZ": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

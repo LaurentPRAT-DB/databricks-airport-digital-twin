@@ -1,0 +1,39 @@
+{
+  "icao_code": "UKB",
+  "iata_code": "UKB",
+  "airline_shares": {
+    "SKY": 0.7272727272727273,
+    "ANA": 0.18181818181818182,
+    "ADO": 0.09090909090909091
+  },
+  "domestic_route_shares": {
+    "CTS": 0.3333333333333333,
+    "HND": 0.2222222222222222,
+    "KOJ": 0.1111111111111111,
+    "NGS": 0.1111111111111111,
+    "OKA": 0.1111111111111111,
+    "SDJ": 0.1111111111111111
+  },
+  "international_route_shares": {
+    "IBR": 0.5,
+    "YGJ": 0.5
+  },
+  "domestic_ratio": 0.818,
+  "fleet_mix": {
+    "SKY": {
+      "B737": 1.0
+    },
+    "ANA": {
+      "B737": 0.6666666666666666,
+      "B767": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

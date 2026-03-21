@@ -1,0 +1,46 @@
+{
+  "icao_code": "GRZ",
+  "iata_code": "GRZ",
+  "airline_shares": {
+    "NLY": 0.4,
+    "BER": 0.3,
+    "ISK": 0.1,
+    "GEC": 0.1,
+    "SXS": 0.1
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "HER": 0.2,
+    "TFS": 0.2,
+    "AYT": 0.2,
+    "ZRH": 0.1,
+    "TXL": 0.1,
+    "PMI": 0.1,
+    "FRA": 0.1
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "BER": {
+      "A320": 0.6666666666666666,
+      "A319": 0.3333333333333333
+    },
+    "NLY": {
+      "A320": 0.75,
+      "A321": 0.25
+    },
+    "GEC": {
+      "E190": 1.0
+    },
+    "SXS": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

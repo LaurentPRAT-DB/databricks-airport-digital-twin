@@ -1,0 +1,33 @@
+{
+  "icao_code": "SFJ",
+  "iata_code": "SFJ",
+  "airline_shares": {
+    "BSK": 1.0
+  },
+  "domestic_route_shares": {
+    "GOH": 1.0
+  },
+  "international_route_shares": {
+    "CPH": 0.14285714285714285,
+    "JAV": 0.14285714285714285,
+    "JEG": 0.14285714285714285,
+    "JHS": 0.14285714285714285,
+    "JSU": 0.14285714285714285,
+    "KUS": 0.14285714285714285,
+    "UAK": 0.14285714285714285
+  },
+  "domestic_ratio": 0.125,
+  "fleet_mix": {
+    "BSK": {
+      "A330": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

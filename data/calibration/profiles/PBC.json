@@ -1,0 +1,31 @@
+{
+  "icao_code": "PBC",
+  "iata_code": "PBC",
+  "airline_shares": {
+    "VOI": 0.75,
+    "USA": 0.25
+  },
+  "domestic_route_shares": {
+    "CUN": 0.3333333333333333,
+    "GDL": 0.3333333333333333,
+    "TIJ": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "DFW": 1.0
+  },
+  "domestic_ratio": 0.75,
+  "fleet_mix": {
+    "VOI": {
+      "A320": 0.6666666666666666,
+      "A319": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

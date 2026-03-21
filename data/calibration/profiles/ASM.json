@@ -1,0 +1,38 @@
+{
+  "icao_code": "ASM",
+  "iata_code": "ASM",
+  "airline_shares": {
+    "TEP": 0.7333333333333333,
+    "IYE": 0.13333333333333333,
+    "MSR": 0.13333333333333333
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "SAH": 0.13333333333333333,
+    "CAI": 0.13333333333333333,
+    "ADE": 0.13333333333333333,
+    "JED": 0.13333333333333333,
+    "KRT": 0.13333333333333333,
+    "NBO": 0.13333333333333333,
+    "JUB": 0.06666666666666667,
+    "EBB": 0.06666666666666667,
+    "MSW": 0.06666666666666667
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "MSR": {
+      "A320": 1.0
+    },
+    "TEP": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 15
+}

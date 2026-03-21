@@ -1,0 +1,37 @@
+{
+  "icao_code": "HUN",
+  "iata_code": "HUN",
+  "airline_shares": {
+    "TNA": 0.5,
+    "MDA": 0.25,
+    "CDG": 0.25
+  },
+  "domestic_route_shares": {
+    "KHH": 0.3333333333333333,
+    "RMQ": 0.3333333333333333,
+    "TSA": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "TNA": 1.0
+  },
+  "domestic_ratio": 0.75,
+  "fleet_mix": {
+    "MDA": {
+      "E190": 1.0
+    },
+    "TNA": {
+      "AT76": 1.0
+    },
+    "CDG": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

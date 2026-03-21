@@ -1,0 +1,56 @@
+{
+  "icao_code": "DAT",
+  "iata_code": "DAT",
+  "airline_shares": {
+    "GUN": 0.25,
+    "CSC": 0.125,
+    "CCA": 0.125,
+    "CSN": 0.125,
+    "KN": 0.125,
+    "CXA": 0.125,
+    "CES": 0.125
+  },
+  "domestic_route_shares": {
+    "TYN": 0.3333333333333333,
+    "PEK": 0.16666666666666666,
+    "SHE": 0.16666666666666666,
+    "XIY": 0.16666666666666666,
+    "PVG": 0.16666666666666666
+  },
+  "international_route_shares": {
+    "CIH": 0.5,
+    "NAY": 0.5
+  },
+  "domestic_ratio": 0.75,
+  "fleet_mix": {
+    "CSC": {
+      "A319": 1.0
+    },
+    "CCA": {
+      "B738": 1.0
+    },
+    "CSN": {
+      "A320": 1.0
+    },
+    "GUN": {
+      "E190": 1.0
+    },
+    "KN": {
+      "B737": 1.0
+    },
+    "CXA": {
+      "B737": 1.0
+    },
+    "CES": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

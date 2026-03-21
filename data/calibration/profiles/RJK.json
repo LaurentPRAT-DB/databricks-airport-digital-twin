@@ -1,0 +1,41 @@
+{
+  "icao_code": "RJK",
+  "iata_code": "RJK",
+  "airline_shares": {
+    "GWI": 0.42857142857142855,
+    "CTN": 0.42857142857142855,
+    "RYR": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "ZAG": 0.5,
+    "DBV": 0.25,
+    "SPU": 0.25
+  },
+  "international_route_shares": {
+    "CGN": 0.2,
+    "HAM": 0.2,
+    "STR": 0.2,
+    "NYO": 0.2,
+    "LHR": 0.2
+  },
+  "domestic_ratio": 0.286,
+  "fleet_mix": {
+    "GWI": {
+      "A319": 1.0
+    },
+    "RYR": {
+      "B738": 1.0
+    },
+    "CTN": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

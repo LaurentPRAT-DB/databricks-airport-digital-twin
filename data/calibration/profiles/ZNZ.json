@@ -1,0 +1,54 @@
+{
+  "icao_code": "ZNZ",
+  "iata_code": "ZNZ",
+  "airline_shares": {
+    "PRF": 0.3333333333333333,
+    "ETH": 0.2222222222222222,
+    "FFV": 0.1111111111111111,
+    "CFG": 0.1111111111111111,
+    "MNO": 0.1111111111111111,
+    "OMA": 0.1111111111111111
+  },
+  "domestic_route_shares": {
+    "DAR": 0.5714285714285714,
+    "JRO": 0.42857142857142855
+  },
+  "international_route_shares": {
+    "MBA": 0.2727272727272727,
+    "JNB": 0.18181818181818182,
+    "NBO": 0.18181818181818182,
+    "FRA": 0.09090909090909091,
+    "ADD": 0.09090909090909091,
+    "ARK": 0.09090909090909091,
+    "MCT": 0.09090909090909091
+  },
+  "domestic_ratio": 0.389,
+  "fleet_mix": {
+    "FFV": {
+      "CRJ9": 1.0
+    },
+    "CFG": {
+      "B767": 1.0
+    },
+    "ETH": {
+      "B767": 1.0
+    },
+    "MNO": {
+      "B738": 1.0
+    },
+    "PRF": {
+      "AT76": 1.0
+    },
+    "OMA": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

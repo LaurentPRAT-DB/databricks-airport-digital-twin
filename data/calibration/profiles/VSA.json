@@ -1,0 +1,42 @@
+{
+  "icao_code": "VSA",
+  "iata_code": "VSA",
+  "airline_shares": {
+    "AMX": 0.34782608695652173,
+    "VB": 0.2608695652173913,
+    "ZTF": 0.17391304347826086,
+    "4O": 0.08695652173913043,
+    "TAO": 0.08695652173913043,
+    "DAL": 0.043478260869565216
+  },
+  "domestic_route_shares": {
+    "MEX": 0.2631578947368421,
+    "MID": 0.21052631578947367,
+    "VER": 0.21052631578947367,
+    "CUN": 0.10526315789473684,
+    "GDL": 0.10526315789473684,
+    "MTY": 0.10526315789473684
+  },
+  "international_route_shares": {
+    "PAZ": 1.0
+  },
+  "domestic_ratio": 0.826,
+  "fleet_mix": {
+    "4O": {
+      "A320": 1.0
+    },
+    "AMX": {
+      "AT76": 0.5,
+      "B737": 0.25,
+      "E175": 0.25
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 23
+}

@@ -1,0 +1,23 @@
+{
+  "icao_code": "BSG",
+  "iata_code": "BSG",
+  "airline_shares": {
+    "WDY": 1.0
+  },
+  "domestic_route_shares": {
+    "SSG": 1.0
+  },
+  "international_route_shares": {
+    "COO": 1.0
+  },
+  "domestic_ratio": 0.5,
+  "fleet_mix": {},
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 4
+}

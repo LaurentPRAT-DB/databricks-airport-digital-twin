@@ -1,0 +1,57 @@
+{
+  "icao_code": "CRK",
+  "iata_code": "CRK",
+  "airline_shares": {
+    "CEB": 0.3076923076923077,
+    "SRQ": 0.3076923076923077,
+    "HDA": 0.07692307692307693,
+    "JNA": 0.07692307692307693,
+    "OZR": 0.07692307692307693,
+    "QTR": 0.07692307692307693,
+    "TGW": 0.07692307692307693
+  },
+  "domestic_route_shares": {
+    "CEB": 0.5,
+    "KLO": 0.5
+  },
+  "international_route_shares": {
+    "HKG": 0.2727272727272727,
+    "SIN": 0.2727272727272727,
+    "ICN": 0.18181818181818182,
+    "MFM": 0.09090909090909091,
+    "BKK": 0.09090909090909091,
+    "DOH": 0.09090909090909091
+  },
+  "domestic_ratio": 0.154,
+  "fleet_mix": {
+    "CEB": {
+      "A319": 1.0
+    },
+    "SRQ": {
+      "A320": 1.0
+    },
+    "HDA": {
+      "A320": 1.0
+    },
+    "JNA": {
+      "B738": 1.0
+    },
+    "OZR": {
+      "A321": 1.0
+    },
+    "QTR": {
+      "A330": 1.0
+    },
+    "TGW": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 26
+}

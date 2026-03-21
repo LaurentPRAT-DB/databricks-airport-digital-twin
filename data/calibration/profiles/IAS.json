@@ -1,0 +1,32 @@
+{
+  "icao_code": "IAS",
+  "iata_code": "IAS",
+  "airline_shares": {
+    "ROT": 0.7058823529411765,
+    "AZA": 0.29411764705882354
+  },
+  "domestic_route_shares": {
+    "OTP": 1.0
+  },
+  "international_route_shares": {
+    "BLQ": 0.26666666666666666,
+    "TRN": 0.26666666666666666,
+    "FCO": 0.2,
+    "LTN": 0.13333333333333333,
+    "TLV": 0.13333333333333333
+  },
+  "domestic_ratio": 0.118,
+  "fleet_mix": {
+    "ROT": {
+      "AT76": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 17
+}

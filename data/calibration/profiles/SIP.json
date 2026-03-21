@@ -1,0 +1,45 @@
+{
+  "icao_code": "SIP",
+  "iata_code": "SIP",
+  "airline_shares": {
+    "AFL": 0.42857142857142855,
+    "SBI": 0.14285714285714285,
+    "SVR": 0.14285714285714285,
+    "LMU": 0.14285714285714285,
+    "TSO": 0.14285714285714285
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "DME": 0.42857142857142855,
+    "LED": 0.14285714285714285,
+    "ROV": 0.14285714285714285,
+    "SVO": 0.14285714285714285,
+    "KBP": 0.14285714285714285
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "SBI": {
+      "B738": 1.0
+    },
+    "AFL": {
+      "A320": 0.4,
+      "A319": 0.4,
+      "A321": 0.2
+    },
+    "SVR": {
+      "A320": 0.5,
+      "A319": 0.5
+    },
+    "LMU": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

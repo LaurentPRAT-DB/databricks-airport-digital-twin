@@ -1,0 +1,58 @@
+{
+  "icao_code": "MGQ",
+  "iata_code": "MGQ",
+  "airline_shares": {
+    "XU": 0.2916666666666667,
+    "WZP": 0.125,
+    "FLT": 0.125,
+    "DAO": 0.125,
+    "ASL": 0.125,
+    "THY": 0.08333333333333333,
+    "JUS": 0.08333333333333333,
+    "ATM": 0.041666666666666664
+  },
+  "domestic_route_shares": {
+    "HGA": 1.0
+  },
+  "international_route_shares": {
+    "JIB": 0.2857142857142857,
+    "NBO": 0.19047619047619047,
+    "WJR": 0.14285714285714285,
+    "BBO": 0.14285714285714285,
+    "EBB": 0.09523809523809523,
+    "GLK": 0.09523809523809523,
+    "ADE": 0.047619047619047616
+  },
+  "domestic_ratio": 0.125,
+  "fleet_mix": {
+    "WZP": {
+      "B737": 1.0
+    },
+    "FLT": {
+      "CRJ9": 1.0
+    },
+    "DAO": {
+      "A321": 1.0
+    },
+    "ATM": {
+      "CRJ7": 1.0
+    },
+    "ASL": {
+      "B737": 1.0
+    },
+    "THY": {
+      "A320": 1.0
+    },
+    "JUS": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 24
+}

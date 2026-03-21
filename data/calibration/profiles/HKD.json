@@ -1,0 +1,46 @@
+{
+  "icao_code": "HKD",
+  "iata_code": "HKD",
+  "airline_shares": {
+    "ANA": 0.42857142857142855,
+    "EVA": 0.14285714285714285,
+    "TNA": 0.14285714285714285,
+    "ADO": 0.14285714285714285,
+    "JAL": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "HND": 0.6,
+    "KIX": 0.2,
+    "NGO": 0.2
+  },
+  "international_route_shares": {
+    "TPE": 1.0
+  },
+  "domestic_ratio": 0.714,
+  "fleet_mix": {
+    "EVA": {
+      "A330": 1.0
+    },
+    "ADO": {
+      "B767": 1.0
+    },
+    "JAL": {
+      "B738": 0.5,
+      "B767": 0.5
+    },
+    "ANA": {
+      "A320": 0.3333333333333333,
+      "B777": 0.2222222222222222,
+      "B767": 0.2222222222222222,
+      "B737": 0.2222222222222222
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

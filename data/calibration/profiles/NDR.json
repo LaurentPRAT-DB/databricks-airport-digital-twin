@@ -1,0 +1,54 @@
+{
+  "icao_code": "NDR",
+  "iata_code": "NDR",
+  "airline_shares": {
+    "3O": 0.35294117647058826,
+    "RYR": 0.29411764705882354,
+    "RAM": 0.23529411764705882,
+    "GWI": 0.058823529411764705,
+    "VLG": 0.058823529411764705
+  },
+  "domestic_route_shares": {
+    "CMN": 1.0
+  },
+  "international_route_shares": {
+    "BCN": 0.1875,
+    "AMS": 0.125,
+    "BRU": 0.125,
+    "CGN": 0.125,
+    "MPL": 0.0625,
+    "PMI": 0.0625,
+    "FRA": 0.0625,
+    "BVA": 0.0625,
+    "CRL": 0.0625,
+    "HHN": 0.0625,
+    "MRS": 0.0625
+  },
+  "domestic_ratio": 0.059,
+  "fleet_mix": {
+    "3O": {
+      "A320": 1.0
+    },
+    "GWI": {
+      "A319": 1.0
+    },
+    "RAM": {
+      "B738": 0.8,
+      "AT76": 0.2
+    },
+    "RYR": {
+      "B738": 1.0
+    },
+    "VLG": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 34
+}

@@ -1,0 +1,32 @@
+{
+  "icao_code": "BGF",
+  "iata_code": "BGF",
+  "airline_shares": {
+    "AFR": 0.5,
+    "RAM": 0.5
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "NSI": 0.25,
+    "CDG": 0.25,
+    "CMN": 0.25,
+    "DLA": 0.25
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "AFR": {
+      "B777": 1.0
+    },
+    "RAM": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 4
+}

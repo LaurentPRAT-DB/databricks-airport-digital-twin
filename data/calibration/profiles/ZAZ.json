@@ -1,0 +1,41 @@
+{
+  "icao_code": "ZAZ",
+  "iata_code": "ZAZ",
+  "airline_shares": {
+    "RYR": 0.625,
+    "WZZ": 0.25,
+    "AEA": 0.125
+  },
+  "domestic_route_shares": {
+    "ACE": 0.5,
+    "PMI": 0.5
+  },
+  "international_route_shares": {
+    "BGY": 0.16666666666666666,
+    "BVA": 0.16666666666666666,
+    "CRL": 0.16666666666666666,
+    "STN": 0.16666666666666666,
+    "CLJ": 0.16666666666666666,
+    "OTP": 0.16666666666666666
+  },
+  "domestic_ratio": 0.25,
+  "fleet_mix": {
+    "RYR": {
+      "B738": 1.0
+    },
+    "AEA": {
+      "E190": 1.0
+    },
+    "WZZ": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

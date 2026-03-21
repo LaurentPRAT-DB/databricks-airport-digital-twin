@@ -1,0 +1,44 @@
+{
+  "icao_code": "LGB",
+  "iata_code": "LGB",
+  "airline_shares": {
+    "JBU": 0.8461538461538461,
+    "AAL": 0.07692307692307693,
+    "USA": 0.07692307692307693
+  },
+  "domestic_route_shares": {
+    "PHX": 0.15384615384615385,
+    "AUS": 0.07692307692307693,
+    "BOS": 0.07692307692307693,
+    "IAD": 0.07692307692307693,
+    "JFK": 0.07692307692307693,
+    "LAS": 0.07692307692307693,
+    "OAK": 0.07692307692307693,
+    "PDX": 0.07692307692307693,
+    "SEA": 0.07692307692307693,
+    "SFO": 0.07692307692307693,
+    "SLC": 0.07692307692307693,
+    "SMF": 0.07692307692307693
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AAL": {
+      "A319": 1.0
+    },
+    "JBU": {
+      "A320": 1.0
+    },
+    "USA": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 26
+}

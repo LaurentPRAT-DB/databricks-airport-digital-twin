@@ -21,7 +21,7 @@ from app.backend.demo_config import (
     DEMO_MODE, DEFAULT_AIRPORT_ICAO, DEFAULT_AIRPORT_IATA, DEFAULT_FLIGHT_COUNT,
 )
 from app.backend.services.data_generator_service import get_data_generator_service
-from app.backend.services.airport_config_service import get_airport_config_service
+from app.backend.services.airport_config_service import get_airport_config_service, AirportConfigService
 from app.backend.services.prediction_service import get_prediction_service
 from src.ingestion.fallback import reload_gates, set_airport_center
 from src.ingestion.schedule_generator import AIRPORT_COORDINATES
@@ -92,6 +92,58 @@ _SOURCE_LABELS = {
     "unity_catalog": "Unity Catalog (Tier 2, SQL Warehouse)",
     "osm_api": "OSM Overpass API (Tier 3, external)",
 }
+
+
+async def _prewarm_airports_background():
+    """Pre-warm Lakebase cache for all well-known airports after startup.
+
+    Runs sequentially to respect Overpass API rate limits. Skips airports
+    already in Lakebase cache (instant Tier 1 check). This makes subsequent
+    airport switches near-instant (<1s) instead of 15-18s.
+    """
+    import time
+    from app.backend.api.routes import WELL_KNOWN_AIRPORT_INFO
+
+    # Brief delay to let the app finish any post-startup work
+    await asyncio.sleep(5)
+
+    service = get_airport_config_service()
+
+    # Check which airports are already cached
+    persisted = service.list_persisted_airports()
+    persisted_codes = {a.get("icao_code", a.get("icaoCode", "")).upper() for a in persisted}
+
+    to_prewarm = [icao for icao in WELL_KNOWN_AIRPORT_INFO if icao not in persisted_codes]
+    if not to_prewarm:
+        logger.info("PREWARM | All %d well-known airports already cached in Lakebase", len(WELL_KNOWN_AIRPORT_INFO))
+        return
+
+    logger.info("PREWARM | Starting background pre-warm for %d/%d airports", len(to_prewarm), len(WELL_KNOWN_AIRPORT_INFO))
+
+    warmed = 0
+    for i, icao in enumerate(to_prewarm, 1):
+        try:
+            t0 = time.monotonic()
+            # Use a fresh service instance so we don't clobber the active airport config
+            prewarm_svc = AirportConfigService()
+            loaded = await asyncio.to_thread(
+                prewarm_svc.initialize_from_lakehouse,
+                icao_code=icao,
+                fallback_to_osm=True,
+            )
+            elapsed = time.monotonic() - t0
+            if loaded:
+                warmed += 1
+                logger.info("PREWARM | [%d/%d] %s cached in %.1fs (source=%s)", i, len(to_prewarm), icao, elapsed, loaded)
+            else:
+                logger.warning("PREWARM | [%d/%d] %s failed", i, len(to_prewarm), icao)
+        except Exception as e:
+            logger.warning("PREWARM | [%d/%d] %s error: %s", i, len(to_prewarm), icao, e)
+
+        # Small delay between OSM requests to be polite to Overpass API
+        await asyncio.sleep(2)
+
+    logger.info("PREWARM | Complete: %d/%d airports newly cached", warmed, len(to_prewarm))
 
 
 async def _background_init(app: FastAPI):
@@ -232,6 +284,11 @@ async def _background_init(app: FastAPI):
         logger.info(f"INIT | Initialization COMPLETE in {total_ms:.0f}ms — app ready")
         logger.info(f"INIT | Serving {airport_icao} ({airport_iata}) with {DEFAULT_FLIGHT_COUNT} flights in {'demo' if DEMO_MODE else 'live'} mode")
         logger.info("=" * 70)
+
+        # ── Phase 4: Pre-warm Lakebase cache for all well-known airports ──
+        # This runs after the app is ready and serves users, so it doesn't
+        # block startup. Airports already in Lakebase are skipped (Tier 1 hit).
+        asyncio.create_task(_prewarm_airports_background())
 
     except Exception as e:
         total_ms = (time.monotonic() - t_start) * 1000

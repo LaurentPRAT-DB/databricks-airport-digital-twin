@@ -225,7 +225,7 @@ describe('getGateDotRadius', () => {
 })
 
 describe('GATE_LABEL_ZOOM', () => {
-  it('is 16', () => {
-    expect(GATE_LABEL_ZOOM).toBe(16)
+  it('is 17', () => {
+    expect(GATE_LABEL_ZOOM).toBe(17)
   })
 })

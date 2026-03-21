@@ -1,0 +1,38 @@
+{
+  "icao_code": "UME",
+  "iata_code": "UME",
+  "airline_shares": {
+    "NAX": 0.2857142857142857,
+    "HS": 0.2857142857142857,
+    "SCW": 0.2857142857142857,
+    "SAS": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "ARN": 0.5,
+    "LLA": 0.25,
+    "OSD": 0.25
+  },
+  "international_route_shares": {
+    "ALC": 0.3333333333333333,
+    "BMA": 0.3333333333333333,
+    "TXL": 0.3333333333333333
+  },
+  "domestic_ratio": 0.571,
+  "fleet_mix": {
+    "NAX": {
+      "B738": 1.0
+    },
+    "SAS": {
+      "B738": 0.5,
+      "B737": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

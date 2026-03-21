@@ -1,0 +1,30 @@
+{
+  "icao_code": "BLA",
+  "iata_code": "BLA",
+  "airline_shares": {
+    "VC9": 0.5454545454545454,
+    "OCA": 0.2727272727272727,
+    "RLN": 0.09090909090909091,
+    "VCV": 0.09090909090909091
+  },
+  "domestic_route_shares": {
+    "CCS": 0.4444444444444444,
+    "PZO": 0.2222222222222222,
+    "VLN": 0.2222222222222222,
+    "PMV": 0.1111111111111111
+  },
+  "international_route_shares": {
+    "MIA": 0.5,
+    "PTY": 0.5
+  },
+  "domestic_ratio": 0.818,
+  "fleet_mix": {},
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

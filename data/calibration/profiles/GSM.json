@@ -1,0 +1,37 @@
+{
+  "icao_code": "GSM",
+  "iata_code": "GSM",
+  "airline_shares": {
+    "GFG": 0.375,
+    "IRA": 0.25,
+    "BGD": 0.125,
+    "IRC": 0.125,
+    "IRK": 0.125
+  },
+  "domestic_route_shares": {
+    "MHD": 0.3333333333333333,
+    "SYZ": 0.3333333333333333,
+    "THR": 0.16666666666666666,
+    "KIH": 0.16666666666666666
+  },
+  "international_route_shares": {
+    "DXB": 1.0
+  },
+  "domestic_ratio": 0.75,
+  "fleet_mix": {
+    "IRC": {
+      "AT76": 1.0
+    },
+    "IRA": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

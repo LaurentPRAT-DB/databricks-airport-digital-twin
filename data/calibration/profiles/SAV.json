@@ -1,0 +1,48 @@
+{
+  "icao_code": "SAV",
+  "iata_code": "SAV",
+  "airline_shares": {
+    "DAL": 0.35294117647058826,
+    "USA": 0.29411764705882354,
+    "JBU": 0.23529411764705882,
+    "AAL": 0.11764705882352941
+  },
+  "domestic_route_shares": {
+    "CLT": 0.23529411764705882,
+    "JFK": 0.23529411764705882,
+    "BOS": 0.11764705882352941,
+    "ATL": 0.11764705882352941,
+    "DFW": 0.11764705882352941,
+    "LGA": 0.058823529411764705,
+    "DTW": 0.058823529411764705,
+    "DCA": 0.058823529411764705
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AAL": {
+      "CRJ9": 1.0
+    },
+    "JBU": {
+      "E190": 0.5,
+      "A320": 0.5
+    },
+    "DAL": {
+      "CRJ7": 0.5714285714285714,
+      "A319": 0.2857142857142857,
+      "CRJ9": 0.14285714285714285
+    },
+    "USA": {
+      "CRJ9": 0.6,
+      "CRJ7": 0.4
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 17
+}

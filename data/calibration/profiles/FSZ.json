@@ -1,0 +1,51 @@
+{
+  "icao_code": "FSZ",
+  "iata_code": "FSZ",
+  "airline_shares": {
+    "NES": 0.375,
+    "ANA": 0.25,
+    "CAL": 0.125,
+    "CES": 0.125,
+    "OZR": 0.125
+  },
+  "domestic_route_shares": {
+    "CTS": 0.4,
+    "FUK": 0.2,
+    "KOJ": 0.2,
+    "OKA": 0.2
+  },
+  "international_route_shares": {
+    "TPE": 0.3333333333333333,
+    "PVG": 0.3333333333333333,
+    "ICN": 0.3333333333333333
+  },
+  "domestic_ratio": 0.625,
+  "fleet_mix": {
+    "CAL": {
+      "A330": 0.5,
+      "B738": 0.5
+    },
+    "NES": {
+      "E175": 1.0
+    },
+    "CES": {
+      "B738": 0.5,
+      "A320": 0.5
+    },
+    "ANA": {
+      "B737": 1.0
+    },
+    "OZR": {
+      "A321": 0.5,
+      "A320": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

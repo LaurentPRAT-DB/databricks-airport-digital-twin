@@ -1,0 +1,52 @@
+{
+  "icao_code": "IXB",
+  "iata_code": "IXB",
+  "airline_shares": {
+    "IGO": 0.21428571428571427,
+    "SEJ": 0.21428571428571427,
+    "JAI": 0.14285714285714285,
+    "AIC": 0.14285714285714285,
+    "GUJ": 0.14285714285714285,
+    "DRK": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "CCU": 0.4166666666666667,
+    "DEL": 0.4166666666666667,
+    "GAU": 0.16666666666666666
+  },
+  "international_route_shares": {
+    "BKK": 0.5,
+    "PBH": 0.5
+  },
+  "domestic_ratio": 0.857,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "JAI": {
+      "B738": 1.0
+    },
+    "AIC": {
+      "A319": 0.3333333333333333,
+      "A320": 0.3333333333333333,
+      "A321": 0.3333333333333333
+    },
+    "GUJ": {
+      "A320": 1.0
+    },
+    "DRK": {
+      "A319": 1.0
+    },
+    "SEJ": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 28
+}

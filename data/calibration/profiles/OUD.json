@@ -1,0 +1,44 @@
+{
+  "icao_code": "OUD",
+  "iata_code": "OUD",
+  "airline_shares": {
+    "RYR": 0.4,
+    "RAM": 0.3,
+    "TVF": 0.3
+  },
+  "domestic_route_shares": {
+    "CMN": 1.0
+  },
+  "international_route_shares": {
+    "ORY": 0.2222222222222222,
+    "BRU": 0.1111111111111111,
+    "BVA": 0.1111111111111111,
+    "CRL": 0.1111111111111111,
+    "MRS": 0.1111111111111111,
+    "NRN": 0.1111111111111111,
+    "LIL": 0.1111111111111111,
+    "LYS": 0.1111111111111111
+  },
+  "domestic_ratio": 0.1,
+  "fleet_mix": {
+    "RAM": {
+      "B737": 0.4,
+      "B738": 0.4,
+      "AT76": 0.2
+    },
+    "RYR": {
+      "B738": 1.0
+    },
+    "TVF": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

@@ -1,0 +1,31 @@
+{
+  "icao_code": "MJN",
+  "iata_code": "MJN",
+  "airline_shares": {
+    "MDG": 0.6666666666666666,
+    "ZD": 0.3333333333333333
+  },
+  "domestic_route_shares": {
+    "TNR": 1.0
+  },
+  "international_route_shares": {
+    "DZA": 1.0
+  },
+  "domestic_ratio": 0.333,
+  "fleet_mix": {
+    "MDG": {
+      "AT76": 1.0
+    },
+    "ZD": {
+      "AT76": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 6
+}

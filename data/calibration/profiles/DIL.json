@@ -1,0 +1,32 @@
+{
+  "icao_code": "DIL",
+  "iata_code": "DIL",
+  "airline_shares": {
+    "SLK": 0.3333333333333333,
+    "SJY": 0.3333333333333333,
+    "TMA": 0.3333333333333333
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "SIN": 0.3333333333333333,
+    "DPS": 0.3333333333333333,
+    "DRW": 0.3333333333333333
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "SLK": {
+      "A319": 1.0
+    },
+    "TMA": {
+      "E175": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 6
+}

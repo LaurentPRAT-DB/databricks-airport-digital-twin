@@ -1,0 +1,47 @@
+{
+  "icao_code": "IGU",
+  "iata_code": "IGU",
+  "airline_shares": {
+    "TAM": 0.36363636363636365,
+    "AZU": 0.2727272727272727,
+    "SEH": 0.2727272727272727,
+    "LAN": 0.09090909090909091
+  },
+  "domestic_route_shares": {
+    "CWB": 0.3,
+    "GIG": 0.2,
+    "GRU": 0.2,
+    "POA": 0.1,
+    "VCP": 0.1,
+    "CGH": 0.1
+  },
+  "international_route_shares": {
+    "LIM": 1.0
+  },
+  "domestic_ratio": 0.909,
+  "fleet_mix": {
+    "AZU": {
+      "E190": 0.75,
+      "AT76": 0.25
+    },
+    "SEH": {
+      "B738": 0.5555555555555556,
+      "B737": 0.4444444444444444
+    },
+    "TAM": {
+      "A320": 0.6666666666666666,
+      "A319": 0.3333333333333333
+    },
+    "LAN": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

@@ -1,0 +1,44 @@
+{
+  "icao_code": "SFA",
+  "iata_code": "SFA",
+  "airline_shares": {
+    "LAA": 0.3,
+    "TUI": 0.3,
+    "AAW": 0.2,
+    "STU": 0.2
+  },
+  "domestic_route_shares": {
+    "TUN": 1.0
+  },
+  "international_route_shares": {
+    "TIP": 0.4444444444444444,
+    "MRA": 0.2222222222222222,
+    "BEN": 0.2222222222222222,
+    "CDG": 0.1111111111111111
+  },
+  "domestic_ratio": 0.1,
+  "fleet_mix": {
+    "AAW": {
+      "A319": 0.5714285714285714,
+      "A320": 0.42857142857142855
+    },
+    "STU": {
+      "A319": 1.0
+    },
+    "LAA": {
+      "A320": 0.6,
+      "CRJ9": 0.4
+    },
+    "TUI": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

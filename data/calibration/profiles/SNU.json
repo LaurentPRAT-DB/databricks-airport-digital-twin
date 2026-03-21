@@ -1,0 +1,37 @@
+{
+  "icao_code": "SNU",
+  "iata_code": "SNU",
+  "airline_shares": {
+    "ACA": 0.38461538461538464,
+    "CUB": 0.38461538461538464,
+    "WJA": 0.15384615384615385,
+    "TSC": 0.07692307692307693
+  },
+  "domestic_route_shares": {
+    "HAV": 1.0
+  },
+  "international_route_shares": {
+    "YYZ": 0.5,
+    "YUL": 0.3333333333333333,
+    "YHZ": 0.08333333333333333,
+    "CCC": 0.08333333333333333
+  },
+  "domestic_ratio": 0.077,
+  "fleet_mix": {
+    "ACA": {
+      "A319": 0.8,
+      "A320": 0.2
+    },
+    "CUB": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 13
+}

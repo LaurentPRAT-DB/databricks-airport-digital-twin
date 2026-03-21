@@ -1,0 +1,34 @@
+{
+  "icao_code": "TLM",
+  "iata_code": "TLM",
+  "airline_shares": {
+    "DAH": 0.6666666666666666,
+    "AAF": 0.3333333333333333
+  },
+  "domestic_route_shares": {
+    "ALG": 1.0
+  },
+  "international_route_shares": {
+    "MRS": 0.4,
+    "ORY": 0.4,
+    "LYS": 0.2
+  },
+  "domestic_ratio": 0.167,
+  "fleet_mix": {
+    "DAH": {
+      "B738": 1.0
+    },
+    "AAF": {
+      "A319": 0.6666666666666666,
+      "A320": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 12
+}

@@ -1,0 +1,40 @@
+{
+  "icao_code": "PAD",
+  "iata_code": "PAD",
+  "airline_shares": {
+    "CFG": 0.6,
+    "BER": 0.3,
+    "SXS": 0.1
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "AYT": 0.3,
+    "PMI": 0.2,
+    "IBZ": 0.1,
+    "ACE": 0.1,
+    "FUE": 0.1,
+    "LPA": 0.1,
+    "TFS": 0.1
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "BER": {
+      "B738": 0.75,
+      "A320": 0.25
+    },
+    "CFG": {
+      "A321": 1.0
+    },
+    "SXS": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

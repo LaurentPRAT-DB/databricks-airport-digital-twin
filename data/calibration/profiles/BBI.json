@@ -1,0 +1,37 @@
+{
+  "icao_code": "BBI",
+  "iata_code": "BBI",
+  "airline_shares": {
+    "IGO": 0.7058823529411765,
+    "AIC": 0.29411764705882354
+  },
+  "domestic_route_shares": {
+    "BOM": 0.23529411764705882,
+    "DEL": 0.23529411764705882,
+    "BLR": 0.11764705882352941,
+    "CCU": 0.11764705882352941,
+    "HYD": 0.11764705882352941,
+    "VTZ": 0.11764705882352941,
+    "IXZ": 0.058823529411764705
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "AIC": {
+      "A319": 0.5,
+      "A320": 0.25,
+      "CRJ7": 0.25
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 17
+}

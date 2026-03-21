@@ -1,0 +1,36 @@
+{
+  "icao_code": "RGL",
+  "iata_code": "RGL",
+  "airline_shares": {
+    "TIB": 0.5555555555555556,
+    "ARG": 0.2222222222222222,
+    "LAN": 0.2222222222222222
+  },
+  "domestic_route_shares": {
+    "CRD": 0.5,
+    "AEP": 0.5
+  },
+  "international_route_shares": {
+    "RGA": 0.4,
+    "USH": 0.2,
+    "PUQ": 0.2,
+    "MPN": 0.2
+  },
+  "domestic_ratio": 0.444,
+  "fleet_mix": {
+    "ARG": {
+      "B737": 1.0
+    },
+    "LAN": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 9
+}

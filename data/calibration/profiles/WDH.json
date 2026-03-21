@@ -1,0 +1,54 @@
+{
+  "icao_code": "WDH",
+  "iata_code": "WDH",
+  "airline_shares": {
+    "NMB": 0.6875,
+    "DTA": 0.125,
+    "KQA": 0.125,
+    "SAA": 0.0625
+  },
+  "domestic_route_shares": {
+    "WVB": 1.0
+  },
+  "international_route_shares": {
+    "JNB": 0.2,
+    "LAD": 0.13333333333333333,
+    "LUN": 0.13333333333333333,
+    "SDD": 0.06666666666666667,
+    "ACC": 0.06666666666666667,
+    "CPT": 0.06666666666666667,
+    "FRA": 0.06666666666666667,
+    "HRE": 0.06666666666666667,
+    "MUB": 0.06666666666666667,
+    "VFA": 0.06666666666666667,
+    "OMD": 0.03333333333333333,
+    "LUD": 0.03333333333333333
+  },
+  "domestic_ratio": 0.062,
+  "fleet_mix": {
+    "DTA": {
+      "B737": 1.0
+    },
+    "KQA": {
+      "A319": 1.0
+    },
+    "SAA": {
+      "A320": 0.25,
+      "A319": 0.25,
+      "B738": 0.25,
+      "A330": 0.25
+    },
+    "NMB": {
+      "A319": 0.8,
+      "A330": 0.2
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 32
+}

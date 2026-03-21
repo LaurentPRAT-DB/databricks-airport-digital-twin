@@ -1,0 +1,47 @@
+{
+  "icao_code": "IXE",
+  "iata_code": "IXE",
+  "airline_shares": {
+    "AXB": 0.5,
+    "JAI": 0.19230769230769232,
+    "AIC": 0.15384615384615385,
+    "SEJ": 0.15384615384615385
+  },
+  "domestic_route_shares": {
+    "BOM": 0.5714285714285714,
+    "BLR": 0.35714285714285715,
+    "CCJ": 0.07142857142857142
+  },
+  "international_route_shares": {
+    "DXB": 0.3333333333333333,
+    "DMM": 0.16666666666666666,
+    "SHJ": 0.16666666666666666,
+    "BAH": 0.08333333333333333,
+    "AUH": 0.08333333333333333,
+    "DOH": 0.08333333333333333,
+    "MCT": 0.08333333333333333
+  },
+  "domestic_ratio": 0.538,
+  "fleet_mix": {
+    "JAI": {
+      "B738": 1.0
+    },
+    "AIC": {
+      "A321": 1.0
+    },
+    "AXB": {
+      "B738": 1.0
+    },
+    "SEJ": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 26
+}

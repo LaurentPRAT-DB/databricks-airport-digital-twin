@@ -1,0 +1,37 @@
+{
+  "icao_code": "VXE",
+  "iata_code": "VXE",
+  "airline_shares": {
+    "TCV": 0.8333333333333334,
+    "TAP": 0.16666666666666666
+  },
+  "domestic_route_shares": {
+    "RAI": 0.5,
+    "SID": 0.5
+  },
+  "international_route_shares": {
+    "LIS": 0.5,
+    "SNE": 0.25,
+    "AMS": 0.125,
+    "CDG": 0.125
+  },
+  "domestic_ratio": 0.333,
+  "fleet_mix": {
+    "TAP": {
+      "A320": 1.0
+    },
+    "TCV": {
+      "AT76": 0.5,
+      "B738": 0.3333333333333333,
+      "B752": 0.16666666666666666
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 12
+}

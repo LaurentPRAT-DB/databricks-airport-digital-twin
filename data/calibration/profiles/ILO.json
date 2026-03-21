@@ -1,0 +1,42 @@
+{
+  "icao_code": "ILO",
+  "iata_code": "ILO",
+  "airline_shares": {
+    "CEB": 0.8,
+    "SRQ": 0.1,
+    "PAL": 0.1
+  },
+  "domestic_route_shares": {
+    "MNL": 0.375,
+    "CEB": 0.125,
+    "CGY": 0.125,
+    "DVO": 0.125,
+    "GES": 0.125,
+    "PPS": 0.125
+  },
+  "international_route_shares": {
+    "HKG": 0.5,
+    "SIN": 0.5
+  },
+  "domestic_ratio": 0.8,
+  "fleet_mix": {
+    "CEB": {
+      "A319": 0.7272727272727273,
+      "A320": 0.2727272727272727
+    },
+    "SRQ": {
+      "A320": 1.0
+    },
+    "PAL": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

@@ -1,0 +1,54 @@
+{
+  "icao_code": "ROR",
+  "iata_code": "ROR",
+  "airline_shares": {
+    "UAL": 0.25,
+    "CAL": 0.125,
+    "DAL": 0.125,
+    "TNA": 0.125,
+    "JAL": 0.125,
+    "KAL": 0.125,
+    "OZR": 0.125
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "TPE": 0.25,
+    "NRT": 0.25,
+    "ICN": 0.25,
+    "GUM": 0.125,
+    "YAP": 0.125
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "CAL": {
+      "B738": 1.0
+    },
+    "DAL": {
+      "B752": 1.0
+    },
+    "TNA": {
+      "A320": 1.0
+    },
+    "JAL": {
+      "B767": 1.0
+    },
+    "KAL": {
+      "B738": 1.0
+    },
+    "OZR": {
+      "A321": 1.0
+    },
+    "UAL": {
+      "B738": 0.6666666666666666,
+      "B737": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

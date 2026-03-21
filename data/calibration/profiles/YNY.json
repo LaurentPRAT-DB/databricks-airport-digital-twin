@@ -1,0 +1,25 @@
+{
+  "icao_code": "YNY",
+  "iata_code": "YNY",
+  "airline_shares": {
+    "DKH": 1.0
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "PVG": 1.0
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "DKH": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 2
+}

@@ -1,0 +1,31 @@
+{
+  "icao_code": "BRM",
+  "iata_code": "BRM",
+  "airline_shares": {
+    "VCV": 0.4,
+    "7I": 0.2,
+    "OCA": 0.2,
+    "VNP": 0.2
+  },
+  "domestic_route_shares": {
+    "CCS": 0.75,
+    "PMV": 0.25
+  },
+  "international_route_shares": {
+    "CUR": 1.0
+  },
+  "domestic_ratio": 0.8,
+  "fleet_mix": {
+    "VCV": {
+      "E190": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

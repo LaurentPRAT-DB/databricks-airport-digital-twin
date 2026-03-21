@@ -1,0 +1,37 @@
+{
+  "icao_code": "YYJ",
+  "iata_code": "YYJ",
+  "airline_shares": {
+    "WJA": 0.75,
+    "PCO": 0.125,
+    "ACA": 0.125
+  },
+  "domestic_route_shares": {
+    "YVR": 0.2857142857142857,
+    "YYZ": 0.2857142857142857,
+    "YEG": 0.14285714285714285,
+    "YLW": 0.14285714285714285,
+    "YYC": 0.14285714285714285
+  },
+  "international_route_shares": {
+    "LAS": 1.0
+  },
+  "domestic_ratio": 0.875,
+  "fleet_mix": {
+    "ACA": {
+      "A320": 1.0
+    },
+    "WJA": {
+      "B738": 0.5,
+      "DH8D": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

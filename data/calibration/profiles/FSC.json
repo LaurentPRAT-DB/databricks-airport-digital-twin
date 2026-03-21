@@ -1,0 +1,49 @@
+{
+  "icao_code": "FSC",
+  "iata_code": "FSC",
+  "airline_shares": {
+    "CCM": 0.2857142857142857,
+    "RLA": 0.19047619047619047,
+    "LGL": 0.19047619047619047,
+    "VOE": 0.19047619047619047,
+    "RYR": 0.09523809523809523,
+    "AZA": 0.047619047619047616
+  },
+  "domestic_route_shares": {
+    "MRS": 0.2727272727272727,
+    "LIL": 0.18181818181818182,
+    "BOD": 0.18181818181818182,
+    "NCE": 0.18181818181818182,
+    "ORY": 0.18181818181818182
+  },
+  "international_route_shares": {
+    "NTE": 0.4,
+    "CRL": 0.2,
+    "ANG": 0.2,
+    "LUX": 0.2
+  },
+  "domestic_ratio": 0.524,
+  "fleet_mix": {
+    "AZA": {
+      "AT76": 1.0
+    },
+    "RYR": {
+      "B738": 1.0
+    },
+    "LGL": {
+      "DH8D": 1.0
+    },
+    "CCM": {
+      "AT76": 0.6666666666666666,
+      "A320": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 21
+}

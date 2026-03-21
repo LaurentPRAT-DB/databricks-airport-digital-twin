@@ -1,0 +1,60 @@
+{
+  "icao_code": "BSR",
+  "iata_code": "BSR",
+  "airline_shares": {
+    "UAE": 0.125,
+    "ETD": 0.125,
+    "FDB": 0.125,
+    "ABY": 0.125,
+    "MEA": 0.125,
+    "QTR": 0.125,
+    "RJA": 0.125,
+    "THY": 0.125
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "DXB": 0.25,
+    "AUH": 0.125,
+    "SHJ": 0.125,
+    "BEY": 0.125,
+    "DOH": 0.125,
+    "AMM": 0.125,
+    "IST": 0.125
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "UAE": {
+      "A330": 1.0
+    },
+    "ETD": {
+      "A320": 1.0
+    },
+    "FDB": {
+      "B738": 1.0
+    },
+    "ABY": {
+      "A320": 1.0
+    },
+    "MEA": {
+      "A320": 1.0
+    },
+    "QTR": {
+      "A320": 1.0
+    },
+    "RJA": {
+      "E190": 0.5,
+      "E175": 0.5
+    },
+    "THY": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

@@ -1,0 +1,59 @@
+{
+  "icao_code": "CEK",
+  "iata_code": "CEK",
+  "airline_shares": {
+    "SVR": 0.4,
+    "SBI": 0.2,
+    "ARD": 0.1,
+    "LYN": 0.1,
+    "AFL": 0.1,
+    "MRR": 0.05,
+    "CSA": 0.05
+  },
+  "domestic_route_shares": {
+    "OVB": 0.2857142857142857,
+    "DME": 0.2857142857142857,
+    "KZN": 0.14285714285714285,
+    "LED": 0.14285714285714285,
+    "SVO": 0.14285714285714285
+  },
+  "international_route_shares": {
+    "PRG": 0.15384615384615385,
+    "OSS": 0.15384615384615385,
+    "DYU": 0.15384615384615385,
+    "LBD": 0.15384615384615385,
+    "FRU": 0.07692307692307693,
+    "EVN": 0.07692307692307693,
+    "DWC": 0.07692307692307693,
+    "NMA": 0.07692307692307693,
+    "TAS": 0.07692307692307693
+  },
+  "domestic_ratio": 0.35,
+  "fleet_mix": {
+    "CSA": {
+      "A320": 1.0
+    },
+    "LYN": {
+      "A320": 1.0
+    },
+    "SBI": {
+      "A319": 1.0
+    },
+    "AFL": {
+      "A319": 0.5,
+      "A320": 0.5
+    },
+    "SVR": {
+      "A320": 0.875,
+      "A321": 0.125
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 40
+}

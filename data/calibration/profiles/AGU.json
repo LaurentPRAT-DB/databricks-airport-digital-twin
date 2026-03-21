@@ -1,0 +1,32 @@
+{
+  "icao_code": "AGU",
+  "iata_code": "AGU",
+  "airline_shares": {
+    "VOI": 0.6666666666666666,
+    "4O": 0.2222222222222222,
+    "USA": 0.1111111111111111
+  },
+  "domestic_route_shares": {
+    "MEX": 0.3333333333333333,
+    "CUN": 0.3333333333333333,
+    "TIJ": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "LAX": 0.6666666666666666,
+    "DFW": 0.3333333333333333
+  },
+  "domestic_ratio": 0.667,
+  "fleet_mix": {
+    "VOI": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 9
+}

@@ -1,0 +1,45 @@
+{
+  "icao_code": "BJM",
+  "iata_code": "BJM",
+  "airline_shares": {
+    "KQA": 0.2857142857142857,
+    "JUS": 0.2857142857142857,
+    "ETH": 0.14285714285714285,
+    "DAT": 0.14285714285714285,
+    "RWD": 0.14285714285714285
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "KGL": 0.5714285714285714,
+    "NBO": 0.21428571428571427,
+    "EBB": 0.14285714285714285,
+    "BRU": 0.07142857142857142
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "ETH": {
+      "B738": 1.0
+    },
+    "KQA": {
+      "E175": 0.6666666666666666,
+      "E190": 0.3333333333333333
+    },
+    "DAT": {
+      "A330": 1.0
+    },
+    "JUS": {
+      "CRJ9": 1.0
+    },
+    "RWD": {
+      "DH8D": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

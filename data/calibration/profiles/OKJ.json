@@ -1,0 +1,56 @@
+{
+  "icao_code": "OKJ",
+  "iata_code": "OKJ",
+  "airline_shares": {
+    "ADO": 0.125,
+    "JAL": 0.125,
+    "KAL": 0.125,
+    "CES": 0.125,
+    "ANA": 0.125,
+    "JTA": 0.125,
+    "AMU": 0.125,
+    "UAL": 0.125
+  },
+  "domestic_route_shares": {
+    "HND": 0.5,
+    "CTS": 0.25,
+    "OKA": 0.25
+  },
+  "international_route_shares": {
+    "ICN": 0.25,
+    "PVG": 0.25,
+    "MFM": 0.25,
+    "GUM": 0.25
+  },
+  "domestic_ratio": 0.5,
+  "fleet_mix": {
+    "JAL": {
+      "B738": 1.0
+    },
+    "KAL": {
+      "B739": 1.0
+    },
+    "CES": {
+      "A320": 1.0
+    },
+    "ANA": {
+      "B787": 0.3333333333333333,
+      "B767": 0.3333333333333333,
+      "B738": 0.3333333333333333
+    },
+    "AMU": {
+      "A321": 1.0
+    },
+    "UAL": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

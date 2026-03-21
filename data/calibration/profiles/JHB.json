@@ -1,0 +1,57 @@
+{
+  "icao_code": "JHB",
+  "iata_code": "JHB",
+  "airline_shares": {
+    "AXM": 0.5,
+    "AWQ": 0.1875,
+    "NWR": 0.125,
+    "MAS": 0.0625,
+    "MXD": 0.0625,
+    "QG": 0.0625
+  },
+  "domestic_route_shares": {
+    "KUL": 0.2857142857142857,
+    "SZB": 0.2857142857142857,
+    "BKI": 0.14285714285714285,
+    "KCH": 0.14285714285714285,
+    "PEN": 0.14285714285714285
+  },
+  "international_route_shares": {
+    "KBR": 0.2222222222222222,
+    "SUB": 0.2222222222222222,
+    "MYY": 0.1111111111111111,
+    "SBW": 0.1111111111111111,
+    "TWU": 0.1111111111111111,
+    "BDO": 0.1111111111111111,
+    "CGK": 0.1111111111111111
+  },
+  "domestic_ratio": 0.438,
+  "fleet_mix": {
+    "AXM": {
+      "A320": 1.0
+    },
+    "NWR": {
+      "AT76": 1.0
+    },
+    "MAS": {
+      "B738": 1.0
+    },
+    "MXD": {
+      "AT76": 1.0
+    },
+    "QG": {
+      "A320": 1.0
+    },
+    "AWQ": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 32
+}

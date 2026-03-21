@@ -1,0 +1,46 @@
+{
+  "icao_code": "TUL",
+  "iata_code": "TUL",
+  "airline_shares": {
+    "SWA": 0.4827586206896552,
+    "AAL": 0.20689655172413793,
+    "USA": 0.1724137931034483,
+    "DAL": 0.06896551724137931,
+    "AAY": 0.06896551724137931
+  },
+  "domestic_route_shares": {
+    "DFW": 0.13793103448275862,
+    "MIA": 0.13793103448275862,
+    "ORD": 0.10344827586206896,
+    "ATL": 0.06896551724137931,
+    "SFB": 0.06896551724137931,
+    "DAL": 0.06896551724137931,
+    "DEN": 0.06896551724137931,
+    "HOU": 0.06896551724137931,
+    "LAS": 0.06896551724137931,
+    "MDW": 0.06896551724137931,
+    "PHX": 0.06896551724137931,
+    "STL": 0.06896551724137931
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AAL": {
+      "B738": 1.0
+    },
+    "AAY": {
+      "A320": 1.0
+    },
+    "USA": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 29
+}

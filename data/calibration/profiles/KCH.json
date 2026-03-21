@@ -1,0 +1,53 @@
+{
+  "icao_code": "KCH",
+  "iata_code": "KCH",
+  "airline_shares": {
+    "AXM": 0.5128205128205128,
+    "MAS": 0.3333333333333333,
+    "RBA": 0.05128205128205128,
+    "SLK": 0.05128205128205128,
+    "MXD": 0.05128205128205128
+  },
+  "domestic_route_shares": {
+    "KUL": 0.42857142857142855,
+    "BKI": 0.2857142857142857,
+    "JHB": 0.14285714285714285,
+    "PEN": 0.14285714285714285
+  },
+  "international_route_shares": {
+    "SIN": 0.24,
+    "BTU": 0.16,
+    "MYY": 0.16,
+    "SBW": 0.16,
+    "MZV": 0.12,
+    "KBR": 0.08,
+    "LGK": 0.08
+  },
+  "domestic_ratio": 0.359,
+  "fleet_mix": {
+    "AXM": {
+      "A320": 1.0
+    },
+    "RBA": {
+      "AT76": 1.0
+    },
+    "MAS": {
+      "B738": 0.9230769230769231,
+      "AT76": 0.07692307692307693
+    },
+    "SLK": {
+      "A319": 1.0
+    },
+    "MXD": {
+      "B739": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 39
+}

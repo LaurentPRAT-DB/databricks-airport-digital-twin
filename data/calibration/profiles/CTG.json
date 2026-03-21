@@ -1,0 +1,55 @@
+{
+  "icao_code": "CTG",
+  "iata_code": "CTG",
+  "airline_shares": {
+    "AVA": 0.4444444444444444,
+    "CMP": 0.2222222222222222,
+    "JBU": 0.1111111111111111,
+    "NKS": 0.1111111111111111,
+    "USA": 0.1111111111111111
+  },
+  "domestic_route_shares": {
+    "BOG": 0.5,
+    "CLO": 0.25,
+    "MDE": 0.25
+  },
+  "international_route_shares": {
+    "MIA": 0.4,
+    "JFK": 0.2,
+    "PTY": 0.2,
+    "FLL": 0.2
+  },
+  "domestic_ratio": 0.444,
+  "fleet_mix": {
+    "AVA": {
+      "A318": 0.4444444444444444,
+      "A320": 0.4444444444444444,
+      "A319": 0.1111111111111111
+    },
+    "JBU": {
+      "A320": 1.0
+    },
+    "CMP": {
+      "A320": 0.25,
+      "E190": 0.25,
+      "B737": 0.25,
+      "B738": 0.25
+    },
+    "NKS": {
+      "A320": 0.5,
+      "A319": 0.5
+    },
+    "USA": {
+      "A318": 0.5,
+      "A320": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

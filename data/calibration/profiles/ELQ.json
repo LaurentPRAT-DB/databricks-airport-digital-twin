@@ -1,0 +1,71 @@
+{
+  "icao_code": "ELQ",
+  "iata_code": "ELQ",
+  "airline_shares": {
+    "SVA": 0.32,
+    "NIA": 0.12,
+    "ALX": 0.08,
+    "FDB": 0.08,
+    "ABY": 0.08,
+    "MSR": 0.08,
+    "QTR": 0.08,
+    "THY": 0.08,
+    "LMU": 0.08
+  },
+  "domestic_route_shares": {
+    "DMM": 0.25,
+    "JED": 0.25,
+    "MED": 0.25,
+    "RUH": 0.25
+  },
+  "international_route_shares": {
+    "CAI": 0.47058823529411764,
+    "DXB": 0.11764705882352941,
+    "SHJ": 0.11764705882352941,
+    "DOH": 0.11764705882352941,
+    "IST": 0.11764705882352941,
+    "HBE": 0.058823529411764705
+  },
+  "domestic_ratio": 0.32,
+  "fleet_mix": {
+    "ALX": {
+      "A320": 1.0
+    },
+    "FDB": {
+      "B738": 1.0
+    },
+    "ABY": {
+      "A320": 1.0
+    },
+    "MSR": {
+      "A321": 0.5,
+      "E175": 0.5
+    },
+    "NIA": {
+      "A320": 1.0
+    },
+    "QTR": {
+      "A320": 0.5,
+      "A319": 0.5
+    },
+    "SVA": {
+      "A320": 0.375,
+      "A321": 0.375,
+      "E175": 0.25
+    },
+    "THY": {
+      "A319": 1.0
+    },
+    "LMU": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 25
+}

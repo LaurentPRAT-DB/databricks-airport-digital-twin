@@ -1,0 +1,39 @@
+{
+  "icao_code": "ZAM",
+  "iata_code": "ZAM",
+  "airline_shares": {
+    "CEB": 0.5,
+    "PAL": 0.3333333333333333,
+    "GAP": 0.16666666666666666
+  },
+  "domestic_route_shares": {
+    "MNL": 0.6,
+    "CEB": 0.2,
+    "DVO": 0.2
+  },
+  "international_route_shares": {
+    "JOL": 1.0
+  },
+  "domestic_ratio": 0.833,
+  "fleet_mix": {
+    "GAP": {
+      "A320": 1.0
+    },
+    "CEB": {
+      "A319": 0.6666666666666666,
+      "A320": 0.3333333333333333
+    },
+    "PAL": {
+      "DH8D": 0.6666666666666666,
+      "A320": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 12
+}

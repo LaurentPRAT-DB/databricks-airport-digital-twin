@@ -1,0 +1,62 @@
+{
+  "icao_code": "KHG",
+  "iata_code": "KHG",
+  "airline_shares": {
+    "CES": 0.2727272727272727,
+    "CCA": 0.18181818181818182,
+    "CSC": 0.09090909090909091,
+    "CSN": 0.09090909090909091,
+    "GUN": 0.09090909090909091,
+    "CHH": 0.09090909090909091,
+    "JAS": 0.09090909090909091,
+    "CDG": 0.09090909090909091
+  },
+  "domestic_route_shares": {
+    "URC": 0.8,
+    "CTU": 0.1,
+    "XIY": 0.1
+  },
+  "international_route_shares": {
+    "NGQ": 1.0
+  },
+  "domestic_ratio": 0.909,
+  "fleet_mix": {
+    "CSC": {
+      "A319": 1.0
+    },
+    "CCA": {
+      "A319": 0.5,
+      "B738": 0.5
+    },
+    "CSN": {
+      "E190": 0.5,
+      "B737": 0.5
+    },
+    "GUN": {
+      "A320": 1.0
+    },
+    "CHH": {
+      "B738": 1.0
+    },
+    "JAS": {
+      "A320": 1.0
+    },
+    "CES": {
+      "A319": 0.4,
+      "E190": 0.2,
+      "A320": 0.2,
+      "B737": 0.2
+    },
+    "CDG": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

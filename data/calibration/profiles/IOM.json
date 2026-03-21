@@ -1,0 +1,38 @@
+{
+  "icao_code": "IOM",
+  "iata_code": "IOM",
+  "airline_shares": {
+    "HCW": 0.4444444444444444,
+    "BEE": 0.3333333333333333,
+    "EZY": 0.2222222222222222
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "LPL": 0.2222222222222222,
+    "BHX": 0.1111111111111111,
+    "MAN": 0.1111111111111111,
+    "LGW": 0.1111111111111111,
+    "BHD": 0.1111111111111111,
+    "BLK": 0.1111111111111111,
+    "GLO": 0.1111111111111111,
+    "NCL": 0.1111111111111111
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "BEE": {
+      "DH8D": 0.75,
+      "E175": 0.25
+    },
+    "EZY": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

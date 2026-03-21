@@ -1,0 +1,56 @@
+{
+  "icao_code": "NIM",
+  "iata_code": "NIM",
+  "airline_shares": {
+    "AFR": 0.2,
+    "RAM": 0.2,
+    "ETH": 0.2,
+    "VBW": 0.1,
+    "DAH": 0.1,
+    "SGG": 0.1,
+    "THY": 0.1
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "OUA": 0.55,
+    "CDG": 0.1,
+    "ALG": 0.1,
+    "CMN": 0.1,
+    "ADD": 0.1,
+    "IST": 0.05
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "VBW": {
+      "CRJ9": 1.0
+    },
+    "AFR": {
+      "A330": 1.0
+    },
+    "DAH": {
+      "B738": 1.0
+    },
+    "RAM": {
+      "B738": 0.8,
+      "B737": 0.2
+    },
+    "SGG": {
+      "A320": 1.0
+    },
+    "ETH": {
+      "B752": 1.0
+    },
+    "THY": {
+      "B739": 0.6666666666666666,
+      "B738": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

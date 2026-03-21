@@ -1,0 +1,46 @@
+{
+  "icao_code": "VER",
+  "iata_code": "VER",
+  "airline_shares": {
+    "VB": 0.2857142857142857,
+    "VOI": 0.2857142857142857,
+    "AMX": 0.21428571428571427,
+    "4O": 0.07142857142857142,
+    "ZTF": 0.07142857142857142,
+    "TAO": 0.07142857142857142
+  },
+  "domestic_route_shares": {
+    "MEX": 0.25,
+    "VSA": 0.16666666666666666,
+    "CUN": 0.16666666666666666,
+    "GDL": 0.16666666666666666,
+    "MTY": 0.16666666666666666,
+    "TIJ": 0.08333333333333333
+  },
+  "international_route_shares": {
+    "TAM": 0.5,
+    "REX": 0.5
+  },
+  "domestic_ratio": 0.857,
+  "fleet_mix": {
+    "4O": {
+      "A320": 1.0
+    },
+    "AMX": {
+      "AT76": 0.8571428571428571,
+      "E175": 0.14285714285714285
+    },
+    "VOI": {
+      "A320": 0.75,
+      "A319": 0.25
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 28
+}

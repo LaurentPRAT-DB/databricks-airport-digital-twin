@@ -1,0 +1,36 @@
+{
+  "icao_code": "TJU",
+  "iata_code": "TJU",
+  "airline_shares": {
+    "JAA": 0.46153846153846156,
+    "SVR": 0.38461538461538464,
+    "SBI": 0.15384615384615385
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "DME": 0.46153846153846156,
+    "LED": 0.23076923076923078,
+    "SVX": 0.23076923076923078,
+    "CIT": 0.07692307692307693
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "JAA": {
+      "A320": 1.0
+    },
+    "SBI": {
+      "A321": 1.0
+    },
+    "SVR": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 13
+}

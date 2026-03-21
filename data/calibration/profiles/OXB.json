@@ -1,0 +1,39 @@
+{
+  "icao_code": "OXB",
+  "iata_code": "OXB",
+  "airline_shares": {
+    "RAM": 0.42857142857142855,
+    "AYZ": 0.2857142857142857,
+    "SGG": 0.14285714285714285,
+    "ETH": 0.14285714285714285
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "CKY": 0.2857142857142857,
+    "DKR": 0.2857142857142857,
+    "BJL": 0.14285714285714285,
+    "CMN": 0.14285714285714285,
+    "RAI": 0.14285714285714285
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "AYZ": {
+      "A319": 1.0
+    },
+    "RAM": {
+      "B738": 0.7142857142857143,
+      "B737": 0.2857142857142857
+    },
+    "SGG": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

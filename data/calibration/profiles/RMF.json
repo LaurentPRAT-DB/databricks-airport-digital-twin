@@ -1,0 +1,45 @@
+{
+  "icao_code": "RMF",
+  "iata_code": "RMF",
+  "airline_shares": {
+    "OAW": 0.2,
+    "BHP": 0.2,
+    "BER": 0.2,
+    "NLY": 0.2,
+    "MSR": 0.2
+  },
+  "domestic_route_shares": {
+    "CAI": 1.0
+  },
+  "international_route_shares": {
+    "ZRH": 0.5,
+    "DUS": 0.25,
+    "VIE": 0.25
+  },
+  "domestic_ratio": 0.2,
+  "fleet_mix": {
+    "OAW": {
+      "A319": 1.0
+    },
+    "BHP": {
+      "A320": 1.0
+    },
+    "BER": {
+      "A321": 1.0
+    },
+    "NLY": {
+      "A321": 1.0
+    },
+    "MSR": {
+      "E175": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

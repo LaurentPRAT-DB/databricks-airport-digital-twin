@@ -1,0 +1,50 @@
+{
+  "icao_code": "VTZ",
+  "iata_code": "VTZ",
+  "airline_shares": {
+    "IGO": 0.3333333333333333,
+    "AIC": 0.25,
+    "SEJ": 0.25,
+    "JAI": 0.08333333333333333,
+    "SLK": 0.08333333333333333
+  },
+  "domestic_route_shares": {
+    "HYD": 0.2857142857142857,
+    "BLR": 0.19047619047619047,
+    "MAA": 0.19047619047619047,
+    "BOM": 0.14285714285714285,
+    "BBI": 0.09523809523809523,
+    "DEL": 0.09523809523809523
+  },
+  "international_route_shares": {
+    "SIN": 0.6666666666666666,
+    "RPR": 0.3333333333333333
+  },
+  "domestic_ratio": 0.875,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "JAI": {
+      "B738": 1.0
+    },
+    "AIC": {
+      "A321": 0.6666666666666666,
+      "A319": 0.3333333333333333
+    },
+    "SLK": {
+      "A319": 1.0
+    },
+    "SEJ": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 24
+}

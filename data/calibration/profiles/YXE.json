@@ -1,0 +1,36 @@
+{
+  "icao_code": "YXE",
+  "iata_code": "YXE",
+  "airline_shares": {
+    "WJA": 0.8571428571428571,
+    "ACA": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "YYZ": 0.3333333333333333,
+    "YEG": 0.16666666666666666,
+    "YVR": 0.16666666666666666,
+    "YWG": 0.16666666666666666,
+    "YYC": 0.16666666666666666
+  },
+  "international_route_shares": {
+    "LAS": 1.0
+  },
+  "domestic_ratio": 0.857,
+  "fleet_mix": {
+    "ACA": {
+      "E190": 1.0
+    },
+    "WJA": {
+      "DH8D": 0.75,
+      "B738": 0.25
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

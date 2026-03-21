@@ -1,0 +1,38 @@
+{
+  "icao_code": "IQT",
+  "iata_code": "IQT",
+  "airline_shares": {
+    "2I": 0.36363636363636365,
+    "PGP": 0.36363636363636365,
+    "CMP": 0.18181818181818182,
+    "LAN": 0.09090909090909091
+  },
+  "domestic_route_shares": {
+    "PCL": 0.5714285714285714,
+    "LIM": 0.42857142857142855
+  },
+  "international_route_shares": {
+    "TPP": 0.5,
+    "PTY": 0.5
+  },
+  "domestic_ratio": 0.636,
+  "fleet_mix": {
+    "CMP": {
+      "E190": 1.0
+    },
+    "LAN": {
+      "A319": 1.0
+    },
+    "PGP": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 11
+}

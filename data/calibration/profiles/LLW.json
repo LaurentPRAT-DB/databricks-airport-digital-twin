@@ -1,0 +1,45 @@
+{
+  "icao_code": "LLW",
+  "iata_code": "LLW",
+  "airline_shares": {
+    "ETH": 0.5294117647058824,
+    "KQA": 0.23529411764705882,
+    "P0": 0.11764705882352941,
+    "SAA": 0.11764705882352941
+  },
+  "domestic_route_shares": {
+    "BLZ": 1.0
+  },
+  "international_route_shares": {
+    "LUN": 0.4,
+    "DAR": 0.13333333333333333,
+    "HRE": 0.13333333333333333,
+    "NBO": 0.13333333333333333,
+    "JNB": 0.13333333333333333,
+    "ADD": 0.06666666666666667
+  },
+  "domestic_ratio": 0.118,
+  "fleet_mix": {
+    "ETH": {
+      "B738": 1.0
+    },
+    "KQA": {
+      "E190": 0.3333333333333333,
+      "B767": 0.3333333333333333,
+      "E175": 0.16666666666666666,
+      "B738": 0.16666666666666666
+    },
+    "SAA": {
+      "B738": 0.5,
+      "A330": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 17
+}

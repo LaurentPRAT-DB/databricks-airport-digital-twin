@@ -1,0 +1,37 @@
+{
+  "icao_code": "ZQN",
+  "iata_code": "ZQN",
+  "airline_shares": {
+    "JST": 0.45454545454545453,
+    "ANZ": 0.36363636363636365,
+    "QFA": 0.18181818181818182
+  },
+  "domestic_route_shares": {
+    "AKL": 0.6666666666666666,
+    "CHC": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "SYD": 0.8,
+    "MEL": 0.2
+  },
+  "domestic_ratio": 0.545,
+  "fleet_mix": {
+    "JST": {
+      "A320": 1.0
+    },
+    "ANZ": {
+      "A320": 1.0
+    },
+    "QFA": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 11
+}

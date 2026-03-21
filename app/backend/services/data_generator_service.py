@@ -103,35 +103,34 @@ class DataGeneratorService:
         try:
             _t_data_start = _time.monotonic()
 
-            if progress_callback:
-                await progress_callback(4, total_steps, "Generating flight schedule...", False)
-            _t_sub = _time.monotonic()
-            schedule_count = await self._generate_schedule() if has_lakebase else 0
-            logger.info(f"[DIAG] Step 4 (schedule): {_time.monotonic() - _t_sub:.3f}s — {schedule_count} flights")
+            if has_lakebase:
+                # Wave 1: Schedule + Weather + GSE in parallel
+                # (Baggage depends on schedule being in Lakebase, so runs in wave 2)
+                if progress_callback:
+                    await progress_callback(4, total_steps, "Generating data (schedule, weather, GSE)...", False)
+                _t_sub = _time.monotonic()
+                schedule_count, weather_count, gse_count = await asyncio.gather(
+                    self._generate_schedule(),
+                    self._generate_weather(),
+                    self._generate_gse_fleet(),
+                )
+                logger.info(
+                    f"[DIAG] Wave 1 (schedule+weather+GSE) parallel: {_time.monotonic() - _t_sub:.3f}s "
+                    f"— {schedule_count} flights, {weather_count} station(s), {gse_count} GSE units"
+                )
 
-            if progress_callback:
-                await progress_callback(5, total_steps, "Generating weather data...", False)
-            _t_sub = _time.monotonic()
-            weather_count = await self._generate_weather() if has_lakebase else 0
-            logger.info(f"[DIAG] Step 5 (weather): {_time.monotonic() - _t_sub:.3f}s — {weather_count} station(s)")
-
-            if progress_callback:
-                await progress_callback(6, total_steps, "Generating baggage data...", False)
-            _t_sub = _time.monotonic()
-            baggage_count = await self._generate_baggage() if has_lakebase else 0
-            logger.info(f"[DIAG] Step 6 (baggage): {_time.monotonic() - _t_sub:.3f}s — {baggage_count} flight stats")
-
-            if progress_callback:
-                await progress_callback(7, total_steps, "Generating GSE fleet data...", False)
-            _t_sub = _time.monotonic()
-            gse_count = await self._generate_gse_fleet() if has_lakebase else 0
-            logger.info(f"[DIAG] Step 7 (GSE): {_time.monotonic() - _t_sub:.3f}s — {gse_count} units")
+                # Wave 2: Baggage (reads schedule from Lakebase)
+                if progress_callback:
+                    await progress_callback(6, total_steps, "Generating baggage data...", False)
+                _t_sub = _time.monotonic()
+                baggage_count = await self._generate_baggage()
+                logger.info(f"[DIAG] Wave 2 (baggage): {_time.monotonic() - _t_sub:.3f}s — {baggage_count} flight stats")
+            else:
+                schedule_count = weather_count = baggage_count = gse_count = 0
 
             total_data = _time.monotonic() - _t_data_start
             logger.info(f"[DIAG] Steps 4-7 (data gen) total: {total_data:.3f}s")
-            logger.info("=" * 60)
             logger.info(f"Data initialization complete for {airport_icao}")
-            logger.info("=" * 60)
 
             self._initialized = True
             self._initialized_airports.add(airport_icao)
@@ -314,7 +313,6 @@ class DataGeneratorService:
         if not schedule:
             return 0
 
-        count = 0
         all_stats = []
         for flight in schedule:
             flight_number = flight.get("flight_number")
@@ -333,18 +331,19 @@ class DataGeneratorService:
                 scheduled_time=scheduled_time,
                 is_arrival=is_arrival,
             )
+            all_stats.append(stats)
 
-            if lakebase.upsert_baggage_stats(stats, airport_icao=self._current_airport_icao):
-                count += 1
-            all_stats.append({"airport_icao": self._current_airport_icao, **stats})
+        # Batch upsert all baggage stats in one round-trip
+        count = lakebase.upsert_baggage_stats_batch(all_stats, airport_icao=self._current_airport_icao)
 
         # Write events to landing zone for DLT pipeline pickup
         # (only works inside Databricks — /Volumes is not mounted in App containers)
         if all_stats and os.path.isdir("/Volumes"):
             try:
                 from src.ingestion.baggage_writer import write_baggage_events
+                tagged = [{"airport_icao": self._current_airport_icao, **s} for s in all_stats]
                 write_baggage_events(
-                    all_stats,
+                    tagged,
                     catalog="serverless_stable_3n0ihb_catalog",
                     schema="airport_digital_twin",
                 )

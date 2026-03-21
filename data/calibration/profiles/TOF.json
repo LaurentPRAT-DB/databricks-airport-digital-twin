@@ -1,0 +1,37 @@
+{
+  "icao_code": "TOF",
+  "iata_code": "TOF",
+  "airline_shares": {
+    "Y7": 0.4,
+    "SBI": 0.2,
+    "AFL": 0.2,
+    "TSO": 0.2
+  },
+  "domestic_route_shares": {
+    "DME": 0.4,
+    "SVO": 0.2,
+    "KJA": 0.2,
+    "SGC": 0.2
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "SBI": {
+      "B738": 1.0
+    },
+    "AFL": {
+      "B738": 1.0
+    },
+    "Y7": {
+      "AT76": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

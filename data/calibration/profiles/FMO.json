@@ -1,0 +1,40 @@
+{
+  "icao_code": "FMO",
+  "iata_code": "FMO",
+  "airline_shares": {
+    "BER": 0.4444444444444444,
+    "CWA": 0.3333333333333333,
+    "RYR": 0.2222222222222222
+  },
+  "domestic_route_shares": {
+    "BRE": 0.5,
+    "STR": 0.5
+  },
+  "international_route_shares": {
+    "AYT": 0.14285714285714285,
+    "CFU": 0.14285714285714285,
+    "IBZ": 0.14285714285714285,
+    "PMI": 0.14285714285714285,
+    "AGP": 0.14285714285714285,
+    "GRO": 0.14285714285714285,
+    "ZRH": 0.14285714285714285
+  },
+  "domestic_ratio": 0.222,
+  "fleet_mix": {
+    "BER": {
+      "B738": 0.8,
+      "A320": 0.2
+    },
+    "RYR": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

@@ -1,0 +1,52 @@
+{
+  "icao_code": "SSG",
+  "iata_code": "SSG",
+  "airline_shares": {
+    "WDY": 0.2727272727272727,
+    "RAM": 0.18181818181818182,
+    "ETH": 0.18181818181818182,
+    "AFR": 0.09090909090909091,
+    "DSY": 0.09090909090909091,
+    "IBE": 0.09090909090909091,
+    "GEC": 0.09090909090909091
+  },
+  "domestic_route_shares": {
+    "BSG": 1.0
+  },
+  "international_route_shares": {
+    "DLA": 0.3,
+    "LBV": 0.15,
+    "CMN": 0.1,
+    "COO": 0.1,
+    "ADD": 0.1,
+    "MAD": 0.1,
+    "ABV": 0.1,
+    "LOS": 0.05
+  },
+  "domestic_ratio": 0.091,
+  "fleet_mix": {
+    "AFR": {
+      "B777": 1.0
+    },
+    "RAM": {
+      "B738": 1.0
+    },
+    "DSY": {
+      "AT76": 1.0
+    },
+    "ETH": {
+      "B767": 1.0
+    },
+    "IBE": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

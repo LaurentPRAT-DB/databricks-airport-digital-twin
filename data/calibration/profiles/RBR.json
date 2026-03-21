@@ -1,0 +1,36 @@
+{
+  "icao_code": "RBR",
+  "iata_code": "RBR",
+  "airline_shares": {
+    "SEH": 0.6,
+    "AZU": 0.2,
+    "TAM": 0.2
+  },
+  "domestic_route_shares": {
+    "PVH": 0.5,
+    "BSB": 0.5
+  },
+  "international_route_shares": {
+    "CZS": 1.0
+  },
+  "domestic_ratio": 0.8,
+  "fleet_mix": {
+    "AZU": {
+      "E190": 1.0
+    },
+    "SEH": {
+      "B737": 1.0
+    },
+    "TAM": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

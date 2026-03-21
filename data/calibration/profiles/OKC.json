@@ -1,0 +1,53 @@
+{
+  "icao_code": "OKC",
+  "iata_code": "OKC",
+  "airline_shares": {
+    "SWA": 0.5,
+    "USA": 0.125,
+    "AAL": 0.0625,
+    "DAL": 0.0625,
+    "FFT": 0.0625,
+    "TRS": 0.0625,
+    "AAY": 0.0625,
+    "UAL": 0.0625
+  },
+  "domestic_route_shares": {
+    "DFW": 0.125,
+    "ATL": 0.125,
+    "DEN": 0.125,
+    "SFB": 0.0625,
+    "IAH": 0.0625,
+    "ORD": 0.0625,
+    "BWI": 0.0625,
+    "DAL": 0.0625,
+    "HOU": 0.0625,
+    "LAS": 0.0625,
+    "MDW": 0.0625,
+    "PHX": 0.0625,
+    "STL": 0.0625
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "FFT": {
+      "A319": 1.0
+    },
+    "AAY": {
+      "A320": 1.0
+    },
+    "UAL": {
+      "A319": 0.2857142857142857,
+      "A320": 0.2857142857142857,
+      "B739": 0.2857142857142857,
+      "B738": 0.14285714285714285
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 32
+}

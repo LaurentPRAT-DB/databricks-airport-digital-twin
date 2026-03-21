@@ -1,0 +1,35 @@
+{
+  "icao_code": "TMM",
+  "iata_code": "TMM",
+  "airline_shares": {
+    "MDG": 0.8461538461538461,
+    "REU": 0.15384615384615385
+  },
+  "domestic_route_shares": {
+    "TNR": 1.0
+  },
+  "international_route_shares": {
+    "RUN": 0.2727272727272727,
+    "ANM": 0.18181818181818182,
+    "SMS": 0.18181818181818182,
+    "WMN": 0.18181818181818182,
+    "WMR": 0.18181818181818182
+  },
+  "domestic_ratio": 0.154,
+  "fleet_mix": {
+    "MDG": {
+      "AT76": 1.0
+    },
+    "REU": {
+      "AT76": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 13
+}

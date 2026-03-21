@@ -1,0 +1,40 @@
+{
+  "icao_code": "BPS",
+  "iata_code": "BPS",
+  "airline_shares": {
+    "AZU": 0.4,
+    "SEH": 0.3,
+    "TAM": 0.3
+  },
+  "domestic_route_shares": {
+    "CNF": 0.3,
+    "SSA": 0.2,
+    "GRU": 0.2,
+    "SDU": 0.1,
+    "VCP": 0.1,
+    "CGH": 0.1
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AZU": {
+      "E190": 0.75,
+      "AT76": 0.25
+    },
+    "SEH": {
+      "B738": 1.0
+    },
+    "TAM": {
+      "A320": 0.75,
+      "A319": 0.25
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

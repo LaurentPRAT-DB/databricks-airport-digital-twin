@@ -1,0 +1,54 @@
+{
+  "icao_code": "ROC",
+  "iata_code": "ROC",
+  "airline_shares": {
+    "SWA": 0.32,
+    "DAL": 0.2,
+    "AAL": 0.16,
+    "USA": 0.16,
+    "JBU": 0.08,
+    "UAL": 0.08
+  },
+  "domestic_route_shares": {
+    "CLT": 0.16,
+    "JFK": 0.16,
+    "ORD": 0.16,
+    "PHL": 0.08,
+    "ATL": 0.08,
+    "BWI": 0.08,
+    "MCO": 0.08,
+    "MDW": 0.08,
+    "TPA": 0.08,
+    "LGA": 0.04
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AAL": {
+      "A319": 1.0
+    },
+    "JBU": {
+      "E190": 1.0
+    },
+    "DAL": {
+      "CRJ9": 0.6666666666666666,
+      "CRJ7": 0.3333333333333333
+    },
+    "UAL": {
+      "B738": 0.3333333333333333,
+      "A320": 0.3333333333333333,
+      "A319": 0.3333333333333333
+    },
+    "USA": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 25
+}

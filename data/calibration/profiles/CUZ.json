@@ -1,0 +1,39 @@
+{
+  "icao_code": "CUZ",
+  "iata_code": "CUZ",
+  "airline_shares": {
+    "2I": 0.36363636363636365,
+    "LAN": 0.2727272727272727,
+    "PGP": 0.18181818181818182,
+    "AZN": 0.18181818181818182
+  },
+  "domestic_route_shares": {
+    "LIM": 0.8571428571428571,
+    "JUL": 0.14285714285714285
+  },
+  "international_route_shares": {
+    "PEM": 0.5,
+    "LPB": 0.5
+  },
+  "domestic_ratio": 0.636,
+  "fleet_mix": {
+    "LAN": {
+      "A319": 0.75,
+      "A320": 0.25
+    },
+    "PGP": {
+      "B737": 1.0
+    },
+    "AZN": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 11
+}

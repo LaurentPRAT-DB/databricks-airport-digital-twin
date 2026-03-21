@@ -1,0 +1,35 @@
+{
+  "icao_code": "KLV",
+  "iata_code": "KLV",
+  "airline_shares": {
+    "CSA": 0.5,
+    "AFL": 0.25,
+    "SVR": 0.25
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "SVO": 0.5,
+    "LED": 0.25,
+    "SVX": 0.25
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "CSA": {
+      "A320": 1.0
+    },
+    "AFL": {
+      "A320": 1.0
+    },
+    "SVR": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

@@ -1,0 +1,55 @@
+{
+  "icao_code": "TYS",
+  "iata_code": "TYS",
+  "airline_shares": {
+    "USA": 0.4444444444444444,
+    "AAY": 0.2962962962962963,
+    "FLG": 0.07407407407407407,
+    "DAL": 0.07407407407407407,
+    "FFT": 0.07407407407407407,
+    "AAL": 0.037037037037037035
+  },
+  "domestic_route_shares": {
+    "ATL": 0.16,
+    "CLT": 0.12,
+    "DEN": 0.08,
+    "FLL": 0.08,
+    "PIE": 0.08,
+    "SFB": 0.08,
+    "DCA": 0.08,
+    "DFW": 0.08,
+    "LGA": 0.08,
+    "ORD": 0.08,
+    "PHL": 0.08
+  },
+  "international_route_shares": {
+    "PGD": 1.0
+  },
+  "domestic_ratio": 0.926,
+  "fleet_mix": {
+    "FLG": {
+      "CRJ9": 1.0
+    },
+    "AAL": {
+      "CRJ7": 1.0
+    },
+    "FFT": {
+      "A319": 1.0
+    },
+    "AAY": {
+      "A320": 1.0
+    },
+    "USA": {
+      "CRJ9": 0.75,
+      "CRJ7": 0.25
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 27
+}

@@ -1,0 +1,44 @@
+{
+  "icao_code": "BND",
+  "iata_code": "BND",
+  "airline_shares": {
+    "IRA": 0.47368421052631576,
+    "IRC": 0.3684210526315789,
+    "BGD": 0.05263157894736842,
+    "GFG": 0.05263157894736842,
+    "IRK": 0.05263157894736842
+  },
+  "domestic_route_shares": {
+    "KIH": 0.25,
+    "MHD": 0.16666666666666666,
+    "IFN": 0.16666666666666666,
+    "SYZ": 0.16666666666666666,
+    "THR": 0.16666666666666666,
+    "AWZ": 0.08333333333333333
+  },
+  "international_route_shares": {
+    "DXB": 0.2857142857142857,
+    "AZD": 0.14285714285714285,
+    "RAS": 0.14285714285714285,
+    "SRY": 0.14285714285714285,
+    "TBZ": 0.14285714285714285,
+    "ZBR": 0.14285714285714285
+  },
+  "domestic_ratio": 0.632,
+  "fleet_mix": {
+    "IRC": {
+      "AT76": 1.0
+    },
+    "IRA": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 38
+}

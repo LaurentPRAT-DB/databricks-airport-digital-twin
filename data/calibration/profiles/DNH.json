@@ -1,0 +1,41 @@
+{
+  "icao_code": "DNH",
+  "iata_code": "DNH",
+  "airline_shares": {
+    "CSN": 0.2857142857142857,
+    "JAS": 0.2857142857142857,
+    "CSC": 0.14285714285714285,
+    "GUN": 0.14285714285714285,
+    "CES": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "LHW": 0.2857142857142857,
+    "URC": 0.2857142857142857,
+    "XIY": 0.2857142857142857,
+    "HGH": 0.14285714285714285
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "CSC": {
+      "A319": 1.0
+    },
+    "CSN": {
+      "E190": 1.0
+    },
+    "JAS": {
+      "A320": 1.0
+    },
+    "CES": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

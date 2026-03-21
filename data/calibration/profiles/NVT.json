@@ -1,0 +1,37 @@
+{
+  "icao_code": "NVT",
+  "iata_code": "NVT",
+  "airline_shares": {
+    "AZU": 0.42857142857142855,
+    "SEH": 0.42857142857142855,
+    "TAM": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "GRU": 0.2857142857142857,
+    "CGH": 0.2857142857142857,
+    "POA": 0.14285714285714285,
+    "VCP": 0.14285714285714285,
+    "GIG": 0.14285714285714285
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AZU": {
+      "E190": 1.0
+    },
+    "SEH": {
+      "B737": 1.0
+    },
+    "TAM": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

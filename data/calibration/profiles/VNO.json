@@ -1,0 +1,133 @@
+{
+  "icao_code": "VNO",
+  "iata_code": "VNO",
+  "airline_shares": {
+    "WZZ": 0.28,
+    "RYR": 0.24,
+    "LTU": 0.12,
+    "NAX": 0.04,
+    "SAS": 0.04,
+    "THY": 0.04,
+    "BRU": 0.02,
+    "BTI": 0.02,
+    "GEC": 0.02,
+    "LOT": 0.02,
+    "ELL": 0.02,
+    "AUI": 0.02,
+    "DAT": 0.02,
+    "AFL": 0.02,
+    "TSO": 0.02,
+    "UR": 0.02,
+    "WAU": 0.02,
+    "YQ": 0.02
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "TLL": 0.06,
+    "ARN": 0.04,
+    "BCN": 0.04,
+    "BGY": 0.04,
+    "BVA": 0.04,
+    "BRU": 0.04,
+    "MSQ": 0.02,
+    "RIX": 0.02,
+    "OSL": 0.02,
+    "BRE": 0.02,
+    "CHQ": 0.02,
+    "CIA": 0.02,
+    "CRL": 0.02,
+    "DUB": 0.02,
+    "LPL": 0.02,
+    "ORK": 0.02,
+    "RYG": 0.02,
+    "STN": 0.02,
+    "FRA": 0.02,
+    "WAW": 0.02,
+    "CDG": 0.02,
+    "MUC": 0.02,
+    "PRG": 0.02,
+    "TXL": 0.02,
+    "KBP": 0.02,
+    "CPH": 0.02,
+    "SVO": 0.02,
+    "IST": 0.02,
+    "DME": 0.02,
+    "VKO": 0.02,
+    "AES": 0.02,
+    "BGO": 0.02,
+    "DSA": 0.02,
+    "DTM": 0.02,
+    "EIN": 0.02,
+    "FCO": 0.02,
+    "KUT": 0.02,
+    "LTN": 0.02,
+    "SVG": 0.02,
+    "TLV": 0.02,
+    "TRF": 0.02,
+    "IEV": 0.02,
+    "LED": 0.02
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "BRU": {
+      "CRJ9": 1.0
+    },
+    "BTI": {
+      "DH8D": 1.0
+    },
+    "NAX": {
+      "B738": 1.0
+    },
+    "RYR": {
+      "B738": 1.0
+    },
+    "GEC": {
+      "A321": 0.5,
+      "A320": 0.5
+    },
+    "LOT": {
+      "E175": 0.6666666666666666,
+      "DH8D": 0.3333333333333333
+    },
+    "LTU": {
+      "E175": 1.0
+    },
+    "ELL": {
+      "CRJ9": 0.5,
+      "E175": 0.5
+    },
+    "AUI": {
+      "B737": 0.5,
+      "E190": 0.5
+    },
+    "SAS": {
+      "CRJ9": 1.0
+    },
+    "DAT": {
+      "A319": 1.0
+    },
+    "AFL": {
+      "A320": 1.0
+    },
+    "THY": {
+      "A319": 1.0
+    },
+    "UR": {
+      "AT76": 1.0
+    },
+    "WZZ": {
+      "A320": 1.0
+    },
+    "WAU": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 100
+}

@@ -1,0 +1,54 @@
+{
+  "icao_code": "MYJ",
+  "iata_code": "MYJ",
+  "airline_shares": {
+    "ANA": 0.2857142857142857,
+    "GK": 0.14285714285714285,
+    "JAL": 0.14285714285714285,
+    "MM": 0.14285714285714285,
+    "CES": 0.14285714285714285,
+    "OZR": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "HND": 0.4,
+    "NRT": 0.2,
+    "KIX": 0.2,
+    "OKA": 0.2
+  },
+  "international_route_shares": {
+    "PVG": 0.5,
+    "ICN": 0.5
+  },
+  "domestic_ratio": 0.714,
+  "fleet_mix": {
+    "GK": {
+      "A320": 1.0
+    },
+    "JAL": {
+      "B767": 1.0
+    },
+    "MM": {
+      "A320": 1.0
+    },
+    "CES": {
+      "A319": 1.0
+    },
+    "ANA": {
+      "B777": 0.25,
+      "B787": 0.25,
+      "B767": 0.25,
+      "B737": 0.25
+    },
+    "OZR": {
+      "A321": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

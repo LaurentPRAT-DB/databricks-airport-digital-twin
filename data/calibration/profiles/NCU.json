@@ -1,0 +1,36 @@
+{
+  "icao_code": "NCU",
+  "iata_code": "NCU",
+  "airline_shares": {
+    "UZB": 0.5,
+    "GZP": 0.25,
+    "SVR": 0.25
+  },
+  "domestic_route_shares": {
+    "TAS": 1.0
+  },
+  "international_route_shares": {
+    "DME": 0.6666666666666666,
+    "VKO": 0.3333333333333333
+  },
+  "domestic_ratio": 0.25,
+  "fleet_mix": {
+    "GZP": {
+      "B737": 1.0
+    },
+    "UZB": {
+      "A320": 1.0
+    },
+    "SVR": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

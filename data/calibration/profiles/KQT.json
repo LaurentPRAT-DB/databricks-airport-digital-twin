@@ -1,0 +1,31 @@
+{
+  "icao_code": "KQT",
+  "iata_code": "KQT",
+  "airline_shares": {
+    "JAA": 1.0
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "OVB": 0.2222222222222222,
+    "REN": 0.2222222222222222,
+    "DME": 0.1111111111111111,
+    "CIT": 0.1111111111111111,
+    "DMB": 0.1111111111111111,
+    "LED": 0.1111111111111111,
+    "SVX": 0.1111111111111111
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "JAA": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 9
+}

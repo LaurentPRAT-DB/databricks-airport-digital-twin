@@ -1,0 +1,39 @@
+{
+  "icao_code": "IDR",
+  "iata_code": "IDR",
+  "airline_shares": {
+    "IGO": 0.4444444444444444,
+    "AIC": 0.2222222222222222,
+    "SEJ": 0.2222222222222222,
+    "JAI": 0.1111111111111111
+  },
+  "domestic_route_shares": {
+    "DEL": 0.5,
+    "BOM": 0.25,
+    "NAG": 0.125,
+    "HYD": 0.125
+  },
+  "international_route_shares": {
+    "RPR": 1.0
+  },
+  "domestic_ratio": 0.889,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "JAI": {
+      "B738": 1.0
+    },
+    "AIC": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

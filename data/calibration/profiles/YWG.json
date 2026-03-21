@@ -1,0 +1,54 @@
+{
+  "icao_code": "YWG",
+  "iata_code": "YWG",
+  "airline_shares": {
+    "WJA": 0.44,
+    "CAV": 0.28,
+    "BLS": 0.16,
+    "ACA": 0.08,
+    "FAB": 0.04
+  },
+  "domestic_route_shares": {
+    "YVR": 0.2222222222222222,
+    "YYZ": 0.2222222222222222,
+    "YEG": 0.1111111111111111,
+    "YOW": 0.1111111111111111,
+    "YUL": 0.1111111111111111,
+    "YXE": 0.1111111111111111,
+    "YYC": 0.1111111111111111
+  },
+  "international_route_shares": {
+    "YRT": 0.125,
+    "YQD": 0.125,
+    "YQT": 0.09375,
+    "YFO": 0.09375,
+    "YQK": 0.0625,
+    "YRL": 0.0625,
+    "YGX": 0.0625,
+    "YSK": 0.0625,
+    "YTH": 0.0625,
+    "YYQ": 0.0625,
+    "LAS": 0.0625,
+    "YQR": 0.0625,
+    "YXU": 0.0625
+  },
+  "domestic_ratio": 0.36,
+  "fleet_mix": {
+    "ACA": {
+      "E190": 0.4444444444444444,
+      "A320": 0.3333333333333333,
+      "A319": 0.2222222222222222
+    },
+    "WJA": {
+      "DH8D": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 50
+}

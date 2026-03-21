@@ -1,0 +1,48 @@
+{
+  "icao_code": "DVO",
+  "iata_code": "DVO",
+  "airline_shares": {
+    "CEB": 0.6666666666666666,
+    "SLK": 0.16666666666666666,
+    "LOO": 0.08333333333333333,
+    "PAL": 0.08333333333333333
+  },
+  "domestic_route_shares": {
+    "MNL": 0.3,
+    "CEB": 0.2,
+    "BCD": 0.1,
+    "CGY": 0.1,
+    "ILO": 0.1,
+    "PPS": 0.1,
+    "ZAM": 0.1
+  },
+  "international_route_shares": {
+    "DPL": 0.5,
+    "SIN": 0.5
+  },
+  "domestic_ratio": 0.833,
+  "fleet_mix": {
+    "CEB": {
+      "A320": 0.5,
+      "A319": 0.5
+    },
+    "SLK": {
+      "A320": 0.6666666666666666,
+      "B738": 0.3333333333333333
+    },
+    "LOO": {
+      "A320": 1.0
+    },
+    "PAL": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 24
+}

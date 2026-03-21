@@ -1,0 +1,32 @@
+{
+  "icao_code": "NAV",
+  "iata_code": "NAV",
+  "airline_shares": {
+    "PGT": 0.5,
+    "THY": 0.5
+  },
+  "domestic_route_shares": {
+    "SAW": 0.5,
+    "IST": 0.5
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "PGT": {
+      "B738": 1.0
+    },
+    "THY": {
+      "B738": 0.3333333333333333,
+      "A320": 0.3333333333333333,
+      "A319": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 4
+}

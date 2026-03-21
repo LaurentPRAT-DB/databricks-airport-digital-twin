@@ -1,0 +1,37 @@
+{
+  "icao_code": "GBE",
+  "iata_code": "GBE",
+  "airline_shares": {
+    "BOT": 0.875,
+    "KQA": 0.125
+  },
+  "domestic_route_shares": {
+    "BBK": 0.3333333333333333,
+    "FRW": 0.3333333333333333,
+    "MUB": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "CPT": 0.2,
+    "HRE": 0.2,
+    "JNB": 0.2,
+    "LUN": 0.2,
+    "NBO": 0.2
+  },
+  "domestic_ratio": 0.375,
+  "fleet_mix": {
+    "BOT": {
+      "AT76": 1.0
+    },
+    "KQA": {
+      "E190": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

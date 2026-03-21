@@ -1,0 +1,34 @@
+{
+  "icao_code": "FPO",
+  "iata_code": "FPO",
+  "airline_shares": {
+    "BHS": 0.6363636363636364,
+    "3M": 0.09090909090909091,
+    "DAL": 0.09090909090909091,
+    "Q7": 0.09090909090909091,
+    "USA": 0.09090909090909091
+  },
+  "domestic_route_shares": {
+    "NAS": 1.0
+  },
+  "international_route_shares": {
+    "FLL": 0.2222222222222222,
+    "ATL": 0.1111111111111111,
+    "BHM": 0.1111111111111111,
+    "BWI": 0.1111111111111111,
+    "CMH": 0.1111111111111111,
+    "EWR": 0.1111111111111111,
+    "RIC": 0.1111111111111111,
+    "MIA": 0.1111111111111111
+  },
+  "domestic_ratio": 0.182,
+  "fleet_mix": {},
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

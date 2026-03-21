@@ -1,0 +1,29 @@
+{
+  "icao_code": "EDL",
+  "iata_code": "EDL",
+  "airline_shares": {
+    "FFV": 0.7142857142857143,
+    "KQA": 0.2857142857142857
+  },
+  "domestic_route_shares": {
+    "NBO": 0.8,
+    "KIS": 0.2
+  },
+  "international_route_shares": {
+    "LOK": 1.0
+  },
+  "domestic_ratio": 0.714,
+  "fleet_mix": {
+    "FFV": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 7
+}

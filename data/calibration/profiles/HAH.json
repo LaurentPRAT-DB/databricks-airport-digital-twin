@@ -1,0 +1,49 @@
+{
+  "icao_code": "HAH",
+  "iata_code": "HAH",
+  "airline_shares": {
+    "REU": 0.25,
+    "FLT": 0.125,
+    "IYE": 0.125,
+    "KQA": 0.125,
+    "MDG": 0.125,
+    "PRF": 0.125,
+    "ZD": 0.125
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "DZA": 0.3125,
+    "MBA": 0.125,
+    "JIB": 0.125,
+    "TNR": 0.125,
+    "DAR": 0.125,
+    "RUN": 0.125,
+    "NBO": 0.0625
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "KQA": {
+      "E190": 1.0
+    },
+    "MDG": {
+      "AT76": 1.0
+    },
+    "PRF": {
+      "AT76": 1.0
+    },
+    "REU": {
+      "B738": 1.0
+    },
+    "ZD": {
+      "AT76": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

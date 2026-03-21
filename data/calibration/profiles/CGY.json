@@ -1,0 +1,38 @@
+{
+  "icao_code": "CGY",
+  "iata_code": "CGY",
+  "airline_shares": {
+    "CEB": 0.7142857142857143,
+    "GAP": 0.14285714285714285,
+    "PAL": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "MNL": 0.42857142857142855,
+    "BCD": 0.14285714285714285,
+    "CEB": 0.14285714285714285,
+    "DVO": 0.14285714285714285,
+    "ILO": 0.14285714285714285
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "GAP": {
+      "A320": 1.0
+    },
+    "CEB": {
+      "A319": 0.6,
+      "A320": 0.4
+    },
+    "PAL": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

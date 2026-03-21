@@ -1,0 +1,42 @@
+{
+  "icao_code": "SZB",
+  "iata_code": "SZB",
+  "airline_shares": {
+    "NWR": 0.6111111111111112,
+    "MXD": 0.3333333333333333,
+    "BVT": 0.05555555555555555
+  },
+  "domestic_route_shares": {
+    "JHB": 0.5,
+    "PEN": 0.5
+  },
+  "international_route_shares": {
+    "AOR": 0.14285714285714285,
+    "KBR": 0.14285714285714285,
+    "LGK": 0.14285714285714285,
+    "TGG": 0.14285714285714285,
+    "BTH": 0.07142857142857142,
+    "KTE": 0.07142857142857142,
+    "PKU": 0.07142857142857142,
+    "SIN": 0.07142857142857142,
+    "USM": 0.07142857142857142,
+    "RDN": 0.07142857142857142
+  },
+  "domestic_ratio": 0.222,
+  "fleet_mix": {
+    "NWR": {
+      "AT76": 1.0
+    },
+    "MXD": {
+      "AT76": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 36
+}

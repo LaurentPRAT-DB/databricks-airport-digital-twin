@@ -1,0 +1,29 @@
+{
+  "icao_code": "KER",
+  "iata_code": "KER",
+  "airline_shares": {
+    "IRA": 0.75,
+    "IRC": 0.25
+  },
+  "domestic_route_shares": {
+    "SYZ": 0.25,
+    "IFN": 0.25,
+    "THR": 0.25,
+    "ZAH": 0.25
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "IRC": {
+      "AT76": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

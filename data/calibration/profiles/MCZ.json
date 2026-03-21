@@ -1,0 +1,47 @@
+{
+  "icao_code": "MCZ",
+  "iata_code": "MCZ",
+  "airline_shares": {
+    "SEH": 0.3076923076923077,
+    "AZU": 0.23076923076923078,
+    "TAM": 0.23076923076923078,
+    "ONE": 0.23076923076923078
+  },
+  "domestic_route_shares": {
+    "BSB": 0.25,
+    "GRU": 0.25,
+    "GIG": 0.16666666666666666,
+    "SSA": 0.16666666666666666,
+    "REC": 0.08333333333333333,
+    "VCP": 0.08333333333333333
+  },
+  "international_route_shares": {
+    "AJU": 1.0
+  },
+  "domestic_ratio": 0.923,
+  "fleet_mix": {
+    "AZU": {
+      "E190": 0.6,
+      "AT76": 0.4
+    },
+    "SEH": {
+      "B738": 1.0
+    },
+    "TAM": {
+      "A320": 0.6666666666666666,
+      "A321": 0.3333333333333333
+    },
+    "ONE": {
+      "A318": 0.6666666666666666,
+      "A320": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 26
+}

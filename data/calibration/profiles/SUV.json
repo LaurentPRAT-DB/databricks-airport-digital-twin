@@ -1,0 +1,28 @@
+{
+  "icao_code": "SUV",
+  "iata_code": "SUV",
+  "airline_shares": {
+    "FJI": 1.0
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "FUN": 0.2857142857142857,
+    "SYD": 0.2857142857142857,
+    "TBU": 0.2857142857142857,
+    "AKL": 0.14285714285714285
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "FJI": {
+      "AT76": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 7
+}

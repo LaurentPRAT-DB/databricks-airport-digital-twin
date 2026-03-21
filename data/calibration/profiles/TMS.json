@@ -1,0 +1,28 @@
+{
+  "icao_code": "TMS",
+  "iata_code": "TMS",
+  "airline_shares": {
+    "DTA": 0.8,
+    "TAP": 0.2
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "LAD": 0.4,
+    "RAI": 0.4,
+    "LIS": 0.2
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "DTA": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 5
+}

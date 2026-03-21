@@ -1,0 +1,49 @@
+{
+  "icao_code": "SXR",
+  "iata_code": "SXR",
+  "airline_shares": {
+    "SEJ": 0.2962962962962963,
+    "IGO": 0.2222222222222222,
+    "AIC": 0.2222222222222222,
+    "GUJ": 0.18518518518518517,
+    "JAI": 0.07407407407407407
+  },
+  "domestic_route_shares": {
+    "DEL": 0.5882352941176471,
+    "BOM": 0.17647058823529413,
+    "ATQ": 0.11764705882352941,
+    "IXC": 0.11764705882352941
+  },
+  "international_route_shares": {
+    "IXJ": 0.8,
+    "IXL": 0.2
+  },
+  "domestic_ratio": 0.63,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "JAI": {
+      "B738": 1.0
+    },
+    "AIC": {
+      "A319": 0.5,
+      "A321": 0.25,
+      "A320": 0.25
+    },
+    "GUJ": {
+      "A320": 1.0
+    },
+    "SEJ": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 27
+}

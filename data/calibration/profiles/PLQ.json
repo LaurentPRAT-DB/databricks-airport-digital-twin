@@ -1,0 +1,32 @@
+{
+  "icao_code": "PLQ",
+  "iata_code": "PLQ",
+  "airline_shares": {
+    "BTI": 0.3333333333333333,
+    "NAX": 0.3333333333333333,
+    "SAS": 0.3333333333333333
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "RIX": 0.3333333333333333,
+    "OSL": 0.3333333333333333,
+    "CPH": 0.3333333333333333
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "BTI": {
+      "DH8D": 1.0
+    },
+    "SAS": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 6
+}

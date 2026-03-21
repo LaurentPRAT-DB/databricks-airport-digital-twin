@@ -1,0 +1,37 @@
+{
+  "icao_code": "MDZ",
+  "iata_code": "MDZ",
+  "airline_shares": {
+    "ARG": 0.47058823529411764,
+    "LAN": 0.29411764705882354,
+    "TIB": 0.23529411764705882
+  },
+  "domestic_route_shares": {
+    "COR": 0.2857142857142857,
+    "NQN": 0.2857142857142857,
+    "AEP": 0.2857142857142857,
+    "BRC": 0.14285714285714285
+  },
+  "international_route_shares": {
+    "SCL": 0.6666666666666666,
+    "UAQ": 0.3333333333333333
+  },
+  "domestic_ratio": 0.824,
+  "fleet_mix": {
+    "ARG": {
+      "B737": 1.0
+    },
+    "LAN": {
+      "A320": 0.7142857142857143,
+      "A319": 0.2857142857142857
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 17
+}

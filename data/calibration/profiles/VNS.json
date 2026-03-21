@@ -1,0 +1,40 @@
+{
+  "icao_code": "VNS",
+  "iata_code": "VNS",
+  "airline_shares": {
+    "AIC": 0.6666666666666666,
+    "IGO": 0.16666666666666666,
+    "SEJ": 0.16666666666666666
+  },
+  "domestic_route_shares": {
+    "DEL": 0.75,
+    "BOM": 0.25
+  },
+  "international_route_shares": {
+    "KTM": 0.5,
+    "HJR": 0.25,
+    "AGR": 0.25
+  },
+  "domestic_ratio": 0.667,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "AIC": {
+      "A320": 0.4,
+      "A321": 0.4,
+      "A319": 0.2
+    },
+    "SEJ": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 12
+}

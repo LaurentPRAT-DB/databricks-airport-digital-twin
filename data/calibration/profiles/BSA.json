@@ -1,0 +1,23 @@
+{
+  "icao_code": "BSA",
+  "iata_code": "BSA",
+  "airline_shares": {
+    "ASL": 0.5,
+    "XU": 0.5
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "BBO": 0.5,
+    "GLK": 0.5
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {},
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

@@ -1,0 +1,36 @@
+{
+  "icao_code": "AOJ",
+  "iata_code": "AOJ",
+  "airline_shares": {
+    "NES": 0.3333333333333333,
+    "JAL": 0.3333333333333333,
+    "KAL": 0.3333333333333333
+  },
+  "domestic_route_shares": {
+    "HND": 1.0
+  },
+  "international_route_shares": {
+    "NKM": 0.5,
+    "ICN": 0.5
+  },
+  "domestic_ratio": 0.333,
+  "fleet_mix": {
+    "NES": {
+      "E175": 1.0
+    },
+    "JAL": {
+      "B738": 1.0
+    },
+    "KAL": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 6
+}

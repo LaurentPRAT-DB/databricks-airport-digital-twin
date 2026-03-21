@@ -1,0 +1,82 @@
+{
+  "icao_code": "MVD",
+  "iata_code": "MVD",
+  "airline_shares": {
+    "5Q": 0.4,
+    "SEH": 0.1,
+    "AAL": 0.05,
+    "AFR": 0.05,
+    "ARG": 0.05,
+    "AVA": 0.05,
+    "CMP": 0.05,
+    "TAM": 0.05,
+    "LAN": 0.05,
+    "LAP": 0.05,
+    "USA": 0.05,
+    "AEA": 0.05
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "GRU": 0.2,
+    "AEP": 0.1,
+    "EZE": 0.1,
+    "POA": 0.1,
+    "SCL": 0.1,
+    "MIA": 0.1,
+    "ASU": 0.05,
+    "CWB": 0.05,
+    "GIG": 0.05,
+    "LIM": 0.05,
+    "PTY": 0.05,
+    "MAD": 0.05
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "5Q": {
+      "AT76": 0.7,
+      "A319": 0.3
+    },
+    "AAL": {
+      "B767": 1.0
+    },
+    "AFR": {
+      "B777": 1.0
+    },
+    "ARG": {
+      "B737": 1.0
+    },
+    "AVA": {
+      "A320": 1.0
+    },
+    "CMP": {
+      "B738": 1.0
+    },
+    "SEH": {
+      "B738": 1.0
+    },
+    "TAM": {
+      "A320": 1.0
+    },
+    "LAN": {
+      "A320": 0.5,
+      "B767": 0.5
+    },
+    "LAP": {
+      "A320": 1.0
+    },
+    "USA": {
+      "B767": 1.0
+    },
+    "AEA": {
+      "A330": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 40
+}

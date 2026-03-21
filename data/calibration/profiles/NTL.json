@@ -1,0 +1,31 @@
+{
+  "icao_code": "NTL",
+  "iata_code": "NTL",
+  "airline_shares": {
+    "JST": 0.6,
+    "RXA": 0.4
+  },
+  "domestic_route_shares": {
+    "BNE": 0.25,
+    "MEL": 0.25,
+    "OOL": 0.25,
+    "SYD": 0.25
+  },
+  "international_route_shares": {
+    "BNK": 1.0
+  },
+  "domestic_ratio": 0.8,
+  "fleet_mix": {
+    "JST": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

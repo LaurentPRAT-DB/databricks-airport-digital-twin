@@ -1,0 +1,42 @@
+{
+  "icao_code": "MWX",
+  "iata_code": "MWX",
+  "airline_shares": {
+    "OZR": 0.4,
+    "GUN": 0.2,
+    "CES": 0.2,
+    "AMU": 0.2
+  },
+  "domestic_route_shares": {
+    "CJU": 1.0
+  },
+  "international_route_shares": {
+    "TSN": 0.25,
+    "PVG": 0.25,
+    "MFM": 0.25,
+    "PEK": 0.25
+  },
+  "domestic_ratio": 0.2,
+  "fleet_mix": {
+    "GUN": {
+      "A321": 1.0
+    },
+    "CES": {
+      "A320": 1.0
+    },
+    "AMU": {
+      "A320": 1.0
+    },
+    "OZR": {
+      "A321": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

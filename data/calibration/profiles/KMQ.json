@@ -1,0 +1,60 @@
+{
+  "icao_code": "KMQ",
+  "iata_code": "KMQ",
+  "airline_shares": {
+    "IBX": 0.2727272727272727,
+    "ANA": 0.18181818181818182,
+    "EVA": 0.09090909090909091,
+    "ADO": 0.09090909090909091,
+    "JAL": 0.09090909090909091,
+    "KAL": 0.09090909090909091,
+    "CES": 0.09090909090909091,
+    "JTA": 0.09090909090909091
+  },
+  "domestic_route_shares": {
+    "FUK": 0.25,
+    "HND": 0.25,
+    "NRT": 0.125,
+    "SDJ": 0.125,
+    "CTS": 0.125,
+    "OKA": 0.125
+  },
+  "international_route_shares": {
+    "TPE": 0.3333333333333333,
+    "ICN": 0.3333333333333333,
+    "PVG": 0.3333333333333333
+  },
+  "domestic_ratio": 0.727,
+  "fleet_mix": {
+    "EVA": {
+      "A321": 0.5,
+      "A330": 0.5
+    },
+    "IBX": {
+      "CRJ9": 1.0
+    },
+    "JAL": {
+      "B767": 1.0
+    },
+    "KAL": {
+      "B738": 1.0
+    },
+    "CES": {
+      "A319": 1.0
+    },
+    "ANA": {
+      "B777": 0.25,
+      "B767": 0.25,
+      "A320": 0.25,
+      "B787": 0.25
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

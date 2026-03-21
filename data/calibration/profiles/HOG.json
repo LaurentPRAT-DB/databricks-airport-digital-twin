@@ -1,0 +1,55 @@
+{
+  "icao_code": "HOG",
+  "iata_code": "HOG",
+  "airline_shares": {
+    "ACA": 0.2222222222222222,
+    "CUB": 0.2222222222222222,
+    "CFG": 0.16666666666666666,
+    "BPA": 0.1111111111111111,
+    "TFL": 0.1111111111111111,
+    "TSC": 0.1111111111111111,
+    "TCX": 0.05555555555555555
+  },
+  "domestic_route_shares": {
+    "HAV": 1.0
+  },
+  "international_route_shares": {
+    "YUL": 0.4,
+    "YYZ": 0.13333333333333333,
+    "FRA": 0.13333333333333333,
+    "MXP": 0.06666666666666667,
+    "MBJ": 0.06666666666666667,
+    "AMS": 0.06666666666666667,
+    "CUN": 0.06666666666666667,
+    "MAN": 0.06666666666666667
+  },
+  "domestic_ratio": 0.167,
+  "fleet_mix": {
+    "ACA": {
+      "A319": 1.0
+    },
+    "BPA": {
+      "B767": 1.0
+    },
+    "CUB": {
+      "A320": 1.0
+    },
+    "CFG": {
+      "B767": 1.0
+    },
+    "TFL": {
+      "B767": 1.0
+    },
+    "TCX": {
+      "A330": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

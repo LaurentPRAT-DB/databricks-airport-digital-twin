@@ -1,0 +1,49 @@
+{
+  "icao_code": "BOO",
+  "iata_code": "BOO",
+  "airline_shares": {
+    "WIF": 0.7714285714285715,
+    "SAS": 0.17142857142857143,
+    "NAX": 0.05714285714285714
+  },
+  "domestic_route_shares": {
+    "OSL": 0.25,
+    "TOS": 0.25,
+    "TRD": 0.25,
+    "BGO": 0.125,
+    "EVE": 0.125
+  },
+  "international_route_shares": {
+    "ANX": 0.10526315789473684,
+    "LKN": 0.10526315789473684,
+    "MJF": 0.10526315789473684,
+    "MQN": 0.10526315789473684,
+    "NVK": 0.10526315789473684,
+    "RET": 0.10526315789473684,
+    "SKN": 0.10526315789473684,
+    "SSJ": 0.10526315789473684,
+    "SVJ": 0.10526315789473684,
+    "BNN": 0.05263157894736842
+  },
+  "domestic_ratio": 0.457,
+  "fleet_mix": {
+    "NAX": {
+      "B738": 1.0
+    },
+    "SAS": {
+      "B738": 0.6666666666666666,
+      "B737": 0.3333333333333333
+    },
+    "WIF": {
+      "DH8D": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 35
+}

@@ -1,0 +1,58 @@
+{
+  "icao_code": "LOP",
+  "iata_code": "LOP",
+  "airline_shares": {
+    "GIA": 0.46153846153846156,
+    "LNI": 0.23076923076923078,
+    "AXM": 0.07692307692307693,
+    "JST": 0.07692307692307693,
+    "SLK": 0.07692307692307693,
+    "QG": 0.07692307692307693
+  },
+  "domestic_route_shares": {
+    "SUB": 0.375,
+    "CGK": 0.25,
+    "DPS": 0.125,
+    "UPG": 0.125,
+    "JOG": 0.125
+  },
+  "international_route_shares": {
+    "KUL": 0.2,
+    "BMU": 0.2,
+    "KOE": 0.2,
+    "PER": 0.2,
+    "SIN": 0.2
+  },
+  "domestic_ratio": 0.615,
+  "fleet_mix": {
+    "AXM": {
+      "A320": 1.0
+    },
+    "GIA": {
+      "AT76": 0.5,
+      "B738": 0.5
+    },
+    "JST": {
+      "A320": 1.0
+    },
+    "LNI": {
+      "B739": 0.5,
+      "B738": 0.5
+    },
+    "SLK": {
+      "A319": 0.5,
+      "A320": 0.5
+    },
+    "QG": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 26
+}

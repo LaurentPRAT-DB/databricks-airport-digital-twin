@@ -1,0 +1,37 @@
+{
+  "icao_code": "AQP",
+  "iata_code": "AQP",
+  "airline_shares": {
+    "PGP": 0.5,
+    "LAN": 0.25,
+    "AZN": 0.25
+  },
+  "domestic_route_shares": {
+    "LIM": 0.75,
+    "JUL": 0.25
+  },
+  "international_route_shares": {
+    "TCQ": 0.5,
+    "LPB": 0.5
+  },
+  "domestic_ratio": 0.5,
+  "fleet_mix": {
+    "LAN": {
+      "A319": 1.0
+    },
+    "PGP": {
+      "B737": 1.0
+    },
+    "AZN": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

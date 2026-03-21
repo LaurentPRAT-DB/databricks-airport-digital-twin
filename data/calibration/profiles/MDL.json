@@ -1,0 +1,50 @@
+{
+  "icao_code": "MDL",
+  "iata_code": "MDL",
+  "airline_shares": {
+    "YJ": 0.3103448275862069,
+    "SGR": 0.27586206896551724,
+    "6T": 0.20689655172413793,
+    "AIQ": 0.06896551724137931,
+    "CES": 0.06896551724137931,
+    "BKP": 0.06896551724137931
+  },
+  "domestic_route_shares": {
+    "RGN": 1.0
+  },
+  "international_route_shares": {
+    "HEH": 0.24,
+    "NYU": 0.24,
+    "MYT": 0.16,
+    "THL": 0.12,
+    "DMK": 0.08,
+    "KMG": 0.08,
+    "BKK": 0.08
+  },
+  "domestic_ratio": 0.138,
+  "fleet_mix": {
+    "AIQ": {
+      "A320": 1.0
+    },
+    "CES": {
+      "B738": 1.0
+    },
+    "BKP": {
+      "A320": 1.0
+    },
+    "SGR": {
+      "AT76": 1.0
+    },
+    "YJ": {
+      "AT76": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 29
+}

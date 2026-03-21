@@ -1,0 +1,35 @@
+{
+  "icao_code": "CJS",
+  "iata_code": "CJS",
+  "airline_shares": {
+    "VOI": 0.5,
+    "VB": 0.25,
+    "4O": 0.125,
+    "AMX": 0.125
+  },
+  "domestic_route_shares": {
+    "MEX": 0.375,
+    "GDL": 0.25,
+    "MTY": 0.25,
+    "TIJ": 0.125
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "4O": {
+      "A320": 1.0
+    },
+    "VOI": {
+      "A319": 0.6,
+      "A320": 0.4
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

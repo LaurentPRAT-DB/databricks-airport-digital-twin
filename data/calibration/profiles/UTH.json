@@ -1,0 +1,38 @@
+{
+  "icao_code": "UTH",
+  "iata_code": "UTH",
+  "airline_shares": {
+    "NOK": 0.3333333333333333,
+    "AIQ": 0.3333333333333333,
+    "BKP": 0.16666666666666666,
+    "THA": 0.16666666666666666
+  },
+  "domestic_route_shares": {
+    "DMK": 0.3333333333333333,
+    "BKK": 0.3333333333333333,
+    "CNX": 0.16666666666666666,
+    "HKT": 0.16666666666666666
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "NOK": {
+      "B738": 1.0
+    },
+    "AIQ": {
+      "A320": 1.0
+    },
+    "BKP": {
+      "A319": 0.5,
+      "A320": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 12
+}

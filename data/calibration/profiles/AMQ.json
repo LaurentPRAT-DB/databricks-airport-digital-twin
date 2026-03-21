@@ -1,0 +1,43 @@
+{
+  "icao_code": "AMQ",
+  "iata_code": "AMQ",
+  "airline_shares": {
+    "GIA": 0.3333333333333333,
+    "LNI": 0.3333333333333333,
+    "ITK": 0.1111111111111111,
+    "ILY": 0.1111111111111111,
+    "SJY": 0.1111111111111111
+  },
+  "domestic_route_shares": {
+    "CGK": 0.375,
+    "UPG": 0.375,
+    "SUB": 0.25
+  },
+  "international_route_shares": {
+    "SXK": 0.5,
+    "LUV": 0.5
+  },
+  "domestic_ratio": 0.889,
+  "fleet_mix": {
+    "GIA": {
+      "B738": 1.0
+    },
+    "ITK": {
+      "B739": 1.0
+    },
+    "LNI": {
+      "B739": 1.0
+    },
+    "SJY": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

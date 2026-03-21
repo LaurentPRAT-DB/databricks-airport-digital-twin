@@ -1,0 +1,46 @@
+{
+  "icao_code": "ECN",
+  "iata_code": "ECN",
+  "airline_shares": {
+    "PGT": 0.5,
+    "KKK": 0.21428571428571427,
+    "THY": 0.21428571428571427,
+    "OHY": 0.07142857142857142
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "IST": 0.21428571428571427,
+    "ADA": 0.14285714285714285,
+    "ADB": 0.14285714285714285,
+    "ESB": 0.14285714285714285,
+    "SAW": 0.14285714285714285,
+    "AYT": 0.07142857142857142,
+    "GZT": 0.07142857142857142,
+    "HTY": 0.07142857142857142
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "OHY": {
+      "A320": 1.0
+    },
+    "KKK": {
+      "A320": 1.0
+    },
+    "PGT": {
+      "B738": 1.0
+    },
+    "THY": {
+      "B738": 0.6,
+      "A321": 0.2,
+      "A320": 0.2
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 28
+}

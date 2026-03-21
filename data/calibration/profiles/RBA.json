@@ -1,0 +1,48 @@
+{
+  "icao_code": "RBA",
+  "iata_code": "RBA",
+  "airline_shares": {
+    "RYR": 0.6,
+    "RAM": 0.2,
+    "AFR": 0.1,
+    "VLG": 0.1
+  },
+  "domestic_route_shares": {
+    "CMN": 1.0
+  },
+  "international_route_shares": {
+    "ORY": 0.2222222222222222,
+    "CDG": 0.1111111111111111,
+    "BVA": 0.1111111111111111,
+    "CRL": 0.1111111111111111,
+    "GRO": 0.1111111111111111,
+    "MAD": 0.1111111111111111,
+    "MRS": 0.1111111111111111,
+    "STN": 0.1111111111111111
+  },
+  "domestic_ratio": 0.1,
+  "fleet_mix": {
+    "AFR": {
+      "A319": 0.5,
+      "A320": 0.5
+    },
+    "RAM": {
+      "AT76": 0.5,
+      "B738": 0.5
+    },
+    "RYR": {
+      "B738": 1.0
+    },
+    "VLG": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

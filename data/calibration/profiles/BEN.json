@@ -1,0 +1,71 @@
+{
+  "icao_code": "BEN",
+  "iata_code": "BEN",
+  "airline_shares": {
+    "LAA": 0.4,
+    "AAW": 0.36,
+    "AMC": 0.04,
+    "MSR": 0.04,
+    "RJA": 0.04,
+    "THY": 0.04,
+    "TAR": 0.04,
+    "TUI": 0.04
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "AMM": 0.12,
+    "CAI": 0.12,
+    "IST": 0.12,
+    "TUN": 0.12,
+    "AKF": 0.08,
+    "CMN": 0.08,
+    "MRA": 0.08,
+    "TIP": 0.08,
+    "SFA": 0.08,
+    "JED": 0.04,
+    "MLA": 0.04,
+    "HBE": 0.04
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "AAW": {
+      "A320": 0.75,
+      "A319": 0.16666666666666666,
+      "A330": 0.08333333333333333
+    },
+    "AMC": {
+      "A320": 1.0
+    },
+    "LAA": {
+      "A320": 0.6923076923076923,
+      "CRJ9": 0.3076923076923077
+    },
+    "MSR": {
+      "A320": 0.5,
+      "E175": 0.5
+    },
+    "RJA": {
+      "E190": 0.3333333333333333,
+      "A319": 0.3333333333333333,
+      "E175": 0.3333333333333333
+    },
+    "THY": {
+      "B738": 0.5,
+      "B739": 0.5
+    },
+    "TAR": {
+      "A320": 1.0
+    },
+    "TUI": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 50
+}

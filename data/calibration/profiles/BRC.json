@@ -1,0 +1,37 @@
+{
+  "icao_code": "BRC",
+  "iata_code": "BRC",
+  "airline_shares": {
+    "ARG": 0.5714285714285714,
+    "TIB": 0.2857142857142857,
+    "LAN": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "AEP": 0.36363636363636365,
+    "COR": 0.18181818181818182,
+    "EZE": 0.18181818181818182,
+    "MDZ": 0.18181818181818182,
+    "CRD": 0.09090909090909091
+  },
+  "international_route_shares": {
+    "EQS": 0.6666666666666666,
+    "REL": 0.3333333333333333
+  },
+  "domestic_ratio": 0.786,
+  "fleet_mix": {
+    "ARG": {
+      "B737": 1.0
+    },
+    "LAN": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

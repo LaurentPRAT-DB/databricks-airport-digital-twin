@@ -1,0 +1,37 @@
+{
+  "icao_code": "OAX",
+  "iata_code": "OAX",
+  "airline_shares": {
+    "VB": 0.4,
+    "4O": 0.2,
+    "AMX": 0.2,
+    "VOI": 0.2
+  },
+  "domestic_route_shares": {
+    "MEX": 0.4,
+    "CUN": 0.2,
+    "MTY": 0.2,
+    "TIJ": 0.2
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "4O": {
+      "A320": 1.0
+    },
+    "AMX": {
+      "E175": 1.0
+    },
+    "VOI": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

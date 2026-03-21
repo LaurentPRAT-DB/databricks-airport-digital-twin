@@ -1,0 +1,37 @@
+{
+  "icao_code": "BCD",
+  "iata_code": "BCD",
+  "airline_shares": {
+    "CEB": 0.6666666666666666,
+    "SRQ": 0.16666666666666666,
+    "PAL": 0.16666666666666666
+  },
+  "domestic_route_shares": {
+    "MNL": 0.5,
+    "CEB": 0.16666666666666666,
+    "CGY": 0.16666666666666666,
+    "DVO": 0.16666666666666666
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "CEB": {
+      "A320": 0.75,
+      "A319": 0.25
+    },
+    "SRQ": {
+      "A320": 1.0
+    },
+    "PAL": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 12
+}

@@ -1,0 +1,30 @@
+{
+  "icao_code": "STV",
+  "iata_code": "STV",
+  "airline_shares": {
+    "SEJ": 0.6666666666666666,
+    "AIC": 0.3333333333333333
+  },
+  "domestic_route_shares": {
+    "DEL": 0.6666666666666666,
+    "BOM": 0.3333333333333333
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AIC": {
+      "CRJ7": 1.0
+    },
+    "SEJ": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 6
+}

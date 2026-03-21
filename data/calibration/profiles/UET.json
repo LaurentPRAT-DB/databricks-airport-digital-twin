@@ -1,0 +1,35 @@
+{
+  "icao_code": "UET",
+  "iata_code": "UET",
+  "airline_shares": {
+    "PIA": 0.5714285714285714,
+    "MXI": 0.21428571428571427,
+    "SAI": 0.21428571428571427
+  },
+  "domestic_route_shares": {
+    "ISB": 0.2727272727272727,
+    "KHI": 0.2727272727272727,
+    "LHE": 0.2727272727272727,
+    "MUX": 0.09090909090909091,
+    "TUK": 0.09090909090909091
+  },
+  "international_route_shares": {
+    "MHD": 0.3333333333333333,
+    "PZH": 0.3333333333333333,
+    "SHJ": 0.3333333333333333
+  },
+  "domestic_ratio": 0.786,
+  "fleet_mix": {
+    "PIA": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 28
+}

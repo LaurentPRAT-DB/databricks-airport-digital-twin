@@ -1,0 +1,40 @@
+{
+  "icao_code": "MST",
+  "iata_code": "MST",
+  "airline_shares": {
+    "RYR": 0.8421052631578947,
+    "TRA": 0.15789473684210525
+  },
+  "domestic_route_shares": {
+    "GRQ": 1.0
+  },
+  "international_route_shares": {
+    "ALC": 0.1111111111111111,
+    "BRI": 0.1111111111111111,
+    "FAO": 0.1111111111111111,
+    "GRO": 0.1111111111111111,
+    "OPO": 0.1111111111111111,
+    "PMI": 0.1111111111111111,
+    "TFS": 0.1111111111111111,
+    "TPS": 0.1111111111111111,
+    "AYT": 0.05555555555555555,
+    "HER": 0.05555555555555555
+  },
+  "domestic_ratio": 0.053,
+  "fleet_mix": {
+    "RYR": {
+      "B738": 1.0
+    },
+    "TRA": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 19
+}

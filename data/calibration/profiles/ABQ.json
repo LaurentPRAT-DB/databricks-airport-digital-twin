@@ -1,0 +1,64 @@
+{
+  "icao_code": "ABQ",
+  "iata_code": "ABQ",
+  "airline_shares": {
+    "SWA": 0.5909090909090909,
+    "DAL": 0.09090909090909091,
+    "NMI": 0.09090909090909091,
+    "USA": 0.06818181818181818,
+    "AAL": 0.045454545454545456,
+    "JBU": 0.045454545454545456,
+    "UAL": 0.045454545454545456,
+    "TRS": 0.022727272727272728
+  },
+  "domestic_route_shares": {
+    "DFW": 0.1,
+    "DEN": 0.075,
+    "JFK": 0.05,
+    "ATL": 0.05,
+    "MSP": 0.05,
+    "IAH": 0.05,
+    "BWI": 0.05,
+    "DAL": 0.05,
+    "HOU": 0.05,
+    "LAS": 0.05,
+    "LAX": 0.05,
+    "MCI": 0.05,
+    "MDW": 0.05,
+    "OAK": 0.05,
+    "PDX": 0.05,
+    "PHX": 0.05,
+    "SAN": 0.05,
+    "SEA": 0.05,
+    "ORD": 0.025
+  },
+  "international_route_shares": {
+    "CNM": 0.5,
+    "LAM": 0.5
+  },
+  "domestic_ratio": 0.909,
+  "fleet_mix": {
+    "JBU": {
+      "A320": 1.0
+    },
+    "DAL": {
+      "A320": 1.0
+    },
+    "UAL": {
+      "A320": 0.4,
+      "B738": 0.4,
+      "B737": 0.2
+    },
+    "USA": {
+      "E175": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 44
+}

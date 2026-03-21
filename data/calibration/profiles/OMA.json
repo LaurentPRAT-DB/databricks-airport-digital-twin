@@ -1,0 +1,55 @@
+{
+  "icao_code": "OMA",
+  "iata_code": "OMA",
+  "airline_shares": {
+    "SWA": 0.3125,
+    "DAL": 0.1875,
+    "USA": 0.1875,
+    "AAL": 0.125,
+    "UAL": 0.125,
+    "FFT": 0.0625
+  },
+  "domestic_route_shares": {
+    "PHX": 0.1875,
+    "DEN": 0.1875,
+    "DFW": 0.125,
+    "ORD": 0.125,
+    "ATL": 0.0625,
+    "DTW": 0.0625,
+    "MSP": 0.0625,
+    "LAS": 0.0625,
+    "MDW": 0.0625,
+    "STL": 0.0625
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AAL": {
+      "A319": 1.0
+    },
+    "DAL": {
+      "A319": 0.6666666666666666,
+      "A320": 0.3333333333333333
+    },
+    "FFT": {
+      "A319": 1.0
+    },
+    "UAL": {
+      "B738": 0.36363636363636365,
+      "B737": 0.36363636363636365,
+      "A319": 0.2727272727272727
+    },
+    "USA": {
+      "CRJ7": 0.5,
+      "A319": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 32
+}

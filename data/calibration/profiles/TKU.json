@@ -1,0 +1,45 @@
+{
+  "icao_code": "TKU",
+  "iata_code": "TKU",
+  "airline_shares": {
+    "SAS": 0.2727272727272727,
+    "NTJ": 0.18181818181818182,
+    "BTI": 0.18181818181818182,
+    "NAX": 0.18181818181818182,
+    "WZZ": 0.18181818181818182
+  },
+  "domestic_route_shares": {
+    "MHQ": 1.0
+  },
+  "international_route_shares": {
+    "RIX": 0.2222222222222222,
+    "ALC": 0.2222222222222222,
+    "CPH": 0.2222222222222222,
+    "GDN": 0.2222222222222222,
+    "ARN": 0.1111111111111111
+  },
+  "domestic_ratio": 0.182,
+  "fleet_mix": {
+    "BTI": {
+      "DH8D": 1.0
+    },
+    "NAX": {
+      "B738": 1.0
+    },
+    "SAS": {
+      "CRJ9": 0.6666666666666666,
+      "AT76": 0.3333333333333333
+    },
+    "WZZ": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 11
+}

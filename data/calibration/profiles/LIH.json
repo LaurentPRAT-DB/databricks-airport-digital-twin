@@ -1,0 +1,55 @@
+{
+  "icao_code": "LIH",
+  "iata_code": "LIH",
+  "airline_shares": {
+    "ASA": 0.25,
+    "UAL": 0.1875,
+    "AAL": 0.125,
+    "HAL": 0.125,
+    "USA": 0.125,
+    "DAL": 0.0625,
+    "MKU": 0.0625,
+    "WJA": 0.0625
+  },
+  "domestic_route_shares": {
+    "LAX": 0.26666666666666666,
+    "PHX": 0.13333333333333333,
+    "HNL": 0.13333333333333333,
+    "OAK": 0.06666666666666667,
+    "SAN": 0.06666666666666667,
+    "SEA": 0.06666666666666667,
+    "SJC": 0.06666666666666667,
+    "OGG": 0.06666666666666667,
+    "DEN": 0.06666666666666667,
+    "SFO": 0.06666666666666667
+  },
+  "international_route_shares": {
+    "YVR": 1.0
+  },
+  "domestic_ratio": 0.938,
+  "fleet_mix": {
+    "ASA": {
+      "B738": 1.0
+    },
+    "UAL": {
+      "B752": 1.0
+    },
+    "USA": {
+      "B752": 1.0
+    },
+    "MKU": {
+      "AT76": 1.0
+    },
+    "WJA": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 32
+}

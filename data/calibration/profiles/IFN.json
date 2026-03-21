@@ -1,0 +1,48 @@
+{
+  "icao_code": "IFN",
+  "iata_code": "IFN",
+  "airline_shares": {
+    "IRA": 0.5,
+    "IRC": 0.2,
+    "BGD": 0.1,
+    "IRK": 0.1,
+    "SVA": 0.05,
+    "THY": 0.05
+  },
+  "domestic_route_shares": {
+    "MHD": 0.23076923076923078,
+    "AWZ": 0.15384615384615385,
+    "BND": 0.15384615384615385,
+    "THR": 0.15384615384615385,
+    "KIH": 0.15384615384615385,
+    "KER": 0.07692307692307693,
+    "SYZ": 0.07692307692307693
+  },
+  "international_route_shares": {
+    "PGU": 0.14285714285714285,
+    "DXB": 0.14285714285714285,
+    "KWI": 0.14285714285714285,
+    "TBZ": 0.14285714285714285,
+    "IST": 0.14285714285714285,
+    "MRX": 0.14285714285714285,
+    "MED": 0.07142857142857142,
+    "JED": 0.07142857142857142
+  },
+  "domestic_ratio": 0.65,
+  "fleet_mix": {
+    "IRA": {
+      "A320": 1.0
+    },
+    "THY": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 40
+}

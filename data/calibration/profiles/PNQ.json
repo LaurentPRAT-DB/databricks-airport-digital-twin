@@ -1,0 +1,58 @@
+{
+  "icao_code": "PNQ",
+  "iata_code": "PNQ",
+  "airline_shares": {
+    "SEJ": 0.32,
+    "IGO": 0.28,
+    "GUJ": 0.16,
+    "AIC": 0.12,
+    "JAI": 0.08,
+    "AXB": 0.04
+  },
+  "domestic_route_shares": {
+    "DEL": 0.21739130434782608,
+    "BLR": 0.13043478260869565,
+    "HYD": 0.13043478260869565,
+    "MAA": 0.13043478260869565,
+    "AMD": 0.08695652173913043,
+    "NAG": 0.08695652173913043,
+    "GOI": 0.08695652173913043,
+    "CCU": 0.043478260869565216,
+    "BOM": 0.043478260869565216,
+    "COK": 0.043478260869565216
+  },
+  "international_route_shares": {
+    "SHJ": 1.0
+  },
+  "domestic_ratio": 0.92,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "JAI": {
+      "B738": 1.0
+    },
+    "AIC": {
+      "A319": 0.5,
+      "A320": 0.25,
+      "A321": 0.25
+    },
+    "GUJ": {
+      "A320": 1.0
+    },
+    "AXB": {
+      "B738": 1.0
+    },
+    "SEJ": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 50
+}

@@ -1,0 +1,50 @@
+{
+  "icao_code": "TUU",
+  "iata_code": "TUU",
+  "airline_shares": {
+    "SVA": 0.5555555555555556,
+    "ALX": 0.1111111111111111,
+    "FDB": 0.1111111111111111,
+    "NIA": 0.1111111111111111,
+    "LMU": 0.1111111111111111
+  },
+  "domestic_route_shares": {
+    "AHB": 0.2,
+    "DMM": 0.2,
+    "JED": 0.2,
+    "MED": 0.2,
+    "RUH": 0.2
+  },
+  "international_route_shares": {
+    "CAI": 0.75,
+    "DXB": 0.25
+  },
+  "domestic_ratio": 0.556,
+  "fleet_mix": {
+    "ALX": {
+      "A320": 1.0
+    },
+    "FDB": {
+      "B738": 1.0
+    },
+    "NIA": {
+      "A320": 1.0
+    },
+    "SVA": {
+      "A320": 0.3333333333333333,
+      "E175": 0.3333333333333333,
+      "A321": 0.3333333333333333
+    },
+    "LMU": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

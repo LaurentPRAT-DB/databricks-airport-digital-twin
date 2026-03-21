@@ -1,0 +1,36 @@
+{
+  "icao_code": "OSR",
+  "iata_code": "OSR",
+  "airline_shares": {
+    "TVS": 0.5,
+    "RYR": 0.25,
+    "CSA": 0.25
+  },
+  "domestic_route_shares": {
+    "PRG": 1.0
+  },
+  "international_route_shares": {
+    "STN": 0.5,
+    "CDG": 0.5
+  },
+  "domestic_ratio": 0.5,
+  "fleet_mix": {
+    "RYR": {
+      "B738": 1.0
+    },
+    "CSA": {
+      "AT76": 1.0
+    },
+    "TVS": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

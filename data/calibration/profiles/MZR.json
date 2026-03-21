@@ -1,0 +1,36 @@
+{
+  "icao_code": "MZR",
+  "iata_code": "MZR",
+  "airline_shares": {
+    "4Q": 0.25,
+    "IRC": 0.25,
+    "HNX": 0.25,
+    "THY": 0.25
+  },
+  "domestic_route_shares": {
+    "KBL": 1.0
+  },
+  "international_route_shares": {
+    "IST": 0.5,
+    "MHD": 0.25,
+    "IKA": 0.25
+  },
+  "domestic_ratio": 0.5,
+  "fleet_mix": {
+    "4Q": {
+      "A319": 1.0
+    },
+    "THY": {
+      "A320": 0.5,
+      "B738": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

@@ -581,39 +581,38 @@ class LakebaseService:
         self._ensure_airport_columns()
 
         try:
+            params = [{**flight, "airport_icao": airport_icao} for flight in flights]
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
-                    count = 0
-                    for flight in flights:
-                        cur.execute(
-                            """
-                            INSERT INTO flight_schedule (
-                                airport_icao, flight_number, airline, airline_code, origin, destination,
-                                scheduled_time, estimated_time, actual_time, gate, status,
-                                delay_minutes, delay_reason, aircraft_type, flight_type
-                            ) VALUES (
-                                %(airport_icao)s, %(flight_number)s, %(airline)s, %(airline_code)s, %(origin)s, %(destination)s,
-                                %(scheduled_time)s, %(estimated_time)s, %(actual_time)s, %(gate)s, %(status)s,
-                                %(delay_minutes)s, %(delay_reason)s, %(aircraft_type)s, %(flight_type)s
-                            )
-                            ON CONFLICT (airport_icao, flight_number, scheduled_time) DO UPDATE SET
-                                airline = EXCLUDED.airline,
-                                airline_code = EXCLUDED.airline_code,
-                                origin = EXCLUDED.origin,
-                                destination = EXCLUDED.destination,
-                                estimated_time = EXCLUDED.estimated_time,
-                                actual_time = EXCLUDED.actual_time,
-                                gate = EXCLUDED.gate,
-                                status = EXCLUDED.status,
-                                delay_minutes = EXCLUDED.delay_minutes,
-                                delay_reason = EXCLUDED.delay_reason,
-                                aircraft_type = EXCLUDED.aircraft_type,
-                                flight_type = EXCLUDED.flight_type
-                            """,
-                            {**flight, "airport_icao": airport_icao}
+                    cur.executemany(
+                        """
+                        INSERT INTO flight_schedule (
+                            airport_icao, flight_number, airline, airline_code, origin, destination,
+                            scheduled_time, estimated_time, actual_time, gate, status,
+                            delay_minutes, delay_reason, aircraft_type, flight_type
+                        ) VALUES (
+                            %(airport_icao)s, %(flight_number)s, %(airline)s, %(airline_code)s, %(origin)s, %(destination)s,
+                            %(scheduled_time)s, %(estimated_time)s, %(actual_time)s, %(gate)s, %(status)s,
+                            %(delay_minutes)s, %(delay_reason)s, %(aircraft_type)s, %(flight_type)s
                         )
-                        count += 1
+                        ON CONFLICT (airport_icao, flight_number, scheduled_time) DO UPDATE SET
+                            airline = EXCLUDED.airline,
+                            airline_code = EXCLUDED.airline_code,
+                            origin = EXCLUDED.origin,
+                            destination = EXCLUDED.destination,
+                            estimated_time = EXCLUDED.estimated_time,
+                            actual_time = EXCLUDED.actual_time,
+                            gate = EXCLUDED.gate,
+                            status = EXCLUDED.status,
+                            delay_minutes = EXCLUDED.delay_minutes,
+                            delay_reason = EXCLUDED.delay_reason,
+                            aircraft_type = EXCLUDED.aircraft_type,
+                            flight_type = EXCLUDED.flight_type
+                        """,
+                        params,
+                    )
                     conn.commit()
+                    count = len(params)
                     logger.info(f"Upserted {count} flights to Lakebase schedule for {airport_icao}")
                     return count
 
@@ -783,6 +782,55 @@ class LakebaseService:
             self._invalidate_credentials_if_auth_error(e)
             return False
 
+    def upsert_baggage_stats_batch(self, stats_list: list[dict], airport_icao: str = "KSFO") -> int:
+        """Batch upsert baggage statistics for multiple flights.
+
+        Args:
+            stats_list: List of baggage stats dictionaries.
+            airport_icao: ICAO code to scope the data to.
+
+        Returns:
+            Number of rows upserted.
+        """
+        if not self.is_available or not stats_list:
+            return 0
+
+        self._ensure_airport_columns()
+
+        try:
+            params = [{**stats, "airport_icao": airport_icao} for stats in stats_list]
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.executemany(
+                        """
+                        INSERT INTO baggage_status (
+                            airport_icao, flight_number, total_bags, checked_in, loaded, unloaded,
+                            on_carousel, loading_progress_pct, connecting_bags, misconnects, carousel
+                        ) VALUES (
+                            %(airport_icao)s, %(flight_number)s, %(total_bags)s, %(checked_in)s, %(loaded)s, %(unloaded)s,
+                            %(on_carousel)s, %(loading_progress_pct)s, %(connecting_bags)s, %(misconnects)s, %(carousel)s
+                        )
+                        ON CONFLICT (airport_icao, flight_number) DO UPDATE SET
+                            total_bags = EXCLUDED.total_bags,
+                            checked_in = EXCLUDED.checked_in,
+                            loaded = EXCLUDED.loaded,
+                            unloaded = EXCLUDED.unloaded,
+                            on_carousel = EXCLUDED.on_carousel,
+                            loading_progress_pct = EXCLUDED.loading_progress_pct,
+                            connecting_bags = EXCLUDED.connecting_bags,
+                            misconnects = EXCLUDED.misconnects,
+                            carousel = EXCLUDED.carousel
+                        """,
+                        params,
+                    )
+                    conn.commit()
+                    return len(params)
+
+        except Exception as e:
+            logger.warning(f"Lakebase baggage batch upsert failed: {e}")
+            self._invalidate_credentials_if_auth_error(e)
+            return 0
+
     def get_baggage_stats(self, flight_number: str, airport_icao: str = "KSFO") -> Optional[dict]:
         """
         Get baggage statistics for a flight from Lakebase.
@@ -841,31 +889,30 @@ class LakebaseService:
         self._ensure_airport_columns()
 
         try:
+            params = [{**unit, "airport_icao": airport_icao} for unit in units]
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
-                    count = 0
-                    for unit in units:
-                        cur.execute(
-                            """
-                            INSERT INTO gse_fleet (
-                                airport_icao, unit_id, gse_type, status, assigned_flight,
-                                assigned_gate, position_x, position_y
-                            ) VALUES (
-                                %(airport_icao)s, %(unit_id)s, %(gse_type)s, %(status)s, %(assigned_flight)s,
-                                %(assigned_gate)s, %(position_x)s, %(position_y)s
-                            )
-                            ON CONFLICT (airport_icao, unit_id) DO UPDATE SET
-                                gse_type = EXCLUDED.gse_type,
-                                status = EXCLUDED.status,
-                                assigned_flight = EXCLUDED.assigned_flight,
-                                assigned_gate = EXCLUDED.assigned_gate,
-                                position_x = EXCLUDED.position_x,
-                                position_y = EXCLUDED.position_y
-                            """,
-                            {**unit, "airport_icao": airport_icao}
+                    cur.executemany(
+                        """
+                        INSERT INTO gse_fleet (
+                            airport_icao, unit_id, gse_type, status, assigned_flight,
+                            assigned_gate, position_x, position_y
+                        ) VALUES (
+                            %(airport_icao)s, %(unit_id)s, %(gse_type)s, %(status)s, %(assigned_flight)s,
+                            %(assigned_gate)s, %(position_x)s, %(position_y)s
                         )
-                        count += 1
+                        ON CONFLICT (airport_icao, unit_id) DO UPDATE SET
+                            gse_type = EXCLUDED.gse_type,
+                            status = EXCLUDED.status,
+                            assigned_flight = EXCLUDED.assigned_flight,
+                            assigned_gate = EXCLUDED.assigned_gate,
+                            position_x = EXCLUDED.position_x,
+                            position_y = EXCLUDED.position_y
+                        """,
+                        params,
+                    )
                     conn.commit()
+                    count = len(params)
                     return count
 
         except Exception as e:

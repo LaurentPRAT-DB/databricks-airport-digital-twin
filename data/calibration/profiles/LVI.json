@@ -1,0 +1,35 @@
+{
+  "icao_code": "LVI",
+  "iata_code": "LVI",
+  "airline_shares": {
+    "KQA": 0.3333333333333333,
+    "P0": 0.3333333333333333,
+    "SAA": 0.3333333333333333
+  },
+  "domestic_route_shares": {
+    "LUN": 1.0
+  },
+  "international_route_shares": {
+    "JNB": 0.5,
+    "HRE": 0.25,
+    "NBO": 0.25
+  },
+  "domestic_ratio": 0.333,
+  "fleet_mix": {
+    "KQA": {
+      "E190": 1.0
+    },
+    "SAA": {
+      "A319": 0.5,
+      "A320": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 6
+}

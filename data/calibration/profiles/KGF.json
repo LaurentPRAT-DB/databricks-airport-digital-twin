@@ -1,0 +1,41 @@
+{
+  "icao_code": "KGF",
+  "iata_code": "KGF",
+  "airline_shares": {
+    "VSV": 0.42857142857142855,
+    "AFL": 0.2857142857142857,
+    "KZR": 0.14285714285714285,
+    "TSO": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "ALA": 0.5,
+    "KZO": 0.25,
+    "UKK": 0.25
+  },
+  "international_route_shares": {
+    "LED": 0.3333333333333333,
+    "SVO": 0.3333333333333333,
+    "DME": 0.3333333333333333
+  },
+  "domestic_ratio": 0.571,
+  "fleet_mix": {
+    "VSV": {
+      "CRJ9": 1.0
+    },
+    "KZR": {
+      "E190": 0.5,
+      "A319": 0.5
+    },
+    "AFL": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

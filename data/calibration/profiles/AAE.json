@@ -1,0 +1,36 @@
+{
+  "icao_code": "AAE",
+  "iata_code": "AAE",
+  "airline_shares": {
+    "DAH": 0.7777777777777778,
+    "AAF": 0.2222222222222222
+  },
+  "domestic_route_shares": {
+    "ALG": 0.5,
+    "ORN": 0.5
+  },
+  "international_route_shares": {
+    "MRS": 0.2857142857142857,
+    "ORY": 0.2857142857142857,
+    "CDG": 0.14285714285714285,
+    "IST": 0.14285714285714285,
+    "LYS": 0.14285714285714285
+  },
+  "domestic_ratio": 0.222,
+  "fleet_mix": {
+    "DAH": {
+      "B738": 1.0
+    },
+    "AAF": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

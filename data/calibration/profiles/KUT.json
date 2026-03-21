@@ -1,0 +1,46 @@
+{
+  "icao_code": "KUT",
+  "iata_code": "KUT",
+  "airline_shares": {
+    "WZZ": 0.375,
+    "WAU": 0.375,
+    "TGZ": 0.125,
+    "BRU": 0.125
+  },
+  "domestic_route_shares": {
+    "TBS": 1.0
+  },
+  "international_route_shares": {
+    "MSQ": 0.13333333333333333,
+    "KTW": 0.13333333333333333,
+    "VNO": 0.13333333333333333,
+    "WAW": 0.13333333333333333,
+    "DOK": 0.13333333333333333,
+    "HRK": 0.13333333333333333,
+    "IEV": 0.13333333333333333,
+    "VKO": 0.06666666666666667
+  },
+  "domestic_ratio": 0.062,
+  "fleet_mix": {
+    "TGZ": {
+      "CRJ9": 1.0
+    },
+    "BRU": {
+      "CRJ9": 1.0
+    },
+    "WZZ": {
+      "A320": 1.0
+    },
+    "WAU": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

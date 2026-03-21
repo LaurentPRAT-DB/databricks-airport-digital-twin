@@ -1,0 +1,27 @@
+{
+  "icao_code": "TUK",
+  "iata_code": "TUK",
+  "airline_shares": {
+    "PIA": 1.0
+  },
+  "domestic_route_shares": {
+    "GWD": 0.3333333333333333,
+    "KHI": 0.3333333333333333,
+    "UET": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "MCT": 0.4,
+    "SHJ": 0.4,
+    "DBA": 0.2
+  },
+  "domestic_ratio": 0.545,
+  "fleet_mix": {},
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 11
+}

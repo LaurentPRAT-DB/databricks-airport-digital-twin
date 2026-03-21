@@ -1,0 +1,59 @@
+{
+  "icao_code": "NGS",
+  "iata_code": "NGS",
+  "airline_shares": {
+    "ANA": 0.3333333333333333,
+    "OC": 0.25,
+    "SKY": 0.08333333333333333,
+    "JAL": 0.08333333333333333,
+    "JNA": 0.08333333333333333,
+    "MM": 0.08333333333333333,
+    "CES": 0.08333333333333333
+  },
+  "domestic_route_shares": {
+    "HND": 0.2857142857142857,
+    "UKB": 0.14285714285714285,
+    "KIX": 0.14285714285714285,
+    "ITM": 0.14285714285714285,
+    "NGO": 0.14285714285714285,
+    "OKA": 0.14285714285714285
+  },
+  "international_route_shares": {
+    "ICN": 0.2,
+    "PVG": 0.2,
+    "FUJ": 0.2,
+    "IKI": 0.2,
+    "TSJ": 0.2
+  },
+  "domestic_ratio": 0.583,
+  "fleet_mix": {
+    "SKY": {
+      "B737": 1.0
+    },
+    "JAL": {
+      "B738": 1.0
+    },
+    "JNA": {
+      "B738": 1.0
+    },
+    "MM": {
+      "A320": 1.0
+    },
+    "CES": {
+      "A319": 1.0
+    },
+    "ANA": {
+      "B737": 0.5,
+      "B777": 0.25,
+      "A320": 0.25
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 24
+}

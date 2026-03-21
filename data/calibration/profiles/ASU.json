@@ -1,0 +1,67 @@
+{
+  "icao_code": "ASU",
+  "iata_code": "ASU",
+  "airline_shares": {
+    "LAP": 0.3125,
+    "ARG": 0.125,
+    "TAM": 0.125,
+    "5Q": 0.0625,
+    "AAL": 0.0625,
+    "AVA": 0.0625,
+    "CMP": 0.0625,
+    "SEH": 0.0625,
+    "USA": 0.0625,
+    "AZN": 0.0625
+  },
+  "domestic_route_shares": {
+    "AGT": 1.0
+  },
+  "international_route_shares": {
+    "EZE": 0.2,
+    "GRU": 0.2,
+    "MIA": 0.13333333333333333,
+    "VVI": 0.13333333333333333,
+    "MVD": 0.06666666666666667,
+    "AEP": 0.06666666666666667,
+    "LIM": 0.06666666666666667,
+    "PTY": 0.06666666666666667,
+    "SCL": 0.06666666666666667
+  },
+  "domestic_ratio": 0.062,
+  "fleet_mix": {
+    "5Q": {
+      "AT76": 1.0
+    },
+    "ARG": {
+      "B737": 1.0
+    },
+    "AVA": {
+      "E190": 1.0
+    },
+    "CMP": {
+      "B738": 0.5,
+      "B737": 0.5
+    },
+    "SEH": {
+      "B738": 0.5,
+      "B737": 0.5
+    },
+    "TAM": {
+      "A320": 1.0
+    },
+    "LAP": {
+      "A320": 1.0
+    },
+    "AZN": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 32
+}

@@ -1,0 +1,24 @@
+{
+  "icao_code": "CAP",
+  "iata_code": "CAP",
+  "airline_shares": {
+    "S6": 0.6666666666666666,
+    "AXZ": 0.3333333333333333
+  },
+  "domestic_route_shares": {
+    "PAP": 1.0
+  },
+  "international_route_shares": {
+    "PLS": 1.0
+  },
+  "domestic_ratio": 0.333,
+  "fleet_mix": {},
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 6
+}

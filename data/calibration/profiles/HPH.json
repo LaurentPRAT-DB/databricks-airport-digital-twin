@@ -1,0 +1,35 @@
+{
+  "icao_code": "HPH",
+  "iata_code": "HPH",
+  "airline_shares": {
+    "HVN": 0.5,
+    "PIC": 0.25,
+    "RAC": 0.25
+  },
+  "domestic_route_shares": {
+    "SGN": 0.75,
+    "DAD": 0.25
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "PIC": {
+      "A320": 1.0
+    },
+    "RAC": {
+      "A320": 1.0
+    },
+    "HVN": {
+      "AT76": 0.5,
+      "A321": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

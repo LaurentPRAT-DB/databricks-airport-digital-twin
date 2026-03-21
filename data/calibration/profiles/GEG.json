@@ -1,0 +1,52 @@
+{
+  "icao_code": "GEG",
+  "iata_code": "GEG",
+  "airline_shares": {
+    "SWA": 0.4166666666666667,
+    "DAL": 0.16666666666666666,
+    "AAL": 0.08333333333333333,
+    "ASA": 0.08333333333333333,
+    "FFT": 0.08333333333333333,
+    "UAL": 0.08333333333333333,
+    "USA": 0.08333333333333333
+  },
+  "domestic_route_shares": {
+    "PHX": 0.25,
+    "DEN": 0.25,
+    "SEA": 0.08333333333333333,
+    "MSP": 0.08333333333333333,
+    "SLC": 0.08333333333333333,
+    "BOI": 0.08333333333333333,
+    "LAS": 0.08333333333333333,
+    "OAK": 0.08333333333333333
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "AAL": {
+      "A319": 1.0
+    },
+    "DAL": {
+      "A320": 0.6666666666666666,
+      "A319": 0.3333333333333333
+    },
+    "FFT": {
+      "A319": 1.0
+    },
+    "UAL": {
+      "B738": 0.5,
+      "B739": 0.5
+    },
+    "USA": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 24
+}

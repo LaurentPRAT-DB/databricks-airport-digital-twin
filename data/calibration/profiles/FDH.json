@@ -1,0 +1,53 @@
+{
+  "icao_code": "FDH",
+  "iata_code": "FDH",
+  "airline_shares": {
+    "ISK": 0.5,
+    "BER": 0.16666666666666666,
+    "GMI": 0.16666666666666666,
+    "GWI": 0.08333333333333333,
+    "THY": 0.08333333333333333
+  },
+  "domestic_route_shares": {
+    "DUS": 0.3333333333333333,
+    "HAM": 0.3333333333333333,
+    "CGN": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "PMI": 0.2222222222222222,
+    "EBA": 0.1111111111111111,
+    "OLB": 0.1111111111111111,
+    "TXL": 0.1111111111111111,
+    "ZAD": 0.1111111111111111,
+    "IBZ": 0.1111111111111111,
+    "AYT": 0.1111111111111111,
+    "IST": 0.1111111111111111
+  },
+  "domestic_ratio": 0.25,
+  "fleet_mix": {
+    "ISK": {
+      "AT76": 1.0
+    },
+    "GWI": {
+      "A319": 0.5,
+      "CRJ9": 0.5
+    },
+    "BER": {
+      "A320": 1.0
+    },
+    "GMI": {
+      "B737": 1.0
+    },
+    "THY": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 24
+}

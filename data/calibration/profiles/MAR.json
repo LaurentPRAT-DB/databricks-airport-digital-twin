@@ -1,0 +1,44 @@
+{
+  "icao_code": "MAR",
+  "iata_code": "MAR",
+  "airline_shares": {
+    "VC9": 0.21428571428571427,
+    "VCV": 0.21428571428571427,
+    "OCA": 0.14285714285714285,
+    "TNM": 0.07142857142857142,
+    "7I": 0.07142857142857142,
+    "AAL": 0.07142857142857142,
+    "CMP": 0.07142857142857142,
+    "RLN": 0.07142857142857142,
+    "VNP": 0.07142857142857142
+  },
+  "domestic_route_shares": {
+    "CCS": 0.625,
+    "VLN": 0.25,
+    "PMV": 0.125
+  },
+  "international_route_shares": {
+    "AUA": 0.3333333333333333,
+    "CUR": 0.16666666666666666,
+    "MIA": 0.16666666666666666,
+    "PTY": 0.16666666666666666,
+    "PBL": 0.16666666666666666
+  },
+  "domestic_ratio": 0.571,
+  "fleet_mix": {
+    "CMP": {
+      "B737": 1.0
+    },
+    "VCV": {
+      "E190": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 28
+}

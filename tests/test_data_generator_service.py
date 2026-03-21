@@ -98,7 +98,7 @@ class TestDataGeneratorServiceInitialization:
         mock_lakebase.is_available = True
         mock_lakebase.upsert_weather.return_value = True
         mock_lakebase.upsert_schedule.return_value = 50
-        mock_lakebase.upsert_baggage_stats.return_value = True
+        mock_lakebase.upsert_baggage_stats_batch.return_value = 1
         mock_lakebase.upsert_gse_fleet.return_value = 30
         mock_lakebase.clear_old_schedule.return_value = None
         mock_lakebase.get_schedule.return_value = [
@@ -395,7 +395,7 @@ class TestBaggageGeneration:
                 "scheduled_time": datetime.now(timezone.utc),
             },
         ]
-        mock_lakebase.upsert_baggage_stats.return_value = True
+        mock_lakebase.upsert_baggage_stats_batch.return_value = 2
 
         mock_baggage_stats = {
             "flight_number": "UA123",
@@ -413,7 +413,7 @@ class TestBaggageGeneration:
             result = await service._generate_baggage()
 
         assert result == 2
-        assert mock_lakebase.upsert_baggage_stats.call_count == 2
+        mock_lakebase.upsert_baggage_stats_batch.assert_called_once()
 
 
 class TestGSEFleetGeneration:

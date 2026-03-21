@@ -1,0 +1,35 @@
+{
+  "icao_code": "IMF",
+  "iata_code": "IMF",
+  "airline_shares": {
+    "AIC": 0.5714285714285714,
+    "IGO": 0.42857142857142855
+  },
+  "domestic_route_shares": {
+    "CCU": 0.5,
+    "GAU": 0.5
+  },
+  "international_route_shares": {
+    "IXA": 0.3333333333333333,
+    "AJL": 0.3333333333333333,
+    "IXS": 0.3333333333333333
+  },
+  "domestic_ratio": 0.571,
+  "fleet_mix": {
+    "IGO": {
+      "A320": 1.0
+    },
+    "AIC": {
+      "A319": 0.6666666666666666,
+      "A320": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

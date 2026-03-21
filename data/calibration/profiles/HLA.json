@@ -1,0 +1,34 @@
+{
+  "icao_code": "HLA",
+  "iata_code": "HLA",
+  "airline_shares": {
+    "CAW": 0.5,
+    "MNO": 0.25,
+    "SAA": 0.25
+  },
+  "domestic_route_shares": {
+    "CPT": 0.75,
+    "DUR": 0.25
+  },
+  "international_route_shares": {},
+  "domestic_ratio": 1.0,
+  "fleet_mix": {
+    "MNO": {
+      "B738": 1.0
+    },
+    "CAW": {
+      "B738": 1.0
+    },
+    "SAA": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

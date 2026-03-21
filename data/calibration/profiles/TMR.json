@@ -1,0 +1,30 @@
+{
+  "icao_code": "TMR",
+  "iata_code": "TMR",
+  "airline_shares": {
+    "DAH": 1.0
+  },
+  "domestic_route_shares": {
+    "DJG": 0.5,
+    "ALG": 0.5
+  },
+  "international_route_shares": {
+    "ELG": 0.3333333333333333,
+    "GHA": 0.3333333333333333,
+    "INZ": 0.3333333333333333
+  },
+  "domestic_ratio": 0.25,
+  "fleet_mix": {
+    "DAH": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

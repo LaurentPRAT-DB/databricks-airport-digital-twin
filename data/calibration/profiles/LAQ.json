@@ -1,0 +1,28 @@
+{
+  "icao_code": "LAQ",
+  "iata_code": "LAQ",
+  "airline_shares": {
+    "LAA": 0.6666666666666666,
+    "TAR": 0.3333333333333333
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "TUN": 0.6666666666666666,
+    "TIP": 0.3333333333333333
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "LAA": {
+      "CRJ9": 0.5714285714285714,
+      "A320": 0.42857142857142855
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 6
+}

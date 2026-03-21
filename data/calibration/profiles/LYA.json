@@ -1,0 +1,48 @@
+{
+  "icao_code": "LYA",
+  "iata_code": "LYA",
+  "airline_shares": {
+    "CES": 0.4444444444444444,
+    "9C": 0.2222222222222222,
+    "CSN": 0.2222222222222222,
+    "GUN": 0.1111111111111111
+  },
+  "domestic_route_shares": {
+    "CKG": 0.125,
+    "SHE": 0.125,
+    "CAN": 0.125,
+    "KHN": 0.125,
+    "DLC": 0.125,
+    "KMG": 0.125,
+    "PEK": 0.125,
+    "SHA": 0.125
+  },
+  "international_route_shares": {
+    "BHY": 1.0
+  },
+  "domestic_ratio": 0.889,
+  "fleet_mix": {
+    "9C": {
+      "A320": 1.0
+    },
+    "CSN": {
+      "E190": 0.5,
+      "A319": 0.5
+    },
+    "GUN": {
+      "E190": 1.0
+    },
+    "CES": {
+      "A320": 0.5,
+      "A321": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

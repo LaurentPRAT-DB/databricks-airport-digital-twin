@@ -1,0 +1,39 @@
+{
+  "icao_code": "EVE",
+  "iata_code": "EVE",
+  "airline_shares": {
+    "WIF": 0.4444444444444444,
+    "NAX": 0.3333333333333333,
+    "BYE": 0.1111111111111111,
+    "SAS": 0.1111111111111111
+  },
+  "domestic_route_shares": {
+    "OSL": 0.2857142857142857,
+    "TRD": 0.2857142857142857,
+    "SVG": 0.14285714285714285,
+    "BOO": 0.14285714285714285,
+    "TOS": 0.14285714285714285
+  },
+  "international_route_shares": {
+    "ALC": 0.5,
+    "ANX": 0.5
+  },
+  "domestic_ratio": 0.778,
+  "fleet_mix": {
+    "NAX": {
+      "B738": 1.0
+    },
+    "SAS": {
+      "B738": 0.6666666666666666,
+      "B737": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 18
+}

@@ -1,0 +1,41 @@
+{
+  "icao_code": "GEO",
+  "iata_code": "GEO",
+  "airline_shares": {
+    "BWA": 0.375,
+    "OLA": 0.25,
+    "SLM": 0.25,
+    "VCV": 0.125
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "YYZ": 0.25,
+    "JFK": 0.125,
+    "POS": 0.125,
+    "KIN": 0.125,
+    "MIA": 0.125,
+    "PBM": 0.125,
+    "PZO": 0.125
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "BWA": {
+      "B767": 0.6,
+      "B738": 0.4
+    },
+    "OLA": {
+      "B752": 1.0
+    },
+    "VCV": {
+      "E190": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

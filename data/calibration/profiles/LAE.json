@@ -1,0 +1,35 @@
+{
+  "icao_code": "LAE",
+  "iata_code": "LAE",
+  "airline_shares": {
+    "TOK": 0.8181818181818182,
+    "ANG": 0.18181818181818182
+  },
+  "domestic_route_shares": {
+    "POM": 1.0
+  },
+  "international_route_shares": {
+    "HKN": 0.2222222222222222,
+    "DAU": 0.1111111111111111,
+    "GKA": 0.1111111111111111,
+    "HGU": 0.1111111111111111,
+    "MAG": 0.1111111111111111,
+    "MAS": 0.1111111111111111,
+    "PNP": 0.1111111111111111,
+    "RAB": 0.1111111111111111
+  },
+  "domestic_ratio": 0.182,
+  "fleet_mix": {
+    "ANG": {
+      "DH8D": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 22
+}

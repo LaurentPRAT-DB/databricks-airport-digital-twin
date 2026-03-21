@@ -1,0 +1,41 @@
+{
+  "icao_code": "KIH",
+  "iata_code": "KIH",
+  "airline_shares": {
+    "IRK": 0.3333333333333333,
+    "IRA": 0.24242424242424243,
+    "GFG": 0.18181818181818182,
+    "BGD": 0.12121212121212122,
+    "IRC": 0.12121212121212122
+  },
+  "domestic_route_shares": {
+    "SYZ": 0.27586206896551724,
+    "BND": 0.20689655172413793,
+    "AWZ": 0.13793103448275862,
+    "IFN": 0.13793103448275862,
+    "THR": 0.13793103448275862,
+    "GSM": 0.06896551724137931,
+    "MHD": 0.034482758620689655
+  },
+  "international_route_shares": {
+    "AUH": 0.5,
+    "DXB": 0.5
+  },
+  "domestic_ratio": 0.879,
+  "fleet_mix": {
+    "IRC": {
+      "AT76": 1.0
+    },
+    "IRA": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 33
+}

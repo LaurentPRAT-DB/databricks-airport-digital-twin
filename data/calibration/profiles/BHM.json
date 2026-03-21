@@ -1,0 +1,51 @@
+{
+  "icao_code": "BHM",
+  "iata_code": "BHM",
+  "airline_shares": {
+    "SWA": 0.4117647058823529,
+    "USA": 0.29411764705882354,
+    "AAL": 0.17647058823529413,
+    "DAL": 0.058823529411764705,
+    "BHS": 0.058823529411764705
+  },
+  "domestic_route_shares": {
+    "CLT": 0.125,
+    "DFW": 0.125,
+    "DCA": 0.09375,
+    "PHL": 0.09375,
+    "ATL": 0.0625,
+    "MIA": 0.0625,
+    "BWI": 0.0625,
+    "DAL": 0.0625,
+    "HOU": 0.0625,
+    "LAS": 0.0625,
+    "MCO": 0.0625,
+    "MDW": 0.0625,
+    "TPA": 0.0625
+  },
+  "international_route_shares": {
+    "FPO": 1.0
+  },
+  "domestic_ratio": 0.941,
+  "fleet_mix": {
+    "AAL": {
+      "CRJ9": 0.8,
+      "CRJ7": 0.2
+    },
+    "DAL": {
+      "A320": 1.0
+    },
+    "USA": {
+      "CRJ9": 0.8571428571428571,
+      "CRJ7": 0.14285714285714285
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 34
+}

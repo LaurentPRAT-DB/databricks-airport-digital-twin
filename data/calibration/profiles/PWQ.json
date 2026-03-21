@@ -1,0 +1,32 @@
+{
+  "icao_code": "PWQ",
+  "iata_code": "PWQ",
+  "airline_shares": {
+    "KZR": 0.6666666666666666,
+    "SBI": 0.3333333333333333
+  },
+  "domestic_route_shares": {
+    "ALA": 1.0
+  },
+  "international_route_shares": {
+    "TSE": 0.5,
+    "DME": 0.5
+  },
+  "domestic_ratio": 0.333,
+  "fleet_mix": {
+    "KZR": {
+      "E190": 1.0
+    },
+    "SBI": {
+      "A319": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 6
+}

@@ -1,0 +1,28 @@
+{
+  "icao_code": "OZZ",
+  "iata_code": "OZZ",
+  "airline_shares": {
+    "RAM": 1.0
+  },
+  "domestic_route_shares": {
+    "CMN": 1.0
+  },
+  "international_route_shares": {
+    "ORY": 1.0
+  },
+  "domestic_ratio": 0.5,
+  "fleet_mix": {
+    "RAM": {
+      "B738": 0.6666666666666666,
+      "AT76": 0.3333333333333333
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 4
+}

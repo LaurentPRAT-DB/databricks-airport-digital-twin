@@ -1,0 +1,52 @@
+{
+  "icao_code": "BJX",
+  "iata_code": "BJX",
+  "airline_shares": {
+    "AMX": 0.3,
+    "VOI": 0.3,
+    "AAL": 0.1,
+    "UAL": 0.1,
+    "USA": 0.1,
+    "VB": 0.1
+  },
+  "domestic_route_shares": {
+    "TIJ": 0.4,
+    "MEX": 0.2,
+    "MTY": 0.2,
+    "CUN": 0.2
+  },
+  "international_route_shares": {
+    "DFW": 0.4,
+    "SFO": 0.2,
+    "LAX": 0.2,
+    "MDW": 0.2
+  },
+  "domestic_ratio": 0.5,
+  "fleet_mix": {
+    "AAL": {
+      "A319": 1.0
+    },
+    "AMX": {
+      "E175": 0.5,
+      "B738": 0.5
+    },
+    "UAL": {
+      "A319": 1.0
+    },
+    "USA": {
+      "A319": 1.0
+    },
+    "VOI": {
+      "A320": 0.5,
+      "A319": 0.5
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

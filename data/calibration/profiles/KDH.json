@@ -1,0 +1,27 @@
+{
+  "icao_code": "KDH",
+  "iata_code": "KDH",
+  "airline_shares": {
+    "AFG": 0.6,
+    "IRC": 0.2,
+    "HNX": 0.2
+  },
+  "domestic_route_shares": {
+    "KBL": 1.0
+  },
+  "international_route_shares": {
+    "MHD": 0.3333333333333333,
+    "DEL": 0.3333333333333333,
+    "DXB": 0.3333333333333333
+  },
+  "domestic_ratio": 0.4,
+  "fleet_mix": {},
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

@@ -1,0 +1,40 @@
+{
+  "icao_code": "IQQ",
+  "iata_code": "IQQ",
+  "airline_shares": {
+    "LAN": 0.5,
+    "SKU": 0.375,
+    "5P": 0.125
+  },
+  "domestic_route_shares": {
+    "SCL": 0.5555555555555556,
+    "ANF": 0.4444444444444444
+  },
+  "international_route_shares": {
+    "ARI": 0.42857142857142855,
+    "LPB": 0.2857142857142857,
+    "VVI": 0.2857142857142857
+  },
+  "domestic_ratio": 0.562,
+  "fleet_mix": {
+    "5P": {
+      "B737": 1.0
+    },
+    "SKU": {
+      "A319": 0.5,
+      "A320": 0.5
+    },
+    "LAN": {
+      "A320": 0.8888888888888888,
+      "A319": 0.1111111111111111
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 16
+}

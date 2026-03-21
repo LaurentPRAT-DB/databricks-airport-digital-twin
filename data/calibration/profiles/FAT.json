@@ -1,0 +1,45 @@
+{
+  "icao_code": "FAT",
+  "iata_code": "FAT",
+  "airline_shares": {
+    "AAL": 0.14285714285714285,
+    "AMX": 0.14285714285714285,
+    "ASA": 0.14285714285714285,
+    "FFT": 0.14285714285714285,
+    "AAY": 0.14285714285714285,
+    "USA": 0.14285714285714285,
+    "VOI": 0.14285714285714285
+  },
+  "domestic_route_shares": {
+    "DFW": 0.4,
+    "SEA": 0.2,
+    "DEN": 0.2,
+    "LAS": 0.2
+  },
+  "international_route_shares": {
+    "GDL": 1.0
+  },
+  "domestic_ratio": 0.714,
+  "fleet_mix": {
+    "AMX": {
+      "B738": 1.0
+    },
+    "ASA": {
+      "CRJ7": 1.0
+    },
+    "FFT": {
+      "A319": 1.0
+    },
+    "VOI": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 14
+}

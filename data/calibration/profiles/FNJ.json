@@ -1,0 +1,29 @@
+{
+  "icao_code": "FNJ",
+  "iata_code": "FNJ",
+  "airline_shares": {
+    "KOR": 0.8,
+    "CCA": 0.2
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "PEK": 0.4,
+    "KUL": 0.2,
+    "SHE": 0.2,
+    "VVO": 0.2
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "CCA": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 10
+}

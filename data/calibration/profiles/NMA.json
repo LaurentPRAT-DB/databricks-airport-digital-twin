@@ -1,0 +1,44 @@
+{
+  "icao_code": "NMA",
+  "iata_code": "NMA",
+  "airline_shares": {
+    "UZB": 0.4166666666666667,
+    "SVR": 0.4166666666666667,
+    "GAI": 0.08333333333333333,
+    "AFL": 0.08333333333333333
+  },
+  "domestic_route_shares": {
+    "TAS": 1.0
+  },
+  "international_route_shares": {
+    "DME": 0.18181818181818182,
+    "LED": 0.18181818181818182,
+    "SVX": 0.18181818181818182,
+    "OVB": 0.09090909090909091,
+    "CEK": 0.09090909090909091,
+    "GOJ": 0.09090909090909091,
+    "KJA": 0.09090909090909091,
+    "KRR": 0.09090909090909091
+  },
+  "domestic_ratio": 0.083,
+  "fleet_mix": {
+    "UZB": {
+      "A320": 0.5714285714285714,
+      "B752": 0.42857142857142855
+    },
+    "AFL": {
+      "A320": 1.0
+    },
+    "SVR": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 24
+}

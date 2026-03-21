@@ -1,0 +1,64 @@
+{
+  "icao_code": "OOL",
+  "iata_code": "OOL",
+  "airline_shares": {
+    "JST": 0.5,
+    "ANZ": 0.1111111111111111,
+    "TGW": 0.1111111111111111,
+    "XAX": 0.05555555555555555,
+    "QFA": 0.05555555555555555,
+    "TMA": 0.05555555555555555,
+    "SCO": 0.05555555555555555,
+    "VOZ": 0.05555555555555555
+  },
+  "domestic_route_shares": {
+    "SYD": 0.375,
+    "MEL": 0.25,
+    "ADL": 0.125,
+    "CNS": 0.125,
+    "NTL": 0.125
+  },
+  "international_route_shares": {
+    "CHC": 0.3,
+    "AKL": 0.2,
+    "KUL": 0.1,
+    "KIX": 0.1,
+    "NRT": 0.1,
+    "ISA": 0.1,
+    "SIN": 0.1
+  },
+  "domestic_ratio": 0.444,
+  "fleet_mix": {
+    "JST": {
+      "A320": 0.6086956521739131,
+      "A330": 0.21739130434782608,
+      "A321": 0.17391304347826086
+    },
+    "ANZ": {
+      "A320": 1.0
+    },
+    "QFA": {
+      "B738": 1.0
+    },
+    "TMA": {
+      "E175": 1.0
+    },
+    "TGW": {
+      "A320": 1.0
+    },
+    "SCO": {
+      "B777": 1.0
+    },
+    "VOZ": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 36
+}

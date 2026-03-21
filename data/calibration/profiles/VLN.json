@@ -1,0 +1,37 @@
+{
+  "icao_code": "VLN",
+  "iata_code": "VLN",
+  "airline_shares": {
+    "7I": 0.2,
+    "VC9": 0.2,
+    "OCA": 0.2,
+    "8I": 0.1,
+    "CMP": 0.1,
+    "RLN": 0.1,
+    "VNP": 0.1
+  },
+  "domestic_route_shares": {
+    "BLA": 0.3333333333333333,
+    "MAR": 0.3333333333333333,
+    "PMV": 0.3333333333333333
+  },
+  "international_route_shares": {
+    "AUA": 0.5,
+    "CUR": 0.25,
+    "PTY": 0.25
+  },
+  "domestic_ratio": 0.6,
+  "fleet_mix": {
+    "CMP": {
+      "B737": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

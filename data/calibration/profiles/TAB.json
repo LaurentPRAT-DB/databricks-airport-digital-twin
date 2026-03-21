@@ -1,0 +1,38 @@
+{
+  "icao_code": "TAB",
+  "iata_code": "TAB",
+  "airline_shares": {
+    "BWA": 0.5,
+    "BAW": 0.25,
+    "CFG": 0.25
+  },
+  "domestic_route_shares": {
+    "POS": 1.0
+  },
+  "international_route_shares": {
+    "ANU": 0.3333333333333333,
+    "JFK": 0.3333333333333333,
+    "FRA": 0.16666666666666666,
+    "BGI": 0.16666666666666666
+  },
+  "domestic_ratio": 0.25,
+  "fleet_mix": {
+    "BAW": {
+      "B777": 1.0
+    },
+    "BWA": {
+      "B738": 1.0
+    },
+    "CFG": {
+      "B767": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 8
+}

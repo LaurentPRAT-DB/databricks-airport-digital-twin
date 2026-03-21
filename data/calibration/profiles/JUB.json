@@ -1,0 +1,62 @@
+{
+  "icao_code": "JUB",
+  "iata_code": "JUB",
+  "airline_shares": {
+    "TEP": 0.2,
+    "FFV": 0.1,
+    "ETH": 0.1,
+    "FDB": 0.1,
+    "KQA": 0.1,
+    "MSR": 0.1,
+    "SUD": 0.1,
+    "JUS": 0.1,
+    "RWD": 0.1
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "NBO": 0.2,
+    "KRT": 0.2,
+    "EBB": 0.15,
+    "ADD": 0.1,
+    "DXB": 0.1,
+    "CAI": 0.1,
+    "KGL": 0.1,
+    "ASM": 0.05
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "FFV": {
+      "CRJ9": 1.0
+    },
+    "FDB": {
+      "B738": 1.0
+    },
+    "KQA": {
+      "E190": 0.5,
+      "E175": 0.5
+    },
+    "MSR": {
+      "A320": 1.0
+    },
+    "SUD": {
+      "A320": 1.0
+    },
+    "JUS": {
+      "CRJ9": 1.0
+    },
+    "TEP": {
+      "A320": 1.0
+    },
+    "RWD": {
+      "CRJ9": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

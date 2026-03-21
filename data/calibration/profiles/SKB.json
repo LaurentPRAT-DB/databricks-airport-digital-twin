@@ -1,0 +1,48 @@
+{
+  "icao_code": "SKB",
+  "iata_code": "SKB",
+  "airline_shares": {
+    "SBS": 0.2,
+    "LIA": 0.2,
+    "WM": 0.2,
+    "AAL": 0.1,
+    "BAW": 0.1,
+    "BHS": 0.1,
+    "USA": 0.1
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "MIA": 0.25,
+    "ANU": 0.2,
+    "NEV": 0.2,
+    "SXM": 0.2,
+    "SJU": 0.1,
+    "NAS": 0.05
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "AAL": {
+      "B738": 1.0
+    },
+    "BAW": {
+      "B777": 1.0
+    },
+    "LIA": {
+      "AT76": 1.0
+    },
+    "BHS": {
+      "B737": 1.0
+    },
+    "USA": {
+      "B738": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 20
+}

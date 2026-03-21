@@ -1,0 +1,27 @@
+{
+  "icao_code": "WLS",
+  "iata_code": "WLS",
+  "airline_shares": {
+    "ACI": 1.0
+  },
+  "domestic_route_shares": {},
+  "international_route_shares": {
+    "FUT": 0.3333333333333333,
+    "NAN": 0.3333333333333333,
+    "NOU": 0.3333333333333333
+  },
+  "domestic_ratio": 0.0,
+  "fleet_mix": {
+    "ACI": {
+      "A320": 1.0
+    }
+  },
+  "hourly_profile": [],
+  "delay_rate": 0.0,
+  "delay_distribution": {},
+  "mean_delay_minutes": 0.0,
+  "data_source": "openflights",
+  "region": "",
+  "profile_date": "2026-03-21",
+  "sample_size": 6
+}
