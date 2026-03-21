@@ -192,16 +192,23 @@ export const mockArrivals = {
 }
 
 // WebSocket handler for /ws/flights
-const flightsWs = ws.link('ws://localhost:3000/ws/flights')
+export const flightsWs = ws.link('ws://localhost:3000/ws/flights')
+
+/** Override what flights the WebSocket sends on connection. Set to null to use default mockFlights. */
+export let wsFlightOverride: typeof mockFlights | null = null
+export function setWsFlightOverride(flights: typeof mockFlights | null) {
+  wsFlightOverride = flights
+}
 
 export const handlers = [
   // WebSocket: send initial flight data on connection
   flightsWs.addEventListener('connection', ({ client }) => {
+    const flights = wsFlightOverride ?? mockFlights
     client.send(JSON.stringify({
       type: 'initial',
       data: {
-        flights: mockFlights,
-        count: mockFlights.length,
+        flights,
+        count: flights.length,
         timestamp: new Date().toISOString(),
       },
     }))

@@ -2,6 +2,7 @@ import '@testing-library/jest-dom'
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi, beforeAll, afterAll, expect } from 'vitest'
 import { server } from './mocks/server'
+import { setWsFlightOverride } from './mocks/handlers'
 
 // Start MSW server before all tests
 beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }))
@@ -10,6 +11,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }))
 afterEach(() => {
   cleanup()
   server.resetHandlers()
+  setWsFlightOverride(null)
 })
 
 // Close server after all tests

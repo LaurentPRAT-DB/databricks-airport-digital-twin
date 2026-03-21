@@ -17,6 +17,7 @@ import { render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse, delay } from 'msw'
 import { server } from './test/mocks/server'
+import { setWsFlightOverride } from './test/mocks/handlers'
 import { PERFORMANCE_THRESHOLDS } from './test/test-utils'
 import App from './App'
 import {
@@ -179,8 +180,11 @@ async function waitForAppReady() {
   )
 }
 
-/** Override the flights API to return custom flight data */
+/** Override the flights API and WebSocket to return custom flight data */
 function useFlightOverride(flights: Flight[]) {
+  // Override WebSocket data (checked by connection handler in handlers.ts)
+  setWsFlightOverride(flights)
+  // Override HTTP fallback
   server.use(
     http.get('/api/flights', async () => {
       await delay(30)
