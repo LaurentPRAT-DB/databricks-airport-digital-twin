@@ -69,10 +69,17 @@ env/
 data/*
 # Exception: keep fallback sample data for offline mode
 !data/fallback/
-# Exception: keep calibration profile JSONs (small, ~2KB each) and data sources config
+# Exception: keep calibration data needed for synthetic data generation
 !data/calibration/
 data/calibration/*
 !data/calibration/data_sources.json
+!data/calibration/raw/
+data/calibration/raw/*
+!data/calibration/raw/openflights_routes.dat
+!data/calibration/raw/openflights_airlines.dat
+!data/calibration/raw/airports.csv
+!data/calibration/raw/runways.csv
+# BTS OTP zips are too large (~338MB) — download via scripts/build_airport_profiles.py
 !data/calibration/profiles/
 data/calibration/profiles/*
 !data/calibration/profiles/*.json
