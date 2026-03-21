@@ -103,8 +103,12 @@ app/frontend/dist/
 # Claude Code local config
 .claude/
 
-# Debug/review/audit plans (local only)
-.planning/debug/
+# Local-only planning docs (audits, fixes with untracked content)
+.planning/audits/
+.planning/fixes/11-approach-trajectory-fix/
+.planning/fixes/40-lakebase-auth-fix/
+.planning/fixes/43-ux-review-fixes/
+.planning/fixes/46-ux-review-v3-fixes/
 
 # Generated service worker
 app/frontend/public/sw.js
