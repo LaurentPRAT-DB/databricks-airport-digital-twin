@@ -672,50 +672,54 @@ class TestFlightDynamics:
         cm.close_runway("28R", future)
         assert cm.go_around_probability() == 1.0
 
-    def test_go_around_in_bad_weather(self, tmp_path):
-        """Short LIFR sim should produce at least one go-around."""
+    def test_go_around_in_bad_weather(self):
+        """Go-around mechanism triggers and records correctly in LIFR."""
         from src.simulation.engine import SimulationEngine
+        from src.simulation.config import SimulationConfig
+        from src.simulation.recorder import SimulationRecorder
+        from src.simulation.capacity import CapacityManager
+        from src.ingestion.fallback import FlightState, FlightPhase, _flight_states, _runway_28R
+        from unittest.mock import patch, MagicMock
+        import random
 
-        scenario_yaml = {
-            "name": "LIFR Go-Around Test",
-            "description": "Test go-arounds under LIFR",
-            "weather_events": [
-                {
-                    "time": "00:00",
-                    "type": "fog",
-                    "severity": "extreme",
-                    "duration_hours": 3.0,
-                    "visibility_nm": 0.25,
-                    "ceiling_ft": 100,
-                    "wind_gusts_kt": 55,
-                }
-            ],
-        }
-        path = tmp_path / "lifr_test.yaml"
-        path.write_text(yaml.dump(scenario_yaml))
+        # Create a minimal engine to test the go-around logic in _force_advance
+        config = SimulationConfig(
+            airport="SFO", arrivals=5, departures=0, seed=42,
+            duration_hours=1.0, time_step_seconds=5.0,
+        )
+        engine = SimulationEngine(config)
 
-        # Go-arounds are probabilistic (10% per APPROACHING→LANDING transition)
-        # and the LIFR capacity constraint means few flights complete approaches.
-        # Try many seeds to statistically guarantee at least one go-around.
-        any_go_around = False
-        for seed in range(50):
-            config = SimulationConfig(
-                airport="SFO",
-                arrivals=50,
-                departures=5,
-                seed=seed,
-                duration_hours=3.0,
-                time_step_seconds=5.0,
-                scenario_file=str(path),
-            )
-            engine = SimulationEngine(config)
-            recorder = engine.run()
-            summary = recorder.compute_summary(config.model_dump(mode="json"))
-            if summary["total_go_arounds"] > 0:
-                any_go_around = True
-                break
+        # Set up LIFR weather on the capacity manager
+        engine.capacity.apply_weather(0.25, 100, 55)
+        assert engine.capacity.current_category == "LIFR"
+        assert engine.capacity.go_around_probability() >= 0.10
 
-        assert any_go_around, "No go-arounds in extreme LIFR across 50 seeds"
+        # Clear runway and place a test flight in APPROACHING
+        _runway_28R.occupied_by = None
+        test_state = FlightState(
+            icao24="gotest01", callsign="GO101",
+            latitude=37.62, longitude=-122.38, altitude=1500,
+            velocity=180, heading=280, vertical_rate=-500,
+            on_ground=False, phase=FlightPhase.APPROACHING,
+            aircraft_type="A320",
+        )
+        _flight_states["gotest01"] = test_state
+
+        # Force random to return a small value (triggers go-around)
+        with patch("random.random", return_value=0.01):
+            engine._force_advance("gotest01", test_state)
+
+        # Should have recorded a go-around and kept in APPROACHING
+        go_around_events = [e for e in engine.recorder.scenario_events
+                            if e.get("event_type") == "go_around"]
+        assert len(go_around_events) >= 1, "Go-around event not recorded"
+        assert test_state.go_around_count >= 1, "Go-around count not incremented"
+        assert test_state.phase == FlightPhase.APPROACHING, "Should stay in APPROACHING after go-around"
+        assert test_state.altitude == 2000, "Should climb to 2000ft after go-around"
+
+        # Clean up
+        if "gotest01" in _flight_states:
+            del _flight_states["gotest01"]
 
     def test_diversion_on_all_runways_closed(self, tmp_path):
         """Close both runways → APPROACHING flights get diverted."""
@@ -791,62 +795,52 @@ class TestFlightDynamics:
         gate_state = _gate_states.get("A1")
         assert gate_state is None or gate_state.occupied_by != "test01"
 
-    def test_diversion_after_two_go_arounds(self, tmp_path):
-        """Flight with 2 go-arounds should be diverted."""
+    def test_diversion_after_two_go_arounds(self):
+        """Flight with 2 go-arounds gets diverted."""
         from src.simulation.engine import SimulationEngine
-
-        # Use LIFR with extreme gusts + close both runways to guarantee diversions
-        scenario_yaml = {
-            "name": "Multi Go-Around",
-            "description": "Test diversion after repeated go-arounds",
-            "weather_events": [
-                {
-                    "time": "00:00",
-                    "type": "blizzard",
-                    "severity": "extreme",
-                    "duration_hours": 4.0,
-                    "visibility_nm": 0.1,
-                    "ceiling_ft": 50,
-                    "wind_gusts_kt": 60,
-                }
-            ],
-            "runway_events": [
-                {
-                    "time": "01:00",
-                    "type": "closure",
-                    "runway": "28L",
-                    "duration_minutes": 60,
-                    "reason": "blizzard",
-                },
-                {
-                    "time": "01:00",
-                    "type": "closure",
-                    "runway": "28R",
-                    "duration_minutes": 60,
-                    "reason": "blizzard",
-                },
-            ],
-        }
-        path = tmp_path / "multi_ga.yaml"
-        path.write_text(yaml.dump(scenario_yaml))
+        from src.ingestion.fallback import FlightState, FlightPhase, _flight_states, _runway_28R
+        from unittest.mock import patch
 
         config = SimulationConfig(
-            airport="SFO",
-            arrivals=40,
-            departures=5,
-            seed=123,
-            duration_hours=4.0,
-            time_step_seconds=5.0,
-            scenario_file=str(path),
+            airport="SFO", arrivals=5, departures=0, seed=42,
+            duration_hours=1.0, time_step_seconds=5.0,
         )
         engine = SimulationEngine(config)
-        recorder = engine.run()
-        summary = recorder.compute_summary(config.model_dump(mode="json"))
 
-        # With extreme weather, many arrivals, and runway closures:
-        # - go-arounds from weather probability
-        # - diversions from runway closure sweep
-        assert summary["total_go_arounds"] > 0 or summary["total_diversions"] > 0
+        # Set up LIFR weather
+        engine.capacity.apply_weather(0.1, 50, 60)
+
+        # Place a test flight with 1 go-around already
+        _runway_28R.occupied_by = None
+        test_state = FlightState(
+            icao24="divtest01", callsign="DV101",
+            latitude=37.62, longitude=-122.38, altitude=1500,
+            velocity=180, heading=280, vertical_rate=-500,
+            on_ground=False, phase=FlightPhase.APPROACHING,
+            aircraft_type="A320",
+        )
+        test_state.go_around_count = 1
+        _flight_states["divtest01"] = test_state
+
+        # Force go-around (returns small random value)
+        with patch("random.random", return_value=0.01):
+            engine._force_advance("divtest01", test_state)
+
+        # After 2nd go-around, flight should be diverted (phase = ENROUTE).
+        # _divert_flight resets go_around_count to 0, so check events instead.
+        assert test_state.phase == FlightPhase.ENROUTE, "Should be diverted to ENROUTE"
+
+        # Should have go-around + diversion events
+        go_arounds = [e for e in engine.recorder.scenario_events
+                      if e.get("event_type") == "go_around"]
+        diversions = [e for e in engine.recorder.scenario_events
+                      if e.get("event_type") == "diversion"]
+        assert len(go_arounds) >= 1, "Go-around event not recorded"
+        assert len(diversions) >= 1, "Diversion event not recorded"
+
+        # Clean up
+        if "divtest01" in _flight_states:
+            del _flight_states["divtest01"]
 
     def test_force_advance_approaching_checks_runway(self):
         """Fixed force-advance should not blindly transition to LANDING."""
