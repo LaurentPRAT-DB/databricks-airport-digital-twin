@@ -1,4 +1,4 @@
-import { http, HttpResponse, delay } from 'msw'
+import { http, HttpResponse, delay, ws } from 'msw'
 
 // Mock flight data
 export const mockFlights = [
@@ -191,7 +191,22 @@ export const mockArrivals = {
   timestamp: new Date().toISOString(),
 }
 
+// WebSocket handler for /ws/flights
+const flightsWs = ws.link('ws://localhost:3000/ws/flights')
+
 export const handlers = [
+  // WebSocket: send initial flight data on connection
+  flightsWs.addEventListener('connection', ({ client }) => {
+    client.send(JSON.stringify({
+      type: 'initial',
+      data: {
+        flights: mockFlights,
+        count: mockFlights.length,
+        timestamp: new Date().toISOString(),
+      },
+    }))
+  }),
+
   // Flights endpoint
   http.get('/api/flights', async () => {
     await delay(50) // Simulate network latency
