@@ -2737,7 +2737,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude, state.longitude = new_pos
 
                 # Descend (clamp to prevent sub-ground altitudes)
-                state.altitude = max(0.0, _interpolate_altitude(state.altitude, target_alt, 300 * dt))
+                state.altitude = max(0.0, _interpolate_altitude(state.altitude, target_alt, 300 * dt) + random.uniform(-200, 200))
                 # Type-specific approach speed: decelerate from 180 kts to Vref
                 vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
                 total_wps = len(_get_approach_waypoints(state.origin_airport))
@@ -2745,7 +2745,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     progress = state.waypoint_index / (total_wps - 1)
                 else:
                     progress = 1.0
-                state.velocity = 180 - progress * (180 - vref)  # Smooth decel to Vref
+                state.velocity = 180 - progress * (180 - vref) + random.uniform(-5, 5)  # Smooth decel to Vref + noise
                 # Compute vertical rate from actual altitude difference to target
                 alt_diff = state.altitude - target_alt
                 if alt_diff > 500:

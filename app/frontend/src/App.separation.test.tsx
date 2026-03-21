@@ -181,7 +181,8 @@ async function waitForAppReady() {
 }
 
 /** Override the flights API and WebSocket to return custom flight data */
-function useFlightOverride(flights: Flight[]) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function useFlightOverride(flights: any[]) {
   // Override WebSocket data (checked by connection handler in handlers.ts)
   setWsFlightOverride(flights)
   // Override HTTP fallback
