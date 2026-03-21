@@ -132,6 +132,30 @@ def _get_turnaround_international_factor(state: "FlightState") -> float:
     return 1.0
 
 # ============================================================================
+# GATE-KEYED INBOUND DELAY TRACKING (for reactionary delay prediction)
+# ============================================================================
+
+_gate_last_delay: Dict[str, float] = {}
+
+
+def get_gate_last_delay(gate_id: str) -> float:
+    """Return the delay of the last inbound flight at this gate (minutes)."""
+    return _gate_last_delay.get(gate_id, 0.0)
+
+
+def get_airport_load_ratio() -> float:
+    """Return current airport load ratio: active flights / nominal capacity.
+
+    Uses the target flight count as nominal capacity (the count parameter
+    from generate_synthetic_flights, typically 50).
+    """
+    active = len(_flight_states)
+    # Default capacity is the target flight count (50)
+    capacity = max(1, 50)
+    return active / capacity
+
+
+# ============================================================================
 # EVENT BUFFERS for ML training data persistence
 # ============================================================================
 # Thread-safe buffers that collect events during state machine updates.
@@ -2926,6 +2950,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.time_at_gate = 0
                 state.parked_since = time.time()
                 _occupy_gate(state.icao24, state.assigned_gate)
+                # Record inbound delay for reactionary delay prediction
+                # (TAXI_TO_GATE → PARKED is always an arrival)
+                if state.assigned_gate:
+                    _h = (hash(state.icao24) ^ hash(state.callsign[:3] if state.callsign else "")) & 0xFFFF
+                    inbound_delay = (5 + ((_h >> 8) % 41)) if ((_h >> 4) % 5 == 0) else 0
+                    _gate_last_delay[state.assigned_gate] = float(inbound_delay)
                 # Offset aircraft away from terminal based on OSM geometry + aircraft dimensions
                 parked_heading = _get_parked_heading(state.latitude, state.longitude)
                 state.heading = parked_heading

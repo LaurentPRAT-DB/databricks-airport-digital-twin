@@ -311,13 +311,14 @@ class CongestionPredictor:
         return min(1.0, base_confidence + count_factor)
 
     def _get_hourly_capacity_scale(self) -> float:
-        """Scale capacity based on profile's hourly traffic pattern.
+        """Scale effective capacity based on profile's hourly traffic pattern.
 
-        During peak hours airports handle more traffic, so effective capacity
-        is higher.  During off-peak, capacity stays at the baseline.
+        At peak hours, effective capacity per slot is *lower* (more sequencing
+        delays, less margin), so congestion onset should be more sensitive.
+        At off-peak, the full baseline capacity is available.
 
         Returns:
-            Multiplier >= 1.0 (peak hours get up to 1.5× capacity).
+            Multiplier in (0.67, 1.0]: peak hours reduce effective capacity.
         """
         if not self._profile or not self._profile.hourly_profile:
             return 1.0
@@ -333,8 +334,8 @@ class CongestionPredictor:
 
         relative = profile[hour] / max_weight  # 0..1
 
-        # Scale capacity: off-peak (relative~0) → 1.0×, peak (relative~1) → 1.5×
-        return 1.0 + relative * 0.5
+        # Invert: peak (relative~1) → ~0.67× capacity, off-peak → 1.0×
+        return 1.0 / (1.0 + relative * 0.5)
 
     def predict(self, flights: List[dict]) -> List[AreaCongestion]:
         """

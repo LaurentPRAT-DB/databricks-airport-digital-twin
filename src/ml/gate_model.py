@@ -311,6 +311,12 @@ class GateRecommender:
         """
         score = 0.0
 
+        # Dynamic proximity weight: delayed flights benefit more from closer gates
+        delay_minutes = flight.get("delay_minutes", 0) or 0
+        proximity_weight = min(0.30, 0.10 + (delay_minutes / 100) * 0.20)
+        # Redistribute from operator_match weight
+        operator_weight = 0.20 - (proximity_weight - 0.10)
+
         # 1. Availability check (40% weight) - most important
         if gate.status == GateStatus.AVAILABLE:
             score += 0.40
@@ -324,19 +330,19 @@ class GateRecommender:
         aircraft_type = flight.get("aircraft_type", "")
         airline_code = callsign[:3].upper() if len(callsign) >= 3 else ""
 
-        # 2. Operator matching (20% weight) - OSM gates have operator info
+        # 2. Operator matching (dynamic weight) - OSM gates have operator info
         if gate.operator:
             operator_lower = gate.operator.lower()
             # Check if airline matches gate operator
             if self._airline_matches_operator(airline_code, operator_lower):
-                score += 0.20
+                score += operator_weight
             else:
                 score += 0.05  # Small penalty for non-matching operator
 
         elif self._profile and airline_code:
             # No OSM operator, but profile has airline shares — use affinity
             share = self._profile.airline_shares.get(airline_code, 0.0)
-            score += 0.08 + min(share, 0.5) * 0.16
+            score += (operator_weight * 0.4) + min(share, 0.5) * (operator_weight * 0.8)
         else:
             # Check airline-terminal affinity (known carrier preferences)
             _AIRLINE_TERMINAL_AFFINITY = {
@@ -350,9 +356,9 @@ class GateRecommender:
             terminal_letter = (gate.terminal or gate.gate_id)[:1].upper()
             preferred = _AIRLINE_TERMINAL_AFFINITY.get(airline_code, set())
             if terminal_letter in preferred:
-                score += 0.18
+                score += operator_weight * 0.9
             else:
-                score += 0.10
+                score += operator_weight * 0.5
 
         # 3. Terminal type matching (15% weight)
         # If profile has domestic routes, check against known domestic destinations
@@ -377,7 +383,7 @@ class GateRecommender:
         size_score = self._score_size_compatibility(gate.gate_size, aircraft_size)
         score += size_score * 0.15
 
-        # 5. Proximity bonus (10% weight)
+        # 5. Proximity bonus (dynamic weight: 10-30% based on delay)
         # Use geo-coordinates distance to runway if available for real differentiation
         if gate.latitude and gate.longitude:
             import math
@@ -390,23 +396,16 @@ class GateRecommender:
             dist_m = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
             # Normalize: 0m → 1.0, 3000m → 0.0
             proximity_score = max(0, 1.0 - (dist_m / 3000))
-            score += proximity_score * 0.10
+            score += proximity_score * proximity_weight
         else:
             try:
                 numeric_part = "".join(c for c in gate.gate_id if c.isdigit())
                 if numeric_part:
                     gate_number = int(numeric_part)
                     proximity_score = max(0, 1.0 - (gate_number / 100))
-                    score += proximity_score * 0.10
+                    score += proximity_score * proximity_weight
             except (ValueError, IndexError):
-                score += 0.05
-
-        # Penalty for delayed flights
-        delay_minutes = flight.get("delay_minutes", 0)
-        if delay_minutes > 30:
-            score -= 0.05
-        elif delay_minutes > 0:
-            score -= 0.02
+                score += proximity_weight * 0.5
 
         return min(1.0, max(0.0, score))
 

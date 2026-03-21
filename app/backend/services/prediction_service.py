@@ -80,21 +80,64 @@ class PredictionService:
     ) -> Dict[str, Any]:
         """Get all predictions for a list of flights.
 
-        Runs delay, gate, and congestion predictions in parallel.
+        Runs congestion first, then feeds the worst congestion level into
+        delay predictions. Gate recommendations run in parallel with delay.
         """
-        delay_task = asyncio.create_task(self._get_all_delays(flights))
-        gate_task = asyncio.create_task(self._get_all_gates(flights))
-        congestion_task = asyncio.create_task(self._get_congestion_internal(flights))
+        # Step 1: Run congestion prediction first
+        congestion = await self._get_congestion_internal(flights)
 
-        delays, gates, congestion = await asyncio.gather(
-            delay_task, gate_task, congestion_task
-        )
+        # Derive worst congestion level for delay features
+        worst_level = "LOW"
+        level_rank = {"LOW": 0, "MODERATE": 1, "HIGH": 2, "CRITICAL": 3}
+        for area in congestion:
+            area_level = area.level.value.upper()
+            if level_rank.get(area_level, 0) > level_rank.get(worst_level, 0):
+                worst_level = area_level
+
+        # Enrich flights with congestion + weather + inbound delay for delay model
+        enriched_flights = self._enrich_flights_for_delay(flights, worst_level)
+
+        # Step 2: Run delay (with congestion context) and gate in parallel
+        delay_task = asyncio.create_task(self._get_all_delays(enriched_flights))
+        gate_task = asyncio.create_task(self._get_all_gates(flights))
+
+        delays, gates = await asyncio.gather(delay_task, gate_task)
 
         return {
             "delays": delays,
             "gates": gates,
             "congestion": congestion,
         }
+
+    def _enrich_flights_for_delay(
+        self, flights: List[Dict[str, Any]], congestion_level: str
+    ) -> List[Dict[str, Any]]:
+        """Add weather, congestion, inbound delay, and load ratio to flight dicts."""
+        try:
+            from src.ingestion.fallback import (
+                _current_weather,
+                get_gate_last_delay,
+                get_airport_load_ratio,
+            )
+            wind = _current_weather.get("wind_speed_kts", 0.0)
+            vis = _current_weather.get("visibility_sm", 10.0)
+            load_ratio = get_airport_load_ratio()
+        except ImportError:
+            wind, vis, load_ratio = 0.0, 10.0, 0.5
+            get_gate_last_delay = lambda g: 0.0  # noqa: E731
+
+        enriched = []
+        for flight in flights:
+            f = dict(flight)
+            f["wind_speed_kt"] = wind
+            f["visibility_sm"] = vis
+            f["congestion_level"] = congestion_level
+            f["airport_load_ratio"] = load_ratio
+            # Inbound delay at the flight's assigned gate
+            gate = f.get("assigned_gate") or f.get("gate", "")
+            f["inbound_delay_minutes"] = get_gate_last_delay(gate) if gate else 0.0
+            enriched.append(f)
+        return enriched
 
     async def _get_all_delays(
         self, flights: List[Dict[str, Any]]

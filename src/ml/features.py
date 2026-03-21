@@ -29,6 +29,15 @@ class FeatureSet:
     altitude_category: str
     heading_quadrant: int
     velocity_normalized: float
+    # Weather features (from fallback._current_weather or flight dict)
+    wind_speed_kt: float = 0.0
+    visibility_sm: float = 10.0
+    # Cross-model features
+    congestion_level: str = "LOW"
+    # Reactionary delay (inbound delay at same gate)
+    inbound_delay_minutes: float = 0.0
+    # Airport load ratio (active flights / capacity)
+    airport_load_ratio: float = 0.5
 
 
 def extract_features(flight: Dict[str, Any]) -> FeatureSet:
@@ -72,6 +81,19 @@ def extract_features(flight: Dict[str, Any]) -> FeatureSet:
     heading = float(flight.get("true_track") or flight.get("heading") or 0)
     heading_quadrant = _compute_heading_quadrant(heading)
 
+    # Weather features (passed through from fallback weather state or flight dict)
+    wind_speed_kt = float(flight.get("wind_speed_kt", 0.0) or 0.0)
+    visibility_sm = float(flight.get("visibility_sm", 10.0) or 10.0)
+
+    # Cross-model features (injected by prediction service)
+    congestion_level = str(flight.get("congestion_level", "LOW") or "LOW").upper()
+
+    # Reactionary delay (inbound delay at same gate)
+    inbound_delay_minutes = float(flight.get("inbound_delay_minutes", 0.0) or 0.0)
+
+    # Airport load ratio
+    airport_load_ratio = float(flight.get("airport_load_ratio", 0.5) or 0.5)
+
     return FeatureSet(
         hour_of_day=hour_of_day,
         day_of_week=day_of_week,
@@ -80,6 +102,11 @@ def extract_features(flight: Dict[str, Any]) -> FeatureSet:
         altitude_category=altitude_category,
         heading_quadrant=heading_quadrant,
         velocity_normalized=velocity_normalized,
+        wind_speed_kt=wind_speed_kt,
+        visibility_sm=visibility_sm,
+        congestion_level=congestion_level,
+        inbound_delay_minutes=inbound_delay_minutes,
+        airport_load_ratio=airport_load_ratio,
     )
 
 

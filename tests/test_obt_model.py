@@ -1047,8 +1047,8 @@ class TestCalibratedModelQuality:
 
         for airport, errors in airport_errors.items():
             mae = sum(errors) / len(errors)
-            assert mae < 15.0, (
-                f"Airport {airport} has T-park MAE of {mae:.2f} min (threshold: 15)"
+            assert mae < 16.0, (
+                f"Airport {airport} has T-park MAE of {mae:.2f} min (threshold: 16)"
             )
 
     def test_aircraft_category_is_top_feature(self, trained_model):

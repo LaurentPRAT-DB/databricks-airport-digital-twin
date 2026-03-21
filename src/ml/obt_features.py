@@ -120,6 +120,7 @@ class OBTCoarseFeatureSet:
     hour_cos: float               # cos(2*pi*hour/24)
     is_weather_scenario: bool     # True if simulation used a scenario file
     scheduled_buffer_min: float = 0.0  # SOBT - SIBT (schedule-only at T-90)
+    is_hub_connecting: bool = False  # True when airline's hub matches airport
 
 
 @dataclass
@@ -148,6 +149,7 @@ class OBTFeatureSet:
     hour_cos: float               # cos(2*pi*hour/24)
     is_weather_scenario: bool     # True if simulation used a scenario file
     scheduled_buffer_min: float = 0.0  # scheduled_departure - actual_arrival (T-park)
+    is_hub_connecting: bool = False  # True when airline's hub matches airport
 
     def to_coarse(self) -> OBTCoarseFeatureSet:
         """Project full feature set down to T-90 coarse features."""
@@ -166,6 +168,7 @@ class OBTFeatureSet:
             hour_cos=self.hour_cos,
             is_weather_scenario=self.is_weather_scenario,
             scheduled_buffer_min=self.scheduled_buffer_min,
+            is_hub_connecting=self.is_hub_connecting,
         )
 
     def to_board(
@@ -197,6 +200,33 @@ class OBTBoardFeatureSet(OBTFeatureSet):
     elapsed_gate_time_min: float = 0.0
     remaining_predicted_min: float = 0.0
     turnaround_progress_pct: float = 0.0
+
+
+# Airline ICAO code → hub IATA codes lookup
+_AIRLINE_HUBS: Dict[str, frozenset] = {
+    "UAL": frozenset({"SFO", "ORD", "IAH", "EWR", "DEN", "IAD", "LAX"}),
+    "AAL": frozenset({"DFW", "CLT", "MIA", "PHX", "PHL", "ORD", "LAX"}),
+    "DAL": frozenset({"ATL", "MSP", "DTW", "SLC", "SEA", "JFK", "LAX", "BOS"}),
+    "SWA": frozenset({"DAL", "MDW", "BWI", "DEN", "LAS", "OAK"}),
+    "DLH": frozenset({"FRA", "MUC"}),
+    "BAW": frozenset({"LHR", "LGW"}),
+    "AFR": frozenset({"CDG", "ORY"}),
+    "KLM": frozenset({"AMS"}),
+    "SIA": frozenset({"SIN"}),
+    "CPA": frozenset({"HKG"}),
+    "ANA": frozenset({"NRT", "HND"}),
+    "JAL": frozenset({"NRT", "HND"}),
+    "KAL": frozenset({"ICN"}),
+    "UAE": frozenset({"DXB"}),
+    "QFA": frozenset({"SYD", "MEL"}),
+    "THY": frozenset({"IST"}),
+}
+
+
+def is_hub_connection(airline_code: str, airport_iata: str) -> bool:
+    """Check if the airline operates this airport as a hub."""
+    hubs = _AIRLINE_HUBS.get(airline_code.upper(), frozenset())
+    return airport_iata.upper() in hubs
 
 
 def classify_aircraft(aircraft_type: str) -> str:
@@ -460,6 +490,9 @@ def extract_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]:
             # Clamp to reasonable range (negative = already late)
             scheduled_buffer = max(-60.0, min(300.0, scheduled_buffer))
 
+        # Hub connection check
+        hub_connecting = is_hub_connection(airline_code, airport_iata)
+
         features = OBTFeatureSet(
             aircraft_category=aircraft_category,
             airline_code=airline_code,
@@ -479,6 +512,7 @@ def extract_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]:
             hour_cos=h_cos,
             is_weather_scenario=is_weather_scenario,
             scheduled_buffer_min=scheduled_buffer,
+            is_hub_connecting=hub_connecting,
         )
 
         results.append({

@@ -110,6 +110,41 @@ class DelayPredictor:
         if features.velocity_normalized < 0.1 and features.altitude_category != "cruise":
             base_delay += 5.0
 
+        # --- Weather impact ---
+        # Wind: >25kt adds 15-30%, >40kt adds 30-60%
+        weather_factor = 1.0
+        wind = features.wind_speed_kt
+        if wind > 40:
+            weather_factor += 0.3 + self._random.uniform(0, 0.3)
+        elif wind > 25:
+            weather_factor += 0.15 + self._random.uniform(0, 0.15)
+        # Low visibility: <1SM adds 40-80%, <3SM adds 20-40%
+        vis = features.visibility_sm
+        if vis < 1:
+            weather_factor += 0.4 + self._random.uniform(0, 0.4)
+        elif vis < 3:
+            weather_factor += 0.2 + self._random.uniform(0, 0.2)
+
+        base_delay *= weather_factor
+
+        # --- Congestion multiplier ---
+        congestion_mult = {"LOW": 1.0, "MODERATE": 1.15, "HIGH": 1.35, "CRITICAL": 1.6}
+        base_delay *= congestion_mult.get(features.congestion_level, 1.0)
+
+        # --- Reactionary delay (inbound delay propagation) ---
+        # 30-60% of inbound delay propagates to outbound flight at same gate
+        if features.inbound_delay_minutes > 0:
+            propagation = features.inbound_delay_minutes * self._random.uniform(0.3, 0.6)
+            base_delay += propagation
+
+        # --- Airport load ratio scaling ---
+        # >0.8 load increases delay probability, >1.0 strongly increases
+        load = features.airport_load_ratio
+        if load > 1.0:
+            base_delay *= 1.0 + (load - 1.0) * 1.5
+        elif load > 0.8:
+            base_delay *= 1.0 + (load - 0.8) * 0.75
+
         # Add noise for realism (+/- 5 minutes)
         noise = self._random.uniform(-5.0, 5.0)
         delay_minutes = max(0.0, base_delay + noise)

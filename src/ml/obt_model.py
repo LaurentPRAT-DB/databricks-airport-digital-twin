@@ -58,6 +58,7 @@ BINARY_FEATURES = [
     "is_remote_stand",
     "has_active_ground_stop",
     "is_weather_scenario",
+    "is_hub_connecting",
 ]
 
 ALL_FEATURE_NAMES = NUMERIC_FEATURES + CATEGORICAL_FEATURES + BINARY_FEATURES
@@ -82,6 +83,7 @@ COARSE_BINARY_FEATURES = [
     "is_international",
     "has_active_ground_stop",
     "is_weather_scenario",
+    "is_hub_connecting",
 ]
 ALL_COARSE_FEATURE_NAMES = (
     COARSE_NUMERIC_FEATURES + COARSE_CATEGORICAL_FEATURES + COARSE_BINARY_FEATURES
@@ -129,6 +131,7 @@ def _features_to_row(f: OBTFeatureSet) -> List[Any]:
         int(f.is_remote_stand),
         int(f.has_active_ground_stop),
         int(f.is_weather_scenario),
+        int(f.is_hub_connecting),
     ]
 
 
@@ -149,6 +152,7 @@ def _coarse_features_to_row(f: OBTCoarseFeatureSet) -> List[Any]:
         int(f.is_international),
         int(f.has_active_ground_stop),
         int(f.is_weather_scenario),
+        int(f.is_hub_connecting),
     ]
 
 
@@ -169,6 +173,7 @@ def _dict_to_coarse_feature_set(d: Dict[str, Any]) -> OBTCoarseFeatureSet:
         hour_cos=float(d.get("hour_cos", 1.0)),
         is_weather_scenario=bool(d.get("is_weather_scenario", False)),
         scheduled_buffer_min=float(d.get("scheduled_buffer_min", 0.0)),
+        is_hub_connecting=bool(d.get("is_hub_connecting", False)),
     )
 
 
@@ -193,6 +198,7 @@ def _dict_to_feature_set(d: Dict[str, Any]) -> OBTFeatureSet:
         hour_cos=float(d.get("hour_cos", 1.0)),
         is_weather_scenario=bool(d.get("is_weather_scenario", False)),
         scheduled_buffer_min=float(d.get("scheduled_buffer_min", 0.0)),
+        is_hub_connecting=bool(d.get("is_hub_connecting", False)),
     )
 
 
@@ -535,6 +541,9 @@ class OBTPredictor:
             duration = self._fallback_durations.get(
                 features.aircraft_category, 45.0
             )
+            # Hub connecting flights get 5-10% faster turnaround
+            if features.is_hub_connecting:
+                duration *= 0.925  # ~7.5% reduction
             return OBTPrediction(
                 turnaround_minutes=duration,
                 lower_bound_minutes=duration * 0.8,
@@ -846,6 +855,9 @@ class OBTCoarsePredictor:
             duration = self._fallback_durations.get(
                 features.aircraft_category, 45.0
             )
+            # Hub connecting flights get 5-10% faster turnaround
+            if features.is_hub_connecting:
+                duration *= 0.925  # ~7.5% reduction
             return OBTPrediction(
                 turnaround_minutes=duration,
                 lower_bound_minutes=duration * 0.8,
