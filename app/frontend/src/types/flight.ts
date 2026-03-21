@@ -10,7 +10,11 @@ export interface Flight {
   vertical_rate: number | null;
   last_seen: string;
   data_source: string;
-  flight_phase: "ground" | "climbing" | "descending" | "cruising";
+  flight_phase:
+    | "parked" | "pushback" | "taxi_out" | "takeoff" | "departing"
+    | "enroute" | "approaching" | "landing" | "taxi_in"
+    // Legacy aliases (backward compat)
+    | "ground" | "climbing" | "descending" | "cruising";
   aircraft_type?: string; // ICAO aircraft type code (e.g., A320, B738)
   origin_airport?: string; // Origin airport IATA code
   destination_airport?: string; // Destination airport IATA code

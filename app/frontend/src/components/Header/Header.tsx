@@ -80,23 +80,45 @@ export default function Header({ onShowFIDS, simulationControls }: HeaderProps) 
           </button>
         )}
 
-        {/* Flight phase legend */}
-        <div className="flex items-center gap-4 text-sm">
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-gray-500" />
-            Ground
+        {/* Flight phase legend — grouped by category */}
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-slate-400">Ground:</span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-gray-500" />
+            Parked
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-green-500" />
-            Climbing
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-gray-400" />
+            Pushback
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-orange-500" />
-            Descending
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-stone-400" />
+            Taxi
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-blue-500" />
-            Cruising
+          <span className="text-slate-300">|</span>
+          <span className="text-slate-400">Departure:</span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-green-600" />
+            Takeoff
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
+            Departing
+          </span>
+          <span className="text-slate-300">|</span>
+          <span className="text-slate-400">Arrival:</span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+            Approaching
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-orange-600" />
+            Landing
+          </span>
+          <span className="text-slate-300">|</span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+            Enroute
           </span>
         </div>
 

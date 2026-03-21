@@ -85,7 +85,7 @@ describe('FlightDetail', () => {
 
       await waitFor(
         () => {
-          expect(screen.getByText(/descending/i)).toBeInTheDocument()
+          expect(screen.getByText(/approaching/i)).toBeInTheDocument()
         },
         { timeout: 5000 }
       )
@@ -198,7 +198,7 @@ describe('FlightDetail', () => {
 
   describe('Gate Recommendations', () => {
     it('shows gate recommendations for arriving flights', async () => {
-      // Flight at index 0 is descending, so should show gate recommendations
+      // Flight at index 0 is approaching, so should show gate recommendations
       renderWithFlightSelection(0)
 
       await waitFor(
@@ -210,7 +210,7 @@ describe('FlightDetail', () => {
     })
 
     it('does not show gate recommendations for cruising flights', async () => {
-      // Flight at index 1 is cruising
+      // Flight at index 1 is enroute
       renderWithFlightSelection(1)
 
       await waitFor(
@@ -220,7 +220,7 @@ describe('FlightDetail', () => {
         { timeout: 5000 }
       )
 
-      // Gate recommendations should not appear for cruising flight
+      // Gate recommendations should not appear for enroute flight
       expect(screen.queryByText(/gate recommendations/i)).not.toBeInTheDocument()
     })
   })

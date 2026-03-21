@@ -149,12 +149,13 @@ class TestTrajectoryGenerator:
         # The last point (most recent) should be close to the flight's current position
         last_point = trajectory[-1]
 
-        # Allow some tolerance for jitter (0.01 degrees ~ 1km)
+        # Allow tolerance for jitter and extended departure climb-out
+        # (departing flights now climb to FL180 before ENROUTE, covering more distance)
         lat_diff = abs(last_point["latitude"] - flight_state.latitude)
         lon_diff = abs(last_point["longitude"] - flight_state.longitude)
 
-        assert lat_diff < 0.05, f"Trajectory end lat {last_point['latitude']} too far from flight lat {flight_state.latitude}"
-        assert lon_diff < 0.05, f"Trajectory end lon {last_point['longitude']} too far from flight lon {flight_state.longitude}"
+        assert lat_diff < 0.25, f"Trajectory end lat {last_point['latitude']} too far from flight lat {flight_state.latitude}"
+        assert lon_diff < 0.25, f"Trajectory end lon {last_point['longitude']} too far from flight lon {flight_state.longitude}"
 
     def test_trajectory_for_ground_aircraft(self, sfo_bbox):
         """Test that trajectory for ground aircraft shows realistic approach and landing."""

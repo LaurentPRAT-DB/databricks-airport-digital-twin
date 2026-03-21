@@ -54,7 +54,7 @@ function createFlight(overrides: Partial<Flight> = {}): Flight {
     on_ground: false,
     last_seen: new Date().toISOString(),
     data_source: 'synthetic',
-    flight_phase: 'descending',
+    flight_phase: 'approaching',
     ...overrides,
   };
 }
@@ -124,7 +124,7 @@ describe('FlightMarker', () => {
     it('shows gate label for ground phase with assigned gate', () => {
       render(
         <FlightMarker
-          flight={createFlight({ flight_phase: 'ground', assigned_gate: 'A5' })}
+          flight={createFlight({ flight_phase: 'parked', assigned_gate: 'A5' })}
         />
       );
       expect(lastDivIconHtml).toContain('gate-label');
@@ -134,7 +134,7 @@ describe('FlightMarker', () => {
     it('does not show gate label for non-ground phase', () => {
       render(
         <FlightMarker
-          flight={createFlight({ flight_phase: 'descending', assigned_gate: 'A5' })}
+          flight={createFlight({ flight_phase: 'enroute', assigned_gate: 'A5' })}
         />
       );
       expect(lastDivIconHtml).not.toContain('gate-label');

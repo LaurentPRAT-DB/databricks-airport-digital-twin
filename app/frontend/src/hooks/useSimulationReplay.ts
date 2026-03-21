@@ -48,23 +48,20 @@ interface SimulationData {
   scenario_events: ScenarioEvent[];
 }
 
-/** Map simulation phase names to the frontend flight_phase enum. */
+/** Map simulation phase names to the frontend flight_phase enum (fine-grained). */
 function mapPhase(phase: string): Flight['flight_phase'] {
-  switch (phase) {
-    case 'approaching':
-    case 'landing':
-      return 'descending';
-    case 'taxi_to_gate':
-    case 'parked':
-    case 'pushback':
-    case 'taxi_to_runway':
-      return 'ground';
-    case 'takeoff':
-    case 'departing':
-      return 'climbing';
-    default:
-      return 'ground';
-  }
+  const map: Record<string, Flight['flight_phase']> = {
+    approaching: 'approaching',
+    landing: 'landing',
+    taxi_to_gate: 'taxi_in',
+    parked: 'parked',
+    pushback: 'pushback',
+    taxi_to_runway: 'taxi_out',
+    takeoff: 'takeoff',
+    departing: 'departing',
+    enroute: 'enroute',
+  };
+  return map[phase] ?? 'parked';
 }
 
 /** Convert a position snapshot to the Flight interface. */

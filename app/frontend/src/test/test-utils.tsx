@@ -87,7 +87,7 @@ export function createMockFlight(overrides = {}) {
     on_ground: false,
     last_seen: Date.now(),
     data_source: 'synthetic' as const,
-    flight_phase: 'cruising' as const,
+    flight_phase: 'enroute' as const,
     aircraft_type: 'B737',
     ...overrides,
   }

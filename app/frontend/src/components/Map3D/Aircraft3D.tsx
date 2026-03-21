@@ -15,6 +15,7 @@ import {
   normalizeRotationDiff,
   extractAirlineCode,
 } from '../../utils/map3d-calculations';
+import { isGroundPhase as isGroundPhaseFn } from '../../utils/phaseUtils';
 
 // Re-export for backwards compatibility
 export { latLonTo3D };
@@ -47,7 +48,7 @@ export function Aircraft3D({ flight, selected = false, onClick, airportCenter }:
   // Calculate target position from flight data
   // Ground-phase aircraft (taxi, parked, pushback) must stay at ground level —
   // their altitude field may contain airport elevation which would make them float.
-  const isGroundPhase = flight.flight_phase === 'ground';
+  const isGroundPhase = isGroundPhaseFn(flight.flight_phase);
   const effectiveAltitude = isGroundPhase ? 0 : (flight.altitude ?? 0);
   const targetPosition = useMemo(() =>
     latLonTo3D(flight.latitude, flight.longitude, effectiveAltitude, airportCenter?.lat, airportCenter?.lon),

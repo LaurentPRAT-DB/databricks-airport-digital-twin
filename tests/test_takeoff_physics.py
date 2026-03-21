@@ -184,13 +184,19 @@ class TestAltitudeTransitions:
     """Test altitude behavior through takeoff sub-phases."""
 
     def test_zero_altitude_during_ground_roll(self):
-        """Altitude should be 0 during lineup, roll, and rotate."""
+        """Altitude should be 0 during lineup and roll; small rise allowed during rotate."""
         state = _make_takeoff_state()
         for _ in range(2000):
             state = _update_flight_state(state, 0.5)
-            if state.takeoff_subphase in ("lineup", "roll", "rotate"):
+            if state.takeoff_subphase in ("lineup", "roll"):
                 assert state.altitude == 0, \
                     f"Altitude {state.altitude} != 0 during {state.takeoff_subphase}"
+            elif state.takeoff_subphase == "rotate":
+                # Rotation ramps vertical rate from 0→500 fpm over ~3s;
+                # aircraft is still on ground but nose pitches up — small
+                # altitude increase is physically correct.
+                assert state.altitude < 10, \
+                    f"Altitude {state.altitude} too high during rotate (expect <10 ft)"
             if state.takeoff_subphase == "liftoff":
                 break
 

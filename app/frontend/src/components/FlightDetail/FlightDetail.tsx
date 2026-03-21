@@ -4,20 +4,7 @@ import { useDelayPrediction, useGateRecommendations } from '../../hooks/usePredi
 import { useTrajectory } from '../../hooks/useTrajectory';
 import TurnaroundTimeline from './TurnaroundTimeline';
 import BaggageStatus from '../Baggage/BaggageStatus';
-
-const phaseColors: Record<Flight['flight_phase'], string> = {
-  ground: 'bg-gray-500',
-  climbing: 'bg-green-500',
-  descending: 'bg-orange-500',
-  cruising: 'bg-blue-500',
-};
-
-const phaseLabels: Record<Flight['flight_phase'], string> = {
-  ground: 'Ground',
-  climbing: 'Climbing',
-  descending: 'Descending',
-  cruising: 'Cruising',
-};
+import { PHASE_BG_CLASSES, PHASE_LABELS, isGroundPhase, isArrivalPhase } from '../../utils/phaseUtils';
 
 const delayColors: Record<string, string> = {
   on_time: 'bg-green-500',
@@ -74,8 +61,7 @@ export default function FlightDetail() {
 
   // Show gate recommendations only for descending flights (pre-arrival optimization).
   // Ground flights either have a gate (PARKED/TAXI_TO_GATE) or are departing.
-  const needsGateAssignment =
-    selectedFlight?.flight_phase === 'descending';
+  const needsGateAssignment = selectedFlight ? isArrivalPhase(selectedFlight.flight_phase) : false;
 
   if (!selectedFlight) {
     return (
@@ -135,9 +121,9 @@ export default function FlightDetail() {
         </div>
         <span className={`
           px-3 py-1 rounded-full text-sm font-medium text-white
-          ${phaseColors[flight_phase]}
+          ${PHASE_BG_CLASSES[flight_phase] ?? 'bg-gray-500'}
         `}>
-          {phaseLabels[flight_phase]}
+          {PHASE_LABELS[flight_phase] ?? flight_phase}
         </span>
       </div>
 
@@ -149,7 +135,7 @@ export default function FlightDetail() {
               <div className="text-lg font-bold font-mono text-slate-800">
                 {origin_airport || '---'}
               </div>
-              <div className="text-xs text-slate-400">{flight_phase === 'ground' ? 'Arrived from' : 'Origin'}</div>
+              <div className="text-xs text-slate-400">{isGroundPhase(flight_phase) ? 'Arrived from' : 'Origin'}</div>
             </div>
             <div className="px-3 text-slate-300">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -160,7 +146,7 @@ export default function FlightDetail() {
               <div className="text-lg font-bold font-mono text-slate-800">
                 {destination_airport || '---'}
               </div>
-              <div className="text-xs text-slate-400">{flight_phase === 'ground' ? 'Departing to' : 'Destination'}</div>
+              <div className="text-xs text-slate-400">{isGroundPhase(flight_phase) ? 'Departing to' : 'Destination'}</div>
             </div>
           </div>
           {aircraft_type && (
@@ -321,7 +307,7 @@ export default function FlightDetail() {
       )}
 
       {/* Turnaround Timeline (for ground flights) */}
-      {flight_phase === 'ground' && (
+      {isGroundPhase(flight_phase) && (
         <div className="mb-4">
           <TurnaroundTimeline
             icao24={icao24}
@@ -337,7 +323,7 @@ export default function FlightDetail() {
           <BaggageStatus
             flightNumber={callsign.trim()}
             aircraftType={aircraft_type || 'A320'}
-            isArrival={flight_phase === 'ground' || flight_phase === 'descending'}
+            isArrival={isGroundPhase(flight_phase) || isArrivalPhase(flight_phase)}
           />
         </div>
       )}

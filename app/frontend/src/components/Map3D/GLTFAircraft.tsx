@@ -7,14 +7,28 @@ import { AircraftModelConfig, AirlineConfig, AIRCRAFT_MODELS } from '../../confi
 // The decoder is loaded on-demand when a Draco-compressed model is detected
 const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.6/';
 
-type FlightPhase = 'ground' | 'climbing' | 'descending' | 'cruising';
+type FlightPhase = string;
 
 // Phase-based emissive tints to distinguish flight state in 3D
-const PHASE_EMISSIVE: Record<FlightPhase, number> = {
-  ground: 0x003300,     // Green tint
-  descending: 0x332200, // Orange tint
-  climbing: 0x001133,   // Blue tint
-  cruising: 0x111111,   // Subtle white
+const PHASE_EMISSIVE: Record<string, number> = {
+  // Ground phases (green tint)
+  parked: 0x003300,
+  pushback: 0x003300,
+  taxi_out: 0x003300,
+  taxi_in: 0x003300,
+  // Departure phases (blue tint)
+  takeoff: 0x001133,
+  departing: 0x001133,
+  // Arrival phases (orange tint)
+  approaching: 0x332200,
+  landing: 0x332200,
+  // Cruise
+  enroute: 0x111111,
+  // Legacy
+  ground: 0x003300,
+  climbing: 0x001133,
+  descending: 0x332200,
+  cruising: 0x111111,
 };
 
 interface GLTFAircraftProps {

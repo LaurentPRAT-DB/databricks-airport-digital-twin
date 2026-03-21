@@ -49,7 +49,7 @@ const separatedApproachFlights: Flight[] = [
     on_ground: false,
     last_seen: new Date().toISOString(),
     data_source: 'synthetic',
-    flight_phase: 'descending',
+    flight_phase: 'approaching',
     aircraft_type: 'B737', // LARGE
   },
   {
@@ -64,7 +64,7 @@ const separatedApproachFlights: Flight[] = [
     on_ground: false,
     last_seen: new Date().toISOString(),
     data_source: 'synthetic',
-    flight_phase: 'descending',
+    flight_phase: 'approaching',
     aircraft_type: 'A320', // LARGE
   },
 ]
@@ -83,7 +83,7 @@ const violationFlights: Flight[] = [
     on_ground: false,
     last_seen: new Date().toISOString(),
     data_source: 'synthetic',
-    flight_phase: 'descending',
+    flight_phase: 'approaching',
     aircraft_type: 'B747', // HEAVY
   },
   {
@@ -98,7 +98,7 @@ const violationFlights: Flight[] = [
     on_ground: false,
     last_seen: new Date().toISOString(),
     data_source: 'synthetic',
-    flight_phase: 'descending',
+    flight_phase: 'approaching',
     aircraft_type: 'B738', // LARGE
   },
 ]
@@ -117,7 +117,7 @@ const groundFlightsOk: Flight[] = [
     on_ground: true,
     last_seen: new Date().toISOString(),
     data_source: 'synthetic',
-    flight_phase: 'ground',
+    flight_phase: 'taxi_in',
     aircraft_type: 'A320',
   },
   {
@@ -132,7 +132,7 @@ const groundFlightsOk: Flight[] = [
     on_ground: true,
     last_seen: new Date().toISOString(),
     data_source: 'synthetic',
-    flight_phase: 'ground',
+    flight_phase: 'taxi_in',
     aircraft_type: 'B738',
   },
 ]
@@ -150,7 +150,7 @@ const overCapacityFlights: Flight[] = Array.from({ length: 6 }, (_, i) => ({
   on_ground: false,
   last_seen: new Date().toISOString(),
   data_source: 'synthetic' as const,
-  flight_phase: 'descending' as const,
+  flight_phase: 'approaching' as const,
   aircraft_type: 'A320',
 }))
 
@@ -456,20 +456,20 @@ describe('Aircraft separation — UI integration', () => {
         on_ground: false,
         last_seen: new Date().toISOString(),
         data_source: 'synthetic',
-        flight_phase: 'cruising',
+        flight_phase: 'enroute',
         aircraft_type: 'A321',
       },
     ]
 
-    it('renders all phases: descending, ground, cruising', async () => {
+    it('renders all phases: approaching, taxi_in, enroute', async () => {
       useFlightOverride(mixedFleet)
       renderApp()
       await waitForAppReady()
 
       await waitFor(() => {
-        expect(screen.getByText(/UAL100/)).toBeInTheDocument() // descending
-        expect(screen.getByText(/UAL500/)).toBeInTheDocument() // ground
-        expect(screen.getByText(/JBU999/)).toBeInTheDocument() // cruising
+        expect(screen.getByText(/UAL100/)).toBeInTheDocument() // approaching
+        expect(screen.getByText(/UAL500/)).toBeInTheDocument() // taxi_in
+        expect(screen.getByText(/JBU999/)).toBeInTheDocument() // enroute
       }, { timeout: 5000 })
     })
 
@@ -484,7 +484,7 @@ describe('Aircraft separation — UI integration', () => {
     })
 
     it('approach flights among the mixed fleet maintain required separation', () => {
-      const approachFlights = mixedFleet.filter((f) => f.flight_phase === 'descending')
+      const approachFlights = mixedFleet.filter((f) => f.flight_phase === 'approaching')
       expect(approachFlights.length).toBe(2)
 
       const f1 = approachFlights[0]
@@ -496,7 +496,7 @@ describe('Aircraft separation — UI integration', () => {
     })
 
     it('ground flights among the mixed fleet maintain taxi separation', () => {
-      const ground = mixedFleet.filter((f) => f.flight_phase === 'ground')
+      const ground = mixedFleet.filter((f) => f.flight_phase === 'taxi_in')
       expect(ground.length).toBe(2)
 
       for (let i = 0; i < ground.length; i++) {
@@ -548,15 +548,15 @@ describe('Aircraft separation — UI integration', () => {
       renderApp()
       await waitForAppReady()
 
-      // The default mock has UAL123 (descending, B737) and DAL456 (cruising, A320)
-      // Only 1 descending flight → separation N/A (trivially OK)
+      // The default mock has UAL123 (approaching, B737) and DAL456 (enroute, A320)
+      // Only 1 approaching flight → separation N/A (trivially OK)
       await waitFor(() => {
         expect(screen.getByText(/UAL123/)).toBeInTheDocument()
       }, { timeout: 5000 })
 
       // Verify by checking the data directly
       const { mockFlights } = await import('./test/mocks/handlers')
-      const descending = mockFlights.filter((f) => f.flight_phase === 'descending')
+      const descending = mockFlights.filter((f) => f.flight_phase === 'approaching')
 
       if (descending.length >= 2) {
         for (let i = 0; i < descending.length; i++) {

@@ -3,6 +3,7 @@ import { Marker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { Flight } from '../../types/flight';
 import { useFlightContext } from '../../context/FlightContext';
+import { PHASE_COLORS, isGroundPhase } from '../../utils/phaseUtils';
 
 interface FlightMarkerProps {
   flight: Flight;
@@ -11,18 +12,7 @@ interface FlightMarkerProps {
 
 // Get color based on flight phase
 function getPhaseColor(phase: Flight['flight_phase']): string {
-  switch (phase) {
-    case 'ground':
-      return '#6b7280'; // gray-500
-    case 'climbing':
-      return '#22c55e'; // green-500
-    case 'descending':
-      return '#f97316'; // orange-500
-    case 'cruising':
-      return '#3b82f6'; // blue-500
-    default:
-      return '#9ca3af'; // gray-400
-  }
+  return PHASE_COLORS[phase] ?? '#9ca3af';
 }
 
 // Selection color (green)
@@ -63,36 +53,25 @@ const SILHOUETTE_PATHS: Record<AircraftCategory, string> = {
   wideQuad: `M50 2 C53.5 2 56 8 56 18 L57 34 L97 50 L97 56 L57 47 L57.5 74 L74 83 L74 87 L57.5 81 L57 93 C56.5 96 55 98 50 98 C45 98 43.5 96 43 93 L42.5 81 L26 87 L26 83 L42.5 74 L43 47 L3 56 L3 50 L43 34 L44 18 C44 8 46.5 2 50 2 Z M63 42 C65 42 66 40 66 38 C66 36 65 34 63 34 C61 34 60 36 60 38 C60 40 61 42 63 42 Z M76 48 C78 48 79 46 79 44 C79 42 78 40 76 40 C74 40 73 42 73 44 C73 46 74 48 76 48 Z M37 42 C39 42 40 40 40 38 C40 36 39 34 37 34 C35 34 34 36 34 38 C34 40 35 42 37 42 Z M24 48 C26 48 27 46 27 44 C27 42 26 40 24 40 C22 40 21 42 21 44 C21 46 22 48 24 48 Z`,
 };
 
-// Size multiplier per category (wide-body slightly larger at high zoom)
-const SIZE_MULTIPLIER: Record<AircraftCategory, number> = {
-  default: 1.0,
-  narrow: 1.0,
-  wideTwin: 1.1,
-  wideQuad: 1.2,
+// Real wingspans in meters per ICAO type code
+const AIRCRAFT_WINGSPAN_M: Record<string, number> = {
+  A318: 34.1, A319: 35.8, A320: 35.8, A321: 35.8,
+  B737: 35.8, B738: 35.8, B739: 35.8,
+  A330: 60.9, A350: 64.8, B777: 65.0, B787: 60.1,
+  A380: 79.7, A340: 63.5, A345: 63.5, A310: 44.0,
 };
+const DEFAULT_WINGSPAN_M = 36; // midsize jet fallback
 
-// Airplane pixel size by zoom level — geo-realistic so icons match satellite imagery.
-// Reference: B737/A320 wingspan ~ 35m, B777 ~ 65m.  We target ~40m (midsize jet).
-// Leaflet: meters-per-pixel ~ 156543 * cos(lat) / 2^zoom  (at lat ~40: factor ~ 120000)
-//   zoom 18 -> ~0.46 m/px -> 40m ~ 87px (capped at 48 for readability)
-//   zoom 17 -> ~0.92 m/px -> 40m ~ 43px
-//   zoom 16 -> ~1.83 m/px -> 40m ~ 22px
-//   zoom 15 -> ~3.67 m/px -> 40m ~ 11px (min 10 for clickability)
-function getIconSize(zoom: number, category: AircraftCategory = 'default'): number {
-  let base: number;
-  if (zoom >= 18) base = 48;
-  else if (zoom >= 17) base = 36;
-  else if (zoom >= 16) base = 20;
-  else if (zoom >= 15) base = 12;
-  else if (zoom >= 14) base = 10;
-  else if (zoom >= 13) base = 8;
-  else base = 6;
-
-  // Apply size multiplier only at high zoom where the difference is visible
-  if (zoom >= 16) {
-    return Math.round(base * SIZE_MULTIPLIER[category]);
-  }
-  return base;
+// Geo-realistic sizing: pixel size derived from real wingspan and Leaflet meters-per-pixel.
+// At zoom 18 (~0.46 m/px at lat 40): B737→78px, B777→141→capped 96px.
+// At zoom 16 (~1.83 m/px): B737→20px, B777→36px.
+// At zoom 14 (~7.33 m/px): B737→5→clamped 6px.
+function getIconSize(zoom: number, aircraftType?: string, latitude?: number): number {
+  const lat = latitude ?? 40;
+  const metersPerPixel = (156543 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+  const wingspan = AIRCRAFT_WINGSPAN_M[(aircraftType ?? '').toUpperCase()] ?? DEFAULT_WINGSPAN_M;
+  const rawPixels = wingspan / metersPerPixel;
+  return Math.round(Math.max(6, Math.min(96, rawPixels)));
 }
 
 // Create airplane SVG icon with rotation, ARIA label, aircraft-type silhouette, and optional gate label
@@ -103,7 +82,7 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
   const category = getAircraftCategory(aircraftType);
   const path = SILHOUETTE_PATHS[category];
 
-  const gateLabel = gateName && phase === 'ground'
+  const gateLabel = gateName && isGroundPhase(phase)
     ? `<div class="gate-label">${gateName}</div>`
     : '';
 
@@ -135,12 +114,11 @@ export default function FlightMarker({ flight, zoom = 14 }: FlightMarkerProps) {
   const { selectedFlight, setSelectedFlight } = useFlightContext();
   const isSelected = selectedFlight?.icao24 === flight.icao24;
   const markerRef = useRef<L.Marker>(null);
-  const category = getAircraftCategory(flight.aircraft_type);
-  const size = getIconSize(zoom, category);
+  const size = getIconSize(zoom, flight.aircraft_type, flight.latitude);
 
   const icon = useMemo(
     () => createAirplaneIcon(flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type),
-    [flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type]
+    [flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type, flight.latitude]
   );
 
   // Update marker icon when selection changes without full re-render

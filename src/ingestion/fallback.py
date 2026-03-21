@@ -2533,7 +2533,8 @@ def _create_new_flight(
             )
             lat, lon = spawn_point
             heading = bearing + random.uniform(-5, 5)
-            alt = random.uniform(28000, 39000)
+            # Departing enroute: spawn at mid-climb altitude (visible as climbing)
+            alt = random.uniform(10000, 25000)
         else:
             # No origin/destination — random position on the circle edge
             center = get_airport_center()
@@ -2547,15 +2548,24 @@ def _create_new_flight(
             heading = _calculate_heading((lat, lon), center)
             alt = random.uniform(28000, 39000)
 
+        # Departing enroute flights climb; arriving ones descend
+        _is_departing_enroute = destination is not None and origin is None
+        if _is_departing_enroute:
+            vrate = random.uniform(800, 2000)  # Climbing
+            vel = random.uniform(280, 400)
+        else:
+            vrate = random.uniform(-500, -100)  # Descending toward airport
+            vel = random.uniform(400, 500)
+
         return FlightState(
             icao24=icao24,
             callsign=callsign,
             latitude=lat,
             longitude=lon,
             altitude=alt,
-            velocity=random.uniform(400, 500),
+            velocity=vel,
             heading=heading,
-            vertical_rate=random.uniform(-500, -100),  # Enroute descending toward airport
+            vertical_rate=vrate,
             on_ground=False,
             phase=phase,
             aircraft_type=aircraft_type,
@@ -3211,16 +3221,26 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if _distance_between(new_pos, target) < 0.005:
                 state.waypoint_index += 1
         else:
-            # Switch to enroute — heading toward destination
-            emit_phase_transition(
-                state.icao24, state.callsign,
-                FlightPhase.DEPARTING.value, FlightPhase.ENROUTE.value,
-                state.latitude, state.longitude, state.altitude,
-                state.aircraft_type, state.assigned_gate,
-            )
-            _set_phase(state, FlightPhase.ENROUTE)
-            if state.destination_airport:
-                state.heading = _bearing_to_airport(state.destination_airport)
+            # Waypoints exhausted — continue climbing to FL180 before ENROUTE transition
+            if state.altitude < 18000:
+                state.velocity = min(state.velocity + 2 * dt, 350)
+                state.vertical_rate = 2000
+                state.altitude += 2000 / 60.0 * dt
+                # Continue on departure heading
+                speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+                state.latitude += math.cos(math.radians(state.heading)) * speed_deg
+                state.longitude += math.sin(math.radians(state.heading)) * speed_deg / max(0.01, math.cos(math.radians(state.latitude)))
+            else:
+                # Now switch to enroute — heading toward destination
+                emit_phase_transition(
+                    state.icao24, state.callsign,
+                    FlightPhase.DEPARTING.value, FlightPhase.ENROUTE.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
+                _set_phase(state, FlightPhase.ENROUTE)
+                if state.destination_airport:
+                    state.heading = _bearing_to_airport(state.destination_airport)
 
     elif state.phase == FlightPhase.ENROUTE:
         EXIT_RADIUS_DEG = 0.5  # ~30 NM — remove when exiting this circle
@@ -3373,19 +3393,19 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
 
 def _get_flight_phase_name(phase: FlightPhase) -> str:
-    """Convert flight phase to API-compatible phase name."""
+    """Convert flight phase to API-compatible phase name (fine-grained 9-phase)."""
     phase_map = {
-        FlightPhase.APPROACHING: "descending",
-        FlightPhase.LANDING: "descending",
-        FlightPhase.TAXI_TO_GATE: "ground",
-        FlightPhase.PARKED: "ground",
-        FlightPhase.PUSHBACK: "ground",
-        FlightPhase.TAXI_TO_RUNWAY: "ground",
-        FlightPhase.TAKEOFF: "climbing",
-        FlightPhase.DEPARTING: "climbing",
-        FlightPhase.ENROUTE: "cruising",
+        FlightPhase.APPROACHING: "approaching",
+        FlightPhase.LANDING: "landing",
+        FlightPhase.TAXI_TO_GATE: "taxi_in",
+        FlightPhase.PARKED: "parked",
+        FlightPhase.PUSHBACK: "pushback",
+        FlightPhase.TAXI_TO_RUNWAY: "taxi_out",
+        FlightPhase.TAKEOFF: "takeoff",
+        FlightPhase.DEPARTING: "departing",
+        FlightPhase.ENROUTE: "enroute",
     }
-    return phase_map.get(phase, "ground")
+    return phase_map.get(phase, "parked")
 
 
 def generate_synthetic_flights(
@@ -3437,10 +3457,12 @@ def generate_synthetic_flights(
 
             # Select airline from calibrated profile if available
             _profile = _get_current_airport_profile()
+            _from_profile = False
             if _profile and _profile.airline_shares:
                 _codes = list(_profile.airline_shares.keys())
                 _weights = list(_profile.airline_shares.values())
                 prefix = random.choices(_codes, weights=_weights, k=1)[0]
+                _from_profile = True
             else:
                 prefix = random.choice(CALLSIGN_PREFIXES)
 
@@ -3449,38 +3471,40 @@ def generate_synthetic_flights(
             if prefix == "OTH":
                 prefix = random.choice(_OTH_REPLACEMENTS)
 
-            # Validate airline scope: reject carriers that don't match the airport region
-            _US_DOMESTIC_CARRIERS = {"SWA", "JBU", "ASA", "HAL"}
-            _US_REGIONAL_CARRIERS = {"SKW", "RPA", "ENY", "PDT", "EDV"}
-            _US_IATA_CODES = {
-                "SFO", "LAX", "ORD", "DFW", "JFK", "ATL", "DEN", "SEA", "BOS",
-                "PHX", "LAS", "MCO", "MIA", "CLT", "MSP", "DTW", "EWR", "PHL",
-                "IAH", "SAN", "PDX", "HNL", "AUS", "TPA", "SLC", "BNA", "DCA",
-                "IAD", "FLL", "STL", "BWI", "RDU", "SJC", "DAL", "MDW", "OAK",
-                "SMF", "IND", "CLE", "MCI", "CMH", "PIT", "SAT", "MKE", "CVG",
-            }
-            _is_us_airport = local_iata in _US_IATA_CODES
+            # Validate airline scope — only for non-profile airlines.
+            # If the profile explicitly includes a carrier for this airport, trust it.
+            if not _from_profile:
+                _US_DOMESTIC_CARRIERS = {"SWA", "JBU", "ASA", "HAL"}
+                _US_REGIONAL_CARRIERS = {"SKW", "RPA", "ENY", "PDT", "EDV"}
+                _US_IATA_CODES = {
+                    "SFO", "LAX", "ORD", "DFW", "JFK", "ATL", "DEN", "SEA", "BOS",
+                    "PHX", "LAS", "MCO", "MIA", "CLT", "MSP", "DTW", "EWR", "PHL",
+                    "IAH", "SAN", "PDX", "HNL", "AUS", "TPA", "SLC", "BNA", "DCA",
+                    "IAD", "FLL", "STL", "BWI", "RDU", "SJC", "DAL", "MDW", "OAK",
+                    "SMF", "IND", "CLE", "MCI", "CMH", "PIT", "SAT", "MKE", "CVG",
+                }
+                _is_us_airport = local_iata in _US_IATA_CODES
 
-            # Filter domestic-only US carriers at non-US airports
-            if prefix in _US_DOMESTIC_CARRIERS and not _is_us_airport:
-                prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
+                # Filter domestic-only US carriers at non-US airports
+                if prefix in _US_DOMESTIC_CARRIERS and not _is_us_airport:
+                    prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
 
-            # Filter US regional carriers at non-US airports
-            if prefix in _US_REGIONAL_CARRIERS and not _is_us_airport:
-                prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
+                # Filter US regional carriers at non-US airports
+                if prefix in _US_REGIONAL_CARRIERS and not _is_us_airport:
+                    prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
 
-            try:
-                from src.ingestion.schedule_generator import AIRLINES as _SG_AIRLINES
-                _airline_info = _SG_AIRLINES.get(prefix)
-                if _airline_info:
-                    _scope = _airline_info.get("scope", "full")
-                    if _scope == "regional_eu" and not _is_international_airport(local_iata):
-                        prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
-                    elif _scope == "regional_me":
-                        if not any(local_iata.startswith(p) for p in ("DXB", "DOH", "AUH", "BAH", "KWI", "MCT")):
+                try:
+                    from src.ingestion.schedule_generator import AIRLINES as _SG_AIRLINES
+                    _airline_info = _SG_AIRLINES.get(prefix)
+                    if _airline_info:
+                        _scope = _airline_info.get("scope", "full")
+                        if _scope == "regional_eu" and not _is_international_airport(local_iata):
                             prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
-            except ImportError:
-                pass
+                        elif _scope == "regional_me":
+                            if not any(local_iata.startswith(p) for p in ("DXB", "DOH", "AUH", "BAH", "KWI", "MCT")):
+                                prefix = random.choice(["UAL", "DAL", "AAL", "UAE", "AFR", "CPA"])
+                except ImportError:
+                    pass
 
             flight_num = random.randint(100, 9999)
             callsign = f"{prefix}{flight_num}"
@@ -3492,17 +3516,20 @@ def generate_synthetic_flights(
                          _count_aircraft_in_phase(FlightPhase.TAXI_TO_RUNWAY))
 
             max_parked = int(len(get_gates()) * 0.8)  # 80% cap — buffer for arrivals
-            approach_weight = 0.15 if approach_count < MAX_APPROACH_AIRCRAFT else 0.0
-            parked_weight = 0.25 if parked_count < max_parked else 0.0
-            taxi_in_weight = 0.08 if taxi_count < 6 else 0.0
+            approach_weight = 0.10 if approach_count < MAX_APPROACH_AIRCRAFT else 0.0
+            parked_weight = 0.12 if parked_count < max_parked else 0.0
+            taxi_in_weight = 0.05 if taxi_count < 6 else 0.0
             taxi_out_weight = 0.08 if taxi_count < 6 else 0.0
-            departing_weight = 0.08
+            departing_weight = 0.15
 
-            total_ground = approach_weight + parked_weight + taxi_in_weight + taxi_out_weight
-            enroute_weight = max(0.0, 1.0 - total_ground - departing_weight)
+            total_assigned = approach_weight + parked_weight + taxi_in_weight + taxi_out_weight + departing_weight
+            enroute_weight = max(0.0, 1.0 - total_assigned)
 
+            # Split ENROUTE 50/50 into arriving and departing.
+            # "ENROUTE_DEPARTING" is a pseudo-phase: spawns as ENROUTE but positioned outbound.
             phase_weights = [
-                (FlightPhase.ENROUTE, enroute_weight),
+                (FlightPhase.ENROUTE, enroute_weight * 0.5),           # arriving enroute
+                ("ENROUTE_DEPARTING", enroute_weight * 0.5),           # departing enroute (pseudo)
                 (FlightPhase.APPROACHING, approach_weight),
                 (FlightPhase.PARKED, parked_weight),
                 (FlightPhase.TAXI_TO_GATE, taxi_in_weight),
@@ -3513,22 +3540,33 @@ def generate_synthetic_flights(
             r = random.random()
             cumulative = 0
             selected_phase = FlightPhase.ENROUTE
+            _is_enroute_departing = False
             for phase, weight in phase_weights:
                 cumulative += weight
                 if r <= cumulative:
-                    selected_phase = phase
+                    if phase == "ENROUTE_DEPARTING":
+                        selected_phase = FlightPhase.ENROUTE
+                        _is_enroute_departing = True
+                    else:
+                        selected_phase = phase
                     break
 
             # Assign origin/destination based on phase
             origin = None
             dest = None
-            is_arriving = selected_phase in (
-                FlightPhase.ENROUTE, FlightPhase.APPROACHING,
-                FlightPhase.LANDING, FlightPhase.TAXI_TO_GATE,
+            is_arriving = (
+                selected_phase in (
+                    FlightPhase.ENROUTE, FlightPhase.APPROACHING,
+                    FlightPhase.LANDING, FlightPhase.TAXI_TO_GATE,
+                )
+                and not _is_enroute_departing
             )
-            is_departing = selected_phase in (
-                FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY,
-                FlightPhase.TAKEOFF, FlightPhase.DEPARTING,
+            is_departing = (
+                selected_phase in (
+                    FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY,
+                    FlightPhase.TAKEOFF, FlightPhase.DEPARTING,
+                )
+                or _is_enroute_departing
             )
 
             local_iata = get_current_airport_iata()

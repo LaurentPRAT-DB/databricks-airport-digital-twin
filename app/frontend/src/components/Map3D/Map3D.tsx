@@ -10,6 +10,7 @@ import { Flight } from '../../types/flight';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { latLonTo3D, position3DToLatLon } from '../../utils/map3d-calculations';
 import { SharedViewport } from '../../hooks/useViewportState';
+import { isGroundPhase } from '../../utils/phaseUtils';
 
 interface Map3DProps {
   className?: string;
@@ -177,7 +178,7 @@ export function Map3D({
         airportCenter?.lat,
         airportCenter?.lon
       );
-      const isGround = selectedFlightObj.flight_phase === 'ground';
+      const isGround = isGroundPhase(selectedFlightObj.flight_phase);
       // Heading in degrees — position camera behind the aircraft
       const headingDeg = selectedFlightObj.heading ?? 0;
       const headingRad = (headingDeg * Math.PI) / 180;

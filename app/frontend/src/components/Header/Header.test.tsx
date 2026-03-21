@@ -102,24 +102,24 @@ describe('Header', () => {
   })
 
   describe('Flight phase legend', () => {
-    it('shows Ground phase indicator', async () => {
+    it('shows Parked phase indicator', async () => {
       render(<Header />)
-      expect(screen.getByText(/ground/i)).toBeInTheDocument()
+      expect(screen.getByText(/parked/i)).toBeInTheDocument()
     })
 
-    it('shows Climbing phase indicator', async () => {
+    it('shows Takeoff phase indicator', async () => {
       render(<Header />)
-      expect(screen.getByText(/climbing/i)).toBeInTheDocument()
+      expect(screen.getByText(/takeoff/i)).toBeInTheDocument()
     })
 
-    it('shows Descending phase indicator', async () => {
+    it('shows Approaching phase indicator', async () => {
       render(<Header />)
-      expect(screen.getByText(/descending/i)).toBeInTheDocument()
+      expect(screen.getByText(/approaching/i)).toBeInTheDocument()
     })
 
-    it('shows Cruising phase indicator', async () => {
+    it('shows Enroute phase indicator', async () => {
       render(<Header />)
-      expect(screen.getByText(/cruising/i)).toBeInTheDocument()
+      expect(screen.getByText(/enroute/i)).toBeInTheDocument()
     })
 
     it('has correct color for each phase', async () => {

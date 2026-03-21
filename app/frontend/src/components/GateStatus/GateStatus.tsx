@@ -4,6 +4,7 @@ import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { useFlightContext } from '../../context/FlightContext';
 import { CongestionArea, Flight } from '../../types/flight';
 import { OSMGate } from '../../types/airportFormats';
+import { isGroundPhase, isArrivalPhase } from '../../utils/phaseUtils';
 
 type GateStatusLabel = 'ON STAND' | 'TAXI IN' | 'INBOUND' | 'VACANT';
 
@@ -77,14 +78,14 @@ function inferTerminal(ref: string, isRemoteStand: boolean): string {
 
 // Classify the status of a flight at a gate
 function classifyGateStatus(flight: Flight): GateStatusLabel {
-  if (flight.flight_phase === 'ground') {
+  if (isGroundPhase(flight.flight_phase)) {
     const vel = Number(flight.velocity) || 0;
     return vel === 0 ? 'ON STAND' : 'TAXI IN';
   }
-  if (flight.flight_phase === 'descending') {
+  if (isArrivalPhase(flight.flight_phase)) {
     return 'INBOUND';
   }
-  // Climbing/cruising with a gate assigned — treat as on stand (pre-departure)
+  // Departing/enroute with a gate assigned — treat as on stand (pre-departure)
   return 'ON STAND';
 }
 

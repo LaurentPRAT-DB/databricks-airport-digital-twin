@@ -30,7 +30,7 @@ const mockFlight: Flight = {
   on_ground: false,
   last_seen: new Date().toISOString(),
   data_source: 'synthetic',
-  flight_phase: 'descending',
+  flight_phase: 'approaching',
 };
 
 describe('usePredictions hooks', () => {

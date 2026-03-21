@@ -956,9 +956,9 @@ describe('End-to-end user interaction flows', () => {
       const header = screen.getByRole('banner')
       expect(within(header).getByText(/Flights:/)).toBeInTheDocument()
 
-      // Phase legend in header
-      expect(within(header).getByText('Ground')).toBeInTheDocument()
-      expect(within(header).getByText('Climbing')).toBeInTheDocument()
+      // Phase legend in header (9-phase system)
+      expect(within(header).getByText('Parked')).toBeInTheDocument()
+      expect(within(header).getByText('Takeoff')).toBeInTheDocument()
 
       // Connection status - may be "Connected" or "Updating" depending on timing
       await waitFor(() => {

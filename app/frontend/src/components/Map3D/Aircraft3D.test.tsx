@@ -37,7 +37,7 @@ const createMockFlight = (overrides: Partial<Flight> = {}): Flight => ({
   on_ground: false,
   last_seen: new Date().toISOString(),
   data_source: 'synthetic',
-  flight_phase: 'descending',
+  flight_phase: 'approaching',
   aircraft_type: 'B737',
   ...overrides,
 });
@@ -184,11 +184,11 @@ describe('Aircraft3D', () => {
   });
 
   describe('Flight Phases', () => {
-    it('renders aircraft on ground', async () => {
+    it('renders aircraft on ground (parked)', async () => {
       const flight = createMockFlight({
         on_ground: true,
         altitude: 0,
-        flight_phase: 'ground',
+        flight_phase: 'parked',
       });
       const renderer = await ReactThreeTestRenderer.create(
         <Aircraft3D flight={flight} />
@@ -196,11 +196,11 @@ describe('Aircraft3D', () => {
       expect(renderer.scene.children.length).toBeGreaterThan(0);
     });
 
-    it('renders aircraft descending', async () => {
+    it('renders aircraft approaching', async () => {
       const flight = createMockFlight({
         on_ground: false,
         altitude: 5000,
-        flight_phase: 'descending',
+        flight_phase: 'approaching',
       });
       const renderer = await ReactThreeTestRenderer.create(
         <Aircraft3D flight={flight} />
@@ -208,11 +208,11 @@ describe('Aircraft3D', () => {
       expect(renderer.scene.children.length).toBeGreaterThan(0);
     });
 
-    it('renders aircraft cruising', async () => {
+    it('renders aircraft enroute', async () => {
       const flight = createMockFlight({
         on_ground: false,
         altitude: 35000,
-        flight_phase: 'cruising',
+        flight_phase: 'enroute',
       });
       const renderer = await ReactThreeTestRenderer.create(
         <Aircraft3D flight={flight} />
@@ -220,11 +220,11 @@ describe('Aircraft3D', () => {
       expect(renderer.scene.children.length).toBeGreaterThan(0);
     });
 
-    it('renders aircraft climbing', async () => {
+    it('renders aircraft departing', async () => {
       const flight = createMockFlight({
         on_ground: false,
         altitude: 15000,
-        flight_phase: 'climbing',
+        flight_phase: 'departing',
       });
       const renderer = await ReactThreeTestRenderer.create(
         <Aircraft3D flight={flight} />

@@ -826,12 +826,31 @@ class SimulationEngine:
             self._phase_time[icao24] = ("taxi_to_runway", 0.0)
 
         elif state.phase == FlightPhase.APPROACHING:
-            from src.ingestion.fallback import _is_runway_clear, _occupy_runway
+            from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway
             if _is_runway_clear("28R"):
-                state.phase = FlightPhase.LANDING
-                state.waypoint_index = 0
-                _occupy_runway(icao24, "28R")
-                self._phase_time[icao24] = ("landing", 0.0)
+                # Apply go-around check (same as normal transition)
+                if random.random() < self.capacity.go_around_probability():
+                    state.waypoint_index = 0
+                    state.altitude = 2000
+                    state.velocity = 200
+                    state.vertical_rate = 1500
+                    state.go_around_count += 1
+                    state.holding_phase_time = 0.0
+                    state.holding_inbound = True
+                    self.recorder.record_scenario_event(
+                        self.sim_time, "go_around",
+                        f"{state.callsign} go-around #{state.go_around_count} ({self.capacity.current_category})",
+                        {"callsign": state.callsign, "icao24": icao24,
+                         "attempt": state.go_around_count, "weather": self.capacity.current_category},
+                    )
+                    if state.go_around_count >= 2:
+                        self._divert_flight(icao24, state)
+                    self._phase_time[icao24] = ("approaching", 0.0)
+                else:
+                    state.phase = FlightPhase.LANDING
+                    state.waypoint_index = 0
+                    _occupy_runway(icao24, "28R")
+                    self._phase_time[icao24] = ("landing", 0.0)
             else:
                 # Runway still blocked — reset timer to check again in 5 min
                 self._phase_time[icao24] = ("approaching", 600.0)

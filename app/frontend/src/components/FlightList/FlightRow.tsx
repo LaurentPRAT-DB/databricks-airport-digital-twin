@@ -1,24 +1,11 @@
 import { Flight } from '../../types/flight';
+import { PHASE_BG_CLASSES, PHASE_SHORT_LABELS } from '../../utils/phaseUtils';
 
 interface FlightRowProps {
   flight: Flight;
   isSelected: boolean;
   onClick: () => void;
 }
-
-const phaseColors: Record<Flight['flight_phase'], string> = {
-  ground: 'bg-gray-500',
-  climbing: 'bg-green-500',
-  descending: 'bg-orange-500',
-  cruising: 'bg-blue-500',
-};
-
-const phaseLabels: Record<Flight['flight_phase'], string> = {
-  ground: 'GND',
-  climbing: 'CLB',
-  descending: 'DSC',
-  cruising: 'CRZ',
-};
 
 export default function FlightRow({ flight, isSelected, onClick }: FlightRowProps) {
   const callsign = flight.callsign?.trim() || flight.icao24.toUpperCase();
@@ -37,7 +24,7 @@ export default function FlightRow({ flight, isSelected, onClick }: FlightRowProp
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
-            className={`w-2 h-2 rounded-full ${phaseColors[flight.flight_phase]}`}
+            className={`w-2 h-2 rounded-full ${PHASE_BG_CLASSES[flight.flight_phase] ?? 'bg-gray-500'}`}
             title={flight.flight_phase}
           />
           <span className="font-mono font-medium text-slate-800">
@@ -46,9 +33,9 @@ export default function FlightRow({ flight, isSelected, onClick }: FlightRowProp
         </div>
         <span className={`
           text-xs px-1.5 py-0.5 rounded font-medium
-          ${phaseColors[flight.flight_phase]} text-white
+          ${PHASE_BG_CLASSES[flight.flight_phase] ?? 'bg-gray-500'} text-white
         `}>
-          {phaseLabels[flight.flight_phase]}
+          {PHASE_SHORT_LABELS[flight.flight_phase] ?? flight.flight_phase}
         </span>
       </div>
       <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">

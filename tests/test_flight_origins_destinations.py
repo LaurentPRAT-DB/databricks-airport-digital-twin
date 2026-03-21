@@ -478,17 +478,18 @@ class TestUpdateFlightWithDirection:
         assert removed, "Departing flight should eventually exit and be flagged for removal"
 
     def test_departing_after_takeoff_heads_toward_destination(self):
-        """After DEPARTING phase ends, enroute heading should be toward destination."""
+        """After DEPARTING climb-out reaches FL180, transitions to ENROUTE toward destination."""
         # Use dynamic departure waypoints from OSM runway data
         dep_wps = _get_departure_waypoints("JFK")
         assert len(dep_wps) > 0, "Should have departure waypoints with OSM runway data"
         last_wp = dep_wps[-1]
 
+        # Start above FL180 so the extended climb completes immediately
         state = FlightState(
             icao24="dep03", callsign="AAL500",
             latitude=last_wp[1],
             longitude=last_wp[0],
-            altitude=last_wp[2],
+            altitude=18500,  # Above FL180 threshold — triggers immediate ENROUTE transition
             velocity=350, heading=284,
             vertical_rate=1500, on_ground=False,
             phase=FlightPhase.DEPARTING,
@@ -497,7 +498,7 @@ class TestUpdateFlightWithDirection:
             destination_airport="JFK",
         )
 
-        # One update should transition to ENROUTE
+        # One update should transition to ENROUTE (altitude already above FL180)
         state = _update_flight_state(state, 1.0)
         assert state.phase == FlightPhase.ENROUTE
 
