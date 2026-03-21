@@ -103,7 +103,8 @@ app/frontend/dist/
 # Claude Code local config
 .claude/
 
-# Local-only planning docs (audits, fixes with untracked content)
+# Local-only planning docs (audits, debug, fixes with untracked content)
+.planning/debug/
 .planning/audits/
 .planning/fixes/11-approach-trajectory-fix/
 .planning/fixes/40-lakebase-auth-fix/
