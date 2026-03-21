@@ -20,13 +20,24 @@ except (ValueError, TypeError):
 
 # Derive IATA from ICAO for convenience
 _ICAO_TO_IATA = {
+    # US airports
     "KSFO": "SFO", "KJFK": "JFK", "KLAX": "LAX", "KORD": "ORD",
     "KATL": "ATL", "KDEN": "DEN", "KDFW": "DFW", "KMIA": "MIA",
     "KBOS": "BOS", "KSEA": "SEA", "KIAH": "IAH", "KLAS": "LAS",
     "KMSP": "MSP", "KPHX": "PHX", "KEWR": "EWR", "KDTW": "DTW",
+    "KMCO": "MCO", "KCLT": "CLT", "KPHL": "PHL", "KSAN": "SAN",
+    "KPDX": "PDX",
+    # Europe
     "EGLL": "LHR", "LFPG": "CDG", "EDDF": "FRA", "EHAM": "AMS",
-    "RJTT": "HND", "VHHH": "HKG", "WSSS": "SIN", "YSSY": "SYD",
-    "FAOR": "JNB",
+    "LSGG": "GVA", "LGAV": "ATH", "LEMD": "MAD", "LIRF": "FCO",
+    # Middle East
+    "OMDB": "DXB", "OMAA": "AUH",
+    # Asia-Pacific
+    "RJTT": "HND", "RJAA": "NRT", "VHHH": "HKG", "WSSS": "SIN",
+    "YSSY": "SYD", "RKSI": "ICN", "ZBAA": "PEK", "VTBS": "BKK",
+    # Americas / Africa
+    "SBGR": "GRU", "FAOR": "JNB", "FACT": "CPT",
+    "GMMN": "CMN", "MMMX": "MEX",
 }
 
 

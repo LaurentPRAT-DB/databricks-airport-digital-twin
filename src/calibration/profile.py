@@ -167,6 +167,15 @@ class AirportProfileLoader:
             except Exception as e:
                 logger.warning("Failed to load profile %s: %s", json_path, e)
 
+        # Try hand-researched known profiles (known_profiles.py)
+        from src.calibration.known_profiles import get_known_profile
+        iata = _icao_to_iata(icao) if len(icao) == 4 else airport_code
+        known = get_known_profile(iata)
+        if known is not None:
+            self._cache[icao] = known
+            logger.info("Loaded known-stats profile for %s (%s)", icao, iata)
+            return known
+
         # Try Unity Catalog
         uc_profile = self._load_from_unity_catalog(icao)
         if uc_profile is not None:
@@ -253,6 +262,10 @@ _IATA_TO_ICAO: dict[str, str] = {
     "HKG": "VHHH", "NRT": "RJAA", "SIN": "WSSS", "SYD": "YSSY",
     "DXB": "OMDB", "ICN": "RKSI", "GRU": "SBGR", "JNB": "FAOR",
     "CPT": "FACT",
+    # New international airports
+    "GVA": "LSGG", "ATH": "LGAV", "MAD": "LEMD", "FCO": "LIRF",
+    "AUH": "OMAA", "HND": "RJTT", "PEK": "ZBAA", "BKK": "VTBS",
+    "CMN": "GMMN", "MEX": "MMMX",
 }
 
 _ICAO_TO_IATA: dict[str, str] = {v: k for k, v in _IATA_TO_ICAO.items()}

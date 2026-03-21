@@ -192,10 +192,17 @@ class TestFallbackProfile:
 
 class TestAirportProfileLoader:
     def test_loader_returns_fallback_when_no_files(self, tmp_path):
+        # Use an unknown airport to test true fallback (SFO has a known-stats profile)
+        loader = AirportProfileLoader(profiles_dir=tmp_path)
+        p = loader.get_profile("ZZZZ")
+        assert p.icao_code == "ZZZZ"
+        assert p.data_source == "fallback"
+
+    def test_loader_returns_known_stats_profile(self, tmp_path):
         loader = AirportProfileLoader(profiles_dir=tmp_path)
         p = loader.get_profile("SFO")
         assert p.icao_code == "KSFO"
-        assert p.data_source == "fallback"
+        assert p.data_source == "known_stats"
 
     def test_loader_reads_json_file(self, tmp_path):
         # Write a profile JSON
@@ -242,10 +249,10 @@ class TestAirportProfileLoader:
         assert "EGLL" in available
 
     def test_loader_handles_corrupt_json(self, tmp_path):
-        # Write corrupt JSON
-        (tmp_path / "KSFO.json").write_text("not valid json{{{")
+        # Write corrupt JSON for an unknown airport (no known-stats fallback)
+        (tmp_path / "ZZZZ.json").write_text("not valid json{{{")
         loader = AirportProfileLoader(profiles_dir=tmp_path)
-        p = loader.get_profile("SFO")
+        p = loader.get_profile("ZZZZ")
         # Should fall back to hardcoded
         assert p.data_source == "fallback"
 
