@@ -6,7 +6,7 @@ import FlightRow from './FlightRow';
 type SortOption = 'callsign' | 'altitude';
 
 export default function FlightList() {
-  const { flights, selectedFlight, setSelectedFlight, isLoading } = useFlightContext();
+  const { filteredFlights: flights, selectedFlight, setSelectedFlight, isLoading } = useFlightContext();
   const { switchProgress } = useAirportConfigContext();
   const isAirportSwitching = switchProgress !== null && !switchProgress.done;
   const [searchQuery, setSearchQuery] = useState('');

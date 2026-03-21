@@ -126,7 +126,7 @@ const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imag
 const SAT_ATTR = '&copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, GIS User Community';
 
 export default function AirportMap({ sharedViewport, onViewportChange, satellite = false }: AirportMapProps) {
-  const { flights, isLoading, error, lastUpdated } = useFlightContext();
+  const { filteredFlights: flights, isLoading, error, lastUpdated } = useFlightContext();
   const [zoom, setZoom] = useState(sharedViewport?.zoom ?? DEFAULT_ZOOM);
 
   // Use shared viewport center/zoom if available, otherwise defaults

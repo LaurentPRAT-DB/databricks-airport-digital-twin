@@ -159,14 +159,14 @@ describe('FIDS', () => {
   describe('Close functionality', () => {
     it('renders close button', async () => {
       render(<FIDS onClose={mockOnClose} />)
-      expect(screen.getByRole('button', { name: /x/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /close fids/i })).toBeInTheDocument()
     })
 
     it('calls onClose when close button clicked', async () => {
       const user = userEvent.setup()
       render(<FIDS onClose={mockOnClose} />)
 
-      const closeButton = screen.getByRole('button', { name: /x/i })
+      const closeButton = screen.getByRole('button', { name: /close fids/i })
       await user.click(closeButton)
 
       expect(mockOnClose).toHaveBeenCalledTimes(1)

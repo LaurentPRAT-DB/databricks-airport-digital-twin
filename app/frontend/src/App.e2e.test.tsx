@@ -337,7 +337,7 @@ describe('End-to-end user interaction flows', () => {
       expect(arrivalsTab).toHaveClass('bg-blue-600')
 
       // Close FIDS
-      const closeButton = screen.getByRole('button', { name: /x/i })
+      const closeButton = screen.getByRole('button', { name: /close fids/i })
       const closeTime = await timed(async () => {
         await user.click(closeButton)
         await waitFor(() => {
@@ -956,14 +956,13 @@ describe('End-to-end user interaction flows', () => {
       const header = screen.getByRole('banner')
       expect(within(header).getByText(/Flights:/)).toBeInTheDocument()
 
-      // Phase legend in header (9-phase system)
-      expect(within(header).getByText('Parked')).toBeInTheDocument()
-      expect(within(header).getByText('Takeoff')).toBeInTheDocument()
+      // Phase filter button in header
+      expect(within(header).getByRole('button', { name: /phases/i })).toBeInTheDocument()
 
-      // Connection status - may be "Connected" or "Updating" depending on timing
+      // Connection status — compact dot with tooltip
       await waitFor(() => {
-        const statusText = within(header).getByText(/Connected|Updating|Error/)
-        expect(statusText).toBeInTheDocument()
+        const indicator = header.querySelector('.bg-green-500, .bg-yellow-500, .bg-red-500')
+        expect(indicator).toBeTruthy()
       })
     })
 
@@ -1013,7 +1012,7 @@ describe('End-to-end user interaction flows', () => {
       })
 
       // Step 5: Close FIDS
-      const closeButton = screen.getByRole('button', { name: /x/i })
+      const closeButton = screen.getByRole('button', { name: /close fids/i })
       await user.click(closeButton)
       await waitFor(() => {
         expect(screen.queryByText(/flight information display/i)).not.toBeInTheDocument()
@@ -1278,7 +1277,7 @@ describe('End-to-end user interaction flows', () => {
       })
 
       // Close FIDS
-      const closeButton = screen.getByRole('button', { name: /x/i })
+      const closeButton = screen.getByRole('button', { name: /close fids/i })
       await user.click(closeButton)
 
       await waitFor(() => {
@@ -1492,7 +1491,7 @@ describe('End-to-end user interaction flows', () => {
       })
 
       // Close
-      const closeButton = screen.getByRole('button', { name: /x/i })
+      const closeButton = screen.getByRole('button', { name: /close fids/i })
       await user.click(closeButton)
       await waitFor(() => {
         expect(screen.queryByText(/flight information display/i)).not.toBeInTheDocument()

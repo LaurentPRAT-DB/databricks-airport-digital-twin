@@ -68,6 +68,10 @@ vi.mock('../../context/AirportConfigContext', () => ({
 vi.mock('../../context/FlightContext', () => ({
   useFlightContext: () => ({
     flights: [],
+    filteredFlights: [],
+    hiddenPhases: new Set(),
+    togglePhase: vi.fn(),
+    setHiddenPhases: vi.fn(),
     selectedFlight: null,
     setSelectedFlight: vi.fn(),
     isLoading: false,

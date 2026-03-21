@@ -5,6 +5,7 @@ import PlatformLinks from '../PlatformLinks/PlatformLinks';
 import WeatherWidget from '../Weather/WeatherWidget';
 import AirportSelector from '../AirportSelector/AirportSelector';
 import AirportSwitchProgress from '../AirportSelector/AirportSwitchProgress';
+import PhaseFilter from './PhaseFilter';
 
 const SPEED_PRESETS = [1, 4, 8, 16, 32];
 
@@ -78,7 +79,7 @@ interface HeaderProps {
 }
 
 export default function Header({ onShowFIDS, simulationControls }: HeaderProps) {
-  const { flights, isLoading, error, lastUpdated, dataSource, setSelectedFlight } = useFlightContext();
+  const { flights, filteredFlights, isLoading, error, lastUpdated, dataSource, setSelectedFlight } = useFlightContext();
   const { currentAirport, isLoading: isLoadingAirport, error: airportError, loadAirport, switchProgress } = useAirportConfigContext();
 
   // Clear flight selection before switching airports to avoid stale data
@@ -116,7 +117,11 @@ export default function Header({ onShowFIDS, simulationControls }: HeaderProps) 
 
         <div className="flex items-center gap-2 bg-slate-700 px-3 py-1 rounded-full text-sm">
           <span className="text-slate-300">Flights:</span>
-          <span className="font-mono font-medium">{flights.length}</span>
+          <span className="font-mono font-medium">
+            {filteredFlights.length !== flights.length
+              ? <>{filteredFlights.length}<span className="text-slate-400">/{flights.length}</span></>
+              : flights.length}
+          </span>
           {isLoading && (
             <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
           )}
@@ -148,68 +153,26 @@ export default function Header({ onShowFIDS, simulationControls }: HeaderProps) 
           </button>
         )}
 
-        {/* Flight phase legend — grouped by category */}
-        <div className="flex items-center gap-3 text-xs">
-          <span className="text-slate-400">Ground:</span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-gray-500" />
-            Parked
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-gray-400" />
-            Pushback
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-stone-400" />
-            Taxi
-          </span>
-          <span className="text-slate-300">|</span>
-          <span className="text-slate-400">Departure:</span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-green-600" />
-            Takeoff
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-            Departing
-          </span>
-          <span className="text-slate-300">|</span>
-          <span className="text-slate-400">Arrival:</span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
-            Approaching
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-600" />
-            Landing
-          </span>
-          <span className="text-slate-300">|</span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-            Enroute
-          </span>
-        </div>
+        {/* Phase filter dropdown */}
+        <PhaseFilter />
 
-        {/* Connection status */}
-        <div className="flex items-center gap-2 text-sm">
-          <span
-            className={`w-2.5 h-2.5 rounded-full ${
-              error
-                ? 'bg-red-500'
-                : isLoading
-                ? 'bg-yellow-500 animate-pulse'
-                : 'bg-green-500'
-            }`}
-          />
-          <span className="text-slate-300">
-            {error ? 'Error' : isLoading ? 'Updating' : 'Connected'}
-          </span>
-          {lastUpdated && !error && (
-            <span className="text-slate-400 text-xs">
-              {new Date(lastUpdated).toLocaleTimeString()}
-            </span>
-          )}
-        </div>
+        {/* Connection status — compact dot with tooltip */}
+        <span
+          className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+            error
+              ? 'bg-red-500'
+              : isLoading
+              ? 'bg-yellow-500 animate-pulse'
+              : 'bg-green-500'
+          }`}
+          title={
+            error
+              ? 'Connection error'
+              : isLoading
+              ? 'Updating...'
+              : `Connected${lastUpdated ? ' · ' + new Date(lastUpdated).toLocaleTimeString() : ''}`
+          }
+        />
 
         {/* Platform Links */}
         <PlatformLinks />

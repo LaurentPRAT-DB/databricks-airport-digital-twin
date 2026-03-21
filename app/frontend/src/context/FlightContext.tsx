@@ -4,6 +4,10 @@ import { Flight } from '../types/flight';
 
 interface FlightContextType {
   flights: Flight[];
+  filteredFlights: Flight[];
+  hiddenPhases: Set<string>;
+  togglePhase: (phase: string) => void;
+  setHiddenPhases: (phases: Set<string>) => void;
   selectedFlight: Flight | null;
   setSelectedFlight: (flight: Flight | null) => void;
   showTrajectory: boolean;
@@ -28,6 +32,28 @@ export function FlightProvider({
   // Use simulation flights when provided, otherwise live
   const flights = simulationFlights ?? liveFlights;
   const dataSource = simulationFlights ? 'simulation' as const : liveDataSource;
+  // Phase filter state
+  const [hiddenPhases, setHiddenPhasesState] = useState<Set<string>>(new Set());
+
+  // Flights filtered by visible phases
+  const filteredFlights = useMemo(() => {
+    if (hiddenPhases.size === 0) return flights;
+    return flights.filter(f => !hiddenPhases.has(f.flight_phase));
+  }, [flights, hiddenPhases]);
+
+  const togglePhase = useCallback((phase: string) => {
+    setHiddenPhasesState(prev => {
+      const next = new Set(prev);
+      if (next.has(phase)) next.delete(phase);
+      else next.add(phase);
+      return next;
+    });
+  }, []);
+
+  const setHiddenPhases = useCallback((phases: Set<string>) => {
+    setHiddenPhasesState(phases);
+  }, []);
+
   // Store selection by icao24 ID so it persists across data refreshes
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   // Trajectory display toggle
@@ -55,6 +81,10 @@ export function FlightProvider({
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => ({
     flights,
+    filteredFlights,
+    hiddenPhases,
+    togglePhase,
+    setHiddenPhases,
     selectedFlight,
     setSelectedFlight,
     showTrajectory,
@@ -63,7 +93,7 @@ export function FlightProvider({
     error,
     lastUpdated,
     dataSource,
-  }), [flights, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource]);
+  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource]);
 
   return (
     <FlightContext.Provider value={contextValue}>

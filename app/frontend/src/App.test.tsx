@@ -169,7 +169,7 @@ describe('App', () => {
       })
 
       // Close FIDS
-      const closeButton = screen.getByRole('button', { name: /x/i })
+      const closeButton = screen.getByRole('button', { name: /close fids/i })
       await user.click(closeButton)
 
       await waitFor(() => {

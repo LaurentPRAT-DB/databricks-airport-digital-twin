@@ -72,15 +72,7 @@ describe('Header', () => {
   })
 
   describe('Connection status', () => {
-    it('shows connected status when data loaded', async () => {
-      render(<Header />)
-
-      await waitFor(() => {
-        expect(screen.getByText(/connected/i)).toBeInTheDocument()
-      })
-    })
-
-    it('shows green indicator when connected', async () => {
+    it('shows green indicator dot when connected', async () => {
       render(<Header />)
 
       await waitFor(() => {
@@ -89,48 +81,43 @@ describe('Header', () => {
       })
     })
 
-    it('shows timestamp of last update', async () => {
+    it('shows connection info in tooltip', async () => {
       render(<Header />)
 
       await waitFor(() => {
-        // Time format like "12:34:56 PM"
-        const timeRegex = /\d{1,2}:\d{2}:\d{2}/
-        const timeElement = screen.getByText(timeRegex)
-        expect(timeElement).toBeInTheDocument()
+        const indicator = document.querySelector('.bg-green-500')
+        expect(indicator).toBeInTheDocument()
+        expect(indicator?.getAttribute('title')).toMatch(/connected/i)
       })
     })
   })
 
-  describe('Flight phase legend', () => {
-    it('shows Parked phase indicator', async () => {
+  describe('Phase filter', () => {
+    it('renders Phases dropdown button', async () => {
       render(<Header />)
+      expect(screen.getByRole('button', { name: /phases/i })).toBeInTheDocument()
+    })
+
+    it('opens dropdown on click showing phase names', async () => {
+      const user = userEvent.setup()
+      render(<Header />)
+
+      await user.click(screen.getByRole('button', { name: /phases/i }))
+
       expect(screen.getByText(/parked/i)).toBeInTheDocument()
-    })
-
-    it('shows Takeoff phase indicator', async () => {
-      render(<Header />)
       expect(screen.getByText(/takeoff/i)).toBeInTheDocument()
-    })
-
-    it('shows Approaching phase indicator', async () => {
-      render(<Header />)
       expect(screen.getByText(/approaching/i)).toBeInTheDocument()
-    })
-
-    it('shows Enroute phase indicator', async () => {
-      render(<Header />)
       expect(screen.getByText(/enroute/i)).toBeInTheDocument()
     })
 
-    it('has correct color for each phase', async () => {
+    it('shows Show All and Hide All buttons in dropdown', async () => {
+      const user = userEvent.setup()
       render(<Header />)
 
-      // Check legend indicators
-      const grayIndicator = document.querySelector('.bg-gray-500')
-      const orangeIndicator = document.querySelector('.bg-orange-500')
+      await user.click(screen.getByRole('button', { name: /phases/i }))
 
-      expect(grayIndicator).toBeInTheDocument()
-      expect(orangeIndicator).toBeInTheDocument()
+      expect(screen.getByText(/show all/i)).toBeInTheDocument()
+      expect(screen.getByText(/hide all/i)).toBeInTheDocument()
     })
   })
 

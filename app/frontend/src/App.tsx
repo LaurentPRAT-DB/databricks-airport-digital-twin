@@ -201,7 +201,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
     }, 3000);
     return () => clearTimeout(timer);
   }, []);
-  const { flights, selectedFlight, setSelectedFlight } = useFlightContext();
+  const { flights, filteredFlights, selectedFlight, setSelectedFlight } = useFlightContext();
   const { currentAirport, refresh: refreshConfig, loadAirport } = useAirportConfigContext();
 
   // Expose airport control API on window for headless video renderer (Playwright)
@@ -318,7 +318,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
             <div className="absolute inset-0">
               <Suspense fallback={<MapLoadingFallback label="Loading 3D View..." />}>
                 <Map3D
-                  flights={flights}
+                  flights={filteredFlights}
                   selectedFlight={selectedFlight?.icao24 || null}
                   onSelectFlight={handleFlightSelect}
                   sharedViewport={viewport}

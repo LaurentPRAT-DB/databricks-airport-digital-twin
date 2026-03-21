@@ -160,6 +160,7 @@ export default function FIDS({ onClose }: FIDSProps) {
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-white text-2xl font-light"
+            aria-label="Close FIDS"
           >
             x
           </button>
