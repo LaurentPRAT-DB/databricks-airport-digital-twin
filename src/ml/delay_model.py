@@ -67,20 +67,33 @@ class DelayPredictor:
             self._base_delay_rate = airport_profile.delay_rate
             self._mean_delay = airport_profile.mean_delay_minutes
 
-    def predict(self, features: FeatureSet) -> DelayPrediction:
+    def predict(self, features: FeatureSet, flight_id: str = "") -> DelayPrediction:
         """Predict delay for a single flight.
 
         Args:
             features: FeatureSet extracted from flight data
+            flight_id: Optional flight identifier (callsign/icao24) for
+                per-flight variation. Without this, flights with identical
+                features get identical predictions.
 
         Returns:
             DelayPrediction with delay estimate and confidence
         """
+        # Per-flight deterministic RNG for consistent but varied predictions
+        flight_rng = random.Random(flight_id) if flight_id else self._random
+
         # Scale base delay from calibrated mean (default 0 for non-delayed prediction)
         # The profile's mean_delay adjusts the overall delay magnitude
         delay_scale = self._mean_delay / 20.0  # 20.0 is the default mean
         base_delay = 0.0
         confidence = 0.7  # Default confidence
+
+        # --- Per-flight baseline variation ---
+        # Each flight gets a unique delay disposition: some flights are
+        # inherently more delay-prone (crew scheduling, aircraft rotation,
+        # connecting passengers, etc.)
+        flight_disposition = flight_rng.gauss(0, 6.0)  # +/- ~6 min std dev
+        base_delay += flight_disposition
 
         # Peak hours (7-9am, 5-7pm) add delay scaled by airport profile
         if features.hour_of_day in [7, 8, 9]:
@@ -115,15 +128,15 @@ class DelayPredictor:
         weather_factor = 1.0
         wind = features.wind_speed_kt
         if wind > 40:
-            weather_factor += 0.3 + self._random.uniform(0, 0.3)
+            weather_factor += 0.3 + flight_rng.uniform(0, 0.3)
         elif wind > 25:
-            weather_factor += 0.15 + self._random.uniform(0, 0.15)
+            weather_factor += 0.15 + flight_rng.uniform(0, 0.15)
         # Low visibility: <1SM adds 40-80%, <3SM adds 20-40%
         vis = features.visibility_sm
         if vis < 1:
-            weather_factor += 0.4 + self._random.uniform(0, 0.4)
+            weather_factor += 0.4 + flight_rng.uniform(0, 0.4)
         elif vis < 3:
-            weather_factor += 0.2 + self._random.uniform(0, 0.2)
+            weather_factor += 0.2 + flight_rng.uniform(0, 0.2)
 
         base_delay *= weather_factor
 
@@ -134,7 +147,7 @@ class DelayPredictor:
         # --- Reactionary delay (inbound delay propagation) ---
         # 30-60% of inbound delay propagates to outbound flight at same gate
         if features.inbound_delay_minutes > 0:
-            propagation = features.inbound_delay_minutes * self._random.uniform(0.3, 0.6)
+            propagation = features.inbound_delay_minutes * flight_rng.uniform(0.3, 0.6)
             base_delay += propagation
 
         # --- Airport load ratio scaling ---
@@ -146,8 +159,11 @@ class DelayPredictor:
             base_delay *= 1.0 + (load - 0.8) * 0.75
 
         # Add noise for realism (+/- 5 minutes)
-        noise = self._random.uniform(-5.0, 5.0)
+        noise = flight_rng.uniform(-5.0, 5.0)
         delay_minutes = max(0.0, base_delay + noise)
+
+        # Per-flight confidence variation
+        confidence += flight_rng.uniform(-0.1, 0.1)
 
         # Ensure confidence is in valid range
         confidence = max(0.3, min(0.95, confidence))
@@ -173,7 +189,8 @@ class DelayPredictor:
         predictions = []
         for flight in flights:
             features = extract_features(flight)
-            prediction = self.predict(features)
+            flight_id = flight.get("callsign") or flight.get("icao24") or ""
+            prediction = self.predict(features, flight_id=flight_id)
             predictions.append(prediction)
         return predictions
 
@@ -216,4 +233,5 @@ def predict_delay(flight: Dict[str, Any]) -> DelayPrediction:
         _default_predictor = DelayPredictor()
 
     features = extract_features(flight)
-    return _default_predictor.predict(features)
+    flight_id = flight.get("callsign") or flight.get("icao24") or ""
+    return _default_predictor.predict(features, flight_id=flight_id)

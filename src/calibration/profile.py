@@ -177,6 +177,12 @@ class AirportProfileLoader:
             logger.info("Loaded known-stats profile for %s (%s)", icao, iata)
             return known
 
+        # Try OpenFlights auto-build (if routes.dat exists locally)
+        openflights_profile = self._try_openflights(iata)
+        if openflights_profile is not None:
+            self._cache[icao] = openflights_profile
+            return openflights_profile
+
         # Try Unity Catalog
         uc_profile = self._load_from_unity_catalog(icao)
         if uc_profile is not None:
@@ -188,6 +194,26 @@ class AirportProfileLoader:
         self._cache[icao] = profile
         logger.info("Using fallback profile for %s", icao)
         return profile
+
+    def _try_openflights(self, iata: str) -> Optional[AirportProfile]:
+        """Try to build profile from locally cached OpenFlights routes.dat.
+
+        Only uses the file if already downloaded — does not trigger downloads
+        at runtime to avoid blocking the request path.
+        """
+        try:
+            from src.calibration.openflights_ingest import build_profile_from_openflights
+            profile = build_profile_from_openflights(
+                iata, download=False,  # never download at runtime
+            )
+            if profile is not None and (
+                profile.domestic_route_shares or profile.international_route_shares
+            ):
+                logger.info("Built OpenFlights profile for %s (%d routes)", iata, profile.sample_size)
+                return profile
+        except Exception as e:
+            logger.debug("OpenFlights auto-build failed for %s: %s", iata, e)
+        return None
 
     def _load_from_unity_catalog(self, icao: str) -> Optional[AirportProfile]:
         """Try to load profile from Unity Catalog airport_profiles table.

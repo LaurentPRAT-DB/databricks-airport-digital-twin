@@ -232,11 +232,11 @@ export const AIRPORT_3D_CONFIG: Airport3DConfig = {
   // Scene lighting configuration
   lighting: {
     ambient: {
-      intensity: 0.8,
+      intensity: 1.2,
     },
     directional: {
       position: { x: 100, y: 100, z: 50 },
-      intensity: 0.9,
+      intensity: 1.5,
     },
   },
 };

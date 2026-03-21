@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.calibration.profile_builder import build_profiles, US_AIRPORTS, INTERNATIONAL_AIRPORTS
 from src.calibration.profile import _build_fallback_profile, _PROFILES_DIR
+from src.ingestion.airport_table import AIRPORTS as ALL_AIRPORTS_TABLE
 
 logging.basicConfig(
     level=logging.INFO,
@@ -115,8 +116,17 @@ def main():
     parser.add_argument("--opensky-user", default=None, help="OpenSky username")
     parser.add_argument("--opensky-pass", default=None, help="OpenSky password")
     parser.add_argument(
+        "--source", choices=["auto", "openflights", "fallback"],
+        default="auto",
+        help="Data source: auto (priority chain), openflights (routes.dat only), fallback (no external data)",
+    )
+    parser.add_argument(
+        "--all-airports", action="store_true",
+        help="Process all ~1,180 airports from airport_table.py (not just the 33 default)",
+    )
+    parser.add_argument(
         "--fallback-only", action="store_true",
-        help="Build fallback profiles only (no external data needed)",
+        help="Build fallback profiles only (no external data needed). Deprecated: use --source fallback",
     )
     parser.add_argument(
         "--persist-to-uc", action="store_true",
@@ -127,10 +137,39 @@ def main():
     parser.add_argument("--warehouse-id", default=None, help="SQL warehouse ID (default: from env DATABRICKS_WAREHOUSE_ID)")
     args = parser.parse_args()
 
-    airports = args.airports or (US_AIRPORTS + INTERNATIONAL_AIRPORTS)
+    if args.all_airports:
+        airports = args.airports or sorted(ALL_AIRPORTS_TABLE.keys())
+    else:
+        airports = args.airports or (US_AIRPORTS + INTERNATIONAL_AIRPORTS)
     output_dir = args.output_dir or _PROFILES_DIR
 
-    if args.fallback_only:
+    if args.source == "openflights":
+        logger.info("Building OpenFlights-only profiles for %d airports", len(airports))
+        output_dir.mkdir(parents=True, exist_ok=True)
+        from src.calibration.openflights_ingest import build_profiles_batch
+        profiles_dict = build_profiles_batch(airports, download=True)
+        built = []
+        from datetime import datetime, timezone
+        for iata in airports:
+            profile = profiles_dict.get(iata)
+            if profile is None:
+                logger.warning("  %s: no OpenFlights data, using fallback", iata)
+                profile = _build_fallback_profile(iata)
+            profile.profile_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            profile.save(output_dir / f"{profile.icao_code}.json")
+            built.append(profile)
+        logger.info("Done. %d profiles written to %s", len(built), output_dir)
+        # Summary
+        of_count = sum(1 for p in built if p.data_source == "openflights")
+        fb_count = len(built) - of_count
+        print(f"\n{'='*60}")
+        print(f"Built {len(built)} profiles ({of_count} OpenFlights, {fb_count} fallback)")
+        print(f"{'='*60}")
+        if args.persist_to_uc:
+            _persist_to_unity_catalog(built, args)
+        return
+
+    if args.fallback_only or args.source == "fallback":
         logger.info("Building fallback-only profiles for %d airports", len(airports))
         output_dir.mkdir(parents=True, exist_ok=True)
         built = []

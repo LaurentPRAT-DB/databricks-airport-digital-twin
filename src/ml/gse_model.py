@@ -222,7 +222,8 @@ def calculate_turnaround_status(
     phases = timing["phases"]
 
     # Calculate elapsed time since arrival
-    elapsed_minutes = (current_time - arrival_time).total_seconds() / 60
+    from src.ingestion.fallback import get_gate_time_multiplier
+    elapsed_minutes = (current_time - arrival_time).total_seconds() / 60 * get_gate_time_multiplier()
 
     # Find current phase
     cumulative = 0
@@ -246,8 +247,9 @@ def calculate_turnaround_status(
             break
         cumulative += phase_duration
 
-    # Calculate estimated departure
-    estimated_departure = arrival_time + timedelta(minutes=timing["total_minutes"])
+    # Calculate estimated departure (scaled by gate time multiplier)
+    scaled_total = timing["total_minutes"] / get_gate_time_multiplier()
+    estimated_departure = arrival_time + timedelta(minutes=scaled_total)
 
     return {
         "current_phase": current_phase,

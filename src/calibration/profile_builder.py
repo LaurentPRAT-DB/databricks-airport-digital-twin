@@ -41,6 +41,7 @@ def build_profiles(
     output_dir: Optional[Path] = None,
     use_opensky: bool = False,
     opensky_auth: Optional[tuple[str, str]] = None,
+    use_openflights: bool = True,
 ) -> list[AirportProfile]:
     """Build calibration profiles for a list of airports.
 
@@ -53,6 +54,7 @@ def build_profiles(
         output_dir: Directory to write profile JSONs
         use_opensky: Whether to query OpenSky for international airports
         opensky_auth: Optional (username, password) for OpenSky
+        use_openflights: Whether to use OpenFlights routes.dat (default True)
 
     Returns:
         List of built AirportProfile objects
@@ -69,6 +71,7 @@ def build_profiles(
         logger.info("Building profile for %s...", iata)
         profile = _build_single_profile(
             iata, raw_dir, use_opensky=use_opensky, opensky_auth=opensky_auth,
+            use_openflights=use_openflights,
         )
         profile.profile_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         profile.save(out_dir / f"{profile.icao_code}.json")
@@ -92,6 +95,7 @@ def _build_single_profile(
     raw_dir: Path,
     use_opensky: bool = False,
     opensky_auth: Optional[tuple[str, str]] = None,
+    use_openflights: bool = True,
 ) -> AirportProfile:
     """Build profile for a single airport, trying data sources in priority order."""
 
@@ -122,7 +126,21 @@ def _build_single_profile(
             ontime_path=ontime if ontime.exists() else None,
         )
 
-    # 3. Try OpenSky (international airports)
+    # 3. Try OpenFlights routes.dat (worldwide route data)
+    if use_openflights:
+        try:
+            from src.calibration.openflights_ingest import build_profile_from_openflights
+            profile = build_profile_from_openflights(iata, raw_dir=raw_dir, download=True)
+            if profile is not None and (
+                profile.domestic_route_shares or profile.international_route_shares
+            ):
+                # OpenFlights lacks hourly/delay — enrich from known_stats
+                _enrich_openflights_with_known_stats(profile, iata)
+                return profile
+        except Exception as e:
+            logger.warning("OpenFlights failed for %s: %s, falling back", iata, e)
+
+    # 4. Try OpenSky (international airports)
     if use_opensky:
         try:
             from src.calibration.opensky_ingest import build_profile_from_opensky
@@ -132,13 +150,13 @@ def _build_single_profile(
         except Exception as e:
             logger.warning("OpenSky failed for %s: %s, falling back", iata, e)
 
-    # 4. Try known hand-researched profiles
+    # 5. Try known hand-researched profiles
     from src.calibration.known_profiles import get_known_profile
     known = get_known_profile(iata)
     if known is not None:
         return known
 
-    # 5. Fallback to hardcoded distributions
+    # 6. Fallback to hardcoded distributions
     return _build_fallback_profile(iata)
 
 
@@ -219,3 +237,23 @@ def _enrich_with_known_stats(profile: AirportProfile, iata: str) -> None:
 
     if "BTS_DB28" in profile.data_source:
         profile.data_source = "BTS_DB28+known_stats"
+
+
+def _enrich_openflights_with_known_stats(profile: AirportProfile, iata: str) -> None:
+    """Fill in hourly/delay fields that OpenFlights doesn't provide."""
+    from src.calibration.known_profiles import get_known_profile
+    known = get_known_profile(iata)
+    if known is None:
+        return
+
+    if not profile.hourly_profile and known.hourly_profile:
+        profile.hourly_profile = known.hourly_profile
+
+    if profile.delay_rate == 0.0 and known.delay_rate > 0:
+        profile.delay_rate = known.delay_rate
+    if not profile.delay_distribution and known.delay_distribution:
+        profile.delay_distribution = known.delay_distribution
+    if profile.mean_delay_minutes == 0.0 and known.mean_delay_minutes > 0:
+        profile.mean_delay_minutes = known.mean_delay_minutes
+
+    profile.data_source = "openflights+known_stats"

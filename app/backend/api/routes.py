@@ -88,7 +88,7 @@ from app.backend.models.airport_config import (
     FAAImportResponse,
     MSFSImportResponse,
 )
-from src.ingestion.fallback import generate_synthetic_trajectory, get_airport_center, get_current_airport_iata, reload_gates, reset_synthetic_state, set_airport_center
+from src.ingestion.fallback import generate_synthetic_trajectory, get_airport_center, get_current_airport_iata, get_gate_time_multiplier, set_gate_time_multiplier, reload_gates, reset_synthetic_state, set_airport_center
 from src.ml.gate_model import reload_gate_recommender
 from src.ml.registry import get_model_registry
 from app.backend.services.prediction_service import get_prediction_service
@@ -1533,6 +1533,34 @@ async def prewarm_user_airports(user: str = Depends(get_current_user)) -> dict:
         "already_cached": len(top_airports) - len(to_warm),
         "warming": len(to_warm),
     }
+
+
+# ==============================================================================
+# Settings Routes
+# ==============================================================================
+
+@router.get("/settings/gate-time-multiplier", tags=["settings"])
+async def get_gate_time_multiplier_endpoint() -> dict:
+    """Get current gate time multiplier."""
+    return {
+        "multiplier": get_gate_time_multiplier(),
+        "min": 1,
+        "max": 60,
+        "default": 8,
+    }
+
+
+@router.put("/settings/gate-time-multiplier", tags=["settings"])
+async def set_gate_time_multiplier_endpoint(body: dict = Body(...)) -> dict:
+    """Set gate time multiplier (clamped to 1-60)."""
+    value = body.get("multiplier")
+    if value is None:
+        raise HTTPException(status_code=422, detail="Missing 'multiplier' field")
+    try:
+        clamped = set_gate_time_multiplier(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Invalid multiplier value")
+    return {"multiplier": clamped}
 
 
 # ==============================================================================

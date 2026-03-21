@@ -34,6 +34,31 @@ from src.ml.gse_model import get_turnaround_timing, PHASE_DEPENDENCIES
 fake = Faker()
 
 # ============================================================================
+# DEMO TURNAROUND SPEEDUP
+# ============================================================================
+# In real time, narrow-body turnaround is ~35 min, wide-body ~90 min.
+# For a live demo, viewers need to see departures within a few minutes.
+# This multiplier divides the gate-time threshold so aircraft push back faster.
+_DEFAULT_GATE_TIME_MULTIPLIER = 8.0
+_gate_time_multiplier = _DEFAULT_GATE_TIME_MULTIPLIER
+
+
+def get_gate_time_multiplier() -> float:
+    """Get current gate time multiplier."""
+    return _gate_time_multiplier
+
+
+def set_gate_time_multiplier(value: float) -> float:
+    """Set gate time multiplier, clamped to [1.0, 60.0]. Returns clamped value."""
+    global _gate_time_multiplier
+    _gate_time_multiplier = max(1.0, min(60.0, float(value)))
+    return _gate_time_multiplier
+
+
+# Keep backward-compatible alias for any remaining imports
+DEMO_GATE_TIME_MULTIPLIER = _DEFAULT_GATE_TIME_MULTIPLIER
+
+# ============================================================================
 # AIRLINE TURNAROUND SPEED FACTORS
 # ============================================================================
 # 1.0 = standard, <1.0 = faster turnaround, >1.0 = slower turnaround.
@@ -305,11 +330,24 @@ def drain_turnaround_events() -> List[Dict[str, Any]]:
 def get_flight_turnaround_info(icao24: str) -> Optional[Dict[str, Any]]:
     """Get turnaround info for a flight from simulation state.
 
-    Returns None if the flight is not found in the simulation.
+    Returns None if the flight is not found or not in PARKED phase.
+    Turnaround data is only meaningful when an aircraft is docked at a gate.
     """
     state = _flight_states.get(icao24)
     if state is None:
         return None
+    # Only return turnaround data for aircraft actually parked at a gate
+    if state.phase != FlightPhase.PARKED:
+        return {
+            "parked_since": None,
+            "time_at_gate_seconds": 0,
+            "assigned_gate": state.assigned_gate,
+            "aircraft_type": state.aircraft_type,
+            "callsign": state.callsign,
+            "phase": state.phase.value,
+            "turnaround_phase": "",
+            "turnaround_schedule": None,
+        }
     return {
         "parked_since": datetime.fromtimestamp(state.parked_since, tz=timezone.utc) if state.parked_since > 0 else None,
         "time_at_gate_seconds": state.time_at_gate,
@@ -400,6 +438,12 @@ _AIRLINE_NAMES = {
     "SCX": "Sun Country Airlines",
     "TAM": "LATAM Airlines",
     # Airlines from calibration profiles (known_profiles.py)
+    "SKY": "Skymark Airlines",
+    "ADO": "Air Do",
+    "SFJ": "StarFlyer",
+    "CES": "China Eastern Airlines",
+    "SNJ": "Solaseed Air",
+    "IBX": "IBEX Airlines",
     "AAR": "Asiana Airlines",
     "APJ": "Peach Aviation",
     "AVA": "Avianca",
@@ -1585,6 +1629,7 @@ class FlightState:
     holding_phase_time: float = 0.0            # Elapsed time in current holding leg (seconds)
     holding_inbound: bool = True               # True = inbound leg, False = outbound leg
     go_around_count: int = 0                   # Number of go-arounds for this approach
+    gate_retry_at: float = 0.0                 # time.time() when to next retry gate assignment
     parked_since: float = 0.0                  # time.time() when aircraft entered PARKED phase
     turnaround_phase: str = ""                 # Current turnaround sub-phase (e.g. "deboarding")
     turnaround_schedule: Optional[Dict] = None # {phase: {"start_offset_s", "duration_s", "done", "started"}}
@@ -1810,13 +1855,19 @@ def _find_available_gate() -> Optional[str]:
     return random.choice(available)
 
 def _find_overflow_gate() -> Optional[str]:
-    """Find the gate expected to free soonest (overflow when all are occupied)."""
+    """Find a gate for overflow (all occupied). Distributes across gates.
+
+    Instead of always picking the single soonest-to-free gate (which causes
+    stacking when multiple flights overflow simultaneously), pick randomly
+    from the N gates that will free soonest.
+    """
     _init_gate_states()
     if not _gate_states:
         return None
-    # Pick gate with the soonest available_at time
-    best_gate = min(_gate_states, key=lambda g: _gate_states[g].available_at)
-    return best_gate
+    # Sort gates by available_at, pick randomly from top 5 soonest
+    sorted_gates = sorted(_gate_states.keys(), key=lambda g: _gate_states[g].available_at)
+    top_n = min(5, len(sorted_gates))
+    return random.choice(sorted_gates[:top_n])
 
 
 def _occupy_gate(icao24: str, gate: str):
@@ -1830,7 +1881,7 @@ def _release_gate(icao24: str, gate: str):
     _init_gate_states()
     if gate in _gate_states and _gate_states[gate].occupied_by == icao24:
         _gate_states[gate].occupied_by = None
-        _gate_states[gate].available_at = time.time() + 60  # 1 min cooldown
+        _gate_states[gate].available_at = time.time() + 60 / get_gate_time_multiplier()
 
 def _check_taxi_separation(state: FlightState) -> bool:
     """Check if aircraft has sufficient separation from others on ground."""
@@ -2420,8 +2471,8 @@ def _build_turnaround_schedule(
     schedule: Dict[str, Dict] = {}
     for phase in _GATE_PHASES:
         schedule[phase] = {
-            "start_offset_s": start[phase] * 60,
-            "duration_s": jittered[phase] * 60,
+            "start_offset_s": start[phase] * 60 / get_gate_time_multiplier(),
+            "duration_s": jittered[phase] * 60 / get_gate_time_multiplier(),
             "done": False,
             "started": False,
         }
@@ -2536,7 +2587,7 @@ def _create_new_flight(
         standoff = _compute_gate_standoff(lat, lon, parked_heading, aircraft_type)
         lat, lon = _offset_position_by_heading(lat, lon, parked_heading, standoff)
 
-        initial_time_at_gate = random.uniform(0, 300)  # Random time already parked
+        initial_time_at_gate = random.uniform(0, 300 / get_gate_time_multiplier())  # Scaled with gate time
 
         # Build turnaround schedule and pre-advance to match elapsed time
         airline_code = callsign[:3] if callsign and len(callsign) >= 3 else ""
@@ -2907,10 +2958,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                         emit_gate_event(state.icao24, state.callsign, overflow_gate, "assign", state.aircraft_type)
                         state.taxi_route = _get_taxi_waypoints_arrival(overflow_gate)
                     else:
-                        # Absolute fallback: first gate in registry
+                        # Absolute fallback: random gate from registry
                         _init_gate_states()
                         if _gate_states:
-                            fallback_gate = next(iter(_gate_states))
+                            fallback_gate = random.choice(list(_gate_states.keys()))
                             state.assigned_gate = fallback_gate
                             state.taxi_route = _get_taxi_waypoints_arrival(fallback_gate)
                         else:
@@ -2923,6 +2974,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
         # First, ensure we have an assigned gate before proceeding
         if state.assigned_gate is None:
+            now = time.time()
+            if now < state.gate_retry_at:
+                # Still waiting for retry — hold position
+                state.velocity = 0
+                return state
             available_gate = _find_available_gate()
             if not available_gate:
                 available_gate = _find_overflow_gate()
@@ -2930,8 +2986,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.assigned_gate = available_gate
                 _occupy_gate(state.icao24, available_gate)
                 state.taxi_route = _get_taxi_waypoints_arrival(available_gate)
+                state.gate_retry_at = 0.0
             else:
-                # No gates available - hold position on taxiway
+                # No gates available — retry in 5 seconds (sim time)
+                state.gate_retry_at = now + 5.0
                 state.velocity = 0
                 return state
 
@@ -2971,9 +3029,15 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     _occupy_gate(state.icao24, new_gate)
                     target = get_gates()[new_gate]
                 else:
-                    # No gates available - hold position
-                    state.velocity = 0
-                    return state
+                    # No gates — try overflow gate
+                    new_gate = _find_overflow_gate()
+                    if new_gate:
+                        state.assigned_gate = new_gate
+                        _occupy_gate(state.icao24, new_gate)
+                        target = get_gates()[new_gate]
+                    else:
+                        state.velocity = 0
+                        return state
 
             if _check_taxi_separation(state):
                 speed_deg = TAXI_SPEED_RAMP_KTS * _KTS_TO_DEG_PER_SEC * dt
@@ -3077,6 +3141,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         combined_factor = airline_factor * weather_factor * congestion_factor * intl_factor * dow_factor
         # +/-10% jitter (reduced from 20% since factors explain more variance)
         target = gate_seconds * combined_factor * random.uniform(0.9, 1.1)
+        target = target / get_gate_time_multiplier()
         if state.time_at_gate > target:
             # Ensure correct origin/dest for departure: origin=local, dest=new airport
             local_iata = get_current_airport_iata()

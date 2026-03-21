@@ -90,6 +90,10 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false, flightPhase
         // Determine which color to apply based on mesh name
         const meshName = child.name.toLowerCase();
 
+        // Set reasonable PBR defaults for all meshes
+        material.roughness = 0.5;
+        material.metalness = 0.2;
+
         if (meshName.includes('tail') || meshName.includes('fin') || meshName.includes('logo')) {
           // Tail/fin gets secondary color (where logos usually are)
           material.color.setHex(airline.secondaryColor);
@@ -104,9 +108,16 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false, flightPhase
           // Windows stay dark
           material.color.setHex(0x111133);
           material.metalness = 0.8;
+          material.roughness = 0.1;
         } else {
-          // Default to primary color
-          material.color.setHex(airline.primaryColor);
+          // Default to primary color — ensure minimum brightness
+          const color = new THREE.Color(airline.primaryColor);
+          const luminance = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+          if (luminance < 0.15) {
+            // Brighten very dark colors to stay visible
+            color.lerp(new THREE.Color(0xffffff), 0.3);
+          }
+          material.color.copy(color);
         }
 
         // Add selection glow or phase-based emissive tint
