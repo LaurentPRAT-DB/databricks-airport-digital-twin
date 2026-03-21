@@ -1015,12 +1015,12 @@ class TestGateTurnaroundTiming:
     def test_wide_body_stays_parked_longer(self):
         """B777 should remain parked longer than A320 at the gate.
 
-        With DEMO_TURNAROUND_SPEEDUP=8x:
-        - Narrow-body ~35 min / 8 ≈ 4 min gate time
-        - Wide-body ~90 min / 8 ≈ 11 min gate time
-        At 5 min, A320 should have pushed back but B777 should still be parked.
+        With DEMO_TURNAROUND_SPEEDUP=16x:
+        - Narrow-body ~35 min / 16 ≈ 2 min gate time
+        - Wide-body ~90 min / 16 ≈ 5.5 min gate time
+        At 2.5 min, A320 should have pushed back but B777 should still be parked.
         """
-        # A320 at gate for 5 min → should push back (speedup: ~4 min gate time)
+        # A320 at gate for 2.5 min → should push back (speedup: ~2 min gate time)
         a320 = _create_new_flight(
             "ta_a320", "UAL300", FlightPhase.PARKED,
             origin="JFK", destination="SFO"
@@ -1028,7 +1028,7 @@ class TestGateTurnaroundTiming:
         a320.aircraft_type = "A320"
         _flight_states["ta_a320"] = a320
 
-        # B777 at gate for 5 min → should still be parked (speedup: ~11 min gate time)
+        # B777 at gate for 2.5 min → should still be parked (speedup: ~5.5 min gate time)
         b777 = _create_new_flight(
             "ta_b777", "UAL400", FlightPhase.PARKED,
             origin="NRT", destination="SFO"
@@ -1036,14 +1036,14 @@ class TestGateTurnaroundTiming:
         b777.aircraft_type = "B777"
         _flight_states["ta_b777"] = b777
 
-        # Set both to 5 minutes parked
-        a320.time_at_gate = 5 * 60
-        b777.time_at_gate = 5 * 60
+        # Set both to 2.5 minutes parked
+        a320.time_at_gate = 2.5 * 60
+        b777.time_at_gate = 2.5 * 60
 
-        # B777 at 5 min should still be parked (wide-body speedup: ~11 min gate time)
+        # B777 at 2.5 min should still be parked (wide-body speedup: ~5.5 min gate time)
         _update_flight_state(b777, 1.0)
         assert b777.phase == FlightPhase.PARKED, (
-            f"B777 should still be parked at 5 min, but phase is {b777.phase.value}"
+            f"B777 should still be parked at 2.5 min, but phase is {b777.phase.value}"
         )
 
 

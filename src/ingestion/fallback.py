@@ -39,7 +39,7 @@ fake = Faker()
 # In real time, narrow-body turnaround is ~35 min, wide-body ~90 min.
 # For a live demo, viewers need to see departures within a few minutes.
 # This multiplier divides the gate-time threshold so aircraft push back faster.
-_DEFAULT_GATE_TIME_MULTIPLIER = 8.0
+_DEFAULT_GATE_TIME_MULTIPLIER = 16.0
 _gate_time_multiplier = _DEFAULT_GATE_TIME_MULTIPLIER
 
 
@@ -657,7 +657,7 @@ NM_TO_DEG = 1.0 / 60.0
 
 # Minimum separation distances
 MIN_APPROACH_SEPARATION_DEG = 3.0 * NM_TO_DEG  # 3 NM minimum on approach
-MIN_TAXI_SEPARATION_DEG = 0.003  # ~300m for taxi operations (larger for 3D visibility)
+MIN_TAXI_SEPARATION_DEG = 0.001  # ~100m for taxi operations (FAA visual separation ~60-90m)
 MIN_GATE_SEPARATION_DEG = 0.010  # ~800m in 3D scale for gate area (prevents overlap)
 # Aircraft fuselage half-lengths in meters (nose-to-center), by ICAO type designator.
 # Used to compute how far to offset parked aircraft from the gate/jetbridge point

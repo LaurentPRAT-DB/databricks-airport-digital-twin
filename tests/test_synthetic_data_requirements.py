@@ -1088,32 +1088,32 @@ class TestPhaseDependencies:
 class TestTurnaroundStatus:
 
     def test_early_phase(self):
-        # With DEMO_GATE_TIME_MULTIPLIER=8x, elapsed is multiplied by 8.
-        # 20 real seconds → 160s effective ≈ 2.67 min → still in arrival_taxi (5 min phase)
-        arrival = datetime.now(timezone.utc) - timedelta(seconds=20)
+        # With DEMO_GATE_TIME_MULTIPLIER=16x, elapsed is multiplied by 16.
+        # 10 real seconds → 160s effective ≈ 2.67 min → still in arrival_taxi (5 min phase)
+        arrival = datetime.now(timezone.utc) - timedelta(seconds=10)
         status = calculate_turnaround_status(arrival, "A320")
         assert status["current_phase"] in ["arrival_taxi", "chocks_on"]
         assert status["total_progress_pct"] < 20
 
     def test_mid_turnaround(self):
-        # 3 real min → 24 effective min → mid-turnaround
-        arrival = datetime.now(timezone.utc) - timedelta(minutes=3)
+        # 1.5 real min → 24 effective min → mid-turnaround
+        arrival = datetime.now(timezone.utc) - timedelta(seconds=90)
         status = calculate_turnaround_status(arrival, "A320")
         assert 15 <= status["total_progress_pct"] <= 70
 
     def test_complete_turnaround(self):
         # Phase durations sum to 112 min (serial); total_minutes=45 (parallel).
-        # With 8x multiplier, 15 real min → 120 effective min > 112 → complete
-        arrival = datetime.now(timezone.utc) - timedelta(minutes=15)
+        # With 16x multiplier, 8 real min → 128 effective min > 112 → complete
+        arrival = datetime.now(timezone.utc) - timedelta(minutes=8)
         status = calculate_turnaround_status(arrival, "A320")
         assert status["current_phase"] == "complete"
         assert status["total_progress_pct"] == 100
 
     def test_estimated_departure(self):
-        # With 8x multiplier, estimated departure = arrival + total_minutes/8
+        # With 16x multiplier, estimated departure = arrival + total_minutes/16
         arrival = datetime.now(timezone.utc)
         status = calculate_turnaround_status(arrival, "A320")
-        expected = arrival + timedelta(minutes=45 / 8)
+        expected = arrival + timedelta(minutes=45 / 16)
         diff = abs((status["estimated_departure"] - expected).total_seconds())
         assert diff < 1
 

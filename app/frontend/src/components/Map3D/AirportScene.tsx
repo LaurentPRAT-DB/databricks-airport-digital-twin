@@ -7,7 +7,8 @@ import { Aircraft3D } from './Aircraft3D';
 import { Trajectory3D } from './Trajectory3D';
 import { Building3D } from './Building3D';
 import { TerminalGroup } from './Terminal3D';
-import { latLonTo3D, METERS_TO_SCENE_UNITS } from '../../utils/map3d-calculations';
+import { latLonTo3D, METERS_TO_SCENE_UNITS, DEFAULT_COORDINATE_SCALE } from '../../utils/map3d-calculations';
+import { SatelliteGround } from './SatelliteGround';
 
 const SCENE_COLORS = {
   runway: 0x555555,   // Dark asphalt
@@ -62,8 +63,17 @@ export function AirportScene({
 
   return (
     <group>
-      {/* Ground plane */}
-      <Ground size={ground.size} color={ground.color} />
+      {/* Satellite imagery ground plane */}
+      {airportCenter ? (
+        <SatelliteGround
+          size={ground.size}
+          centerLat={airportCenter.lat}
+          centerLon={airportCenter.lon}
+          scale={DEFAULT_COORDINATE_SCALE}
+        />
+      ) : (
+        <Ground size={ground.size} color={ground.color} />
+      )}
 
       {/* Default buildings (only if no OSM data) */}
       {!hasOSMData && buildings.map((building) => (
