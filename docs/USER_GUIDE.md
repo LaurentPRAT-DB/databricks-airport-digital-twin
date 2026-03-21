@@ -1,536 +1,528 @@
-# Airport Digital Twin - Complete User Guide
+# Airport Digital Twin — User Guide
 
-This comprehensive guide covers all features of the Airport Digital Twin application, from end-user features to administrator data management and data scientist ML capabilities.
+Welcome to the Airport Digital Twin! This guide walks you through every feature with real screenshots so you can get the most out of the platform in minutes.
+
+**Live app**: [airport-digital-twin-dev](https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.com) | **Local**: http://localhost:3000
 
 ---
 
 ## Table of Contents
 
-1. [Application Overview](#application-overview)
-2. [Main Dashboard](#main-dashboard)
-3. [Airport Selector & Multi-Airport Switching](#airport-selector--multi-airport-switching)
-4. [Flight List Panel](#flight-list-panel)
-5. [2D Map View](#2d-map-view)
-6. [3D Visualization](#3d-visualization)
-7. [Flight Details Panel](#flight-details-panel)
-8. [Flight Information Display System (FIDS)](#flight-information-display-system-fids)
-9. [Weather Widget](#weather-widget)
-10. [Gate Status Panel](#gate-status-panel)
-11. [Platform Integration](#platform-integration)
-12. [Administrator Guide: Data Architecture](#administrator-guide-data-architecture)
-13. [Data Scientist Guide: ML Models](#data-scientist-guide-ml-models)
-14. [Troubleshooting](#troubleshooting)
-15. [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Your First 60 Seconds](#your-first-60-seconds)
+- [The Dashboard at a Glance](#the-dashboard-at-a-glance)
+- [Finding and Tracking Flights](#finding-and-tracking-flights)
+- [The 2D Map](#the-2d-map)
+- [The 3D View](#the-3d-view)
+- [Switching Airports](#switching-airports)
+- [Flight Details & ML Predictions](#flight-details--ml-predictions)
+- [FIDS — The Arrivals & Departures Board](#fids--the-arrivals--departures-board)
+- [Weather at a Glance](#weather-at-a-glance)
+- [Gate Status & Congestion](#gate-status--congestion)
+- [Platform Integration (Databricks)](#platform-integration-databricks)
+- [Simulation Mode](#simulation-mode)
+- [For Data Scientists: ML Models](#for-data-scientists-ml-models)
+- [For IT Ops: Data Architecture](#for-it-ops-data-architecture)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
-## Application Overview
+## Your First 60 Seconds
 
-The Airport Digital Twin is a real-time visualization platform that demonstrates the full Databricks stack through an engaging airport operations domain. It provides:
+Open the app and you'll see a radar animation while data loads. Within seconds, you're looking at a live airport.
 
-- **Real-time flight tracking** with 2D and 3D visualizations
-- **Multi-airport support** with 12 presets + any ICAO code worldwide
-- **ML-powered predictions** for delays, gate assignments, and congestion
-- **Live weather data** via METAR/TAF feeds
-- **FIDS** (Flight Information Display System) for arrivals and departures
-- **Industry-standard data formats** — AIXM, OSM, IFC, AIDM, FAA NASR
-- **Platform integration** with Lakeview dashboards, Genie NL queries, Unity Catalog, MLflow, and Data Lineage
+Here's what to try first:
 
-**Access URLs:**
-- **Production**: https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.com
-- **Local Development**: http://localhost:3000
+1. **Click any flight** in the left panel to see its details, delay prediction, and gate recommendation
+2. **Type a callsign** (like "UAL") in the search box to filter flights instantly
+3. **Click "3D"** above the map to enter the immersive 3D view
+4. **Click the airport button** (e.g., "KSFO") to switch to another airport — try CDG (Paris) or HND (Tokyo)
+5. **Click "FIDS"** in the header to see the familiar arrivals/departures board
+
+That's it — you're already using every major feature. Read on for the details.
 
 ---
 
-## Main Dashboard
+## The Dashboard at a Glance
 
 ![Application Overview](screenshots/01-overview.png)
 
-The main dashboard consists of five key areas:
+The dashboard has five main areas that work together:
 
-| # | Component | Description |
-|---|-----------|-------------|
-| **A** | **Header Bar** | Airport selector, flight count, data source, weather, FIDS, phase legend, connection status, Platform links |
-| **B** | **Flight List** | Searchable, sortable list of all active flights with phase/altitude/speed |
-| **C** | **Map View** | 2D (Leaflet with OSM overlay) or 3D (Three.js) visualization of flights |
-| **D** | **Flight Details** | Detailed information for the selected flight including ML predictions |
-| **E** | **Gate Status** | Terminal gate occupancy and area congestion levels |
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  A: HEADER BAR                                                        │
+│  Airport selector | Flight count | Data source | Weather | FIDS |     │
+│  Phase legend | Connection | Platform links                          │
+├────────────┬──────────────────────────────────────┬──────────────────┤
+│            │                                      │                  │
+│ B: FLIGHT  │         C: MAP VIEW                  │ D: FLIGHT        │
+│    LIST    │    (2D Leaflet or 3D Three.js)       │    DETAILS       │
+│            │                                      │                  │
+│  Search    │    Real airport infrastructure       │  Position        │
+│  Sort      │    from OpenStreetMap:               │  Movement        │
+│  Click to  │    - Terminals (blue)                │  Delay predict.  │
+│  select    │    - Gates (green dots)              │  Gate recommend.  │
+│            │    - Taxiways (yellow lines)         │  Trajectory      │
+│            │    - Aprons (gray areas)             │                  │
+│            │                                      ├──────────────────┤
+│            │    Flight markers color-coded        │ E: GATE STATUS   │
+│            │    by phase                          │  Available/       │
+│            │                                      │  Occupied         │
+│            │                                      │  Congestion       │
+├────────────┴──────────────────────────────────────┴──────────────────┤
+│  Footer: Flight count, last update time                               │
+└──────────────────────────────────────────────────────────────────────┘
+```
 
-### Header Components
+### Header Bar Components
 
-- **Airport Selector**: Click the airport button (e.g., "KSFO (SFO)") to switch airports
-- **Flights Counter**: Total number of tracked flights (e.g., "Flights: 50")
-- **Data Source Indicator**: Shows data origin
-  - `Live` — Real data from Lakebase/Delta tables
-  - `Demo Mode (synthetic)` — Generated demo data when backend unavailable
-- **Weather Badge**: Current METAR conditions (temperature, wind, visibility) — click to expand
-- **FIDS Button**: Opens the Flight Information Display System modal
-- **Flight Phase Legend**: Color-coded indicators for Ground, Climbing, Descending, Cruising
-- **Connection Status**: Real-time connection health
-- **Platform Button**: Access Databricks platform integrations
-
----
-
-## Airport Selector & Multi-Airport Switching
-
-![Airport Selector](screenshots/02-airport-selector.png)
-
-Click the airport button in the header to open the airport selector dropdown.
-
-### Preset Airports (12)
-
-| ICAO | IATA | Airport | Location |
-|------|------|---------|----------|
-| KSFO | SFO | San Francisco International | San Francisco, CA |
-| KJFK | JFK | John F. Kennedy International | New York, NY |
-| KLAX | LAX | Los Angeles International | Los Angeles, CA |
-| KORD | ORD | O'Hare International | Chicago, IL |
-| KATL | ATL | Hartsfield-Jackson Atlanta | Atlanta, GA |
-| EGLL | LHR | London Heathrow | London, UK |
-| LFPG | CDG | Charles de Gaulle | Paris, France |
-| OMAA | AUH | Abu Dhabi International | Abu Dhabi, UAE |
-| OMDB | DXB | Dubai International | Dubai, UAE |
-| RJTT | HND | Tokyo Haneda | Tokyo, Japan |
-| VHHH | HKG | Hong Kong International | Hong Kong |
-| WSSS | SIN | Singapore Changi | Singapore |
-
-### Custom ICAO Code
-
-Enter any 4-letter ICAO code in the text field and click **Load** to switch to any airport worldwide.
-
-### What Happens During Airport Switch
-
-![Airport Switching](screenshots/03-airport-switching.png)
-
-When you switch airports, a progress overlay appears showing "Loading airport data, please wait..." while the system:
-
-1. Fetches airport infrastructure from OpenStreetMap (terminals, gates, taxiways, aprons)
-2. Generates new synthetic flight data positioned at the airport
-3. Updates the 2D map center and zoom level
-4. Loads weather data for the new airport
-
-### Multi-Airport Example: CDG (Paris)
-
-![CDG Airport](screenshots/10-cdg-airport.png)
-
-*Charles de Gaulle loaded with OSM-sourced terminal polygons, gate markers, taxiways, and aprons — demonstrating worldwide airport support.*
+| Component | What It Shows | Try This |
+|---|---|---|
+| **Airport button** (e.g., "KSFO (SFO)") | Current airport | Click to switch airports |
+| **Flights: 50** | Total tracked flights | — |
+| **Data source badge** | `Live` or `Demo Mode (synthetic)` | Live = real data flowing |
+| **Weather badge** | Temperature, wind, visibility | Click to expand full METAR |
+| **FIDS** | Opens arrivals/departures board | Click to open |
+| **Phase legend** | Ground / Climbing / Descending / Cruising | Colors match flight markers |
+| **Connected** | WebSocket health | Green = real-time updates active |
+| **Platform** | Databricks tools (Lakeview, Genie, etc.) | Click to access |
 
 ---
 
-## Flight List Panel
+## Finding and Tracking Flights
 
 ![Flight Search](screenshots/05-flight-search.png)
+*Searching for "UAL" instantly filters to all United Airlines flights*
 
-The flight list panel on the left side shows all active flights.
+### Search
 
-### Search Functionality
-- **Search Box**: Type a callsign prefix to filter flights instantly
-- Example: Typing "UAL" filters to show only United Airlines flights
-- Search is case-insensitive and matches partial callsigns
+The search box at the top of the flight list filters flights as you type. It matches callsign prefixes, so:
+- **"UAL"** shows all United flights
+- **"AAL"** shows all American Airlines
+- **"BAW"** shows British Airways
 
-### Sorting Options
-- **Callsign (A-Z)**: Alphabetical order by flight callsign
-- **Altitude (High-Low)**: Sort by current altitude descending
+Search is case-insensitive and instant.
 
-### Flight Card Information
-Each flight card displays:
-- **Callsign** (e.g., "UAL123")
-- **Phase Badge**: GND (Ground), CLB (Climbing), CRZ (Cruising), DSC (Descending)
-- **Origin/Destination**: Airport codes showing where the flight is from/to
-- **Altitude**: Current altitude in feet
-- **Speed**: Ground speed in knots
+### Sort Options
 
-**Click any flight card** to select it and view detailed information in the right panel.
+Use the dropdown below the search box:
+- **Callsign (A-Z)** — Alphabetical by callsign
+- **Altitude (High-Low)** — Highest aircraft first
 
----
+### Flight Cards
 
-## 2D Map View
+Each card in the list shows:
 
-The 2D view uses Leaflet with OpenStreetMap tiles and a rich airport overlay.
+| Field | Example | Meaning |
+|---|---|---|
+| **Callsign** | UAL123 | Flight identifier |
+| **Phase badge** | `DSC` | GND=Ground, CLB=Climbing, CRZ=Cruising, DSC=Descending |
+| **Route** | SFO → ORD | Origin and destination |
+| **Altitude** | 35,000 ft | Current altitude |
+| **Speed** | 450 kts | Ground speed |
 
-### OSM Airport Overlay
-
-The map renders real airport infrastructure loaded from OpenStreetMap:
-
-| Feature | Color | Description |
-|---------|-------|-------------|
-| **Terminals** | Blue polygons | Terminal building footprints |
-| **Gates** | Green circle markers | Gate positions with labels |
-| **Taxiways** | Yellow polylines | Taxiway centerlines |
-| **Aprons** | Gray polygons | Aircraft parking/ramp areas |
-
-### Flight Markers
-- **Color** indicates flight phase: yellow=ground, green=climbing, red=descending, blue=cruising
-- **Icon rotation** shows heading direction
-- **Hover** shows flight callsign tooltip
-- **Click** selects the flight and shows details panel
-- **Selected flight** has a pulsing highlight effect
-
-### Map Controls
-- **Zoom**: + / - buttons or mouse scroll wheel
-- **Pan**: Click and drag to move the map
-- **2D/3D Toggle**: Buttons above the map to switch between views
+**Click any card** to select the flight. It highlights on the map and shows full details in the right panel.
 
 ---
 
-## 3D Visualization
+## The 2D Map
 
-![3D View](screenshots/08-3d-view.png)
+The default view uses Leaflet with OpenStreetMap tiles, overlaid with real airport infrastructure.
 
-The 3D view provides an immersive visualization using Three.js and React Three Fiber.
+### What You See on the Map
 
-### 3D Features
-- **Aircraft Models**: GLTF 3D models for major airlines (United, Delta, American, etc.) with procedural fallback
-- **Altitude Representation**: Aircraft positioned at actual altitude in 3D space
-- **Terminal Buildings**: 3D extrusions of OSM terminal polygons
-- **Flight Labels**: Hovering callsign, altitude, and speed indicators
+| Feature | Visual | Source |
+|---|---|---|
+| **Terminals** | Blue polygons | OpenStreetMap building footprints |
+| **Gates** | Green circle markers with labels | OSM gate positions |
+| **Taxiways** | Yellow polylines | OSM taxiway centerlines |
+| **Aprons** | Gray polygons | OSM parking/ramp areas |
+| **Flights** | Color-coded aircraft icons | Live or synthetic position data |
 
-### Camera Controls
-- **Rotate**: Left-click and drag
-- **Pan**: Right-click and drag
-- **Zoom**: Mouse scroll wheel
+### Flight Marker Colors
 
-### Switching Views
-Click the **2D** or **3D** buttons above the map to toggle between views.
+| Color | Phase |
+|---|---|
+| Yellow | Ground (taxiing or at gate) |
+| Green | Climbing (just departed) |
+| Red | Descending (on approach) |
+| Blue | Cruising (en route) |
+
+### Interacting with the Map
+
+- **Zoom**: `+`/`-` buttons or scroll wheel
+- **Pan**: Click and drag
+- **Select a flight**: Click its marker — shows a pulsing highlight
+- **Hover**: Shows callsign tooltip
 
 ---
 
-## Flight Details Panel
+## The 3D View
+
+![3D Visualization](screenshots/08-3d-view.png)
+*The 3D view shows aircraft at actual altitude with realistic GLTF models and extruded terminal buildings*
+
+Click the **3D** button above the map to switch. Click **2D** to go back.
+
+### What Makes the 3D View Special
+
+- **Realistic aircraft models**: GLTF 3D models for major airline liveries (United, Delta, American, British Airways, and more) with procedural geometry fallback
+- **True altitude**: Aircraft are positioned at their actual altitude in 3D space — you can see arrivals descending and departures climbing
+- **Terminal buildings**: OSM terminal footprints extruded into 3D structures
+- **Flight labels**: Hovering tags show callsign, altitude, and speed
+- **Origin-aware trajectories**: Approach paths come from the direction of the origin airport; departure paths head toward the destination
+
+### 3D Camera Controls
+
+| Action | Control |
+|---|---|
+| **Rotate** | Left-click + drag |
+| **Pan** | Right-click + drag |
+| **Zoom** | Scroll wheel |
+
+### Performance Tip
+
+The 3D view uses WebGL and runs best on Chrome or Firefox with a dedicated GPU. If it feels slow, try reducing the browser window size or switching back to 2D.
+
+---
+
+## Switching Airports
+
+![Airport Selector](screenshots/02-airport-selector.png)
+*Click the airport button to reveal the dropdown with 12 presets and a custom ICAO input*
+
+### Preset Airports
+
+| ICAO | IATA | Airport | Region |
+|---|---|---|---|
+| KSFO | SFO | San Francisco International | US West |
+| KJFK | JFK | John F. Kennedy International | US East |
+| KLAX | LAX | Los Angeles International | US West |
+| KORD | ORD | O'Hare International | US Central |
+| KATL | ATL | Hartsfield-Jackson Atlanta | US South |
+| EGLL | LHR | London Heathrow | Europe |
+| LFPG | CDG | Charles de Gaulle | Europe |
+| OMAA | AUH | Abu Dhabi International | Middle East |
+| OMDB | DXB | Dubai International | Middle East |
+| RJTT | HND | Tokyo Haneda | Asia |
+| VHHH | HKG | Hong Kong International | Asia |
+| WSSS | SIN | Singapore Changi | Asia |
+
+### Custom Airport
+
+Enter any 4-letter ICAO code in the text field and click **Load**. The system will fetch that airport's real infrastructure from OpenStreetMap.
+
+### What Happens During a Switch
+
+![Airport Switching](screenshots/03-airport-switching.png)
+*A progress overlay appears while the airport loads*
+
+When you switch airports, the system:
+1. Fetches real infrastructure from OpenStreetMap (terminals, gates, taxiways, aprons)
+2. Generates calibrated synthetic flights positioned at the airport
+3. Centers the map on the new airport
+4. Loads weather data for the location
+5. Hot-swaps ML models for the new airport's profile
+
+The progress overlay shows status messages as each step completes. Most airports load in 1-3 seconds.
+
+### See It in Action: Paris CDG
+
+![CDG Airport](screenshots/10-cdg-airport.png)
+*Charles de Gaulle (Paris) loaded with real OSM data — every terminal, taxiway, and apron rendered from community-sourced geospatial data*
+
+Notice how different airports have different layouts: CDG has its distinctive circular Terminal 1, while SFO has its compact H-shaped international terminal. All from OpenStreetMap — no manual data entry.
+
+---
+
+## Flight Details & ML Predictions
 
 ![Flight Selected](screenshots/04-flight-selected.png)
+*Select a flight to see position, movement, delay prediction, and gate recommendations*
 
-When a flight is selected, the details panel shows comprehensive information:
+Click any flight to open its details panel on the right.
 
-### Position Section
-| Field | Description | Example |
-|-------|-------------|---------|
-| Latitude | Current latitude in degrees | 37.4940 |
-| Longitude | Current longitude in degrees | -122.0078 |
-| Altitude | Current altitude in feet | 35,000 ft |
+### Position & Movement
 
-### Movement Section
-| Field | Description | Example |
-|-------|-------------|---------|
-| Speed | Ground speed in knots | 450 kts |
-| Heading | True heading in degrees | 273 deg |
-| Vertical Rate | Climb/descent rate in ft/min | +1,500 ft/min |
-
-### Origin & Destination
-- **Origin Airport**: ICAO/IATA code of departure airport
-- **Destination Airport**: ICAO/IATA code of arrival airport
-- Arriving flights show the current airport as destination; departing flights show it as origin
+| Field | What It Shows |
+|---|---|
+| **Latitude / Longitude** | Current GPS coordinates |
+| **Altitude** | Current altitude in feet |
+| **Speed** | Ground speed in knots |
+| **Heading** | True heading in degrees |
+| **Vertical Rate** | Climb/descent rate (ft/min) |
 
 ### Delay Prediction (ML)
-- **Expected Delay**: Predicted delay in minutes
-- **Delay Category**: On Time, Slight, Moderate, or Severe
-- **Confidence**: Model confidence percentage (0-100%)
+
+The ML model predicts flight delays in real time:
+
+| Field | Example | Meaning |
+|---|---|---|
+| **Expected Delay** | 13 min | Predicted delay in minutes |
+| **Category** | `On Time` / `Slight` / `Moderate` / `Severe` | Color-coded severity |
+| **Confidence** | 78% | Model confidence score |
+
+**How delay prediction works**: The model considers time of day (peak hours = more delays), day of week (weekends = fewer delays), altitude category (ground = likely delayed), and velocity (slow = taxi congestion). See [ML Models](ML_MODELS.md) for full details.
 
 ### Gate Recommendations (ML)
-Top 3 recommended gates with:
-- **Gate ID**: Terminal and gate number (e.g., A1, B3)
-- **Score**: Assignment quality score (0-100%)
-- **Taxi Time**: Estimated taxi time to gate
-- **Reasons**: Why this gate is recommended
 
-### Trajectory Button
-Click **"Show Trajectory"** to display the flight's historical path on the map (requires historical data in Delta tables).
+The top 3 recommended gates, each with:
+
+| Field | Meaning |
+|---|---|
+| **Gate ID** | Terminal and gate (e.g., A1, B3) |
+| **Score** | Quality score (0-100%) — higher is better |
+| **Taxi Time** | Estimated minutes to reach the gate |
+| **Reasons** | Why this gate was recommended (availability, terminal match, proximity) |
+
+### Show Trajectory
+
+Click **"Show Trajectory"** to display the flight's path on the map. Approach trajectories come from the direction of the origin airport; departure trajectories head toward the destination.
 
 ---
 
-## Flight Information Display System (FIDS)
+## FIDS — The Arrivals & Departures Board
 
 ![FIDS Modal](screenshots/06-fids-modal.png)
+*The FIDS looks and feels like the departure boards you see in real airport terminals*
 
 Click the **FIDS** button in the header to open the Flight Information Display System.
 
-### Features
-- **Arrivals Tab**: Shows all incoming flights with scheduled times, origins, gates, and status
-- **Departures Tab**: Shows all outbound flights with scheduled times, destinations, gates, and status
-- **Flight Status**: Color-coded status indicators (On Time, Delayed, Boarding, Landed, etc.)
-- **Schedule Data**: Estimated arrival/departure times
+### Arrivals Tab
 
-### Usage
-The FIDS provides a familiar airport-style display board view of all flights, similar to what passengers see in real airport terminals.
+Shows all incoming flights with:
+- **Time**: Scheduled arrival time
+- **Flight**: Callsign and airline
+- **From**: Origin airport
+- **Gate**: Assigned gate
+- **Status**: On Time, Arrived, Delayed (with delay amount)
+
+### Departures Tab
+
+Shows all outbound flights with:
+- **Time**: Scheduled departure time
+- **Flight**: Callsign and airline
+- **To**: Destination airport
+- **Gate**: Departure gate
+- **Status**: On Time, Boarding, Departed, Delayed
+
+### Status Colors
+
+| Status | Color | Meaning |
+|---|---|---|
+| **Arrived / On Time** | Green | Normal operations |
+| **Delayed** | Red/Orange | Behind schedule (shows delay minutes) |
+| **Boarding** | Yellow | Passengers boarding |
 
 ---
 
-## Weather Widget
+## Weather at a Glance
 
 ![Weather Widget](screenshots/07-weather-widget.png)
 
-Click the **weather badge** in the header (showing temperature, wind, visibility) to expand the weather panel.
+The weather badge in the header shows a compact summary. Click it to expand the full panel.
 
-### METAR Data
-- **Temperature**: Current temperature in Celsius
-- **Wind**: Direction (degrees) and speed (knots)
-- **Visibility**: Statute miles
-- **Altimeter**: Barometric pressure
+### METAR Data (Current Conditions)
 
-### TAF Forecast
-- **Forecast periods** with expected conditions
-- **Wind changes** and visibility predictions
+| Field | What It Means |
+|---|---|
+| **Temperature** | Current temp in Celsius |
+| **Wind** | Direction (degrees true) and speed (knots) |
+| **Visibility** | Distance in statute miles |
+| **Altimeter** | Barometric pressure (inHg) |
 
-### Flight Category
-- **VFR** (Visual Flight Rules) — good conditions
-- **MVFR** (Marginal VFR) — reduced visibility
-- **IFR** (Instrument Flight Rules) — low visibility
-- **LIFR** (Low IFR) — very low visibility
+### Flight Categories
+
+| Category | Conditions | Impact |
+|---|---|---|
+| **VFR** | Good visibility, high ceiling | Normal operations |
+| **MVFR** | Reduced visibility (3-5 mi) | Caution, slower approaches |
+| **IFR** | Low visibility (1-3 mi) | Instrument approaches only |
+| **LIFR** | Very low visibility (<1 mi) | Significant delays likely |
+
+Weather updates automatically and affects the operational picture — expect more delays during IFR/LIFR conditions.
 
 ---
 
-## Gate Status Panel
+## Gate Status & Congestion
 
-The gate status panel on the right shows terminal occupancy.
+The Gate Status panel (bottom-right corner) provides terminal-level situational awareness.
 
-### Terminal Overview
-- **Available**: Number of open gates (green count)
-- **Occupied**: Number of occupied gates (red count)
+### Gate Grid
 
-### Terminal Details
-For each terminal:
-- **Gate Grid**: Visual representation of gates
-  - Green = Available
-  - Red = Occupied
+Each terminal shows its gates in a grid:
+- **Green** = Available
+- **Red** = Occupied
+
+Numbers at the top show total available vs. occupied.
 
 ### Area Congestion
-Shows congestion levels for airport zones:
-- **Low** (green): Normal operations
-- **Moderate** (yellow): Minor delays expected
-- **High** (orange): Significant congestion
-- **Critical** (red): Major operational impact
+
+Below the gate grid, congestion indicators show how busy each airport zone is:
+
+| Level | Color | Meaning |
+|---|---|---|
+| **Low** | Green | Normal operations, no delays |
+| **Moderate** | Yellow | Minor delays possible |
+| **High** | Orange | Significant congestion |
+| **Critical** | Red | Operations at capacity |
+
+This is especially useful for identifying bottlenecks — if a runway shows "Critical" congestion, expect arrival delays.
 
 ---
 
-## Platform Integration
+## Platform Integration (Databricks)
 
 ![Platform Links](screenshots/09-platform-links.png)
+*Click "Platform" in the header to access the full Databricks toolchain*
 
-Click **"Platform"** in the header to access Databricks platform features.
+The Airport Digital Twin is a showcase for the Databricks platform. Click **Platform** to access:
 
-| Link | Description | Use Case |
-|------|-------------|----------|
-| **Flight Dashboard** | Lakeview dashboard with real-time metrics | View aggregated KPIs and trends |
-| **Ask Genie** | Natural language SQL queries | Query flight data conversationally |
-| **Data Lineage** | Unity Catalog lineage view | Track data flow and dependencies |
-| **ML Experiments** | MLflow experiment tracking | Monitor model performance |
-| **Unity Catalog** | Table browser | Explore schemas and data |
+| Tool | What You Can Do |
+|---|---|
+| **Flight Dashboard** (Lakeview) | View aggregated KPIs: on-time %, delay trends, busiest routes, hourly throughput |
+| **Ask Genie** | Query flight data in natural language — "Show me all delayed flights from JFK this week" |
+| **Data Lineage** | Trace any data point from source (OpenSky API) through Bronze/Silver/Gold to the frontend |
+| **ML Experiments** (MLflow) | Track model training runs, compare metrics, manage model versions |
+| **Unity Catalog** | Browse all tables, schemas, and column-level metadata |
+
+### For Executives
+
+The **Flight Dashboard** is your go-to for high-level KPIs. Set up Lakeview alerts to get notified when on-time performance drops below your threshold.
+
+### For Data Scientists
+
+**Ask Genie** lets you explore data conversationally without writing SQL. **ML Experiments** shows model performance over time.
+
+### For IT Ops
+
+**Data Lineage** helps trace data quality issues. **Unity Catalog** provides the full governance view.
 
 ---
 
-## Administrator Guide: Data Architecture
+## Simulation Mode
 
-### Architecture Overview
+For demos, testing, or offline analysis, you can run deterministic airport simulations.
 
-The Airport Digital Twin uses a **two-tier data architecture** optimized for both analytics and real-time serving:
+### Quick Start
 
-```
-                    ┌─────────────────────────────────────────────────────────┐
-                    │                    DATA ARCHITECTURE                      │
-                    ├─────────────────────────────────────────────────────────┤
-                    │                                                           │
-   Data Sources     │     Analytics Layer          │     Serving Layer          │
-                    │     (Batch/Streaming)        │     (Real-time)            │
-                    │                              │                            │
-┌──────────────┐    │  ┌─────────────────────┐    │  ┌─────────────────────┐   │
-│  OpenSky API │────┼─▶│  DLT Pipeline       │    │  │  Lakebase           │   │
-│  (Live Data) │    │  │  Bronze→Silver→Gold │    │  │  (PostgreSQL)       │   │
-└──────────────┘    │  └──────────┬──────────┘    │  └──────────▲──────────┘   │
-                    │             │                │             │              │
-┌──────────────┐    │             ▼                │             │ <10ms        │
-│  Synthetic   │────┼─▶┌─────────────────────┐    │             │              │
-│  (Fallback)  │    │  │  Unity Catalog      │────┼─────────────┤              │
-└──────────────┘    │  │  Delta Tables       │    │  Sync Job   │              │
-                    │  │  (Governed)         │    │  (1 min)    │              │
-                    │  └──────────┬──────────┘    │             │              │
-                    │             │                │             ▼              │
-                    │             │ ~100ms         │  ┌─────────────────────┐   │
-                    │             └────────────────┼─▶│  FastAPI Backend    │   │
-                    │                              │  └──────────┬──────────┘   │
-                    │                              │             │              │
-                    │                              │             ▼              │
-                    │                              │  ┌─────────────────────┐   │
-                    │                              │  │  React Frontend     │   │
-                    │                              │  └─────────────────────┘   │
-                    └──────────────────────────────┴────────────────────────────┘
-```
-
-### Lakebase (Frontend Serving Layer)
-
-**Purpose**: Sub-10ms query latency for real-time frontend serving
-
-**Configuration**:
-```
-Host: ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com
-Endpoint: projects/airport-digital-twin/branches/production/endpoints/primary
-Database: databricks_postgres
-Schema: public
-```
-
-**Tables**:
-| Table | Purpose | Key Columns |
-|-------|---------|-------------|
-| `flight_status` | Current flight positions | icao24, callsign, lat, lon, altitude, velocity, heading, on_ground, vertical_rate, last_seen, flight_phase, data_source |
-
-**Authentication Modes**:
-1. **Direct Credentials** (Local Development):
-   ```bash
-   export LAKEBASE_HOST="ep-xxx.database.us-east-1.cloud.databricks.com"
-   export LAKEBASE_USER="your_user"
-   export LAKEBASE_PASSWORD="your_password"
-   ```
-
-2. **OAuth** (Databricks Apps - Autoscaling):
-   ```bash
-   export LAKEBASE_USE_OAUTH="true"
-   export LAKEBASE_ENDPOINT_NAME="projects/airport-digital-twin/branches/production/endpoints/primary"
-   ```
-
-### Unity Catalog (Lakehouse Analytics Layer)
-
-**Purpose**: Governed data storage with lineage tracking and historical analytics
-
-**Catalog Structure**:
-```
-serverless_stable_3n0ihb_catalog
-└── airport_digital_twin
-    ├── flight_status_gold        # Current positions (DLT Gold layer)
-    └── flight_positions_history  # Historical trajectory data
-```
-
-**Connection Configuration**:
 ```bash
-export DATABRICKS_HOST="fevm-serverless-stable-3n0ihb.cloud.databricks.com"
-export DATABRICKS_HTTP_PATH="/sql/1.0/warehouses/b868e84cedeb4262"
-export DATABRICKS_CATALOG="serverless_stable_3n0ihb_catalog"
-export DATABRICKS_SCHEMA="airport_digital_twin"
+# Debug mode — fast, 4h simulated, 20 flights
+python -m src.simulation.cli --config configs/simulation_sfo_50_debug.yaml
+
+# Full day — 24h simulated, 50 flights each way
+python -m src.simulation.cli --airport SFO --arrivals 50 --departures 50 --seed 42
 ```
 
-### Synchronization Strategy
+### What the Simulation Produces
 
-The system uses a **cascading data source strategy** with automatic fallback:
+- **Flight state transitions**: Every flight progresses through realistic phases (taxi-out, takeoff, climb, cruise, descend, approach, land, taxi-in)
+- **Gate assignments**: ML-optimized gate allocation
+- **Turnaround events**: Pushback, fueling, baggage, catering, cleaning
+- **Weather effects**: Conditions affect delay distributions
+- **Event log**: Structured JSON output for analysis
 
-```
-1. TRY LAKEBASE (PostgreSQL)     → Latency: <10ms  → data_source="live"
-2. FALLBACK TO DELTA TABLES      → Latency: ~100ms → data_source="live"
-3. FALLBACK TO SYNTHETIC          → Latency: <5ms  → data_source="synthetic"
-```
+### Configuration
 
-**Sync Job**: Every 1 minute, UPSERT from Delta tables → Lakebase on `icao24` key.
+Simulations are configured via YAML files or CLI flags. Key parameters:
+- `airport`: IATA code
+- `arrivals` / `departures`: Number of flights
+- `duration_hours`: Simulated time span
+- `seed`: Random seed for reproducibility
 
-### Operational Procedures
-
-**Health Check**: `GET /health` — returns Lakebase connectivity, Delta tables status, current data source.
-
-**Data Freshness**:
-```sql
-SELECT MAX(last_seen) as latest_update,
-       TIMESTAMPDIFF(MINUTE, MAX(last_seen), NOW()) as minutes_stale
-FROM flight_status;
-```
+See the full [Simulation Guide](simulation_user_guide.md) for details.
 
 ---
 
-## Data Scientist Guide: ML Models
+## For Data Scientists: ML Models
 
-### Feature Engineering
+Three ML models power the real-time predictions you see in the UI:
 
-**Module**: `src/ml/features.py`
+### Delay Prediction
 
-The feature extraction pipeline transforms raw flight data into 14 ML-ready features:
+**How it works**: Rule-based heuristic considering time of day, day of week, altitude, velocity, and heading. Designed for demo reliability with realistic distributions.
 
-| Feature | Computation | Rationale |
-|---------|-------------|-----------|
-| `hour_of_day` | Extract from timestamp | Peak hours (7-9am, 5-7pm) have more delays |
-| `is_weekend` | day_of_week >= 5 | Weekends typically have fewer delays |
-| `altitude_category` | ground/low/cruise thresholds | Ground aircraft more likely delayed |
-| `velocity_normalized` | velocity_knots / 500 | Slow aircraft may indicate taxi delays |
-| `flight_distance_category` | Based on velocity + altitude | Long-haul vs short-haul patterns |
-| `heading_quadrant` | Heading degrees → N/E/S/W | Runway direction affects operations |
+| Factor | Effect |
+|---|---|
+| Peak morning (7-9am) | +15 min delay |
+| Peak evening (5-7pm) | +12 min delay |
+| Weekend | -3 min delay |
+| Ground aircraft | +8 min delay |
+| Cruising | -2 min delay |
 
-### Delay Prediction Model
+**Categories**: On Time (<5 min), Slight (5-15), Moderate (15-30), Severe (>30)
 
-**Module**: `src/ml/delay_model.py` | **Type**: Rule-based heuristic (demo)
+### Gate Recommendation
 
-**Prediction Logic**:
-- Peak hours (7-9am): +15 min | Peak hours (5-7pm): +12 min
-- Weekend: -3 min | Ground aircraft: +8 min
-- Random noise: +/-5 min for realism
+**How it works**: Scoring algorithm with four weighted factors:
+- **Availability** (50%): Available gates score highest
+- **Terminal match** (25%): International → Terminal B, Domestic → Terminal A
+- **Proximity** (15%): Closer to runway = faster turnaround
+- **Delay penalty** (10%): Severely delayed flights get deprioritized
 
-**Delay Categories**: On Time (<5 min), Slight (5-15 min), Moderate (15-30 min), Severe (>30 min)
+### Congestion Prediction
 
-### Gate Recommendation Model
+**How it works**: Counts flights per airport area, compares to capacity thresholds:
+- **LOW** (<50% capacity) → 0 min wait
+- **MODERATE** (50-75%) → 1-3 min wait
+- **HIGH** (75-90%) → 3-8 min wait
+- **CRITICAL** (>90%) → 5-15 min wait
 
-**Module**: `src/ml/gate_model.py` | **Type**: Scoring-based optimization
+### Model Registry
 
-**Scoring Factors** (max score 1.0):
-- Availability (0.5 max): Available +0.5, Delayed +0.2
-- Terminal Match (0.25 max): International→Terminal B, Domestic→Terminal A
-- Proximity (0.15 max): Lower gate numbers = closer to runway
-- Delay Penalty: >30 min delay: -0.1
-
-### Congestion Prediction Model
-
-**Module**: `src/ml/congestion_model.py` | **Type**: Capacity-based threshold
-
-**Congestion Levels**: LOW (<50% capacity), MODERATE (50-75%), HIGH (75-90%), CRITICAL (>90%)
-
-### Model Performance
-
-| Model | Type | Latency | Notes |
-|-------|------|---------|-------|
-| Delay Prediction | Rule-based heuristic | <1ms | Demo model, not ML-trained |
-| Gate Recommendation | Scoring optimization | <1ms | Deterministic scoring |
-| Congestion Prediction | Capacity threshold | <1ms | Real-time calculation |
-
-Models are designed for MLflow tracking and can be enhanced with XGBoost/LightGBM for delay prediction, reinforcement learning for gate assignment, and time-series forecasting for congestion.
+All models are wrapped in `AirportModelRegistry` — when you switch airports, models are hot-swapped with per-ICAO configurations. See [ML Models Documentation](ML_MODELS.md) for code-level details.
 
 ---
 
-## Troubleshooting
+## For IT Ops: Data Architecture
 
-### "Demo Mode" Showing Instead of Live Data
+### Three-Tier Serving
 
-**Cause**: Backend cannot connect to Lakebase or Delta tables
+```
+Request → Lakebase (PostgreSQL, <10ms)
+          ↓ fallback
+          Unity Catalog (Delta, ~100ms)
+          ↓ fallback
+          Synthetic Generator (<5ms)
+```
 
-**Solutions**:
-1. Verify Lakebase instance is running
-2. Check network connectivity to Databricks workspace
-3. Validate OAuth credentials (for Databricks Apps)
-4. Check environment variables are set correctly
+The app never goes dark — if Lakebase is unreachable, it transparently falls back to Delta tables, then to synthetic data.
 
-### Flights Not Updating
+### Pipeline Health
 
-1. Check "Connected" status in header
-2. Verify backend health: `GET /health`
-3. Check browser console for JavaScript errors
-4. Verify DLT pipeline is running
+Check `GET /api/data-ops/dashboard` for:
+- **Acquisition stats**: Records ingested, source, timestamps
+- **Sync status**: Lakebase sync lag
+- **Data freshness**: How stale is the latest data
+- **History sync**: Trajectory data pipeline status
 
-### Airport Switch Hangs or Fails
+### Key Endpoints for Monitoring
 
-1. Check backend logs for OSM Overpass API errors
-2. Verify internet connectivity (OSM data fetched from overpass-api.de)
-3. Try a different airport — some small airports may have limited OSM data
-4. Refresh the page and try again
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Overall health + data source connectivity |
+| `GET /api/ready` | Readiness probe for load balancers |
+| `GET /api/data-sources` | Current data source and fallback chain |
+| `GET /api/debug/logs?pattern=DIAG` | Last 2,000 log entries with filtering |
+| `GET /api/data-ops/dashboard` | Full pipeline health dashboard |
 
-### 3D View Performance Issues
+### Deploying Updates
 
-1. Reduce browser window size
-2. Close other GPU-intensive applications
-3. Use Chrome or Firefox (best WebGL support)
-4. Switch to 2D view for lower-end hardware
+```bash
+# Build + deploy (always use DABs)
+cd app/frontend && npm run build
+databricks bundle deploy --target dev
+```
 
-### Gate Recommendations Not Appearing
-
-1. Click on a specific flight to select it
-2. Check backend logs for prediction service errors
-3. Verify flight has valid callsign (needed for domestic/international classification)
+Never use `databricks apps deploy` directly — always go through DABs for reproducible, version-controlled deployments.
 
 ---
 
 ## Keyboard Shortcuts
 
 | Key | Action |
-|-----|--------|
+|---|---|
 | `2` | Switch to 2D map view |
 | `3` | Switch to 3D visualization |
 | `Esc` | Deselect current flight |
@@ -540,5 +532,51 @@ Models are designed for MLflow tracking and can be enhanced with XGBoost/LightGB
 
 ---
 
-*Documentation updated: 2026-03-09*
-*Version: 2.0*
+## Troubleshooting
+
+### "Demo Mode (synthetic data)" showing in header
+
+**What it means**: The backend can't reach live data sources (Lakebase or Delta tables).
+
+**What to check**:
+1. Is the Lakebase instance running?
+2. Are OAuth credentials valid (for Databricks Apps)?
+3. Is the Databricks workspace reachable?
+4. Check `GET /health` for source-level status
+
+**Note**: Demo Mode still provides a fully functional experience with realistic synthetic data — great for demos and development.
+
+### Flights aren't updating
+
+1. Check the **"Connected"** indicator in the header — should be green
+2. Open browser DevTools console for WebSocket errors
+3. Hit `GET /health` to verify backend is running
+4. Check if the DLT pipeline is running
+
+### Airport switch fails or hangs
+
+1. The Overpass API (OpenStreetMap) might be rate-limited or down — try again in 30 seconds
+2. Try a different airport — some tiny airports have sparse OSM data
+3. Check backend logs: `GET /api/debug/logs?pattern=OSM`
+4. Refresh the page and retry
+
+### 3D view is slow
+
+1. Use Chrome or Firefox (best WebGL support)
+2. Close other GPU-intensive apps
+3. Reduce browser window size
+4. Switch to 2D view on lower-end hardware
+
+### Delay predictions seem off
+
+The current model is rule-based (not trained on historical data) — it produces realistic distributions for demo purposes. See [ML Models](ML_MODELS.md) for the roadmap to ML-trained models.
+
+### Gate recommendations not showing
+
+1. You need to **click a flight** first to see its recommendations
+2. Check the backend logs for prediction service errors
+3. The flight needs a valid callsign for domestic/international classification
+
+---
+
+*Documentation updated: 2026-03-21 | Version: 3.0*
