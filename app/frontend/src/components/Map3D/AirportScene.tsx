@@ -30,6 +30,8 @@ interface AirportSceneProps {
   osmAprons?: OSMApron[];
   /** OSM runways */
   osmRunways?: OSMRunway[];
+  /** Whether to show satellite imagery as ground plane */
+  satellite?: boolean;
 }
 
 /**
@@ -54,6 +56,7 @@ export function AirportScene({
   osmTaxiways = [],
   osmAprons = [],
   osmRunways = [],
+  satellite = false,
 }: AirportSceneProps) {
   const { runways, taxiways, buildings, ground } = AIRPORT_3D_CONFIG;
 
@@ -63,8 +66,8 @@ export function AirportScene({
 
   return (
     <group>
-      {/* Satellite imagery ground plane */}
-      {airportCenter ? (
+      {/* Ground plane: satellite imagery or flat color */}
+      {satellite && airportCenter ? (
         <SatelliteGround
           size={ground.size}
           centerLat={airportCenter.lat}

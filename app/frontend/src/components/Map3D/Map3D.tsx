@@ -20,6 +20,7 @@ interface Map3DProps {
   sharedViewport?: SharedViewport | null;
   onViewportChange?: (vp: SharedViewport) => void;
   airportCenter?: { lat: number; lon: number };
+  satellite?: boolean;
 }
 
 // ============================================================================
@@ -118,6 +119,7 @@ export function Map3D({
   sharedViewport,
   onViewportChange,
   airportCenter: airportCenterProp,
+  satellite = false,
 }: Map3DProps) {
   const { lighting } = AIRPORT_3D_CONFIG;
   const { isLoading, switchProgress, getTerminals, getAirportCenter, getTaxiways: getOSMTaxiwaysHook, getAprons, getOSMRunways } = useAirportConfigContext();
@@ -352,6 +354,7 @@ export function Map3D({
           osmTaxiways={osmTaxiways}
           osmAprons={osmAprons}
           osmRunways={osmRunways}
+          satellite={satellite}
         />
 
         {/* Orbit controls for user interaction */}

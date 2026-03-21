@@ -138,22 +138,20 @@ function ViewToggle({
           3D
         </button>
       </div>
-      {viewMode === '2d' && (
-        <button
-          onClick={() => onSatelliteToggle(!satellite)}
-          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg shadow-md transition-colors ${
-            satellite
-              ? 'bg-blue-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
-          }`}
-          title={satellite ? 'Switch to street map' : 'Switch to satellite view'}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path fillRule="evenodd" d="M8.157 2.176a1.5 1.5 0 0 0-1.147 0l-4.084 1.69A1.5 1.5 0 0 0 2 5.25v10.877a1.5 1.5 0 0 0 2.074 1.386l3.51-1.452 4.26 1.762a1.5 1.5 0 0 0 1.147 0l4.083-1.69A1.5 1.5 0 0 0 18 14.75V3.872a1.5 1.5 0 0 0-2.073-1.386l-3.51 1.452-4.26-1.762ZM7.58 5a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0v-6.5A.75.75 0 0 1 7.58 5Zm5.59 2.75a.75.75 0 0 0-1.5 0v6.5a.75.75 0 0 0 1.5 0v-6.5Z" clipRule="evenodd" />
-          </svg>
-          Satellite
-        </button>
-      )}
+      <button
+        onClick={() => onSatelliteToggle(!satellite)}
+        className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg shadow-md transition-colors ${
+          satellite
+            ? 'bg-blue-600 text-white'
+            : 'bg-white text-gray-700 hover:bg-gray-100'
+        }`}
+        title={satellite ? 'Switch to street map' : 'Switch to satellite view'}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+          <path fillRule="evenodd" d="M8.157 2.176a1.5 1.5 0 0 0-1.147 0l-4.084 1.69A1.5 1.5 0 0 0 2 5.25v10.877a1.5 1.5 0 0 0 2.074 1.386l3.51-1.452 4.26 1.762a1.5 1.5 0 0 0 1.147 0l4.083-1.69A1.5 1.5 0 0 0 18 14.75V3.872a1.5 1.5 0 0 0-2.073-1.386l-3.51 1.452-4.26-1.762ZM7.58 5a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0v-6.5A.75.75 0 0 1 7.58 5Zm5.59 2.75a.75.75 0 0 0-1.5 0v6.5a.75.75 0 0 0 1.5 0v-6.5Z" clipRule="evenodd" />
+        </svg>
+        Satellite
+      </button>
     </div>
   );
 }
@@ -325,6 +323,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
                   onSelectFlight={handleFlightSelect}
                   sharedViewport={viewport}
                   onViewportChange={handle3DViewportChange}
+                  satellite={satellite}
                 />
               </Suspense>
             </div>

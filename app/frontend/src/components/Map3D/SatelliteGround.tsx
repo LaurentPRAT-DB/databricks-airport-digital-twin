@@ -153,6 +153,9 @@ export function SatelliteGround({
                 cropX, cropY, cropW, cropH,
                 0, 0, 2048, 2048,
               );
+              // Darken imagery so 3D buildings stand out better
+              cropCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+              cropCtx.fillRect(0, 0, 2048, 2048);
               const tex = new THREE.CanvasTexture(croppedCanvas);
               tex.colorSpace = THREE.SRGBColorSpace;
               tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -190,15 +193,14 @@ export function SatelliteGround({
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]} receiveShadow>
       <planeGeometry args={[size, size]} />
       {texture ? (
-        <meshStandardMaterial
+        <meshBasicMaterial
           map={texture}
           side={THREE.DoubleSide}
-          roughness={0.9}
-          metalness={0.0}
+          toneMapped={false}
         />
       ) : (
         // Fallback while loading: dark gray
-        <meshStandardMaterial color={0x333333} side={THREE.DoubleSide} />
+        <meshBasicMaterial color={0x333333} side={THREE.DoubleSide} />
       )}
     </mesh>
   );
