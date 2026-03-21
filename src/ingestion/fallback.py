@@ -2125,17 +2125,16 @@ def _compute_gate_standoff(gate_lat: float, gate_lon: float,
     """Compute how far to offset a parked aircraft from the gate node.
 
     Uses the airport's OSM terminal polygon to determine the gate-to-terminal
-    edge distance, combined with the aircraft's half-length, so different
+    edge distance, combined with the aircraft's full length, so different
     airports and aircraft types produce different standoff distances.
 
-    The standoff ensures:
-      - At minimum, the aircraft center moves back by half the fuselage length
-        so the nose (not the center) is at the jetbridge point.
-      - If the gate node is inside or very close to the terminal polygon edge
-        (< 5 m, typical for wall-mounted jetbridges), the aircraft is pulled
-        back by at least the half-length so the body clears the building.
-      - If the gate node is already far from the terminal (remote stand),
-        the standoff is reduced accordingly.
+    The Leaflet marker is anchored at the aircraft CENTER. To place the NOSE
+    at the gate/jetbridge point while keeping the fuselage on the apron, we
+    must offset the center back by at least half the fuselage length.
+
+    When the gate node is on or inside the terminal wall (edge_dist ≈ 0,
+    typical for OSM jetbridge nodes), we also add a jetbridge gap so the
+    nose clears the building entirely.
 
     Args:
         gate_lat, gate_lon: Gate/jetbridge position from OSM
@@ -2143,24 +2142,26 @@ def _compute_gate_standoff(gate_lat: float, gate_lon: float,
         aircraft_type: ICAO type designator (e.g. "A320", "B777")
 
     Returns:
-        Standoff distance in meters
+        Standoff distance in meters (applied in the reverse heading direction)
     """
     half_length = AIRCRAFT_HALF_LENGTH_M.get(aircraft_type, _DEFAULT_HALF_LENGTH_M)
+    # Jetbridge gap: distance from terminal wall to aircraft nose tip
+    jetbridge_gap_m = 5.0
 
     edge_dist = _gate_to_terminal_edge_distance_m(gate_lat, gate_lon)
     if edge_dist is None:
-        # No OSM terminal data — use aircraft half-length as best guess
-        return half_length
+        # No OSM terminal data — offset by half-length + jetbridge gap
+        return half_length + jetbridge_gap_m
 
-    # Gate is on or very near the terminal wall (typical jetbridge config):
-    # offset by full half-length so fuselage clears the building.
-    # Gate is further out (remote stand / hardstand):
-    # reduce the offset since the aircraft is already away from the building.
-    # If the gate node is already beyond half-length from the terminal,
-    # no offset is needed — the aircraft fits without overlapping.
-    if edge_dist >= half_length:
+    # Total clearance needed: the aircraft center must be far enough from the
+    # terminal wall that the nose (half_length forward) plus a jetbridge gap
+    # clears the building.  required = half_length + jetbridge_gap.
+    # The gate node is already edge_dist away from the wall, so we subtract that.
+    required = half_length + jetbridge_gap_m
+    if edge_dist >= required:
+        # Gate is already far enough (remote stand) — no offset needed
         return 0.0
-    return half_length - edge_dist
+    return required - edge_dist
 
 
 def _get_parked_heading(gate_lat: float, gate_lon: float) -> float:

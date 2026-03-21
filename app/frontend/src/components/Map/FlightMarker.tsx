@@ -71,7 +71,7 @@ function getIconSize(zoom: number, aircraftType?: string, latitude?: number): nu
   const metersPerPixel = (156543 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
   const wingspan = AIRCRAFT_WINGSPAN_M[(aircraftType ?? '').toUpperCase()] ?? DEFAULT_WINGSPAN_M;
   const rawPixels = wingspan / metersPerPixel;
-  return Math.round(Math.max(6, Math.min(96, rawPixels)));
+  return Math.round(Math.max(6, rawPixels));
 }
 
 // Create airplane SVG icon with rotation, ARIA label, aircraft-type silhouette, and optional gate label

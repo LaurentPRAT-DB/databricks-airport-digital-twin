@@ -1,5 +1,4 @@
 import { useFlightContext } from '../../context/FlightContext';
-import { Flight } from '../../types/flight';
 import { useDelayPrediction, useGateRecommendations } from '../../hooks/usePredictions';
 import { useTrajectory } from '../../hooks/useTrajectory';
 import TurnaroundTimeline from './TurnaroundTimeline';
