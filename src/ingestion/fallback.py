@@ -2086,6 +2086,50 @@ def _point_to_segment_distance_m(px: float, py: float,
     return math.sqrt((pxm - proj_x) ** 2 + (pym - proj_y) ** 2)
 
 
+def _point_in_polygon(lat: float, lon: float, polygon: list[dict]) -> bool:
+    """Ray-casting point-in-polygon test.
+
+    Returns True if the point (lat, lon) is inside the polygon.
+    Polygon vertices are dicts with 'latitude' and 'longitude' keys.
+    """
+    n = len(polygon)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        # latitude = y-axis, longitude = x-axis
+        yi = float(polygon[i].get("latitude", 0))
+        xi = float(polygon[i].get("longitude", 0))
+        yj = float(polygon[j].get("latitude", 0))
+        xj = float(polygon[j].get("longitude", 0))
+        if ((yi > lat) != (yj > lat)) and (
+            lon < (xj - xi) * (lat - yi) / (yj - yi) + xi
+        ):
+            inside = not inside
+        j = i
+    return inside
+
+
+def _is_gate_inside_terminal(gate_lat: float, gate_lon: float) -> bool:
+    """Check if a gate position is inside any terminal polygon.
+
+    Uses OSM terminal geoPolygon data. Returns False if no terminal data.
+    """
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+        terminals = config.get("terminals", [])
+        for terminal in terminals:
+            geo_polygon = terminal.get("geoPolygon", [])
+            if len(geo_polygon) < 3:
+                continue
+            if _point_in_polygon(gate_lat, gate_lon, geo_polygon):
+                return True
+        return False
+    except Exception:
+        return False
+
+
 def _gate_to_terminal_edge_distance_m(gate_lat: float, gate_lon: float) -> float | None:
     """Compute distance in meters from a gate to the nearest terminal polygon edge.
 
@@ -2153,15 +2197,19 @@ def _compute_gate_standoff(gate_lat: float, gate_lon: float,
         # No OSM terminal data — offset by half-length + jetbridge gap
         return half_length + jetbridge_gap_m
 
-    # Total clearance needed: the aircraft center must be far enough from the
-    # terminal wall that the nose (half_length forward) plus a jetbridge gap
-    # clears the building.  required = half_length + jetbridge_gap.
-    # The gate node is already edge_dist away from the wall, so we subtract that.
     required = half_length + jetbridge_gap_m
-    if edge_dist >= required:
-        # Gate is already far enough (remote stand) — no offset needed
-        return 0.0
-    return required - edge_dist
+    inside = _is_gate_inside_terminal(gate_lat, gate_lon)
+
+    if inside:
+        # Gate is inside terminal building (common for jetbridge nodes) —
+        # must push out past the wall first, then clear jetbridge + half-length.
+        return required + edge_dist
+    else:
+        # Gate is outside the building — already has some clearance from wall.
+        if edge_dist >= required:
+            # Remote stand far from building — no offset needed.
+            return 0.0
+        return required - edge_dist
 
 
 def _get_parked_heading(gate_lat: float, gate_lon: float) -> float:

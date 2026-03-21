@@ -16,21 +16,26 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from src.ingestion.fallback import (
+    AIRCRAFT_HALF_LENGTH_M,
     FlightPhase,
     FlightState,
     _calculate_heading,
+    _compute_gate_standoff,
     _create_new_flight,
     _distance_between,
     _find_aircraft_ahead_on_approach,
     _find_available_gate,
     _flight_states,
+    _gate_to_terminal_edge_distance_m,
     _generate_overflow_stands,
     _get_approach_waypoints,
     _get_departure_waypoints,
     _get_parked_heading,
     _get_takeoff_runway_geometry,
     _init_gate_states,
+    _is_gate_inside_terminal,
     _occupy_gate,
+    _point_in_polygon,
     _shortest_angle_diff,
     _update_flight_state,
     _count_aircraft_in_phase,
@@ -1173,3 +1178,128 @@ class TestGateLoadingAndOverflow:
         assert _gate_states["OLD1"].occupied_by == "flight1"
         assert "NEW1" in _gate_states
         assert _gate_states["NEW1"].occupied_by is None
+
+
+# ---------------------------------------------------------------------------
+# Gate standoff and point-in-polygon tests
+# ---------------------------------------------------------------------------
+
+class TestPointInPolygon:
+    """Tests for the ray-casting point-in-polygon helper."""
+
+    SQUARE = [
+        {"latitude": 0.0, "longitude": 0.0},
+        {"latitude": 0.0, "longitude": 1.0},
+        {"latitude": 1.0, "longitude": 1.0},
+        {"latitude": 1.0, "longitude": 0.0},
+    ]
+
+    def test_point_inside(self):
+        assert _point_in_polygon(0.5, 0.5, self.SQUARE) is True
+
+    def test_point_outside(self):
+        assert _point_in_polygon(2.0, 2.0, self.SQUARE) is False
+
+    def test_point_outside_near_edge(self):
+        assert _point_in_polygon(-0.1, 0.5, self.SQUARE) is False
+
+    def test_concave_polygon(self):
+        """L-shaped polygon — point in the concavity should be outside."""
+        l_shape = [
+            {"latitude": 0.0, "longitude": 0.0},
+            {"latitude": 0.0, "longitude": 2.0},
+            {"latitude": 1.0, "longitude": 2.0},
+            {"latitude": 1.0, "longitude": 1.0},
+            {"latitude": 2.0, "longitude": 1.0},
+            {"latitude": 2.0, "longitude": 0.0},
+        ]
+        # Inside the L
+        assert _point_in_polygon(0.5, 0.5, l_shape) is True
+        # In the concavity (outside)
+        assert _point_in_polygon(1.5, 1.5, l_shape) is False
+
+
+class TestGateStandoff:
+    """Tests for gate standoff computation with inside/outside terminal logic."""
+
+    # A simple terminal polygon (square around lat=37.62, lon=-122.38)
+    TERMINAL_POLYGON = [
+        {"latitude": "37.6195", "longitude": "-122.3805"},
+        {"latitude": "37.6195", "longitude": "-122.3795"},
+        {"latitude": "37.6205", "longitude": "-122.3795"},
+        {"latitude": "37.6205", "longitude": "-122.3805"},
+    ]
+
+    def _mock_config(self):
+        """Return a mock airport config service with one terminal polygon."""
+        mock_service = MagicMock()
+        mock_service.get_config.return_value = {
+            "terminals": [{"geoPolygon": self.TERMINAL_POLYGON}]
+        }
+        return mock_service
+
+    def test_gate_standoff_gate_outside_terminal(self):
+        """Gate outside terminal — standoff = required - edge_dist."""
+        # Place gate outside the polygon, ~10m from edge
+        gate_lat, gate_lon = 37.6206, -122.3800  # just north of the polygon
+
+        with patch(
+            "app.backend.services.airport_config_service.get_airport_config_service",
+            return_value=self._mock_config(),
+        ):
+            edge_dist = _gate_to_terminal_edge_distance_m(gate_lat, gate_lon)
+            inside = _is_gate_inside_terminal(gate_lat, gate_lon)
+            standoff = _compute_gate_standoff(gate_lat, gate_lon, 180.0, "B738")
+
+        assert inside is False
+        half_len = AIRCRAFT_HALF_LENGTH_M["B738"]
+        required = half_len + 5.0  # jetbridge gap
+        assert edge_dist is not None
+        expected = max(0.0, required - edge_dist)
+        assert abs(standoff - expected) < 0.1
+
+    def test_gate_standoff_gate_inside_terminal(self):
+        """Gate inside terminal — standoff = required + edge_dist."""
+        # Place gate inside the polygon
+        gate_lat, gate_lon = 37.6200, -122.3800  # center of polygon
+
+        with patch(
+            "app.backend.services.airport_config_service.get_airport_config_service",
+            return_value=self._mock_config(),
+        ):
+            edge_dist = _gate_to_terminal_edge_distance_m(gate_lat, gate_lon)
+            inside = _is_gate_inside_terminal(gate_lat, gate_lon)
+            standoff = _compute_gate_standoff(gate_lat, gate_lon, 180.0, "B738")
+
+        assert inside is True
+        half_len = AIRCRAFT_HALF_LENGTH_M["B738"]
+        required = half_len + 5.0
+        assert edge_dist is not None
+        expected = required + edge_dist
+        assert abs(standoff - expected) < 0.1
+
+    def test_gate_standoff_inside_larger_than_outside(self):
+        """A gate inside the terminal must produce a larger standoff than one outside."""
+        with patch(
+            "app.backend.services.airport_config_service.get_airport_config_service",
+            return_value=self._mock_config(),
+        ):
+            # Inside
+            standoff_in = _compute_gate_standoff(37.6200, -122.3800, 180.0, "B738")
+            # Outside (just beyond edge)
+            standoff_out = _compute_gate_standoff(37.6206, -122.3800, 180.0, "B738")
+
+        assert standoff_in > standoff_out
+
+    def test_gate_standoff_no_terminal_data(self):
+        """Without OSM data, fallback to half-length + jetbridge gap."""
+        mock_service = MagicMock()
+        mock_service.get_config.return_value = {"terminals": []}
+        with patch(
+            "app.backend.services.airport_config_service.get_airport_config_service",
+            return_value=mock_service,
+        ):
+            standoff = _compute_gate_standoff(37.62, -122.38, 180.0, "A320")
+
+        half_len = AIRCRAFT_HALF_LENGTH_M["A320"]
+        assert abs(standoff - (half_len + 5.0)) < 0.01
