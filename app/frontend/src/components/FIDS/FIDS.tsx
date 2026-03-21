@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useFlightContext } from '../../context/FlightContext';
+import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { Flight } from '../../types/flight';
 
 interface ScheduledFlight {
@@ -65,6 +66,9 @@ export default function FIDS({ onClose }: FIDSProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Get current airport so we re-fetch when it changes
+  const { currentAirport } = useAirportConfigContext();
+
   // Get tracked flights for linking
   const { flights: trackedFlights, setSelectedFlight } = useFlightContext();
 
@@ -119,7 +123,7 @@ export default function FIDS({ onClose }: FIDSProps) {
     // Refresh every minute
     const interval = setInterval(fetchSchedule, 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentAirport]);
 
   const flights = activeTab === 'arrivals' ? arrivals : departures;
 

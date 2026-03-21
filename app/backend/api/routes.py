@@ -1094,6 +1094,11 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
             reset_result = reset_synthetic_state()
             logger.info(f"[DIAG]   reset_synthetic_state: {_time.monotonic() - _t_sub:.3f}s")
 
+            # Update schedule service to use the new airport
+            schedule_svc = get_schedule_service()
+            schedule_svc.set_airport(iata_code, icao_code)
+            logger.info(f"[DIAG]   schedule_service switched to {iata_code}/{icao_code}")
+
             # Force full WS update (clear delta cache so clients get a full refresh)
             broadcaster._prev_flights.clear()
             logger.info(f"[DIAG] Step 3 (gates+reset) done in {_time.monotonic() - _t_step:.3f}s")

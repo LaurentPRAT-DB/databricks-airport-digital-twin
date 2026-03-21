@@ -14,6 +14,7 @@ from src.ingestion.schedule_generator import (
     get_arrivals,
     get_departures,
     get_future_schedule,
+    invalidate_schedule_cache,
 )
 from src.ingestion.fallback import get_flights_as_schedule
 from app.backend.models.schedule import (
@@ -66,6 +67,7 @@ class ScheduleService:
         """Update the current airport for schedule queries."""
         self._airport = airport
         self._airport_icao = airport_icao
+        invalidate_schedule_cache()
 
     def get_arrivals(
         self,
