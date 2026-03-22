@@ -2252,53 +2252,86 @@ def _get_parked_heading(gate_lat: float, gate_lon: float) -> float:
     This ensures the aircraft wings are parallel to the terminal building face,
     matching real-world gate orientation. Falls back to airport center if no
     terminal data is available, or 180 deg as a last resort.
+
+    Normal disambiguation uses a point-in-polygon probe instead of centroid
+    direction, which is robust for irregular/L-shaped terminals and concourse
+    fingers where the centroid can be far from the local gate area.
+
+    If the gate is inside a terminal polygon, only edges from that terminal are
+    considered (prevents picking an edge from an adjacent terminal building).
     """
     try:
         from app.backend.services.airport_config_service import get_airport_config_service
         service = get_airport_config_service()
         config = service.get_config()
         terminals = config.get("terminals", [])
-        if terminals:
-            best_dist = float('inf')
-            best_edge = None  # (a_lat, a_lon, b_lat, b_lon) of nearest edge
-            best_centroid = None
-            for terminal in terminals:
-                geo_polygon = terminal.get("geoPolygon", [])
-                if not geo_polygon or len(geo_polygon) < 3:
-                    continue
-                # Compute centroid for inward-direction check
-                c_lat = sum(float(p.get("latitude", 0)) for p in geo_polygon) / len(geo_polygon)
-                c_lon = sum(float(p.get("longitude", 0)) for p in geo_polygon) / len(geo_polygon)
-                for i in range(len(geo_polygon)):
-                    j = (i + 1) % len(geo_polygon)
-                    a_lat = float(geo_polygon[i].get("latitude", 0))
-                    a_lon = float(geo_polygon[i].get("longitude", 0))
-                    b_lat = float(geo_polygon[j].get("latitude", 0))
-                    b_lon = float(geo_polygon[j].get("longitude", 0))
-                    d = _point_to_segment_distance_m(gate_lat, gate_lon,
-                                                      a_lat, a_lon, b_lat, b_lon)
-                    if d < best_dist:
-                        best_dist = d
-                        best_edge = (a_lat, a_lon, b_lat, b_lon)
-                        best_centroid = (c_lat, c_lon)
-            if best_edge and best_centroid:
-                a_lat, a_lon, b_lat, b_lon = best_edge
-                # Edge direction vector in local meter space
-                cos_lat = math.cos(math.radians(gate_lat))
-                dx = (b_lon - a_lon) * 111_000 * cos_lat
-                dy = (b_lat - a_lat) * 111_000
-                edge_len = math.sqrt(dx * dx + dy * dy)
-                if edge_len > 0.01:
-                    # Normal to the edge (two possible directions)
-                    nx, ny = -dy / edge_len, dx / edge_len
-                    # Pick the normal that points toward the terminal centroid
-                    cx = (best_centroid[1] - gate_lon) * 111_000 * cos_lat
-                    cy = (best_centroid[0] - gate_lat) * 111_000
-                    if nx * cx + ny * cy < 0:
-                        nx, ny = -nx, -ny
-                    # Convert normal to heading (0=north, 90=east, clockwise)
-                    heading = round(math.degrees(math.atan2(nx, ny)) % 360, 1)
-                    return heading
+        if not terminals:
+            raise ValueError("no terminals")
+
+        # Collect terminal polygons (parsed once)
+        parsed_terminals: list[tuple[list[dict], list[tuple]]] = []
+        containing_idx = -1
+        for idx, terminal in enumerate(terminals):
+            geo_polygon = terminal.get("geoPolygon", [])
+            if not geo_polygon or len(geo_polygon) < 3:
+                continue
+            verts = [
+                (float(p.get("latitude", 0)), float(p.get("longitude", 0)))
+                for p in geo_polygon
+            ]
+            parsed_terminals.append((geo_polygon, verts))
+            if _point_in_polygon(gate_lat, gate_lon, geo_polygon):
+                containing_idx = len(parsed_terminals) - 1
+
+        # If gate is inside a terminal, restrict search to that terminal's edges
+        if containing_idx >= 0:
+            search_set = [parsed_terminals[containing_idx]]
+        else:
+            search_set = parsed_terminals
+
+        best_dist = float('inf')
+        best_edge = None   # (a_lat, a_lon, b_lat, b_lon)
+        best_poly = None   # geo_polygon list for the owning terminal
+
+        for geo_polygon, verts in search_set:
+            n = len(verts)
+            for i in range(n):
+                j = (i + 1) % n
+                a_lat, a_lon = verts[i]
+                b_lat, b_lon = verts[j]
+                d = _point_to_segment_distance_m(
+                    gate_lat, gate_lon, a_lat, a_lon, b_lat, b_lon
+                )
+                if d < best_dist:
+                    best_dist = d
+                    best_edge = (a_lat, a_lon, b_lat, b_lon)
+                    best_poly = geo_polygon
+
+        if best_edge and best_poly:
+            a_lat, a_lon, b_lat, b_lon = best_edge
+            cos_lat = math.cos(math.radians(gate_lat))
+            dx = (b_lon - a_lon) * 111_000 * cos_lat
+            dy = (b_lat - a_lat) * 111_000
+            edge_len = math.sqrt(dx * dx + dy * dy)
+            if edge_len > 0.01:
+                # Two candidate normals perpendicular to the edge
+                n1x, n1y = -dy / edge_len, dx / edge_len
+                # Probe: move 1m from edge midpoint in n1 direction — if
+                # that lands inside the polygon, n1 is the inward normal
+                mid_lat = (a_lat + b_lat) / 2
+                mid_lon = (a_lon + b_lon) / 2
+                probe_m = 1.0  # 1 meter
+                probe_deg = probe_m / 111_000
+                probe_lat = mid_lat + n1y * probe_deg
+                probe_lon = mid_lon + n1x * probe_deg / max(cos_lat, 0.01)
+                if _point_in_polygon(probe_lat, probe_lon, best_poly):
+                    # n1 points inward — use it (nose toward building)
+                    nx, ny = n1x, n1y
+                else:
+                    # n1 points outward — flip to inward
+                    nx, ny = -n1x, -n1y
+                heading = round(math.degrees(math.atan2(nx, ny)) % 360, 1)
+                return heading
     except Exception:
         pass
     # Fallback: face toward airport center
@@ -3148,16 +3181,18 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         # Real pushback: disconnect jetbridge, engine start, tug pushback, tug disconnect (~3-5 min)
         # Determine pushback heading from taxiway graph or fallback to south
         pb_heading = _get_pushback_heading(state.assigned_gate) if state.assigned_gate else 180.0
+        # Always advance pushback timer — aircraft is at its own gate, not blocking taxiways.
+        # Only check separation for physical movement to prevent overlapping on the apron.
+        state.phase_progress += dt / 240.0  # ~4 min (240s) for full pushback
         if _check_taxi_separation(state):
             state.velocity = TAXI_SPEED_PUSHBACK_KTS
-            state.phase_progress += dt / 240.0  # ~4 min (240s) for full pushback
             # Move in pushback direction (away from terminal toward taxiway)
             pb_rad = math.radians(pb_heading)
             pb_speed_deg = TAXI_SPEED_PUSHBACK_KTS * _KTS_TO_DEG_PER_SEC * dt
             state.latitude += pb_speed_deg * math.cos(pb_rad)
             state.longitude += pb_speed_deg * math.sin(pb_rad)
         else:
-            state.velocity = 0  # Hold if blocked
+            state.velocity = 0  # Hold movement if blocked, but timer still advances
 
         state.heading = (pb_heading + 180) % 360  # Nose faces opposite of movement
 
