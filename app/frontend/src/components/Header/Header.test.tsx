@@ -92,17 +92,17 @@ describe('Header', () => {
     })
   })
 
-  describe('Phase filter', () => {
-    it('renders Phases dropdown button', async () => {
+  describe('Legend / Phase filter', () => {
+    it('renders Legend button', async () => {
       render(<Header />)
-      expect(screen.getByRole('button', { name: /phases/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /legend/i })).toBeInTheDocument()
     })
 
-    it('opens dropdown on click showing phase names', async () => {
+    it('opens dropdown on click showing phase names and descriptions', async () => {
       const user = userEvent.setup()
       render(<Header />)
 
-      await user.click(screen.getByRole('button', { name: /phases/i }))
+      await user.click(screen.getByRole('button', { name: /legend/i }))
 
       expect(screen.getByText(/parked/i)).toBeInTheDocument()
       expect(screen.getByText(/takeoff/i)).toBeInTheDocument()
@@ -114,7 +114,7 @@ describe('Header', () => {
       const user = userEvent.setup()
       render(<Header />)
 
-      await user.click(screen.getByRole('button', { name: /phases/i }))
+      await user.click(screen.getByRole('button', { name: /legend/i }))
 
       expect(screen.getByText(/show all/i)).toBeInTheDocument()
       expect(screen.getByText(/hide all/i)).toBeInTheDocument()
