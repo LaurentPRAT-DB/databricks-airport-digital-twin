@@ -63,9 +63,9 @@ export default function BaggageStatus({
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow p-4 animate-pulse">
-        <div className="h-4 bg-slate-200 rounded w-1/3 mb-3"></div>
-        <div className="h-6 bg-slate-200 rounded"></div>
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 animate-pulse">
+        <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/3 mb-3"></div>
+        <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded"></div>
       </div>
     );
   }
@@ -77,9 +77,9 @@ export default function BaggageStatus({
   const hasMisconnects = stats.misconnects > 0;
 
   return (
-    <div className="bg-white rounded-lg shadow p-4">
+    <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-slate-800">Baggage Status</h3>
+        <h3 className="font-semibold text-slate-800 dark:text-slate-200">Baggage Status</h3>
         {stats.carousel && (
           <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-sm font-mono">
             Carousel {stats.carousel}
@@ -89,11 +89,11 @@ export default function BaggageStatus({
 
       {/* Progress bar */}
       <div className="mb-3">
-        <div className="flex justify-between text-xs text-slate-500 mb-1">
+        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
           <span>{isArrival ? 'Delivered' : 'Loaded'}</span>
           <span>{stats.loading_progress_pct}%</span>
         </div>
-        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+        <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
           <div
             className={`h-full transition-all duration-500 ${
               hasMisconnects ? 'bg-yellow-500' : 'bg-green-500'
@@ -105,21 +105,21 @@ export default function BaggageStatus({
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="bg-slate-50 rounded p-2">
-          <div className="text-lg font-bold text-slate-800">{stats.total_bags}</div>
-          <div className="text-xs text-slate-500">Total</div>
+        <div className="bg-slate-50 dark:bg-slate-700 rounded p-2">
+          <div className="text-lg font-bold text-slate-800 dark:text-slate-200">{stats.total_bags}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">Total</div>
         </div>
-        <div className="bg-slate-50 rounded p-2">
-          <div className="text-lg font-bold text-slate-800">
+        <div className="bg-slate-50 dark:bg-slate-700 rounded p-2">
+          <div className="text-lg font-bold text-slate-800 dark:text-slate-200">
             {isArrival ? stats.delivered : stats.loaded}
           </div>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-slate-500 dark:text-slate-400">
             {isArrival ? 'Delivered' : 'Loaded'}
           </div>
         </div>
-        <div className="bg-slate-50 rounded p-2">
-          <div className="text-lg font-bold text-blue-600">{stats.connecting_bags}</div>
-          <div className="text-xs text-slate-500">Connecting</div>
+        <div className="bg-slate-50 dark:bg-slate-700 rounded p-2">
+          <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{stats.connecting_bags}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">Connecting</div>
         </div>
       </div>
 

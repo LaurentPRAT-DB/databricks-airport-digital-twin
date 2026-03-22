@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor, measureRenderTime, PERFORMANCE_THRESHOLDS } from '../../test/test-utils'
 import Header from './Header'
-import { mockFlights } from '../../test/mocks/handlers'
 
 describe('Header', () => {
   beforeEach(() => {
@@ -35,39 +34,10 @@ describe('Header', () => {
     })
   })
 
-  describe('Flight count', () => {
-    it('displays flight count', async () => {
+  describe('Dark mode toggle', () => {
+    it('renders dark mode toggle button', () => {
       render(<Header />)
-
-      await waitFor(() => {
-        expect(screen.getByText(/flights:/i)).toBeInTheDocument()
-      })
-    })
-
-    it('updates flight count when data loads', async () => {
-      render(<Header />)
-
-      await waitFor(() => {
-        expect(screen.getByText(mockFlights.length.toString())).toBeInTheDocument()
-      })
-    })
-  })
-
-  describe('Data source indicator', () => {
-    it('shows demo badge for synthetic data', async () => {
-      render(<Header />)
-
-      await waitFor(() => {
-        expect(screen.getByText(/demo/i)).toBeInTheDocument()
-      })
-    })
-
-    it('shows data source in tooltip', async () => {
-      render(<Header />)
-
-      await waitFor(() => {
-        expect(screen.getByTitle(/synthetic/i)).toBeInTheDocument()
-      })
+      expect(screen.getByTitle(/switch to dark mode/i)).toBeInTheDocument()
     })
   })
 

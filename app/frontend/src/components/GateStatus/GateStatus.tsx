@@ -221,11 +221,11 @@ function GateDetailCard({
   return (
     <div
       ref={cardRef}
-      className="mt-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs"
+      className="mt-2 p-2.5 bg-slate-50 dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 text-xs"
     >
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-700">Gate {gate.ref}</span>
+          <span className="font-semibold text-slate-700 dark:text-slate-200">Gate {gate.ref}</span>
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${colors}`}>
             {gate.status}
           </span>
@@ -303,10 +303,10 @@ export default function GateStatus() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3">
+    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-3">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-slate-700 text-sm">Gate Status</h3>
+        <h3 className="font-semibold text-slate-700 dark:text-slate-200 text-sm">Gate Status</h3>
         <div className="flex items-center gap-2 text-[11px]">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-green-500" />
@@ -327,7 +327,7 @@ export default function GateStatus() {
           className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors
             ${selectedTerminal === null
               ? 'bg-blue-600 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
             }`}
           onClick={() => { setSelectedTerminal(null); setSelectedGateId(null); }}
         >
@@ -343,7 +343,7 @@ export default function GateStatus() {
               className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors
                 ${selectedTerminal === name
                   ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
                 }`}
               onClick={() => { setSelectedTerminal(name); setSelectedGateId(null); }}
             >
@@ -363,11 +363,11 @@ export default function GateStatus() {
             return (
               <button
                 key={name}
-                className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-slate-50 transition-colors text-left"
+                className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
                 onClick={() => setSelectedTerminal(name)}
               >
                 <div className="flex items-center">
-                  <span className="text-xs font-medium text-slate-700">{name}</span>
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{name}</span>
                   {!isCongestionLoading && (
                     <CongestionIndicator congestion={getTerminalCongestion(name, congestion)} />
                   )}
@@ -389,7 +389,7 @@ export default function GateStatus() {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center">
-              <span className="text-xs font-medium text-slate-700">{selectedTerminal}</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{selectedTerminal}</span>
               {!isCongestionLoading && (
                 <CongestionIndicator congestion={getTerminalCongestion(selectedTerminal, congestion)} />
               )}
@@ -433,27 +433,27 @@ export default function GateStatus() {
       )}
 
       {/* Gate color legend */}
-      <div className="mt-2 pt-2 border-t border-slate-100">
-        <div className="text-[10px] font-medium text-slate-500 mb-1">Stand</div>
+      <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+        <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">Stand</div>
         <div className="flex flex-wrap gap-1.5">
           <span className="flex items-center gap-1 text-[10px]">
             <span className="w-2 h-2 rounded bg-red-400" />
-            <span className="text-slate-500">On Stand</span>
+            <span className="text-slate-500 dark:text-slate-400">On Stand</span>
           </span>
           <span className="flex items-center gap-1 text-[10px]">
             <span className="w-2 h-2 rounded bg-amber-400" />
-            <span className="text-slate-500">Taxi In / Inbound</span>
+            <span className="text-slate-500 dark:text-slate-400">Taxi In / Inbound</span>
           </span>
           <span className="flex items-center gap-1 text-[10px]">
             <span className="w-2 h-2 rounded bg-green-400" />
-            <span className="text-slate-500">Vacant</span>
+            <span className="text-slate-500 dark:text-slate-400">Vacant</span>
           </span>
         </div>
       </div>
 
       {/* Congestion Legend */}
-      <div className="mt-2 pt-2 border-t border-slate-100">
-        <div className="text-[10px] font-medium text-slate-500 mb-1">Area Congestion</div>
+      <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+        <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">Area Congestion</div>
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(congestionColors).map(([level, colors]) => (
             <span

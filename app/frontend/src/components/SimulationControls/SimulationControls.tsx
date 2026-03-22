@@ -45,10 +45,10 @@ function FilePicker({
 }) {
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl shadow-2xl w-[520px] max-h-[480px] overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b">
-          <h3 className="text-lg font-semibold text-slate-800">Load Simulation</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-[520px] max-h-[480px] overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b dark:border-slate-700">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Load Simulation</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xl leading-none">&times;</button>
         </div>
         <div className="p-5 overflow-y-auto max-h-[380px]">
           {isFetchingFiles ? (
@@ -69,13 +69,13 @@ function FilePicker({
                     disabled={isLoading || tooLarge}
                     className={`w-full text-left px-4 py-3 rounded-lg border transition-colors ${
                       tooLarge
-                        ? 'border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed'
-                        : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-50'
+                        ? 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 opacity-60 cursor-not-allowed'
+                        : 'border-slate-200 dark:border-slate-600 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50'
                     }`}
                     title={tooLarge ? 'Too large for browser playback (>1 GB)' : f.filename}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-slate-800">
+                      <span className="font-medium text-slate-800 dark:text-slate-200">
                         {f.scenario_name ? (
                           <>{f.airport} &mdash; {f.scenario_name}</>
                         ) : (

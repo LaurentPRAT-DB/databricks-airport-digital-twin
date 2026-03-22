@@ -12,7 +12,7 @@ resources:
         - task_key: refresh_data
           description: "Download latest data and rebuild all airport profiles"
           notebook_task:
-            notebook_path: "databricks/notebooks/refresh_calibration_data.py"
+            notebook_path: ../databricks/notebooks/build_calibration_profiles.py
           environment_key: default
 
         - task_key: validate_quality
@@ -20,7 +20,7 @@ resources:
           depends_on:
             - task_key: refresh_data
           notebook_task:
-            notebook_path: "databricks/notebooks/realism_scorecard.py"
+            notebook_path: ../databricks/notebooks/run_realism_scorecard.py
           environment_key: default
 
       environments:

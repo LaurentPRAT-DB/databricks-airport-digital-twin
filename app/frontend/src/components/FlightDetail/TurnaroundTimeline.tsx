@@ -93,9 +93,9 @@ export default function TurnaroundTimeline({
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow p-4 animate-pulse">
-        <div className="h-4 bg-slate-200 rounded w-1/2 mb-3"></div>
-        <div className="h-8 bg-slate-200 rounded"></div>
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 animate-pulse">
+        <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/2 mb-3"></div>
+        <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded"></div>
       </div>
     );
   }
@@ -108,21 +108,21 @@ export default function TurnaroundTimeline({
   const estDeparture = new Date(turnaround.estimated_departure);
 
   return (
-    <div className="bg-white rounded-lg shadow p-4">
+    <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-slate-800">Turnaround Progress</h3>
-        <span className="text-sm text-slate-500">
+        <h3 className="font-semibold text-slate-800 dark:text-slate-200">Turnaround Progress</h3>
+        <span className="text-sm text-slate-500 dark:text-slate-400">
           Gate {turnaround.gate}
         </span>
       </div>
 
       {/* Progress bar */}
       <div className="mb-4">
-        <div className="flex justify-between text-xs text-slate-500 mb-1">
+        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
           <span>{PHASE_LABELS[turnaround.current_phase] || turnaround.current_phase}</span>
           <span>{turnaround.total_progress_pct}%</span>
         </div>
-        <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
+        <div className="h-3 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
           <div
             className="h-full bg-blue-500 transition-all duration-500"
             style={{ width: `${turnaround.total_progress_pct}%` }}
@@ -132,7 +132,7 @@ export default function TurnaroundTimeline({
 
       {/* Phase indicators */}
       {selectedPhase && (
-        <div className="text-xs text-slate-600 bg-slate-50 rounded px-2 py-1 mb-2 flex justify-between items-center">
+        <div className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-700 rounded px-2 py-1 mb-2 flex justify-between items-center">
           <span>
             <span className="font-medium">{PHASE_LABELS[selectedPhase]}</span>
             {' — '}
@@ -168,7 +168,7 @@ export default function TurnaroundTimeline({
                     ? 'bg-green-500 text-white'
                     : isCurrent
                     ? 'bg-blue-500 text-white animate-pulse'
-                    : 'bg-slate-200 text-slate-400'
+                    : 'bg-slate-200 dark:bg-slate-600 text-slate-400'
                 } ${isSelected ? 'ring-2 ring-blue-300 scale-110' : 'group-hover:scale-110'}`}
               >
                 {isCompleted ? '✓' : idx + 1}
@@ -180,7 +180,7 @@ export default function TurnaroundTimeline({
 
       {/* EST departure */}
       <div className="flex items-center justify-between text-sm">
-        <span className="text-slate-500">Est. Departure</span>
+        <span className="text-slate-500 dark:text-slate-400">Est. Departure</span>
         <span className="font-mono font-medium">
           {estDeparture.toLocaleTimeString('en-US', {
             hour: '2-digit',
@@ -192,14 +192,14 @@ export default function TurnaroundTimeline({
       {/* Active GSE */}
       {turnaround.assigned_gse.filter(g => g.status === 'servicing').length > 0 && (
         <div className="mt-3 pt-3 border-t">
-          <div className="text-xs text-slate-500 mb-2">Active Equipment</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">Active Equipment</div>
           <div className="flex flex-wrap gap-1">
             {turnaround.assigned_gse
               .filter(g => g.status === 'servicing')
               .map(gse => (
                 <span
                   key={gse.unit_id}
-                  className="px-2 py-0.5 bg-slate-100 rounded text-xs text-slate-600"
+                  className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-xs text-slate-600 dark:text-slate-300"
                 >
                   {gse.gse_type.replace('_', ' ')}
                 </span>

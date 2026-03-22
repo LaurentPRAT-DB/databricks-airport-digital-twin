@@ -17,7 +17,7 @@
 import { METERS_TO_SCENE_UNITS } from '../utils/map3d-calculations';
 
 // Global aircraft visual scale adjustment (0.7 = 30% smaller for better visual proportion vs terminals)
-const AIRCRAFT_VISUAL_SCALE = 0.7;
+export const AIRCRAFT_VISUAL_SCALE = 0.7;
 
 export interface AircraftModelConfig {
   url: string;

@@ -3,6 +3,7 @@ import { render, RenderOptions, RenderResult } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FlightProvider } from '../context/FlightContext'
 import { AirportConfigProvider } from '../context/AirportConfigContext'
+import { ThemeProvider } from '../context/ThemeContext'
 
 // Create a new QueryClient for each test
 function createTestQueryClient() {
@@ -26,9 +27,11 @@ function AllTheProviders({ children }: AllTheProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AirportConfigProvider>
-        <FlightProvider>{children}</FlightProvider>
-      </AirportConfigProvider>
+      <ThemeProvider>
+        <AirportConfigProvider>
+          <FlightProvider>{children}</FlightProvider>
+        </AirportConfigProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   )
 }

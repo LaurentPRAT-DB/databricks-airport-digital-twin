@@ -244,9 +244,9 @@ export default function AirportSelector({
       )}
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-80 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden z-[1100]">
+        <div className="absolute top-full left-0 mt-1 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden z-[1100]">
           {/* Custom ICAO input */}
-          <div className="p-2 border-b border-slate-100 bg-slate-50">
+          <div className="p-2 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
             <div className="flex gap-1">
               <input
                 type="text"
@@ -255,7 +255,7 @@ export default function AirportSelector({
                 onKeyDown={(e) => e.key === 'Enter' && handleCustomSubmit()}
                 placeholder="Enter ICAO code..."
                 maxLength={4}
-                className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded font-mono text-slate-800 placeholder:text-slate-400"
+                className="flex-1 px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded font-mono text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 placeholder:text-slate-400"
               />
               <button
                 onClick={handleCustomSubmit}
@@ -277,7 +277,7 @@ export default function AirportSelector({
           <div className="max-h-72 overflow-y-auto">
             {Object.entries(groupedAirports).map(([region, regionAirports]) => (
               <div key={region}>
-                <div className="px-3 py-1 bg-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0">
+                <div className="px-3 py-1 bg-slate-100 dark:bg-slate-900 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider sticky top-0">
                   {region}
                 </div>
                 {regionAirports.map((airport) => (
@@ -285,8 +285,8 @@ export default function AirportSelector({
                     key={airport.icao}
                     onClick={() => handleSelect(airport.icao)}
                     className={`
-                      w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors
-                      ${airport.icao === currentAirport ? 'bg-blue-100' : ''}
+                      w-full text-left px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors
+                      ${airport.icao === currentAirport ? 'bg-blue-100 dark:bg-blue-900/40' : ''}
                     `}
                   >
                     <div className="flex items-center justify-between">
@@ -295,8 +295,8 @@ export default function AirportSelector({
                           className={`w-2 h-2 rounded-full flex-shrink-0 ${airport.cached ? 'bg-green-500' : 'bg-slate-300'}`}
                           title={airport.cached ? 'Cached (fast switch)' : 'Not cached (will fetch from OSM)'}
                         />
-                        <span className="font-mono font-bold text-slate-800">{airport.icao}</span>
-                        <span className="text-slate-500 text-sm">({airport.iata})</span>
+                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{airport.icao}</span>
+                        <span className="text-slate-500 dark:text-slate-400 text-sm">({airport.iata})</span>
                       </div>
                       {airport.icao === currentAirport && (
                         <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
@@ -306,8 +306,8 @@ export default function AirportSelector({
                         </svg>
                       )}
                     </div>
-                    <div className="text-sm text-slate-600 truncate ml-4">{airport.name}</div>
-                    <div className="text-xs text-slate-400 ml-4">{airport.city}</div>
+                    <div className="text-sm text-slate-600 dark:text-slate-300 truncate ml-4">{airport.name}</div>
+                    <div className="text-xs text-slate-400 dark:text-slate-500 ml-4">{airport.city}</div>
                   </button>
                 ))}
               </div>
@@ -315,7 +315,7 @@ export default function AirportSelector({
           </div>
 
           {/* Pre-load all button */}
-          <div className="p-2 border-t border-slate-100 bg-slate-50">
+          <div className="p-2 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
             <button
               onClick={handlePreloadAll}
               disabled={preloading || cachedCount === totalCount}

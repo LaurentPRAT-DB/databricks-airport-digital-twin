@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { FlightProvider, useFlightContext } from './context/FlightContext';
 import { AirportConfigProvider, useAirportConfigContext } from './context/AirportConfigContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Header from './components/Header/Header';
 import FlightList from './components/FlightList/FlightList';
 // Lazy load 2D map (Leaflet) to reduce initial bundle size — header + flight list render first
@@ -116,13 +117,13 @@ function ViewToggle({
 }) {
   return (
     <div className="absolute top-4 right-4 z-[1001] flex items-center gap-2">
-      <div className="flex bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="flex bg-white dark:bg-slate-700 rounded-lg shadow-md overflow-hidden">
         <button
           onClick={() => onToggle('2d')}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
             viewMode === '2d'
               ? 'bg-blue-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
+              : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-600'
           }`}
         >
           2D
@@ -132,7 +133,7 @@ function ViewToggle({
           className={`px-4 py-2 text-sm font-medium transition-colors ${
             viewMode === '3d'
               ? 'bg-blue-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
+              : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-600'
           }`}
         >
           3D
@@ -143,7 +144,7 @@ function ViewToggle({
         className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg shadow-md transition-colors ${
           satellite
             ? 'bg-blue-600 text-white'
-            : 'bg-white text-gray-700 hover:bg-gray-100'
+            : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-600'
         }`}
         title={satellite ? 'Switch to street map' : 'Switch to satellite view'}
       >
@@ -343,7 +344,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
         </div>
 
         {/* Right panel: Flight Detail + Gate Status */}
-        <div className="w-80 flex-shrink-0 overflow-y-auto bg-slate-50 p-4 space-y-4">
+        <div className="w-80 flex-shrink-0 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 space-y-4">
           <FlightDetail />
           <GateStatus />
         </div>
@@ -360,11 +361,13 @@ function App() {
   }, []);
 
   return (
-    <AirportConfigProvider>
-      <FlightProvider simulationFlights={simulationFlights}>
-        <AppContent handleSimFlightsChange={handleSimFlightsChange} />
-      </FlightProvider>
-    </AirportConfigProvider>
+    <ThemeProvider>
+      <AirportConfigProvider>
+        <FlightProvider simulationFlights={simulationFlights}>
+          <AppContent handleSimFlightsChange={handleSimFlightsChange} />
+        </FlightProvider>
+      </AirportConfigProvider>
+    </ThemeProvider>
   );
 }
 
