@@ -56,21 +56,9 @@ class DemoSimulationService:
             iata = icao_to_iata(airport_icao)
             logger.info("Generating demo simulation for %s (%s)...", airport_icao, iata)
 
-            # Use calibrated flight counts
-            loader = AirportProfileLoader()
-            profile = loader.get_profile(airport_icao)
-            daily_flights = profile.daily_departures + profile.daily_arrivals
-            if daily_flights < 20:
-                daily_flights = 100
-            arrivals = daily_flights // 2
-            departures = daily_flights - arrivals
-
-            # Cap for performance: demo doesn't need 2000+ flights
-            max_flights = 300
-            if arrivals + departures > max_flights:
-                ratio = max_flights / (arrivals + departures)
-                arrivals = int(arrivals * ratio)
-                departures = int(departures * ratio)
+            # Use a fixed flight count for the demo (profile doesn't store daily counts)
+            arrivals = 150
+            departures = 150
 
             config = SimulationConfig(
                 airport=iata,
