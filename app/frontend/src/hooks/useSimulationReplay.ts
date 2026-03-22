@@ -27,6 +27,7 @@ interface PositionSnapshot {
   phase: string;
   on_ground: boolean;
   aircraft_type: string;
+  assigned_gate?: string | null;
 }
 
 export interface ScenarioEvent {
@@ -80,6 +81,7 @@ function snapshotToFlight(snap: PositionSnapshot): Flight {
     data_source: 'simulation',
     flight_phase: mapPhase(snap.phase),
     aircraft_type: snap.aircraft_type,
+    assigned_gate: snap.assigned_gate ?? null,
   };
 }
 
