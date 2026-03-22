@@ -284,6 +284,62 @@ def _get_file_size_bytes(filename: str, files_cache: list[dict] | None) -> int |
     return None
 
 
+@simulation_router.get("/demo/{airport_icao}")
+async def get_demo_simulation(request: Request, airport_icao: str) -> dict:
+    """Load the demo simulation for an airport.
+
+    Returns the same format as /data/{filename} — pre-framed position snapshots
+    ready for the frontend replay engine.
+    """
+    from app.backend.services.demo_simulation_service import get_demo_simulation_service
+
+    service = get_demo_simulation_service()
+    path = service.get_demo_path(airport_icao.upper())
+
+    if path is None:
+        if service.is_generating(airport_icao.upper()):
+            raise HTTPException(status_code=202, detail="Demo simulation is still generating")
+        raise HTTPException(status_code=404, detail=f"No demo simulation for {airport_icao}")
+
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.error("Failed to read demo file for %s: %s", airport_icao, e)
+        raise HTTPException(status_code=500, detail="Failed to read demo file")
+
+    config = data.get("config", {})
+    summary = data.get("summary", {})
+    schedule = data.get("schedule", [])
+    snapshots = data.get("position_snapshots", [])
+    phase_transitions = data.get("phase_transitions", [])
+    gate_events = data.get("gate_events", [])
+    scenario_events = data.get("scenario_events", [])
+
+    # Group snapshots by timestamp for frame-based playback
+    frames: dict[str, list] = {}
+    for snap in snapshots:
+        t = snap.get("time", "")
+        if t not in frames:
+            frames[t] = []
+        frames[t].append(snap)
+
+    sorted_timestamps = sorted(frames.keys())
+
+    return {
+        "config": config,
+        "summary": summary,
+        "schedule": schedule,
+        "frames": {t: frames[t] for t in sorted_timestamps},
+        "frame_timestamps": sorted_timestamps,
+        "frame_count": len(sorted_timestamps),
+        "phase_transitions": phase_transitions,
+        "gate_events": gate_events,
+        "scenario_events": scenario_events,
+        "time_window": {"start_hour": 0, "end_hour": 24},
+    }
+
+
 @simulation_router.get("/files")
 async def list_simulation_files(request: Request) -> dict:
     """List available simulation output files."""

@@ -89,6 +89,8 @@ export interface UseSimulationReplayResult {
   isPlaying: boolean;
   isLoading: boolean;
   isFetchingFiles: boolean;
+  isDemoMode: boolean;
+  demoPaused: boolean;
   speed: PlaybackSpeed;
   currentFrameIndex: number;
   totalFrames: number;
@@ -105,6 +107,7 @@ export interface UseSimulationReplayResult {
 
   // Actions
   loadFile: (filename: string, startHour?: number, endHour?: number) => Promise<void>;
+  loadDemo: (airportIcao: string) => Promise<void>;
   play: () => void;
   pause: () => void;
   togglePlayPause: () => void;
@@ -113,6 +116,7 @@ export interface UseSimulationReplayResult {
   seekToPercent: (pct: number) => void;
   stop: () => void;
   fetchFiles: () => Promise<void>;
+  pauseDemo: () => void;
 }
 
 // TypeScript declaration for the headless video renderer control API
@@ -141,6 +145,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
   const [flights, setFlights] = useState<Flight[]>([]);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [demoPaused, setDemoPaused] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -193,6 +199,47 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // Load a demo simulation by airport ICAO code
+  const loadDemo = useCallback(async (airportIcao: string) => {
+    setIsLoading(true);
+    setIsPlaying(false);
+    setDemoPaused(false);
+    try {
+      const res = await fetch(`/api/simulation/demo/${encodeURIComponent(airportIcao)}`);
+      if (res.status === 202) {
+        // Still generating — caller should retry
+        console.log('Demo simulation still generating for', airportIcao);
+        return;
+      }
+      if (!res.ok) throw new Error(`Failed to load demo: ${res.statusText}`);
+      const data: SimulationData = await res.json();
+      setSimData(data);
+      setLoadedFile(`demo_${airportIcao}`);
+      setCurrentFrameIndex(0);
+      setIsDemoMode(true);
+
+      // Set initial frame
+      if (data.frame_timestamps.length > 0) {
+        const firstTimestamp = data.frame_timestamps[0];
+        const snapshots = data.frames[firstTimestamp] || [];
+        setFlights(snapshots.map(snapshotToFlight));
+      }
+
+      // Auto-play demo
+      setIsPlaying(true);
+    } catch (err) {
+      console.error('Failed to load demo simulation:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Pause demo (for airport switch)
+  const pauseDemo = useCallback(() => {
+    setIsPlaying(false);
+    setDemoPaused(true);
   }, []);
 
   // Update flights when frame index changes
@@ -268,6 +315,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setLoadedFile(null);
     setCurrentFrameIndex(0);
     setFlights([]);
+    setIsDemoMode(false);
+    setDemoPaused(false);
   }, []);
 
   // Expose control API on window for headless video renderer (Playwright)
@@ -292,6 +341,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     isPlaying,
     isLoading,
     isFetchingFiles,
+    isDemoMode,
+    demoPaused,
     speed,
     currentFrameIndex,
     totalFrames,
@@ -307,6 +358,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     simEndTime,
 
     loadFile,
+    loadDemo,
     play,
     pause,
     togglePlayPause,
@@ -315,5 +367,6 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     seekToPercent,
     stop,
     fetchFiles,
+    pauseDemo,
   };
 }

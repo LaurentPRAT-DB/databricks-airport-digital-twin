@@ -88,7 +88,7 @@ from app.backend.models.airport_config import (
     FAAImportResponse,
     MSFSImportResponse,
 )
-from src.ingestion.fallback import generate_synthetic_trajectory, get_airport_center, get_current_airport_iata, get_gate_time_multiplier, set_gate_time_multiplier, reload_gates, reset_synthetic_state, set_airport_center
+from src.ingestion.fallback import generate_synthetic_trajectory, get_airport_center, get_current_airport_iata, reload_gates, reset_synthetic_state, set_airport_center
 from src.ml.gate_model import reload_gate_recommender
 from src.ml.registry import get_model_registry
 from app.backend.services.prediction_service import get_prediction_service
@@ -1214,6 +1214,19 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
 
             asyncio.create_task(_generate_data_background())
 
+        # Generate demo simulation for new airport (background)
+        async def _generate_demo_background():
+            from app.backend.services.demo_simulation_service import get_demo_simulation_service
+            try:
+                demo_svc = get_demo_simulation_service()
+                if not demo_svc.has_demo(icao_code):
+                    await asyncio.to_thread(demo_svc.generate_demo, icao_code)
+                    logger.info(f"[DIAG] Background demo generation for {icao_code} complete")
+            except Exception as e:
+                logger.error(f"Background demo generation failed for {icao_code}: {e}")
+
+        asyncio.create_task(_generate_demo_background())
+
         # Record usage for pre-warming (fire-and-forget, non-blocking)
         lakebase = get_lakebase_service()
         if lakebase.is_available:
@@ -1526,34 +1539,6 @@ async def prewarm_user_airports(user: str = Depends(get_current_user)) -> dict:
         "already_cached": len(top_airports) - len(to_warm),
         "warming": len(to_warm),
     }
-
-
-# ==============================================================================
-# Settings Routes
-# ==============================================================================
-
-@router.get("/settings/gate-time-multiplier", tags=["settings"])
-async def get_gate_time_multiplier_endpoint() -> dict:
-    """Get current gate time multiplier."""
-    return {
-        "multiplier": get_gate_time_multiplier(),
-        "min": 1,
-        "max": 60,
-        "default": 8,
-    }
-
-
-@router.put("/settings/gate-time-multiplier", tags=["settings"])
-async def set_gate_time_multiplier_endpoint(body: dict = Body(...)) -> dict:
-    """Set gate time multiplier (clamped to 1-60)."""
-    value = body.get("multiplier")
-    if value is None:
-        raise HTTPException(status_code=422, detail="Missing 'multiplier' field")
-    try:
-        clamped = set_gate_time_multiplier(value)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=422, detail="Invalid multiplier value")
-    return {"multiplier": clamped}
 
 
 # ==============================================================================

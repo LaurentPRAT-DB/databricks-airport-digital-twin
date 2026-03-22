@@ -177,6 +177,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
   const [backendReady, setBackendReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Initializing');
   const [, setSimulationActive] = useState(false);
+  const [demoReady, setDemoReady] = useState(false);
 
   // Close FIDS when switching between 2D/3D views
   useEffect(() => {
@@ -232,19 +233,24 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
     setLastSource('3d');
   }, [setViewport, setLastSource]);
 
-  // Poll /api/ready until backend signals readiness
+  // Poll /api/ready until backend signals readiness (and demo_ready)
   useEffect(() => {
-    if (backendReady) return;
-
     const poll = setInterval(async () => {
       try {
         const res = await fetch('/api/ready');
         if (res.ok) {
           const data = await res.json();
           setStatusMessage(data.status || 'Initializing');
-          if (data.ready) {
+          if (data.ready && !backendReady) {
             setBackendReady(true);
             refreshConfig();
+          }
+          if (data.demo_ready && !demoReady) {
+            setDemoReady(true);
+          }
+          // Stop polling once both are ready
+          if (data.ready && data.demo_ready) {
+            clearInterval(poll);
           }
         }
       } catch {
@@ -263,6 +269,9 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
             setBackendReady(true);
             refreshConfig();
           }
+          if (data.demo_ready) {
+            setDemoReady(true);
+          }
         }
       } catch {
         // ignore
@@ -270,7 +279,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
     })();
 
     return () => clearInterval(poll);
-  }, [backendReady, refreshConfig]);
+  }, [backendReady, demoReady, refreshConfig]);
 
   // Handler for 3D map flight selection (uses icao24 string)
   const handleFlightSelect = (icao24: string) => {
@@ -292,6 +301,9 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
           onFlightsChange={handleSimFlightsChange}
           onActiveChange={setSimulationActive}
           onAirportChange={loadAirport}
+          backendReady={backendReady}
+          currentAirport={currentAirport}
+          demoReady={demoReady}
         />
       } />
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} />}

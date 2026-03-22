@@ -971,7 +971,8 @@ describe('End-to-end user interaction flows', () => {
       await waitForAppReady()
 
       await waitFor(() => {
-        expect(screen.getByText(/demo/i)).toBeInTheDocument()
+        // Match the exact "Demo" badge text in the header data source indicator
+        expect(screen.getByText(/^Demo$/)).toBeInTheDocument()
       })
     })
   })

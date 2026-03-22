@@ -285,7 +285,24 @@ async def _background_init(app: FastAPI):
         logger.info(f"INIT | Serving {airport_icao} ({airport_iata}) with {DEFAULT_FLIGHT_COUNT} flights in {'demo' if DEMO_MODE else 'live'} mode")
         logger.info("=" * 70)
 
-        # ── Phase 4: Pre-warm Lakebase cache for all well-known airports ──
+        # ── Phase 4: Generate demo simulation (background, non-blocking) ──
+        async def _generate_demo_background():
+            from app.backend.services.demo_simulation_service import get_demo_simulation_service
+            try:
+                app.state.startup_status = "Generating demo simulation..."
+                demo_svc = get_demo_simulation_service()
+                t_demo = time.monotonic()
+                await asyncio.to_thread(demo_svc.generate_demo, airport_icao)
+                demo_ms = (time.monotonic() - t_demo) * 1000
+                logger.info(f"INIT | Demo simulation generated in {demo_ms:.0f}ms")
+                app.state.startup_status = "Ready"
+            except Exception as e:
+                logger.error(f"INIT | Demo simulation generation FAILED: {e}", exc_info=True)
+                app.state.startup_status = "Ready"
+
+        asyncio.create_task(_generate_demo_background())
+
+        # ── Phase 5: Pre-warm Lakebase cache for all well-known airports ──
         # This runs after the app is ready and serves users, so it doesn't
         # block startup. Airports already in Lakebase are skipped (Tier 1 hit).
         asyncio.create_task(_prewarm_airports_background())
@@ -363,9 +380,12 @@ async def health_check():
 @app.get("/api/ready")
 async def readiness():
     """Readiness endpoint — returns background init progress."""
+    from app.backend.services.demo_simulation_service import get_demo_simulation_service
+    demo_svc = get_demo_simulation_service()
     return {
         "ready": getattr(app.state, "ready", False),
         "status": getattr(app.state, "startup_status", "Initializing..."),
+        "demo_ready": demo_svc.has_demo(DEFAULT_AIRPORT_ICAO),
     }
 
 
