@@ -337,6 +337,11 @@ export function SimulationControls({
     }
   }, [demoReady, currentAirport, sim.isActive, sim.isLoading, demoAutoStarted, sim.loadDemo]);
 
+  // Reset auto-start flag when airport changes so demo auto-starts for the new airport
+  useEffect(() => {
+    setDemoAutoStarted(false);
+  }, [currentAirport]);
+
   // Pause demo on airport switch
   useEffect(() => {
     if (!currentAirport) return;
