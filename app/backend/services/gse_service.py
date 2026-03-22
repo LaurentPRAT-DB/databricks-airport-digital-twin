@@ -159,8 +159,7 @@ class GSEService:
 
                 from src.ml.gse_model import get_turnaround_timing
                 timing = get_turnaround_timing(effective_aircraft)
-                from src.ingestion.fallback import get_gate_time_multiplier
-                estimated_departure = arrival_time + timedelta(minutes=timing["total_minutes"] / get_gate_time_multiplier())
+                estimated_departure = arrival_time + timedelta(minutes=timing["total_minutes"])
 
                 status = {
                     "current_phase": turnaround_phase,
@@ -168,7 +167,7 @@ class GSEService:
                     "total_progress_pct": total_progress,
                     "estimated_departure": estimated_departure,
                     "elapsed_minutes": time_at_gate / 60,
-                    "remaining_minutes": max(0, timing["total_minutes"] / get_gate_time_multiplier() - time_at_gate / 60),
+                    "remaining_minutes": max(0, timing["total_minutes"] - time_at_gate / 60),
                 }
             else:
                 # Fallback: compute from elapsed time

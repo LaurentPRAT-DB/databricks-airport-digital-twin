@@ -948,11 +948,11 @@ class TestRacetrackHolding:
 class TestGateTurnaroundTiming:
     """Verify gate time uses realistic turnaround durations from gse_model."""
 
-    def test_narrow_body_turnaround_not_under_1_minute(self):
-        """Narrow-body (A320) should not push back in under 1 minute.
+    def test_narrow_body_turnaround_not_under_10_minutes(self):
+        """Narrow-body (A320) should not push back in under 10 minutes.
 
-        With DEMO_TURNAROUND_SPEEDUP=8x, real ~35 min gate time becomes ~4 min.
-        Still must be well above 1 minute to look realistic.
+        Real turnaround gate time is ~27 min (45 total minus taxi/pushback phases).
+        With airline/weather factors and jitter, minimum is ~22 min.
         """
         flight = _create_new_flight(
             "ta_narrow", "UAL100", FlightPhase.PARKED,
@@ -962,19 +962,19 @@ class TestGateTurnaroundTiming:
         flight.time_at_gate = 0
         flight.aircraft_type = "A320"
 
-        # Simulate 1 minute (60 seconds)
-        for _ in range(60):
+        # Simulate 10 minutes (600 seconds)
+        for _ in range(600):
             _update_flight_state(flight, 1.0)
 
         assert flight.phase == FlightPhase.PARKED, (
-            f"A320 should still be parked after 1 min, but phase is {flight.phase.value}"
+            f"A320 should still be parked after 10 min, but phase is {flight.phase.value}"
         )
 
-    def test_narrow_body_turnaround_completes_within_10_minutes(self):
-        """Narrow-body should push back within 10 minutes.
+    def test_narrow_body_turnaround_completes_within_45_minutes(self):
+        """Narrow-body should push back within 45 minutes.
 
-        With DEMO_TURNAROUND_SPEEDUP=8x, real ~35 min becomes ~4-5 min.
-        10 minutes is a generous upper bound accounting for jitter and factors.
+        Real gate time is ~27 min. With worst-case factors (~1.3x) and +10% jitter,
+        maximum is ~39 min. 45 min is a generous upper bound.
         """
         flight = _create_new_flight(
             "ta_comp", "UAL200", FlightPhase.PARKED,
@@ -984,12 +984,12 @@ class TestGateTurnaroundTiming:
         flight.time_at_gate = 0
         flight.aircraft_type = "A320"
 
-        # Simulate 10 minutes
-        for _ in range(600):
+        # Simulate 45 minutes (2700 seconds)
+        for _ in range(2700):
             _update_flight_state(flight, 1.0)
 
         assert flight.phase != FlightPhase.PARKED, (
-            "A320 should have pushed back within 10 minutes (with demo speedup)"
+            "A320 should have pushed back within 45 minutes"
         )
 
     def test_turnaround_time_varies_by_aircraft_size(self):
@@ -1015,12 +1015,12 @@ class TestGateTurnaroundTiming:
     def test_wide_body_stays_parked_longer(self):
         """B777 should remain parked longer than A320 at the gate.
 
-        With DEMO_TURNAROUND_SPEEDUP=16x:
-        - Narrow-body ~35 min / 16 ≈ 2 min gate time
-        - Wide-body ~90 min / 16 ≈ 5.5 min gate time
-        At 2.5 min, A320 should have pushed back but B777 should still be parked.
+        Real-world turnaround times (no speedup):
+        - Narrow-body (A320) ~27 min gate time (45 total - taxi/pushback)
+        - Wide-body (B777) ~68 min gate time (90 total - taxi/pushback)
+        At 30 min, A320 should have pushed back but B777 should still be parked.
         """
-        # A320 at gate for 2.5 min → should push back (speedup: ~2 min gate time)
+        # A320 at gate for 30 min → should push back (~27 min gate time)
         a320 = _create_new_flight(
             "ta_a320", "UAL300", FlightPhase.PARKED,
             origin="JFK", destination="SFO"
@@ -1028,7 +1028,7 @@ class TestGateTurnaroundTiming:
         a320.aircraft_type = "A320"
         _flight_states["ta_a320"] = a320
 
-        # B777 at gate for 2.5 min → should still be parked (speedup: ~5.5 min gate time)
+        # B777 at gate for 30 min → should still be parked (~68 min gate time)
         b777 = _create_new_flight(
             "ta_b777", "UAL400", FlightPhase.PARKED,
             origin="NRT", destination="SFO"
@@ -1036,14 +1036,14 @@ class TestGateTurnaroundTiming:
         b777.aircraft_type = "B777"
         _flight_states["ta_b777"] = b777
 
-        # Set both to 2.5 minutes parked
-        a320.time_at_gate = 2.5 * 60
-        b777.time_at_gate = 2.5 * 60
+        # Set both to 30 minutes parked
+        a320.time_at_gate = 30 * 60
+        b777.time_at_gate = 30 * 60
 
-        # B777 at 2.5 min should still be parked (wide-body speedup: ~5.5 min gate time)
+        # B777 at 30 min should still be parked (wide-body: ~68 min gate time)
         _update_flight_state(b777, 1.0)
         assert b777.phase == FlightPhase.PARKED, (
-            f"B777 should still be parked at 2.5 min, but phase is {b777.phase.value}"
+            f"B777 should still be parked at 30 min, but phase is {b777.phase.value}"
         )
 
 

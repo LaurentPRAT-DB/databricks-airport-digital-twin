@@ -33,30 +33,13 @@ from src.ml.gse_model import get_turnaround_timing, PHASE_DEPENDENCIES
 
 fake = Faker()
 
-# ============================================================================
-# DEMO TURNAROUND SPEEDUP
-# ============================================================================
-# In real time, narrow-body turnaround is ~35 min, wide-body ~90 min.
-# For a live demo, viewers need to see departures within a few minutes.
-# This multiplier divides the gate-time threshold so aircraft push back faster.
-_DEFAULT_GATE_TIME_MULTIPLIER = 16.0
-_gate_time_multiplier = _DEFAULT_GATE_TIME_MULTIPLIER
 
+def _sanitize_float(val: float, default: float = 0.0) -> float:
+    """Replace NaN/Inf with a safe default."""
+    if val is None or math.isnan(val) or math.isinf(val):
+        return default
+    return val
 
-def get_gate_time_multiplier() -> float:
-    """Get current gate time multiplier."""
-    return _gate_time_multiplier
-
-
-def set_gate_time_multiplier(value: float) -> float:
-    """Set gate time multiplier, clamped to [1.0, 60.0]. Returns clamped value."""
-    global _gate_time_multiplier
-    _gate_time_multiplier = max(1.0, min(60.0, float(value)))
-    return _gate_time_multiplier
-
-
-# Keep backward-compatible alias for any remaining imports
-DEMO_GATE_TIME_MULTIPLIER = _DEFAULT_GATE_TIME_MULTIPLIER
 
 # ============================================================================
 # AIRLINE TURNAROUND SPEED FACTORS
@@ -1881,7 +1864,7 @@ def _release_gate(icao24: str, gate: str):
     _init_gate_states()
     if gate in _gate_states and _gate_states[gate].occupied_by == icao24:
         _gate_states[gate].occupied_by = None
-        _gate_states[gate].available_at = time.time() + 60 / get_gate_time_multiplier()
+        _gate_states[gate].available_at = time.time() + 60  # 60s cooldown before gate reuse
 
 def _check_taxi_separation(state: FlightState) -> bool:
     """Check if aircraft has sufficient separation from others on ground."""
@@ -2314,7 +2297,7 @@ def _get_parked_heading(gate_lat: float, gate_lon: float) -> float:
                     if nx * cx + ny * cy < 0:
                         nx, ny = -nx, -ny
                     # Convert normal to heading (0=north, 90=east, clockwise)
-                    heading = math.degrees(math.atan2(nx, ny)) % 360
+                    heading = round(math.degrees(math.atan2(nx, ny)) % 360, 1)
                     return heading
     except Exception:
         pass
@@ -2471,8 +2454,8 @@ def _build_turnaround_schedule(
     schedule: Dict[str, Dict] = {}
     for phase in _GATE_PHASES:
         schedule[phase] = {
-            "start_offset_s": start[phase] * 60 / get_gate_time_multiplier(),
-            "duration_s": jittered[phase] * 60 / get_gate_time_multiplier(),
+            "start_offset_s": start[phase] * 60,
+            "duration_s": jittered[phase] * 60,
             "done": False,
             "started": False,
         }
@@ -2587,7 +2570,7 @@ def _create_new_flight(
         standoff = _compute_gate_standoff(lat, lon, parked_heading, aircraft_type)
         lat, lon = _offset_position_by_heading(lat, lon, parked_heading, standoff)
 
-        initial_time_at_gate = random.uniform(0, 300 / get_gate_time_multiplier())  # Scaled with gate time
+        initial_time_at_gate = random.uniform(0, 300)  # 0-5 min pre-parked time
 
         # Build turnaround schedule and pre-advance to match elapsed time
         airline_code = callsign[:3] if callsign and len(callsign) >= 3 else ""
@@ -3141,7 +3124,6 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         combined_factor = airline_factor * weather_factor * congestion_factor * intl_factor * dow_factor
         # +/-10% jitter (reduced from 20% since factors explain more variance)
         target = gate_seconds * combined_factor * random.uniform(0.9, 1.1)
-        target = target / get_gate_time_multiplier()
         if state.time_at_gate > target:
             # Ensure correct origin/dest for departure: origin=local, dest=new airport
             local_iata = get_current_airport_iata()
@@ -3657,6 +3639,10 @@ def generate_synthetic_flights(
             flight_num = random.randint(100, 9999)
             callsign = f"{prefix}{flight_num}"
 
+            # Ensure callsign uniqueness — skip duplicates (loop will retry)
+            if any(s.callsign == callsign for s in _flight_states.values()):
+                continue
+
             # Count current phases to balance distribution
             parked_count = _count_aircraft_in_phase(FlightPhase.PARKED)
             approach_count = _count_aircraft_in_phase(FlightPhase.APPROACHING)
@@ -3743,21 +3729,29 @@ def generate_synthetic_flights(
     states: List[List[Any]] = []
 
     for icao24, state in list(_flight_states.items())[:count]:
+        # Sanitize numeric fields to prevent NaN/Inf propagation to frontend
+        _alt = _sanitize_float(state.altitude, 0.0)
+        _vel = _sanitize_float(state.velocity, 0.0)
+        _hdg = _sanitize_float(state.heading, 0.0)
+        _vr = _sanitize_float(state.vertical_rate, 0.0)
+        _lat = _sanitize_float(state.latitude, 0.0)
+        _lon = _sanitize_float(state.longitude, 0.0)
+
         state_vector = [
             state.icao24,                              # 0: icao24
             state.callsign.ljust(8),                   # 1: callsign
             _get_origin_country(state.origin_airport), # 2: origin_country
             int(current_time) - random.randint(0, 2), # 3: time_position
             int(current_time),                         # 4: last_contact
-            state.longitude,                           # 5: longitude
-            state.latitude,                            # 6: latitude
-            state.altitude * 0.3048,                   # 7: baro_altitude (convert ft to m)
+            _lon,                                      # 5: longitude
+            _lat,                                      # 6: latitude
+            _alt * 0.3048,                             # 7: baro_altitude (convert ft to m)
             state.on_ground,                           # 8: on_ground
-            state.velocity * 0.514444,                 # 9: velocity (convert kts to m/s)
-            state.heading,                             # 10: true_track
-            state.vertical_rate * 0.00508,             # 11: vertical_rate (ft/min to m/s)
+            _vel * 0.514444,                           # 9: velocity (convert kts to m/s)
+            _hdg,                                      # 10: true_track
+            _vr * 0.00508,                             # 11: vertical_rate (ft/min to m/s)
             None,                                      # 12: sensors
-            state.altitude * 0.3048,                   # 13: geo_altitude
+            _alt * 0.3048,                             # 13: geo_altitude
             f"{random.randint(1000, 7777):04d}",       # 14: squawk
             False,                                     # 15: spi
             0,                                         # 16: position_source
