@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import React from 'react';
 import { SimulationControls } from './SimulationControls';
 import type { UseSimulationReplayResult } from '../../hooks/useSimulationReplay';
 
@@ -90,7 +89,7 @@ describe('SimulationControls', () => {
       // Need to prevent auto-start: simulate demoAutoStarted already fired
       // We can't easily prevent auto-start, so we render with demoReady=true but sim already loaded and stopped
       // Instead, render without demoReady initially
-      const { rerender } = render(
+      render(
         <SimulationControls {...defaultProps()} demoReady={false} backendReady={false} />
       );
       // Now set demoReady — but the effect won't have loadDemo succeed

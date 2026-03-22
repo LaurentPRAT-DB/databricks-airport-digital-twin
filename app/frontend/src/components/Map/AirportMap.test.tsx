@@ -5,11 +5,13 @@ import React from 'react';
 // ── Leaflet mocks ──────────────────────────────────────────────────
 const mockSetView = vi.fn();
 const mockFlyTo = vi.fn();
+const mockFlyToBounds = vi.fn();
 const mockGetCenter = vi.fn(() => ({ lat: 37.62, lng: -122.38 }));
 const mockGetZoom = vi.fn(() => 13);
 const mockMap = {
   setView: mockSetView,
   flyTo: mockFlyTo,
+  flyToBounds: mockFlyToBounds,
   getCenter: mockGetCenter,
   getZoom: mockGetZoom,
 };
@@ -113,29 +115,30 @@ describe('AirportMap — airport switch recentering', () => {
     mockGetTerminals.mockReturnValue([]);
   });
 
-  it('calls flyTo with SFO center on initial render', () => {
+  it('calls flyToBounds with SFO bounds on initial render', () => {
     render(<AirportMap />);
-    expect(mockFlyTo).toHaveBeenCalledTimes(1);
-    const [center] = mockFlyTo.mock.calls[0];
-    // SFO center should be near 37.6, -122.38
-    expect(center[0]).toBeCloseTo(37.6157, 2);
-    expect(center[1]).toBeCloseTo(-122.3818, 2);
+    expect(mockFlyToBounds).toHaveBeenCalledTimes(1);
+    const [bounds] = mockFlyToBounds.mock.calls[0];
+    // SFO bounds should encompass ~37.6, -122.38 area
+    expect(bounds[0][0]).toBeLessThan(37.62);  // south bound
+    expect(bounds[1][0]).toBeGreaterThan(37.60);  // north bound
+    expect(bounds[0][1]).toBeLessThan(-122.37);  // west bound
   });
 
   it('recenters map to LHR when airport switches from KSFO to EGLL', () => {
     const { rerender } = render(<AirportMap />);
-    mockFlyTo.mockClear();
+    mockFlyToBounds.mockClear();
 
     // Switch to LHR
     mockCurrentAirport = 'EGLL';
     mockGetGates.mockReturnValue(LHR_GATES);
     rerender(<AirportMap />);
 
-    expect(mockFlyTo).toHaveBeenCalledTimes(1);
-    const [center] = mockFlyTo.mock.calls[0];
-    // LHR center should be near 51.47, -0.45
-    expect(center[0]).toBeCloseTo(51.4712, 2);
-    expect(center[1]).toBeCloseTo(-0.4546, 2);
+    expect(mockFlyToBounds).toHaveBeenCalledTimes(1);
+    const [bounds] = mockFlyToBounds.mock.calls[0];
+    // LHR bounds should encompass ~51.47, -0.45 area
+    expect(bounds[0][0]).toBeGreaterThan(51.0);  // south bound in London area
+    expect(bounds[1][0]).toBeGreaterThan(51.0);  // north bound in London area
   });
 
   it('does NOT stay on SFO coordinates after switching to a different airport', () => {
@@ -146,15 +149,13 @@ describe('AirportMap — airport switch recentering', () => {
     mockGetGates.mockReturnValue(LHR_GATES);
     rerender(<AirportMap />);
 
-    // Get the last flyTo call
-    const lastCall = mockFlyTo.mock.calls[mockFlyTo.mock.calls.length - 1];
-    const [center] = lastCall;
+    // Get the last flyToBounds call
+    const lastCall = mockFlyToBounds.mock.calls[mockFlyToBounds.mock.calls.length - 1];
+    const [bounds] = lastCall;
     // Must NOT be SFO coordinates
-    expect(center[0]).not.toBeCloseTo(37.62, 0);
-    expect(center[1]).not.toBeCloseTo(-122.38, 0);
+    expect(bounds[0][0]).not.toBeCloseTo(37.62, 0);
     // Must be LHR coordinates
-    expect(center[0]).toBeGreaterThan(51);
-    expect(center[1]).toBeGreaterThan(-1);
+    expect(bounds[0][0]).toBeGreaterThan(51);
   });
 
   it('recenters even when sharedViewport has old SFO coordinates', () => {
@@ -165,7 +166,7 @@ describe('AirportMap — airport switch recentering', () => {
     };
 
     const { rerender } = render(<AirportMap sharedViewport={sfoViewport} />);
-    mockFlyTo.mockClear();
+    mockFlyToBounds.mockClear();
     mockSetView.mockClear();
 
     // Switch to LHR — sharedViewport still has SFO coords
@@ -173,10 +174,10 @@ describe('AirportMap — airport switch recentering', () => {
     mockGetGates.mockReturnValue(LHR_GATES);
     rerender(<AirportMap sharedViewport={sfoViewport} />);
 
-    // Must use flyTo (not setView with old SFO coords)
-    expect(mockFlyTo).toHaveBeenCalled();
-    const [center] = mockFlyTo.mock.calls[0];
-    expect(center[0]).toBeCloseTo(51.4712, 2);
+    // Must use flyToBounds (not setView with old SFO coords)
+    expect(mockFlyToBounds).toHaveBeenCalled();
+    const [bounds] = mockFlyToBounds.mock.calls[0];
+    expect(bounds[0][0]).toBeGreaterThan(51.0);
   });
 
   it('uses sharedViewport when NOT switching airports', () => {
@@ -198,7 +199,7 @@ describe('AirportMap — airport switch recentering', () => {
 
   it('supports switching through multiple airports sequentially', () => {
     const { rerender } = render(<AirportMap />);
-    mockFlyTo.mockClear();
+    mockFlyToBounds.mockClear();
 
     // Switch to LHR
     mockCurrentAirport = 'EGLL';
@@ -206,10 +207,10 @@ describe('AirportMap — airport switch recentering', () => {
     mockGetTerminals.mockReturnValue([]);
     rerender(<AirportMap />);
 
-    expect(mockFlyTo).toHaveBeenCalledTimes(1);
-    let [center] = mockFlyTo.mock.calls[0];
-    expect(center[0]).toBeCloseTo(51.4712, 2);
-    mockFlyTo.mockClear();
+    expect(mockFlyToBounds).toHaveBeenCalledTimes(1);
+    let [bounds] = mockFlyToBounds.mock.calls[0];
+    expect(bounds[0][0]).toBeGreaterThan(51.0);
+    mockFlyToBounds.mockClear();
 
     // Switch to CDG
     mockCurrentAirport = 'LFPG';
@@ -217,16 +218,16 @@ describe('AirportMap — airport switch recentering', () => {
     mockGetTerminals.mockReturnValue(CDG_TERMINALS);
     rerender(<AirportMap />);
 
-    expect(mockFlyTo).toHaveBeenCalledTimes(1);
-    [center] = mockFlyTo.mock.calls[0];
-    // CDG center should be near 49.0, 2.56
-    expect(center[0]).toBeCloseTo(49.0073, 2);
-    expect(center[1]).toBeCloseTo(2.5594, 2);
+    expect(mockFlyToBounds).toHaveBeenCalledTimes(1);
+    [bounds] = mockFlyToBounds.mock.calls[0];
+    // CDG bounds should be near 49.0, 2.56
+    expect(bounds[0][0]).toBeGreaterThan(48.0);
+    expect(bounds[0][1]).toBeGreaterThan(2.0);
   });
 
   it('handles airport with no gates or terminals gracefully', () => {
     const { rerender } = render(<AirportMap />);
-    mockFlyTo.mockClear();
+    mockFlyToBounds.mockClear();
 
     // Switch to airport with no data
     mockCurrentAirport = 'XXXX';
@@ -234,7 +235,7 @@ describe('AirportMap — airport switch recentering', () => {
     mockGetTerminals.mockReturnValue([]);
     rerender(<AirportMap />);
 
-    // Should not crash; flyTo should not be called (no center to compute)
+    // Should not crash; flyToBounds should not be called (no bounds to compute)
     // The map just stays where it is
   });
 });

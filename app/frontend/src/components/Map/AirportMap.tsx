@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { AIRPORT_CENTER, DEFAULT_ZOOM } from '../../constants/airportLayout';
 import AirportOverlay from './AirportOverlay';
@@ -26,27 +27,36 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
   const map = useMap();
   const { getGates, getTerminals, currentAirport } = useAirportConfigContext();
 
-  const center = useMemo((): [number, number] | null => {
-    // Compute center from terminals or gates
+  // Compute bounding box from terminals/gates for fitBounds
+  const bounds = useMemo((): L.LatLngBoundsExpression | null => {
     const terminals = getTerminals();
     const gates = getGates();
     const items = terminals.length > 0 ? terminals : gates;
 
     if (items.length === 0) return null;
 
-    let sumLat = 0, sumLon = 0, count = 0;
+    let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+    let count = 0;
     for (const item of items) {
       const geo = (item as { geo?: { latitude?: number | string; longitude?: number | string } }).geo;
       const lat = Number(geo?.latitude);
       const lon = Number(geo?.longitude);
       if (lat && lon && !isNaN(lat) && !isNaN(lon)) {
-        sumLat += lat;
-        sumLon += lon;
+        minLat = Math.min(minLat, lat);
+        maxLat = Math.max(maxLat, lat);
+        minLon = Math.min(minLon, lon);
+        maxLon = Math.max(maxLon, lon);
         count++;
       }
     }
     if (count === 0) return null;
-    return [sumLat / count, sumLon / count];
+    // Pad bounds by ~20% for breathing room
+    const latPad = (maxLat - minLat) * 0.2 || 0.005;
+    const lonPad = (maxLon - minLon) * 0.2 || 0.005;
+    return [
+      [minLat - latPad, minLon - lonPad],
+      [maxLat + latPad, maxLon + lonPad],
+    ];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getGates, getTerminals, currentAirport]);
 
@@ -56,9 +66,9 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
     const airportChanged = prevAirportRef.current !== currentAirport;
     prevAirportRef.current = currentAirport;
 
-    // On airport switch, always recenter to the new airport
-    if (airportChanged && center) {
-      map.flyTo(center, DEFAULT_ZOOM, { duration: 1.5 });
+    // On airport switch, fit to terminal bounding box
+    if (airportChanged && bounds) {
+      map.flyToBounds(bounds, { duration: 1.5, maxZoom: 16 });
       return;
     }
     // If we have a shared viewport from 3D (same airport), restore it
@@ -70,12 +80,12 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
       );
       return;
     }
-    // Otherwise, recenter based on airport data
-    if (center) {
-      map.flyTo(center, DEFAULT_ZOOM, { duration: 1.5 });
+    // Otherwise, fit to terminal area
+    if (bounds) {
+      map.flyToBounds(bounds, { duration: 1.5, maxZoom: 16 });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center, map, currentAirport]);
+  }, [bounds, map, currentAirport]);
 
   return null;
 }
