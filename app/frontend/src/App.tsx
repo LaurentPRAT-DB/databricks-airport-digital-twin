@@ -185,6 +185,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
   const [, setSimulationActive] = useState(false);
   const [demoReady, setDemoReady] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>('map');
+  const [showChat, setShowChat] = useState(false);
 
   // Close FIDS when switching between 2D/3D views
   useEffect(() => {
@@ -296,14 +297,11 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
     }
   };
 
-  // On mobile, auto-switch to Info tab when a flight is selected
+  // Track previous selection (kept for potential future use)
   const prevSelectedRef = useRef(selectedFlight);
   useEffect(() => {
-    if (isMobile && selectedFlight && selectedFlight !== prevSelectedRef.current) {
-      setMobileTab('info');
-    }
     prevSelectedRef.current = selectedFlight;
-  }, [isMobile, selectedFlight]);
+  }, [selectedFlight]);
 
   // Show loading screen until backend is ready
   if (!backendReady) {
@@ -351,15 +349,17 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
     </div>
   );
 
+  console.log(`[App] rendering layout: ${isMobile ? 'MOBILE' : 'DESKTOP'}, viewport=${window.innerWidth}x${window.innerHeight}`);
+
   if (isMobile) {
     return (
       <div className="h-screen w-screen flex flex-col overflow-hidden">
         <MobileHeader
           onShowFIDS={() => setShowFIDS(true)}
-          simulationControls={simulationControlsNode}
+          onOpenChat={() => setShowChat(true)}
         />
         {showFIDS && <FIDS onClose={() => setShowFIDS(false)} />}
-        <GenieChat />
+        <GenieChat hideFab externalOpen={showChat} onClose={() => setShowChat(false)} />
 
         {/* Tab content */}
         <main className="flex-1 flex flex-col overflow-hidden">
@@ -376,6 +376,9 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
             </div>
           )}
         </main>
+
+        {/* Simulation controls — header buttons hidden, fixed PlaybackBar still renders */}
+        <div className="h-0 overflow-hidden">{simulationControlsNode}</div>
 
         <MobileTabBar activeTab={mobileTab} onTabChange={setMobileTab} />
       </div>

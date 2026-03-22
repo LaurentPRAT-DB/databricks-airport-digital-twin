@@ -146,10 +146,10 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[1500] bg-slate-900/95 backdrop-blur text-white px-4 py-2 shadow-lg">
-      {/* Event legend — only shown when scenario events exist */}
+    <div className="fixed left-0 right-0 z-[1500] bg-slate-900/95 backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0">
+      {/* Event legend — hidden on mobile */}
       {visibleEventTypes.length > 0 && (
-        <div className="flex items-center gap-3 max-w-screen-xl mx-auto mb-1.5 pl-[136px]">
+        <div className="hidden md:flex items-center gap-3 max-w-screen-xl mx-auto mb-1.5 pl-[136px]">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider">Events</span>
           {visibleEventTypes.map((type) => (
             <div key={type} className="flex items-center gap-1">
@@ -159,35 +159,35 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
           ))}
         </div>
       )}
-      <div className="flex items-center gap-4 max-w-screen-xl mx-auto">
+      <div className="flex items-center gap-2 md:gap-4 max-w-screen-xl mx-auto">
         {/* Play/Pause */}
         <button
           onClick={sim.togglePlayPause}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-600 hover:bg-blue-500 transition-colors flex-shrink-0"
+          className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-blue-600 hover:bg-blue-500 transition-colors flex-shrink-0"
           title={sim.isPlaying ? 'Pause' : 'Play'}
         >
           {sim.isPlaying ? (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" viewBox="0 0 20 20">
               <rect x="5" y="4" width="3" height="12" rx="1" />
               <rect x="12" y="4" width="3" height="12" rx="1" />
             </svg>
           ) : (
-            <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="w-4 h-4 md:w-5 md:h-5 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
               <polygon points="6,4 16,10 6,16" />
             </svg>
           )}
         </button>
 
         {/* Sim time */}
-        <div className="flex-shrink-0 w-24 text-center">
-          <div className="text-lg font-mono font-bold tracking-tight">
+        <div className="flex-shrink-0 text-center">
+          <div className="text-base md:text-lg font-mono font-bold tracking-tight">
             {formatSimTime(sim.currentSimTime)}
           </div>
           <div className="text-[10px] text-slate-400 -mt-0.5">SIM TIME</div>
         </div>
 
-        {/* Progress bar with scenario event markers */}
-        <div className="flex-1 relative group cursor-pointer" onClick={(e) => {
+        {/* Progress bar — hidden on mobile */}
+        <div className="hidden md:block flex-1 relative group cursor-pointer" onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const pct = ((e.clientX - rect.left) / rect.width) * 100;
           sim.seekToPercent(pct);
@@ -223,12 +223,12 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
         </div>
 
         {/* Speed selector */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0 ml-auto md:ml-0">
           {SPEED_OPTIONS.map((s) => (
             <button
               key={s}
               onClick={() => sim.setSpeed(s)}
-              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+              className={`px-1.5 md:px-2 py-1 rounded text-xs font-medium transition-colors ${
                 sim.speed === s
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -239,15 +239,15 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
           ))}
         </div>
 
-        {/* Flight count */}
-        <div className="flex-shrink-0 text-sm text-slate-400">
+        {/* Flight count — hidden on mobile */}
+        <div className="hidden md:block flex-shrink-0 text-sm text-slate-400">
           <span className="font-mono font-medium text-white">{sim.flights.length}</span> flights
         </div>
 
-        {/* Stop button */}
+        {/* Stop button — hidden on mobile */}
         <button
           onClick={sim.stop}
-          className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-sm transition-colors"
+          className="hidden md:block flex-shrink-0 px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-sm transition-colors"
           title="Exit simulation"
         >
           Exit
@@ -268,7 +268,7 @@ function PausedBar({
   onRestart: () => void;
 }) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[1500] bg-amber-900/95 backdrop-blur text-white px-4 py-3 shadow-lg">
+    <div className="fixed bottom-0 left-0 right-0 z-[1500] bg-amber-900/95 backdrop-blur text-white px-4 py-3 shadow-lg max-md:bottom-12">
       <div className="flex items-center justify-center gap-4 max-w-screen-xl mx-auto">
         <span className="text-amber-200 font-medium">Simulation Paused</span>
         {pendingAirport && (

@@ -35,8 +35,22 @@ const SAMPLE_QUESTIONS = [
 const WORKSPACE_URL = 'https://fevm-serverless-stable-3n0ihb.cloud.databricks.com';
 const GENIE_SPACE_ID = '01f12612fa6314ae943d0526f5ae3a00';
 
-export default function GenieChat() {
-  const [isOpen, setIsOpen] = useState(false);
+interface GenieChatProps {
+  /** Hide the floating action button (caller controls open state externally) */
+  hideFab?: boolean;
+  /** Controlled open state — when provided, overrides internal state */
+  externalOpen?: boolean;
+  /** Callback when chat panel is closed */
+  onClose?: () => void;
+}
+
+export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setIsOpen = (open: boolean) => {
+    setInternalOpen(open);
+    if (!open && onClose) onClose();
+  };
   const [messages, setMessages] = useState<GenieMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -132,8 +146,8 @@ export default function GenieChat() {
 
   return (
     <>
-      {/* Floating Action Button */}
-      {!isOpen && (
+      {/* Floating Action Button — hidden when hideFab is set */}
+      {!isOpen && !hideFab && (
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-4 right-4 z-[1100] w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-lg flex items-center justify-center transition-all hover:scale-105"

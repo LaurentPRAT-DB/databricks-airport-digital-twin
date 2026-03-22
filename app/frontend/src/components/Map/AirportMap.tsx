@@ -169,8 +169,8 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
           ))}
       </MapContainer>
 
-      {/* Status overlay */}
-      <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-3 z-[1000]">
+      {/* Status overlay — hidden on mobile */}
+      <div className="hidden md:block absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg p-3 z-[1000]">
         <div className="text-sm">
           <div className="flex items-center gap-2">
             <span className="font-medium">Flights:</span>
