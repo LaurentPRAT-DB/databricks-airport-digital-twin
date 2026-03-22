@@ -365,10 +365,16 @@ export function SimulationControls({
 
   // Switch airport when simulation loads a different one (manual file load)
   useEffect(() => {
-    if (sim.airport && onAirportChange) {
-      onAirportChange(sim.airport).catch((err) => {
-        console.warn('Failed to switch airport for simulation:', err);
-      });
+    if (sim.airport && onAirportChange && currentAirport) {
+      // Only switch if the sim airport differs from the current airport
+      const simAirportIcao = sim.airport.length === 3
+        ? `K${sim.airport}`
+        : sim.airport;
+      if (simAirportIcao !== currentAirport) {
+        onAirportChange(sim.airport).catch((err) => {
+          console.warn('Failed to switch airport for simulation:', err);
+        });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sim.airport]);
