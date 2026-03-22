@@ -431,7 +431,22 @@ export function SimulationControls({
       );
     }
 
-    // Idle — nothing to show (sim auto-starts when demo is ready)
+    // Idle — offer restart when demo was previously running
+    if (demoAutoStarted && currentAirport && !sim.isLoading) {
+      return (
+        <button
+          onClick={() => sim.loadDemo(currentAirport)}
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-sm transition-colors"
+          title="Restart simulation"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <polygon points="6,4 16,10 6,16" />
+          </svg>
+          Start Simulation
+        </button>
+      );
+    }
+
     return null;
   };
 

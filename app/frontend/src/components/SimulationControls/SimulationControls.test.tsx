@@ -330,6 +330,49 @@ describe('SimulationControls', () => {
     });
   });
 
+  describe('restart after exit', () => {
+    it('shows Start Simulation button after demo was auto-started then stopped', async () => {
+      // Start with demo auto-starting
+      mockSim = createMockSim();
+      const { rerender } = render(
+        <SimulationControls {...defaultProps()} demoReady={true} currentAirport="KSFO" />
+      );
+
+      // Demo was auto-started (loadDemo called)
+      await waitFor(() => {
+        expect(mockSim.loadDemo).toHaveBeenCalledWith('KSFO');
+      });
+
+      // Now sim is stopped (user clicked Exit) — sim becomes inactive
+      mockSim = createMockSim({ isActive: false, isLoading: false });
+      rerender(
+        <SimulationControls {...defaultProps()} demoReady={true} currentAirport="KSFO" />
+      );
+
+      expect(screen.getByText('Start Simulation')).toBeInTheDocument();
+    });
+
+    it('calls loadDemo when Start Simulation clicked', async () => {
+      mockSim = createMockSim();
+      const { rerender } = render(
+        <SimulationControls {...defaultProps()} demoReady={true} currentAirport="KSFO" />
+      );
+
+      await waitFor(() => {
+        expect(mockSim.loadDemo).toHaveBeenCalled();
+      });
+
+      // Sim stopped
+      mockSim = createMockSim({ isActive: false, isLoading: false });
+      rerender(
+        <SimulationControls {...defaultProps()} demoReady={true} currentAirport="KSFO" />
+      );
+
+      fireEvent.click(screen.getByText('Start Simulation'));
+      expect(mockSim.loadDemo).toHaveBeenCalledWith('KSFO');
+    });
+  });
+
   describe('file picker', () => {
     it('opens file picker when Simulation button clicked', () => {
       mockSim = createMockSim();
