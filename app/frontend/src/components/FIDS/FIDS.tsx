@@ -129,7 +129,7 @@ export default function FIDS({ onClose }: FIDSProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[1003] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-slate-900 rounded-lg shadow-2xl w-full max-w-4xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-slate-900 rounded-lg shadow-2xl w-full max-w-4xl max-h-[100vh] md:max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div className="flex items-center gap-4">
@@ -167,7 +167,7 @@ export default function FIDS({ onClose }: FIDSProps) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto overscroll-contain">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-slate-400">Loading schedule...</div>

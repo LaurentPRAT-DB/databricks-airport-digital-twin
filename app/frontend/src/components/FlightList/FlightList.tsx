@@ -43,7 +43,7 @@ export default function FlightList() {
   }, [flights, searchQuery, sortBy]);
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700">
+    <div className="flex flex-col h-full bg-white dark:bg-slate-800 md:border-r border-slate-200 dark:border-slate-700">
       {/* Header */}
       <div className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
         <h2 className="font-semibold text-slate-700 dark:text-slate-200 mb-2">

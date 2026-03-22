@@ -16,7 +16,7 @@ export default function FlightRow({ flight, isSelected, onClick }: FlightRowProp
     <button
       onClick={onClick}
       className={`
-        w-full text-left px-3 py-2 border-b border-slate-200 dark:border-slate-700
+        w-full text-left px-3 py-2 min-h-[44px] border-b border-slate-200 dark:border-slate-700
         transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-700
         ${isSelected ? 'bg-blue-50 dark:bg-blue-900/30 border-l-4 border-l-blue-500' : ''}
       `}

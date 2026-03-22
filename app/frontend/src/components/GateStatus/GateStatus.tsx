@@ -398,7 +398,7 @@ export default function GateStatus() {
               {(terminalGroups.get(selectedTerminal) || []).length} gates
             </span>
           </div>
-          <div className="grid grid-cols-8 gap-1">
+          <div className="grid grid-cols-6 md:grid-cols-8 gap-1">
             {(terminalGroups.get(selectedTerminal) || []).map((gate) => {
               const colors = gateStatusColors[gate.status];
               const isSelected = selectedGateId === gate.id;

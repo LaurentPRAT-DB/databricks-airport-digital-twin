@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { FlightProvider, useFlightContext } from './context/FlightContext';
 import { AirportConfigProvider, useAirportConfigContext } from './context/AirportConfigContext';
 import { ThemeProvider } from './context/ThemeContext';
 import Header from './components/Header/Header';
+import MobileHeader from './components/Header/MobileHeader';
 import FlightList from './components/FlightList/FlightList';
 // Lazy load 2D map (Leaflet) to reduce initial bundle size — header + flight list render first
 const AirportMap = lazy(() => import('./components/Map/AirportMap'));
@@ -10,6 +11,8 @@ import FlightDetail from './components/FlightDetail/FlightDetail';
 import GateStatus from './components/GateStatus/GateStatus';
 import FIDS from './components/FIDS/FIDS';
 import GenieChat from './components/GenieChat/GenieChat';
+import MobileTabBar, { type MobileTab } from './components/MobileTabBar/MobileTabBar';
+import { useIsMobile } from './hooks/useIsMobile';
 import { useViewportState, SharedViewport } from './hooks/useViewportState';
 import SimulationControls from './components/SimulationControls/SimulationControls';
 import { Flight } from './types/flight';
@@ -173,6 +176,7 @@ declare global {
 }
 
 function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (flights: Flight[] | null) => void }) {
+  const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
   const [satellite, setSatellite] = useState(false);
   const [showFIDS, setShowFIDS] = useState(false);
@@ -180,6 +184,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
   const [statusMessage, setStatusMessage] = useState('Initializing');
   const [, setSimulationActive] = useState(false);
   const [demoReady, setDemoReady] = useState(false);
+  const [mobileTab, setMobileTab] = useState<MobileTab>('map');
 
   // Close FIDS when switching between 2D/3D views
   useEffect(() => {
@@ -291,23 +296,95 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
     }
   };
 
+  // On mobile, auto-switch to Info tab when a flight is selected
+  const prevSelectedRef = useRef(selectedFlight);
+  useEffect(() => {
+    if (isMobile && selectedFlight && selectedFlight !== prevSelectedRef.current) {
+      setMobileTab('info');
+    }
+    prevSelectedRef.current = selectedFlight;
+  }, [isMobile, selectedFlight]);
+
   // Show loading screen until backend is ready
   if (!backendReady) {
     return <LoadingScreen airportCode={currentAirport || undefined} statusMessage={statusMessage} />;
   }
 
+  const simulationControlsNode = (
+    <SimulationControls
+      onFlightsChange={handleSimFlightsChange}
+      onActiveChange={setSimulationActive}
+      onAirportChange={loadAirport}
+      backendReady={backendReady}
+      currentAirport={currentAirport}
+      demoReady={demoReady}
+    />
+  );
+
+  // Shared map view (used in both desktop and mobile layouts)
+  const mapView = (
+    <div className="flex-1 overflow-hidden relative">
+      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} />
+      <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
+        <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>
+          <AirportMap
+            sharedViewport={viewport}
+            onViewportChange={handle2DViewportChange}
+            satellite={satellite}
+          />
+        </Suspense>
+      </div>
+      {viewMode === '3d' && (
+        <div className="absolute inset-0">
+          <Suspense fallback={<MapLoadingFallback label="Loading 3D View..." />}>
+            <Map3D
+              flights={filteredFlights}
+              selectedFlight={selectedFlight?.icao24 || null}
+              onSelectFlight={handleFlightSelect}
+              sharedViewport={viewport}
+              onViewportChange={handle3DViewportChange}
+              satellite={satellite}
+            />
+          </Suspense>
+        </div>
+      )}
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <div className="h-screen w-screen flex flex-col overflow-hidden">
+        <MobileHeader
+          onShowFIDS={() => setShowFIDS(true)}
+          simulationControls={simulationControlsNode}
+        />
+        {showFIDS && <FIDS onClose={() => setShowFIDS(false)} />}
+        <GenieChat />
+
+        {/* Tab content */}
+        <main className="flex-1 flex flex-col overflow-hidden">
+          {mobileTab === 'map' && mapView}
+          {mobileTab === 'flights' && (
+            <div className="flex-1 overflow-hidden">
+              <FlightList />
+            </div>
+          )}
+          {mobileTab === 'info' && (
+            <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 space-y-4">
+              <FlightDetail />
+              <GateStatus />
+            </div>
+          )}
+        </main>
+
+        <MobileTabBar activeTab={mobileTab} onTabChange={setMobileTab} />
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <Header onShowFIDS={() => setShowFIDS(true)} simulationControls={
-        <SimulationControls
-          onFlightsChange={handleSimFlightsChange}
-          onActiveChange={setSimulationActive}
-          onAirportChange={loadAirport}
-          backendReady={backendReady}
-          currentAirport={currentAirport}
-          demoReady={demoReady}
-        />
-      } />
+      <Header onShowFIDS={() => setShowFIDS(true)} simulationControls={simulationControlsNode} />
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} />}
       <GenieChat />
       <main className="flex-1 flex overflow-hidden">
@@ -317,33 +394,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
         </div>
 
         {/* Center: Airport Map (2D or 3D) */}
-        <div className="flex-1 overflow-hidden relative">
-          <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} />
-          {/* Keep 2D map mounted (hidden) once loaded to avoid Leaflet re-init */}
-          <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
-            <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>
-              <AirportMap
-                sharedViewport={viewport}
-                onViewportChange={handle2DViewportChange}
-                satellite={satellite}
-              />
-            </Suspense>
-          </div>
-          {viewMode === '3d' && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<MapLoadingFallback label="Loading 3D View..." />}>
-                <Map3D
-                  flights={filteredFlights}
-                  selectedFlight={selectedFlight?.icao24 || null}
-                  onSelectFlight={handleFlightSelect}
-                  sharedViewport={viewport}
-                  onViewportChange={handle3DViewportChange}
-                  satellite={satellite}
-                />
-              </Suspense>
-            </div>
-          )}
-        </div>
+        {mapView}
 
         {/* Right panel: Flight Detail + Gate Status */}
         <div className="w-80 flex-shrink-0 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 space-y-4">
