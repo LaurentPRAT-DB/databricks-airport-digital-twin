@@ -57,5 +57,7 @@
     }
   },
   "raw_dir": "data/calibration/raw/",
-  "check_update_days": 90
+  "check_update_days": 90,
+  "last_refreshed": null,
+  "refresh_schedule": "weekly (Monday 06:00 UTC via calibration_refresh_job)"
 }

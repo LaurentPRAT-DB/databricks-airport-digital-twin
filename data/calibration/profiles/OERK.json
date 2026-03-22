@@ -125,6 +125,13 @@
     0.043,
     0.03
   ],
+  "taxi_out_mean_min": 0.0,
+  "taxi_out_p95_min": 0.0,
+  "taxi_in_mean_min": 0.0,
+  "taxi_in_p95_min": 0.0,
+  "turnaround_median_min": 0.0,
+  "turnaround_p75_min": 0.0,
+  "turnaround_p95_min": 0.0,
   "delay_rate": 0.11,
   "delay_distribution": {
     "68": 0.22,

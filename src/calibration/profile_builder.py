@@ -206,11 +206,32 @@ def _enrich_with_otp(profile: AirportProfile, iata: str) -> None:
                         delay_dist[code] = delay_dist.get(code, 0) + weight * frac
                 profile.delay_distribution = delay_dist
 
+                # Taxi time stats
+                taxi_out = otp.get("taxi_out_stats", {})
+                if taxi_out and taxi_out.get("n", 0) > 100:
+                    profile.taxi_out_mean_min = taxi_out["mean"]
+                    profile.taxi_out_p95_min = taxi_out["p95"]
+
+                taxi_in = otp.get("taxi_in_stats", {})
+                if taxi_in and taxi_in.get("n", 0) > 100:
+                    profile.taxi_in_mean_min = taxi_in["mean"]
+                    profile.taxi_in_p95_min = taxi_in["p95"]
+
+                # Turnaround proxy stats (tail-number matching)
+                ta = otp.get("turnaround_stats", {})
+                if ta and ta.get("n", 0) > 50:
+                    profile.turnaround_median_min = ta["median"]
+                    profile.turnaround_p75_min = ta["p75"]
+                    profile.turnaround_p95_min = ta["p95"]
+
                 profile.data_source = "BTS_DB28+OTP"
                 logger.info(
-                    "  Enriched %s with real OTP: %.1f%% delayed, %.1f min avg, %d flights",
+                    "  Enriched %s with real OTP: %.1f%% delayed, %.1f min avg, %d flights"
+                    " | taxi_out=%.1fmin, taxi_in=%.1fmin, turnaround_med=%.1fmin",
                     iata, otp["delay_rate"] * 100, otp["mean_delay_minutes"],
                     otp["total_flights"],
+                    profile.taxi_out_mean_min, profile.taxi_in_mean_min,
+                    profile.turnaround_median_min,
                 )
 
     # Fall back to known_stats if OTP not available

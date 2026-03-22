@@ -439,6 +439,36 @@ class TestTaxiSeparation:
 
         assert _check_taxi_separation(second) is False
 
+    def test_taxi_separation_directional_not_gridlocked(self):
+        """Aircraft behind (opposite direction) should NOT block — prevents gridlock."""
+        # Two aircraft at nearly the same spot, both heading east (90°)
+        leader = make_flight_state(
+            icao24="leader01",
+            latitude=37.49,
+            longitude=-122.0 + 0.0003,  # Slightly ahead (east)
+            altitude=0,
+            on_ground=True,
+            phase=FlightPhase.TAXI_TO_GATE,
+            heading=90.0,
+        )
+        _flight_states["leader01"] = leader
+
+        follower = make_flight_state(
+            icao24="follow01",
+            latitude=37.49,
+            longitude=-122.0,  # Behind (west)
+            altitude=0,
+            on_ground=True,
+            phase=FlightPhase.TAXI_TO_GATE,
+            heading=90.0,
+        )
+        _flight_states["follow01"] = follower
+
+        # Leader has no one ahead → can move
+        assert _check_taxi_separation(leader) is True
+        # Follower has leader ahead → blocked
+        assert _check_taxi_separation(follower) is False
+
     def test_taxi_separation_ignores_parked(self):
         """Test taxi separation ignores parked aircraft."""
         # Parked aircraft

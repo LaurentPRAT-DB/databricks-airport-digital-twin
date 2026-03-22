@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 from faker import Faker
 
-from src.ml.gse_model import get_turnaround_timing, PHASE_DEPENDENCIES
+from src.ml.gse_model import get_turnaround_timing, get_aircraft_category, PHASE_DEPENDENCIES
 
 
 fake = Faker()
@@ -74,6 +74,18 @@ AIRLINE_TURNAROUND_FACTOR: Dict[str, float] = {
     "HAL": 0.95,
 }
 _DEFAULT_AIRLINE_FACTOR = 1.0
+
+# Calibration override: when set (> 0), the physics turnaround uses this
+# median gate time (in minutes) from BTS OTP data instead of the GSE model's
+# nominal timing.  The simulation engine populates this from the airport profile.
+_calibration_gate_minutes: float = 0.0
+
+
+def set_calibration_gate_minutes(minutes: float) -> None:
+    """Set calibrated median gate turnaround time (minutes). 0 disables."""
+    global _calibration_gate_minutes
+    _calibration_gate_minutes = minutes
+
 
 # ============================================================================
 # WEATHER STATE — updated by simulation engine each weather tick
@@ -1347,6 +1359,50 @@ def _get_runway_threshold() -> Optional[tuple]:
     return None
 
 
+def _get_arrival_runway_name() -> str:
+    """Get the arrival runway name from OSM ref tag or fall back to '28R'.
+
+    Derives the runway name dynamically from OSM data instead of hardcoding.
+    """
+    rwy = _get_osm_primary_runway()
+    if rwy:
+        ref = rwy.get("ref") or rwy.get("name", "")
+        if ref:
+            # OSM ref is like "10R/28L" — pick the first designator
+            return ref.split("/")[0].strip()
+    return "28R"
+
+
+def _get_runway_exit_position(state) -> tuple:
+    """Compute a staggered runway exit position for LANDING→TAXI_TO_GATE transition.
+
+    Offsets the aircraft along the runway heading by 100-500m from the touchdown
+    point, simulating different runway exit points (high-speed turnoff vs end-of-runway).
+    Returns (lat, lon).
+    """
+    # Get touchdown point
+    thr = _get_runway_threshold()
+    if thr:
+        base_lat, base_lon = thr[1], thr[0]  # (lon, lat) → (lat, lon)
+    else:
+        base_lat, base_lon = RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0]
+
+    # Get runway heading — exit direction is toward the terminal (reverse of approach)
+    hdg = _get_runway_heading()
+    if hdg is None:
+        hdg = 284.0  # SFO fallback
+
+    # Reverse heading: aircraft exits away from the approach direction (toward terminal)
+    exit_heading = (hdg + 180) % 360
+
+    # Random offset 100-500m along exit heading to simulate different exit points
+    offset_m = random.uniform(100, 500)
+    offset_deg_lat = (offset_m / 111000) * math.cos(math.radians(exit_heading))
+    offset_deg_lon = (offset_m / (111000 * math.cos(math.radians(base_lat)))) * math.sin(math.radians(exit_heading))
+
+    return (base_lat + offset_deg_lat, base_lon + offset_deg_lon)
+
+
 def _get_departure_runway() -> Optional[tuple]:
     """Get the departure runway start (lon, lat) from OSM data.
 
@@ -1378,12 +1434,12 @@ def _get_takeoff_runway_geometry() -> tuple:
 
     if dep is not None and thr is not None and hdg is not None:
         # Same-direction ops: departures take off in the SAME direction as arrivals.
-        # dep = far end of runway (start of takeoff roll)
-        # thr = approach threshold (end of takeoff roll / lift-off point)
-        # Aircraft rolls from dep → thr, heading matches the approach course (hdg).
-        start = (dep[1], dep[0])    # (lat, lon)
-        end = (thr[1], thr[0])      # (lat, lon)
-        dep_heading = hdg  # Same direction as approach (into the wind)
+        # thr = first geoPoint (takeoff roll starts here)
+        # dep = last geoPoint (takeoff roll ends / lift-off area)
+        # Aircraft rolls from thr → dep, heading matches the runway heading.
+        start = (thr[1], thr[0])    # (lat, lon) — start of takeoff roll
+        end = (dep[1], dep[0])      # (lat, lon) — lift-off end
+        dep_heading = _calculate_heading(start, end)  # heading along direction of travel
         # Estimate length from coordinates (~111,000 m/deg lat, 1 ft = 0.3048 m)
         dlat = end[0] - start[0]
         dlon = end[1] - start[1]
@@ -1867,9 +1923,20 @@ def _release_gate(icao24: str, gate: str):
         _gate_states[gate].available_at = time.time() + 60  # 60s cooldown before gate reuse
 
 def _check_taxi_separation(state: FlightState) -> bool:
-    """Check if aircraft has sufficient separation from others on ground."""
+    """Check if aircraft has sufficient separation from others on ground.
+
+    Only blocks if another ground aircraft is AHEAD (within ±90° of heading).
+    This prevents gridlock when multiple aircraft cluster at the same spawn
+    point (e.g. runway exit) — the lead aircraft can always move, and
+    followers queue naturally behind.
+    """
     if not state.on_ground:
         return True
+
+    import math
+    hdg_rad = math.radians(state.heading)
+    fwd_x = math.sin(hdg_rad)  # east component of heading
+    fwd_y = math.cos(hdg_rad)  # north component of heading
 
     for icao24, other in _flight_states.items():
         if icao24 == state.icao24:
@@ -1884,7 +1951,13 @@ def _check_taxi_separation(state: FlightState) -> bool:
             (other.latitude, other.longitude)
         )
         if dist < MIN_TAXI_SEPARATION_DEG:
-            return False
+            # Only block if the other aircraft is AHEAD of us
+            dlat = other.latitude - state.latitude
+            dlon = other.longitude - state.longitude
+            # dot product with heading vector: positive = ahead
+            dot = dlon * fwd_x + dlat * fwd_y
+            if dot > 0:
+                return False
 
     return True
 
@@ -2887,7 +2960,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.waypoint_index += 1
         else:
             # Transition to landing only if runway is clear
-            if _is_runway_clear("28R"):
+            arrival_rwy = _get_arrival_runway_name()
+            if _is_runway_clear(arrival_rwy):
                 emit_phase_transition(
                     state.icao24, state.callsign,
                     FlightPhase.APPROACHING.value, FlightPhase.LANDING.value,
@@ -2896,7 +2970,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 )
                 _set_phase(state, FlightPhase.LANDING)
                 state.waypoint_index = 0
-                _occupy_runway(state.icao24, "28R")
+                _occupy_runway(state.icao24, arrival_rwy)
             else:
                 # Runway busy — FAA standard racetrack holding pattern
                 HOLDING_LEG_SECONDS = 60.0
@@ -2925,9 +2999,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.longitude += speed_deg * math.sin(math.radians(state.heading))
 
     elif state.phase == FlightPhase.LANDING:
-        # Final touchdown sequence - land on runway 28R
+        # Final touchdown sequence - land on active arrival runway
         # Runway should already be marked as occupied
-        runway_touchdown = (RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0])  # lat, lon
+        thr = _get_runway_threshold()
+        runway_touchdown = (thr[1], thr[0]) if thr else (RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0])  # lat, lon
         new_pos = _move_toward((state.latitude, state.longitude), runway_touchdown, 0.002)
         state.latitude, state.longitude = new_pos
         state.altitude = max(0, state.altitude - 500 * dt)
@@ -2938,6 +3013,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.altitude = 0
             state.on_ground = True
             state.vertical_rate = 0
+            # Stagger exit position to prevent gridlock at single point
+            exit_pos = _get_runway_exit_position(state)
+            state.latitude, state.longitude = exit_pos
             emit_phase_transition(
                 state.icao24, state.callsign,
                 FlightPhase.LANDING.value, FlightPhase.TAXI_TO_GATE.value,
@@ -2948,7 +3026,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.waypoint_index = 0
             state.taxi_route = None  # Will be computed below
             # Release runway when exiting to taxiway
-            _release_runway(state.icao24, "28R")
+            arrival_rwy = _get_arrival_runway_name()
+            _release_runway(state.icao24, arrival_rwy)
             # Reuse pre-assigned gate from approach if still held, else find new one
             _init_gate_states()
             pre_gate = state.assigned_gate
@@ -3138,14 +3217,23 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     active_phase = p_name
             state.turnaround_phase = active_phase
 
-        # Realistic turnaround: use total_minutes (accounts for parallel phases)
-        # minus arrival/departure taxi and pushback (handled by other sim phases)
-        timing = get_turnaround_timing(state.aircraft_type)
-        total_min = timing["total_minutes"]  # 45 min narrow-body, 90 min wide-body
-        non_gate_min = (timing["phases"].get("arrival_taxi", 0)
-                        + timing["phases"].get("pushback", 0)
-                        + timing["phases"].get("departure_taxi", 0))
-        gate_minutes = total_min - non_gate_min
+        # Realistic turnaround: use calibrated BTS data if available,
+        # otherwise fall back to GSE model timing
+        if _calibration_gate_minutes > 0:
+            # Calibrated: use BTS OTP median turnaround (already gate-only time)
+            category = get_aircraft_category(state.aircraft_type)
+            if category == "wide_body":
+                gate_minutes = _calibration_gate_minutes * 1.4
+            else:
+                gate_minutes = _calibration_gate_minutes
+        else:
+            # Fallback: GSE model total minus taxi/pushback phases
+            timing = get_turnaround_timing(state.aircraft_type)
+            total_min = timing["total_minutes"]  # 45 min narrow-body, 90 min wide-body
+            non_gate_min = (timing["phases"].get("arrival_taxi", 0)
+                            + timing["phases"].get("pushback", 0)
+                            + timing["phases"].get("departure_taxi", 0))
+            gate_minutes = total_min - non_gate_min
         gate_seconds = gate_minutes * 60
         # Feature-dependent turnaround: airline + weather + congestion + international
         airline_code = state.callsign[:3] if state.callsign and len(state.callsign) >= 3 else ""

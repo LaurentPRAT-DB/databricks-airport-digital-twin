@@ -69,6 +69,17 @@ class AirportProfile:
     # Hourly traffic profile: 24-element list of relative weights (sums to ~1.0)
     hourly_profile: list[float] = field(default_factory=list)
 
+    # Taxi time statistics (from BTS OTP data, in minutes)
+    taxi_out_mean_min: float = 0.0
+    taxi_out_p95_min: float = 0.0
+    taxi_in_mean_min: float = 0.0
+    taxi_in_p95_min: float = 0.0
+
+    # Turnaround time statistics (from BTS OTP tail-number matching, in minutes)
+    turnaround_median_min: float = 0.0
+    turnaround_p75_min: float = 0.0
+    turnaround_p95_min: float = 0.0
+
     # Delay statistics
     delay_rate: float = 0.15  # fraction of flights delayed
     delay_distribution: dict[str, float] = field(default_factory=dict)  # delay code → weight

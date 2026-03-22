@@ -971,26 +971,35 @@ class TestGateTurnaroundTiming:
         )
 
     def test_narrow_body_turnaround_completes_within_45_minutes(self):
-        """Narrow-body should push back within 45 minutes.
+        """Narrow-body should push back within 45 minutes (uncalibrated GSE model).
 
         Real gate time is ~27 min. With worst-case factors (~1.3x) and +10% jitter,
         maximum is ~39 min. 45 min is a generous upper bound.
+
+        Note: When BTS calibration is active (turnaround_median ~70 min), the gate
+        time is longer. This test verifies the GSE model fallback with calibration
+        disabled.
         """
-        flight = _create_new_flight(
-            "ta_comp", "UAL200", FlightPhase.PARKED,
-            origin="JFK", destination="SFO"
-        )
-        _flight_states["ta_comp"] = flight
-        flight.time_at_gate = 0
-        flight.aircraft_type = "A320"
+        from src.ingestion.fallback import set_calibration_gate_minutes
+        set_calibration_gate_minutes(0)  # Disable calibration for this test
+        try:
+            flight = _create_new_flight(
+                "ta_comp", "UAL200", FlightPhase.PARKED,
+                origin="JFK", destination="SFO"
+            )
+            _flight_states["ta_comp"] = flight
+            flight.time_at_gate = 0
+            flight.aircraft_type = "A320"
 
-        # Simulate 45 minutes (2700 seconds)
-        for _ in range(2700):
-            _update_flight_state(flight, 1.0)
+            # Simulate 45 minutes (2700 seconds)
+            for _ in range(2700):
+                _update_flight_state(flight, 1.0)
 
-        assert flight.phase != FlightPhase.PARKED, (
-            "A320 should have pushed back within 45 minutes"
-        )
+            assert flight.phase != FlightPhase.PARKED, (
+                "A320 should have pushed back within 45 minutes (uncalibrated)"
+            )
+        finally:
+            set_calibration_gate_minutes(0)  # Clean up
 
     def test_turnaround_time_varies_by_aircraft_size(self):
         """Wide-body should have longer turnaround than narrow-body."""

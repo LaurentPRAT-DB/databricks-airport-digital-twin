@@ -46,6 +46,7 @@ from src.ingestion.fallback import (
     DEPARTURE_WAYPOINTS,
     apply_airport_offset,
     reset_airport_offset,
+    set_calibration_gate_minutes,
 )
 from src.ingestion.schedule_generator import (
     AIRPORT_COORDINATES,
@@ -60,10 +61,10 @@ from src.ingestion.schedule_generator import (
     _get_flights_per_hour,
     set_traffic_airport,
 )
-from src.ml.gse_model import get_turnaround_timing, PHASE_DEPENDENCIES
+from src.ml.gse_model import get_turnaround_timing, get_aircraft_category, PHASE_DEPENDENCIES
 from src.ingestion.weather_generator import generate_metar
 from src.ingestion.baggage_generator import generate_bags_for_flight
-from src.calibration.profile import AirportProfileLoader
+from src.calibration.profile import AirportProfile, AirportProfileLoader
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,37 @@ def _critical_path_turnaround(aircraft_type: str) -> float:
         finish[phase] = earliest_start + jittered[phase]
 
     return max(finish.values()) if finish else timing["total_minutes"]
+
+
+def _calibrated_turnaround(
+    aircraft_type: str,
+    airline_code: str,
+    profile: AirportProfile,
+) -> float:
+    """Compute turnaround using calibration data when available.
+
+    Uses BTS OTP turnaround stats from the airport profile as the baseline,
+    with aircraft-category and airline adjustments. Falls back to the
+    critical-path DAG model when no calibration data exists.
+    """
+    median = profile.turnaround_median_min
+    if median <= 0:
+        return _critical_path_turnaround(aircraft_type)
+
+    # Aircraft category scaling: wide-body ~1.4x narrow-body base
+    category = get_aircraft_category(aircraft_type)
+    if category == "wide_body":
+        base = median * 1.4
+    else:
+        base = median
+
+    # Airline turnaround factor (fast LCCs vs premium carriers)
+    from src.ingestion.fallback import AIRLINE_TURNAROUND_FACTOR
+    airline_factor = AIRLINE_TURNAROUND_FACTOR.get(airline_code, 1.0)
+    base *= airline_factor
+
+    # Add ±15% jitter to match real P25-P75 spread
+    return base * random.uniform(0.85, 1.15)
 
 
 class SimulationEngine:
@@ -204,9 +236,13 @@ class SimulationEngine:
         self._phase_time: dict[str, tuple[str, float]] = {}
 
         # Max time in seconds before forcing phase transitions
+        # Use profile-calibrated P95 taxi times when available, else defaults
+        profile = self.airport_profile
+        taxi_in_cap = max(600.0, profile.taxi_in_p95_min * 60) if profile.taxi_in_p95_min > 0 else 600.0
+        taxi_out_cap = max(600.0, profile.taxi_out_p95_min * 60) if profile.taxi_out_p95_min > 0 else 600.0
         self._max_phase_seconds = {
-            "taxi_to_gate": 600.0,    # 10 min max taxi
-            "taxi_to_runway": 600.0,  # 10 min max taxi
+            "taxi_to_gate": taxi_in_cap,
+            "taxi_to_runway": taxi_out_cap,
             "pushback": 300.0,        # 5 min max pushback
             "approaching": 900.0,     # 15 min max approach
             "landing": 120.0,         # 2 min max landing
@@ -244,6 +280,9 @@ class SimulationEngine:
 
     def _reset_global_state(self) -> None:
         """Reset fallback.py global state for a clean simulation."""
+        # Set calibrated gate turnaround time from profile (0 = use GSE model)
+        set_calibration_gate_minutes(self.airport_profile.turnaround_median_min)
+
         _flight_states.clear()
         _gate_states.clear()
 
@@ -375,7 +414,7 @@ class SimulationEngine:
         linked_count = 0
         linkable = min(len(arrivals), self.config.departures)
         for arr in arrivals[:linkable]:
-            turnaround = _critical_path_turnaround(arr["aircraft_type"])
+            turnaround = _calibrated_turnaround(arr["aircraft_type"], arr["airline_code"], profile)
             arr_time = datetime.fromisoformat(arr["scheduled_time"])
             dep_time = arr_time + timedelta(minutes=turnaround)
 

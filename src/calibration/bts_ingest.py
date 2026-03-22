@@ -556,16 +556,29 @@ def build_profile_from_db28(
     )
 
 
+def _compute_percentile(sorted_data: list[float], pct: float) -> float:
+    """Compute percentile from pre-sorted list. pct in [0, 100]."""
+    if not sorted_data:
+        return 0.0
+    idx = int(len(sorted_data) * pct / 100.0)
+    idx = min(idx, len(sorted_data) - 1)
+    return sorted_data[idx]
+
+
 def parse_otp_prezip(
     otp_dir: Path,
     target_airport: str,
 ) -> dict:
     """Parse BTS On-Time Performance PREZIP monthly zip files for a specific airport.
 
-    Each zip contains a single CSV with 110 columns. We extract delay stats and
-    hourly patterns the same way as parse_ontime_performance() but from the
-    PREZIP monthly archives downloaded from:
-    https://transtats.bts.gov/PREZIP/On_Time_Reporting_Carrier_On_Time_Performance_...
+    Each zip contains a single CSV with 110 columns. We extract delay stats,
+    hourly patterns, taxi times, and turnaround proxy from the PREZIP monthly
+    archives downloaded from BTS.
+
+    Taxi times come from BTS TaxiOut/TaxiIn columns (minutes from gate to
+    wheels-off / wheels-on to gate). Turnaround is estimated by matching
+    same tail number arriving then departing at the target airport on the
+    same date.
 
     Args:
         otp_dir: Directory containing otp_YYYY_M.zip files
@@ -573,7 +586,8 @@ def parse_otp_prezip(
 
     Returns:
         Dict with delay_rate, delay_causes, hourly_departures, hourly_arrivals,
-        mean_delay_minutes, total_flights, delayed_flights
+        mean_delay_minutes, total_flights, delayed_flights, taxi_out_stats,
+        taxi_in_stats, turnaround_stats
     """
     total_flights = 0
     delayed_flights = 0
@@ -581,6 +595,11 @@ def parse_otp_prezip(
     delay_causes: Counter = Counter()
     hourly_departures: Counter = Counter()
     hourly_arrivals: Counter = Counter()
+    taxi_out_values: list[float] = []
+    taxi_in_values: list[float] = []
+    # For turnaround proxy: (tail, date) -> list of arrival times (minutes since midnight)
+    arrivals_by_tail: dict[tuple[str, str], list[int]] = defaultdict(list)
+    departures_by_tail: dict[tuple[str, str], list[int]] = defaultdict(list)
 
     zip_files = sorted(p for p in otp_dir.iterdir() if p.suffix == ".zip" and p.name.startswith("otp_"))
     if not zip_files:
@@ -593,6 +612,9 @@ def parse_otp_prezip(
             "mean_delay_minutes": 20.0,
             "total_flights": 0,
             "delayed_flights": 0,
+            "taxi_out_stats": {},
+            "taxi_in_stats": {},
+            "turnaround_stats": {},
         }
 
     logger.info("Parsing %d OTP PREZIP files for %s...", len(zip_files), target_airport)
@@ -616,6 +638,8 @@ def parse_otp_prezip(
                         continue
 
                     total_flights += 1
+                    tail = row.get("Tail_Number", "").strip()
+                    flight_date = row.get("FlightDate", "").strip()
 
                     # Hourly pattern
                     dep_time = row.get("CRSDepTime", "").strip()
@@ -626,6 +650,37 @@ def parse_otp_prezip(
                     if is_arrival and arr_time and len(arr_time) >= 3:
                         hour = int(arr_time[:-2]) if len(arr_time) > 2 else 0
                         hourly_arrivals[hour % 24] += 1
+
+                    # Taxi times
+                    if is_departure:
+                        taxi_out = row.get("TaxiOut", "").strip()
+                        if taxi_out:
+                            val = _safe_float(taxi_out)
+                            if 1 <= val <= 120:  # Sanity: 1-120 min
+                                taxi_out_values.append(val)
+                        # Turnaround: record actual departure time
+                        actual_dep = row.get("DepTime", "").strip()
+                        if tail and flight_date and actual_dep and len(actual_dep) >= 3:
+                            try:
+                                dep_min = int(actual_dep[:-2]) * 60 + int(actual_dep[-2:])
+                                departures_by_tail[(tail, flight_date)].append(dep_min)
+                            except (ValueError, IndexError):
+                                pass
+
+                    if is_arrival:
+                        taxi_in = row.get("TaxiIn", "").strip()
+                        if taxi_in:
+                            val = _safe_float(taxi_in)
+                            if 1 <= val <= 120:
+                                taxi_in_values.append(val)
+                        # Turnaround: record actual arrival time
+                        actual_arr = row.get("ArrTime", "").strip()
+                        if tail and flight_date and actual_arr and len(actual_arr) >= 3:
+                            try:
+                                arr_min = int(actual_arr[:-2]) * 60 + int(actual_arr[-2:])
+                                arrivals_by_tail[(tail, flight_date)].append(arr_min)
+                            except (ValueError, IndexError):
+                                pass
 
                     # Delay stats (only count departures for delay rate)
                     if is_departure:
@@ -648,9 +703,55 @@ def parse_otp_prezip(
     delay_rate = delayed_flights / total_flights if total_flights > 0 else 0.15
     mean_delay = total_delay_minutes / delayed_flights if delayed_flights > 0 else 20.0
 
+    # Compute taxi stats
+    taxi_out_values.sort()
+    taxi_in_values.sort()
+    taxi_out_stats: dict = {}
+    taxi_in_stats: dict = {}
+    if taxi_out_values:
+        taxi_out_stats = {
+            "mean": round(sum(taxi_out_values) / len(taxi_out_values), 1),
+            "median": round(_compute_percentile(taxi_out_values, 50), 1),
+            "p95": round(_compute_percentile(taxi_out_values, 95), 1),
+            "n": len(taxi_out_values),
+        }
+    if taxi_in_values:
+        taxi_in_stats = {
+            "mean": round(sum(taxi_in_values) / len(taxi_in_values), 1),
+            "median": round(_compute_percentile(taxi_in_values, 50), 1),
+            "p95": round(_compute_percentile(taxi_in_values, 95), 1),
+            "n": len(taxi_in_values),
+        }
+
+    # Compute turnaround proxy: same tail, arrive then depart same day
+    turnaround_gaps: list[float] = []
+    for key, arr_times in arrivals_by_tail.items():
+        dep_times = departures_by_tail.get(key, [])
+        for a in arr_times:
+            for d in dep_times:
+                gap = d - a
+                if 20 <= gap <= 300:  # Reasonable turnaround: 20 min to 5 hours
+                    turnaround_gaps.append(float(gap))
+
+    turnaround_gaps.sort()
+    turnaround_stats: dict = {}
+    if turnaround_gaps:
+        turnaround_stats = {
+            "mean": round(sum(turnaround_gaps) / len(turnaround_gaps), 1),
+            "median": round(_compute_percentile(turnaround_gaps, 50), 1),
+            "p25": round(_compute_percentile(turnaround_gaps, 25), 1),
+            "p75": round(_compute_percentile(turnaround_gaps, 75), 1),
+            "p95": round(_compute_percentile(turnaround_gaps, 95), 1),
+            "n": len(turnaround_gaps),
+        }
+
     logger.info(
-        "OTP PREZIP for %s: %d flights, %.1f%% delayed, %.1f min avg delay",
+        "OTP PREZIP for %s: %d flights, %.1f%% delayed, %.1f min avg delay, "
+        "taxi_out=%s taxi_in=%s turnaround=%s",
         target_airport, total_flights, delay_rate * 100, mean_delay,
+        f"mean={taxi_out_stats.get('mean', '?')}min(n={taxi_out_stats.get('n', 0)})" if taxi_out_stats else "N/A",
+        f"mean={taxi_in_stats.get('mean', '?')}min(n={taxi_in_stats.get('n', 0)})" if taxi_in_stats else "N/A",
+        f"median={turnaround_stats.get('median', '?')}min(n={turnaround_stats.get('n', 0)})" if turnaround_stats else "N/A",
     )
 
     return {
@@ -661,6 +762,9 @@ def parse_otp_prezip(
         "mean_delay_minutes": mean_delay,
         "total_flights": total_flights,
         "delayed_flights": delayed_flights,
+        "taxi_out_stats": taxi_out_stats,
+        "taxi_in_stats": taxi_in_stats,
+        "turnaround_stats": turnaround_stats,
     }
 
 

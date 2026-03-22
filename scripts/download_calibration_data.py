@@ -132,6 +132,59 @@ def _try_download_bts_zip(csv_filename: str, url: str, label: str) -> bool:
         return False
 
 
+OTP_DIR = RAW_DIR / "otp"
+
+# BTS OTP PREZIP URL template — monthly on-time performance zips
+OTP_PREZIP_URL = (
+    "https://transtats.bts.gov/PREZIP/"
+    "On_Time_Reporting_Carrier_On_Time_Performance_(1987_present)_{year}_{month}.zip"
+)
+
+
+def download_otp_prezip(months: int = 12) -> None:
+    """Download BTS OTP PREZIP monthly zip files.
+
+    Args:
+        months: Number of months to go back from the current date.
+    """
+    from datetime import date, timedelta
+
+    OTP_DIR.mkdir(parents=True, exist_ok=True)
+    today = date.today()
+    # BTS data lags ~3 months; start from 3 months ago
+    end = today.replace(day=1) - timedelta(days=90)
+    downloaded = 0
+    skipped = 0
+
+    for i in range(months):
+        target = end - timedelta(days=30 * i)
+        year, month = target.year, target.month
+        dest = OTP_DIR / f"otp_{year}_{month}.zip"
+        if dest.exists():
+            skipped += 1
+            continue
+
+        url = OTP_PREZIP_URL.format(year=year, month=month)
+        logger.info("Downloading OTP PREZIP %d/%d...", year, month)
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (compatible; AirportDigitalTwin/1.0)",
+            })
+            with urllib.request.urlopen(req, timeout=120) as response:
+                data = response.read()
+            if not data[:2] == b"PK":
+                logger.warning("  -> %d/%d: not a zip file, skipping", year, month)
+                continue
+            dest.write_bytes(data)
+            size_mb = len(data) / (1024 * 1024)
+            logger.info("  -> Saved %s (%.1f MB)", dest.name, size_mb)
+            downloaded += 1
+        except Exception as e:
+            logger.warning("  -> %d/%d failed: %s", year, month, e)
+
+    logger.info("OTP PREZIP: downloaded %d new, skipped %d existing", downloaded, skipped)
+
+
 def download_bts():
     """Try to download BTS data programmatically, fall back to instructions."""
     RAW_DIR.mkdir(parents=True, exist_ok=True)
@@ -180,10 +233,12 @@ def main():
     parser = argparse.ArgumentParser(description="Download calibration data")
     parser.add_argument("--bts", action="store_true", help="Download BTS data (or show instructions)")
     parser.add_argument("--ourairports", action="store_true", help="Download OurAirports data")
+    parser.add_argument("--otp", action="store_true", help="Download BTS OTP PREZIP monthly zips")
+    parser.add_argument("--otp-months", type=int, default=12, help="Months of OTP data (default: 12)")
     parser.add_argument("--all", action="store_true", help="Download everything available")
     args = parser.parse_args()
 
-    if not (args.bts or args.ourairports or args.all):
+    if not (args.bts or args.ourairports or args.otp or args.all):
         args.all = True
 
     if args.ourairports or args.all:
@@ -191,6 +246,9 @@ def main():
 
     if args.bts or args.all:
         download_bts()
+
+    if args.otp or args.all:
+        download_otp_prezip(args.otp_months)
 
 
 if __name__ == "__main__":
