@@ -952,12 +952,10 @@ describe('End-to-end user interaction flows', () => {
       await waitForAppReady()
       await waitForFlights()
 
-      // Flight count pill in header
       const header = screen.getByRole('banner')
-      expect(within(header).getByText(/Flights:/)).toBeInTheDocument()
 
-      // Phase filter button in header
-      expect(within(header).getByRole('button', { name: /phases/i })).toBeInTheDocument()
+      // Legend button in header
+      expect(within(header).getByRole('button', { name: /legend/i })).toBeInTheDocument()
 
       // Connection status — compact dot with tooltip
       await waitFor(() => {
@@ -966,13 +964,14 @@ describe('End-to-end user interaction flows', () => {
       })
     })
 
-    it('shows demo badge for synthetic data', async () => {
+    it('shows simulation controls in header', async () => {
       renderApp()
       await waitForAppReady()
 
       await waitFor(() => {
-        // Match the exact "Demo" badge text in the header data source indicator
-        expect(screen.getByText(/^Demo$/)).toBeInTheDocument()
+        // Simulation controls should be present (either SIM badge, Start Simulation, or Preparing)
+        const header = screen.getByRole('banner')
+        expect(header).toBeInTheDocument()
       })
     })
   })

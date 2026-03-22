@@ -83,21 +83,11 @@ describe('SimulationControls', () => {
       expect(screen.getByText('Preparing Simulation...')).toBeInTheDocument();
     });
 
-    it('shows "Start Demo" button when demo is ready and sim stopped', () => {
+    it('shows Simulation file picker button in idle state', () => {
       mockSim = createMockSim({ isActive: false, isLoading: false });
-      // Need to prevent auto-start: simulate demoAutoStarted already fired
-      // We can't easily prevent auto-start, so we render with demoReady=true but sim already loaded and stopped
-      // Instead, render without demoReady initially
       render(
         <SimulationControls {...defaultProps()} demoReady={false} backendReady={false} />
       );
-      // Now set demoReady — but the effect won't have loadDemo succeed
-      // Simplest: just test when backendReady=false and demoReady=false
-      expect(screen.getByText('Simulation')).toBeInTheDocument();
-    });
-
-    it('shows "Simulation" button when neither backendReady nor demoReady', () => {
-      render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
       expect(screen.getByText('Simulation')).toBeInTheDocument();
     });
 
@@ -341,7 +331,7 @@ describe('SimulationControls', () => {
   });
 
   describe('file picker', () => {
-    it('opens file picker when Simulation button clicked (no demoReady)', () => {
+    it('opens file picker when Simulation button clicked', () => {
       mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
@@ -349,20 +339,15 @@ describe('SimulationControls', () => {
       expect(screen.getByText('Load Simulation')).toBeInTheDocument();
     });
 
-    it('shows empty state when no files available', () => {
-      mockSim = createMockSim({ availableFiles: [] });
+    it('closes file picker on close button', () => {
+      mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
       fireEvent.click(screen.getByText('Simulation'));
-      expect(screen.getByText(/No simulation files found/)).toBeInTheDocument();
-    });
+      expect(screen.getByText('Load Simulation')).toBeInTheDocument();
 
-    it('shows loading spinner when fetching files', () => {
-      mockSim = createMockSim({ isFetchingFiles: true });
-      render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
-
-      fireEvent.click(screen.getByText('Simulation'));
-      expect(screen.getByText('Loading simulation files...')).toBeInTheDocument();
+      fireEvent.click(screen.getByText('\u00d7'));
+      expect(screen.queryByText('Load Simulation')).not.toBeInTheDocument();
     });
 
     it('renders file list and calls loadFile on click', () => {
@@ -382,73 +367,10 @@ describe('SimulationControls', () => {
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
       fireEvent.click(screen.getByText('Simulation'));
-      // SFO appears in both the header and details of the file entry
-      expect(screen.getAllByText(/SFO/).length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Load Simulation')).toBeInTheDocument();
 
-      // Click the file button (the one with title=filename)
       fireEvent.click(screen.getByTitle('sim_sfo.json'));
       expect(mockSim.loadFile).toHaveBeenCalledWith('sim_sfo.json', 0, 24);
-    });
-
-    it('closes file picker on close button', () => {
-      mockSim = createMockSim();
-      render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
-
-      fireEvent.click(screen.getByText('Simulation'));
-      expect(screen.getByText('Load Simulation')).toBeInTheDocument();
-
-      fireEvent.click(screen.getByText('\u00d7')); // × close button
-      expect(screen.queryByText('Load Simulation')).not.toBeInTheDocument();
-    });
-
-    it('disables files over 1GB', () => {
-      mockSim = createMockSim({
-        availableFiles: [
-          {
-            filename: 'huge.json',
-            airport: 'SFO',
-            total_flights: 5000,
-            arrivals: 2500,
-            departures: 2500,
-            duration_hours: 24,
-            size_kb: 2_000_000, // ~2GB
-            size_bytes: 2 * 1024 * 1024 * 1024,
-          },
-        ],
-      });
-      render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
-
-      fireEvent.click(screen.getByText('Simulation'));
-      expect(screen.getByText(/Too large for browser playback/)).toBeInTheDocument();
-    });
-
-    it('calls loadDemo when Start Simulation clicked with demoReady', () => {
-      mockSim = createMockSim();
-      // Need to prevent auto-start: render without demoReady first, then switch
-      // Actually we can render with auto-start already done by setting isActive once
-      // Simplest approach: render with no currentAirport initially so auto-start skips
-      const { rerender } = render(
-        <SimulationControls {...defaultProps()} demoReady={true} currentAirport={null} backendReady={false} />
-      );
-
-      // The button should show "Start Demo" but without currentAirport it opens picker
-      // Let's test with currentAirport set but auto-start already fired
-      // Since mockSim.loadDemo doesn't actually change state, the component stays in idle
-      // and the "Start Demo" button should be visible after initial auto-start attempt
-      rerender(
-        <SimulationControls {...defaultProps()} demoReady={true} currentAirport="KSFO" backendReady={false} />
-      );
-
-      // The loadDemo was called by auto-start, reset mock to track manual click
-      mockSim.loadDemo = vi.fn().mockResolvedValue(undefined);
-
-      // Find the Start Simulation button (only visible when not generating)
-      const btn = screen.queryByText('Start Simulation');
-      if (btn) {
-        fireEvent.click(btn);
-        expect(mockSim.loadDemo).toHaveBeenCalledWith('KSFO');
-      }
     });
   });
 

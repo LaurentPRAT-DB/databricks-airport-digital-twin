@@ -9,16 +9,6 @@ import {
 
 const SPEED_OPTIONS: PlaybackSpeed[] = [1, 2, 5, 10, 30, 60];
 
-const MAX_LOADABLE_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB
-
-/** Format byte count to human-readable size string. */
-function formatFileSize(sizeBytes: number | undefined, sizeKb: number): string {
-  const bytes = sizeBytes ?? sizeKb * 1024;
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
-  return `${(bytes / 1024).toFixed(0)} KB`;
-}
-
 /** Format ISO timestamp to short time display. */
 function formatSimTime(iso: string | null): string {
   if (!iso) return '--:--:--';
@@ -30,7 +20,16 @@ function formatSimTime(iso: string | null): string {
   }
 }
 
-/** File picker dialog shown when simulation mode is not active. */
+const MAX_LOADABLE_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB
+
+function formatFileSize(sizeBytes: number | undefined, sizeKb: number): string {
+  const bytes = sizeBytes ?? sizeKb * 1024;
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
+/** File picker dialog for loading job-generated simulation files. */
 function FilePicker({
   files,
   isLoading,
@@ -58,12 +57,7 @@ function FilePicker({
               <p className="text-slate-500 text-sm">Loading simulation files...</p>
             </div>
           ) : files.length === 0 ? (
-            <p className="text-slate-500 text-sm">
-              No simulation files found. Run a simulation first:
-              <code className="block mt-2 bg-slate-100 p-2 rounded text-xs">
-                python -m src.simulation.cli --config configs/simulation_sfo_50.yaml
-              </code>
-            </p>
+            <p className="text-slate-500 text-sm">No simulation files available.</p>
           ) : (
             <div className="space-y-2">
               {files.map((f) => {
@@ -95,9 +89,7 @@ function FilePicker({
                     <div className="text-xs text-slate-500 mt-1">
                       {f.total_flights} flights &middot; {f.arrivals} arr / {f.departures} dep &middot; {f.duration_hours}h
                       {tooLarge && (
-                        <span className="ml-1 text-red-400">
-                          &middot; Too large for browser playback
-                        </span>
+                        <span className="ml-1 text-red-400">&middot; Too large for browser playback</span>
                       )}
                     </div>
                   </button>
@@ -439,32 +431,30 @@ export function SimulationControls({
       );
     }
 
-    // Demo stopped / not started — dimmed start button
-    return (
-      <button
-        onClick={() => {
-          if (currentAirport && demoReady) {
-            sim.loadDemo(currentAirport);
-          } else {
-            setShowPicker(true);
-          }
-        }}
-        className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-500 px-3 py-1.5 rounded-lg text-sm transition-colors"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        {demoReady ? 'Start Simulation' : 'Simulation'}
-      </button>
-    );
+    // Idle — nothing to show (sim auto-starts when demo is ready)
+    return null;
   };
 
   return (
     <>
       {renderHeaderButton()}
 
-      {/* File picker modal (for manual simulation loading) */}
+      {/* Load simulation file button — always visible */}
+      <button
+        onClick={() => {
+          sim.fetchFiles();
+          setShowPicker(true);
+        }}
+        className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-500 px-3 py-1.5 rounded-lg text-sm transition-colors"
+        title="Load a simulation file"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+        Simulation
+      </button>
+
+      {/* File picker modal */}
       {showPicker && (
         <FilePicker
           files={sim.availableFiles}

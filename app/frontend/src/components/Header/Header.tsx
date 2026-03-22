@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
 import { useFlightContext } from '../../context/FlightContext';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import PlatformLinks from '../PlatformLinks/PlatformLinks';
@@ -7,79 +7,13 @@ import AirportSelector from '../AirportSelector/AirportSelector';
 import AirportSwitchProgress from '../AirportSelector/AirportSwitchProgress';
 import PhaseFilter from './PhaseFilter';
 
-const SPEED_PRESETS = [1, 4, 8, 16, 32];
-
-function SpeedChip() {
-  const [multiplier, setMultiplier] = useState(8);
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    fetch('/api/settings/gate-time-multiplier')
-      .then(r => r.json())
-      .then(d => setMultiplier(d.multiplier))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [isOpen]);
-
-  const pick = (v: number) => {
-    fetch('/api/settings/gate-time-multiplier', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ multiplier: v }),
-    })
-      .then(r => r.json())
-      .then(d => setMultiplier(d.multiplier))
-      .catch(() => {});
-    setIsOpen(false);
-  };
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setIsOpen(o => !o)}
-        className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 px-2 py-0.5 rounded-full text-xs font-medium transition-colors cursor-pointer"
-        title="Gate turnaround speed multiplier"
-      >
-        <span>⚡</span>
-        <span>{multiplier}x</span>
-      </button>
-      {isOpen && (
-        <div className="absolute top-full mt-1 left-0 bg-slate-700 rounded-lg shadow-xl border border-slate-600 p-1 flex gap-1 z-50">
-          {SPEED_PRESETS.map(v => (
-            <button
-              key={v}
-              onClick={() => pick(v)}
-              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                v === multiplier
-                  ? 'bg-blue-600 text-white'
-                  : 'hover:bg-slate-600 text-slate-300'
-              }`}
-            >
-              {v}x
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 interface HeaderProps {
   onShowFIDS?: () => void;
   simulationControls?: ReactNode;
 }
 
 export default function Header({ onShowFIDS, simulationControls }: HeaderProps) {
-  const { flights, filteredFlights, isLoading, error, lastUpdated, dataSource, setSelectedFlight } = useFlightContext();
+  const { isLoading, error, lastUpdated, setSelectedFlight } = useFlightContext();
   const { currentAirport, isLoading: isLoadingAirport, error: airportError, loadAirport, switchProgress } = useAirportConfigContext();
 
   // Clear flight selection before switching airports to avoid stale data
@@ -115,25 +49,6 @@ export default function Header({ onShowFIDS, simulationControls }: HeaderProps) 
           isLoading={isLoadingAirport}
         />
 
-        <div className="flex items-center gap-2 bg-slate-700 px-3 py-1 rounded-full text-sm">
-          <span className="text-slate-300">Flights:</span>
-          <span className="font-mono font-medium">
-            {filteredFlights.length !== flights.length
-              ? <>{filteredFlights.length}<span className="text-slate-400">/{flights.length}</span></>
-              : flights.length}
-          </span>
-          {isLoading && (
-            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-          )}
-        </div>
-        {/* Data source indicator */}
-        {dataSource && dataSource !== 'live' && (
-          <div className="bg-amber-600 px-2 py-0.5 rounded-full text-xs font-medium cursor-default" title={`Using ${dataSource} data`}>
-            Demo
-          </div>
-        )}
-        {/* Speed multiplier chip */}
-        <SpeedChip />
       </div>
 
       <div className="flex items-center gap-6">
