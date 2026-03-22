@@ -1,7 +1,7 @@
-"""Bronze layer DLT pipeline for raw baggage event ingestion.
+"""Bronze layer DLT pipeline for baggage data.
 
-This module defines the Bronze layer table that ingests raw baggage events
-from the JSON landing zone using Databricks Auto Loader (cloudFiles).
+Reads from the Delta table synced from Lakebase by the lakebase_to_delta_sync job.
+The sync job writes baggage_status_gold from Lakebase PostgreSQL to Delta.
 """
 
 import dlt
@@ -10,7 +10,7 @@ from pyspark.sql import functions as F
 
 @dlt.table(
     name="baggage_events_bronze",
-    comment="Raw baggage events ingested from JSON landing zone",
+    comment="Baggage data from Lakebase sync (Delta table)",
     table_properties={
         "quality": "bronze",
         "pipelines.autoOptimize.managed": "true",
@@ -18,22 +18,16 @@ from pyspark.sql import functions as F
     },
 )
 def baggage_events_bronze():
-    """Ingest raw baggage events from cloud storage using Auto Loader.
+    """Read baggage data from the synced Delta table.
 
-    Reads JSON-lines files written by baggage_writer.py from a Unity Catalog
-    Volume landing zone. Each line contains one baggage event with fields:
-    airport_icao, flight_number, total_bags, loaded, connecting_bags,
-    status, load_percentage, last_updated, recorded_at.
+    The lakebase_to_delta_sync job writes baggage_status_gold from Lakebase.
+    This bronze layer reads that table and adds ingestion metadata.
 
     Returns:
-        DataFrame: Raw baggage events with metadata columns
+        DataFrame: Baggage data with metadata columns
     """
     return (
-        spark.readStream.format("cloudFiles")
-        .option("cloudFiles.format", "json")
-        .option("cloudFiles.inferColumnTypes", "true")
-        .option("cloudFiles.schemaLocation", "/tmp/baggage_bronze_schema")
-        .load("/Volumes/catalog/schema/baggage_landing")
+        spark.read.table("serverless_stable_3n0ihb_catalog.airport_digital_twin.baggage_status_gold")
         .withColumn("_ingested_at", F.current_timestamp())
-        .withColumn("_source_file", F.input_file_name())
+        .withColumn("_source_file", F.lit("lakebase_sync"))
     )

@@ -31,11 +31,11 @@ class TestBronzePipeline:
         assert "_ingested_at" in bronze_source
         assert "_source_file" in bronze_source
         assert "current_timestamp()" in bronze_source
-        assert "input_file_name()" in bronze_source
 
-    def test_bronze_uses_cloud_files(self, bronze_source: str) -> None:
-        """Validate bronze table uses cloudFiles format for Auto Loader."""
-        assert "cloudFiles" in bronze_source
+    def test_bronze_reads_from_delta_table(self, bronze_source: str) -> None:
+        """Validate bronze table reads from synced Delta table (not cloudFiles)."""
+        assert "spark.read.table" in bronze_source
+        assert "flight_status_gold" in bronze_source
 
     def test_bronze_table_properties(self, bronze_source: str) -> None:
         """Validate bronze table has quality property set."""
@@ -166,9 +166,10 @@ class TestBaggageBronzePipeline:
         """Validate baggage bronze table is named baggage_events_bronze."""
         assert "baggage_events_bronze" in baggage_bronze_source
 
-    def test_baggage_bronze_uses_cloud_files(self, baggage_bronze_source: str) -> None:
-        """Validate baggage bronze uses cloudFiles format for Auto Loader."""
-        assert "cloudFiles" in baggage_bronze_source
+    def test_baggage_bronze_reads_from_delta_table(self, baggage_bronze_source: str) -> None:
+        """Validate baggage bronze reads from synced Delta table (not cloudFiles)."""
+        assert "spark.read.table" in baggage_bronze_source
+        assert "baggage_status_gold" in baggage_bronze_source
 
     def test_baggage_bronze_has_metadata_columns(self, baggage_bronze_source: str) -> None:
         """Validate baggage bronze adds _ingested_at and _source_file columns."""

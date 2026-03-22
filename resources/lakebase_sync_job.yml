@@ -1,0 +1,37 @@
+# Lakebase to Delta sync job
+# Reads operational data from Lakebase PostgreSQL and writes to Delta tables
+# for analytics, Genie Spaces, and downstream processing
+
+resources:
+  jobs:
+    lakebase_to_delta_sync:
+      name: "[${bundle.target}] Airport Digital Twin - Lakebase to Delta Sync"
+      description: "Syncs operational data from Lakebase PostgreSQL to Delta tables in Unity Catalog"
+
+      # Serverless environment with psycopg2
+      environments:
+        - environment_key: sync_env
+          spec:
+            client: "1"
+            dependencies:
+              - psycopg2-binary
+
+      tasks:
+        - task_key: sync_lakebase_to_delta
+          notebook_task:
+            notebook_path: ../databricks/notebooks/sync_from_lakebase.py
+          environment_key: sync_env
+
+      # Run every 5 minutes
+      schedule:
+        quartz_cron_expression: "0 */5 * * * ?"
+        timezone_id: "UTC"
+        pause_status: UNPAUSED
+
+      tags:
+        project: airport-digital-twin
+        component: lakebase-sync
+        target: ${bundle.target}
+
+      # Timeout after 10 minutes
+      timeout_seconds: 600
