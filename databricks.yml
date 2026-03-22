@@ -28,6 +28,11 @@ sync:
     - simulation_output/*.json
     - simulation_output/calibrated/**
     - configs/calibration_batch/**
+    - data/fallback/**
+    - data/calibration/raw/**
+    - data/calibration/download_manual/**
+    - data/ml_models/**
+    - data/msfs_bgl/**
 
 include:
   - resources/*.yml
