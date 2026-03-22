@@ -883,7 +883,7 @@ describe('End-to-end user interaction flows', () => {
 
       // Check key links are rendered (use getAllByText for labels that appear in both title and description)
       expect(screen.getByText(/Flight Dashboard/)).toBeInTheDocument()
-      expect(screen.getByText(/Ask Genie/)).toBeInTheDocument()
+      expect(screen.getByText(/Airport Ops Genie/)).toBeInTheDocument()
       expect(screen.getByText(/Data Lineage/)).toBeInTheDocument()
       expect(screen.getByText(/ML Experiments/)).toBeInTheDocument()
       // "Unity Catalog" appears in both a link label and a description, use getAllByText

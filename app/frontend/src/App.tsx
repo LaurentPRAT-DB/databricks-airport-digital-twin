@@ -9,6 +9,7 @@ const AirportMap = lazy(() => import('./components/Map/AirportMap'));
 import FlightDetail from './components/FlightDetail/FlightDetail';
 import GateStatus from './components/GateStatus/GateStatus';
 import FIDS from './components/FIDS/FIDS';
+import GenieChat from './components/GenieChat/GenieChat';
 import { useViewportState, SharedViewport } from './hooks/useViewportState';
 import SimulationControls from './components/SimulationControls/SimulationControls';
 import { Flight } from './types/flight';
@@ -308,6 +309,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
         />
       } />
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} />}
+      <GenieChat />
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List */}
         <div className="w-80 flex-shrink-0 overflow-hidden">

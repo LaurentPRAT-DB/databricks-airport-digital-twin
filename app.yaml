@@ -52,3 +52,7 @@ env:
     value: "projects/airport-digital-twin/branches/production/endpoints/primary"
   - name: LAKEBASE_USE_OAUTH
     value: "true"
+
+  # Genie Space for Airport Operations Assistant
+  - name: GENIE_SPACE_ID
+    value: "01f12612fa6314ae943d0526f5ae3a00"

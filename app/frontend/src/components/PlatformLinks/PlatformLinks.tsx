@@ -14,6 +14,7 @@ interface PlatformLink {
 }
 
 const DASHBOARD_ID = '01f11945a61c16f3becdef0ec04c0a8c';
+const GENIE_SPACE_ID = '01f12612fa6314ae943d0526f5ae3a00';
 
 const platformLinks: PlatformLink[] = [
   {
@@ -25,10 +26,10 @@ const platformLinks: PlatformLink[] = [
   },
   {
     id: 'genie',
-    label: 'Ask Genie',
+    label: 'Airport Ops Genie',
     icon: '🗣️',
-    url: `${WORKSPACE_URL}/genie`,
-    description: 'Create a space to query flight data with NL',
+    url: `${WORKSPACE_URL}/genie/spaces/${GENIE_SPACE_ID}`,
+    description: 'Ask natural language questions about flight ops',
   },
   {
     id: 'lineage',

@@ -17,6 +17,7 @@ from app.backend.api.websocket import websocket_router
 from app.backend.api.predictions import prediction_router
 from app.backend.api.data_ops import router as data_ops_router
 from app.backend.api.simulation import simulation_router
+from app.backend.api.genie import genie_router
 from app.backend.demo_config import (
     DEMO_MODE, DEFAULT_AIRPORT_ICAO, DEFAULT_AIRPORT_IATA, DEFAULT_FLIGHT_COUNT,
 )
@@ -360,6 +361,7 @@ app.include_router(websocket_router)
 app.include_router(prediction_router)
 app.include_router(data_ops_router)
 app.include_router(simulation_router)
+app.include_router(genie_router)
 
 
 @app.get("/health")
