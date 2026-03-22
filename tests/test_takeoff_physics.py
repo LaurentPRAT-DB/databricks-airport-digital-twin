@@ -285,6 +285,8 @@ class TestDepartureSeparation:
             phase=FlightPhase.TAXI_TO_RUNWAY,
             aircraft_type="A320",
             waypoint_index=999,
+            departure_queue_hold_s=0.0,
+            departure_queue_set=True,  # bypass calibrated queue hold
         )
 
         # LARGE behind LARGE: 60s default, set 120s ago

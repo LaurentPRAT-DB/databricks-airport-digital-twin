@@ -87,6 +87,27 @@ def set_calibration_gate_minutes(minutes: float) -> None:
     _calibration_gate_minutes = minutes
 
 
+# Calibration: BTS taxi-out mean time in seconds.  When set (> 0), the
+# taxi_to_runway phase adds a departure-queue hold so total taxi-out duration
+# (waypoint travel + hold) matches the real-world BTS mean.
+_calibration_taxi_out_target_s: float = 0.0
+# Estimated seconds the waypoint path alone takes (set once per airport).
+_calibration_taxi_out_waypoint_s: float = 0.0
+
+
+def set_calibration_taxi_out(mean_minutes: float, waypoint_travel_s: float = 180.0) -> None:
+    """Set calibrated taxi-out target from BTS OTP data.
+
+    Args:
+        mean_minutes: BTS mean taxi-out time in minutes (e.g. 20.1 for SFO).
+        waypoint_travel_s: estimated seconds the sim's waypoint path takes
+            without any hold (default 180s ~ 3 min at 25 kts over 5 waypoints).
+    """
+    global _calibration_taxi_out_target_s, _calibration_taxi_out_waypoint_s
+    _calibration_taxi_out_target_s = mean_minutes * 60.0
+    _calibration_taxi_out_waypoint_s = waypoint_travel_s
+
+
 # ============================================================================
 # WEATHER STATE — updated by simulation engine each weather tick
 # ============================================================================
@@ -653,6 +674,7 @@ NM_TO_DEG = 1.0 / 60.0
 # Minimum separation distances
 MIN_APPROACH_SEPARATION_DEG = 3.0 * NM_TO_DEG  # 3 NM minimum on approach
 MIN_TAXI_SEPARATION_DEG = 0.001  # ~100m for taxi operations (FAA visual separation ~60-90m)
+MIN_TAXI_SEPARATION_ARRIVAL_DEG = 0.0006  # ~60m for arriving aircraft (ATC gives inbound priority)
 MIN_GATE_SEPARATION_DEG = 0.010  # ~800m in 3D scale for gate area (prevents overlap)
 # Aircraft fuselage half-lengths in meters (nose-to-center), by ICAO type designator.
 # Used to compute how far to offset parked aircraft from the gate/jetbridge point
@@ -1672,6 +1694,8 @@ class FlightState:
     parked_since: float = 0.0                  # time.time() when aircraft entered PARKED phase
     turnaround_phase: str = ""                 # Current turnaround sub-phase (e.g. "deboarding")
     turnaround_schedule: Optional[Dict] = None # {phase: {"start_offset_s", "duration_s", "done", "started"}}
+    departure_queue_hold_s: float = 0.0        # Remaining departure queue hold (seconds, calibrated)
+    departure_queue_set: bool = False           # True once the hold has been computed
 
 
 # Maximum simultaneous aircraft on approach (approach + landing)
@@ -1929,6 +1953,9 @@ def _check_taxi_separation(state: FlightState) -> bool:
     This prevents gridlock when multiple aircraft cluster at the same spawn
     point (e.g. runway exit) — the lead aircraft can always move, and
     followers queue naturally behind.
+
+    Arriving aircraft (TAXI_TO_GATE) use a reduced separation threshold
+    because ATC gives inbound traffic priority to clear the runway exit.
     """
     if not state.on_ground:
         return True
@@ -1937,6 +1964,13 @@ def _check_taxi_separation(state: FlightState) -> bool:
     hdg_rad = math.radians(state.heading)
     fwd_x = math.sin(hdg_rad)  # east component of heading
     fwd_y = math.cos(hdg_rad)  # north component of heading
+
+    # Arriving aircraft get tighter separation (ATC inbound priority)
+    sep_threshold = (
+        MIN_TAXI_SEPARATION_ARRIVAL_DEG
+        if state.phase == FlightPhase.TAXI_TO_GATE
+        else MIN_TAXI_SEPARATION_DEG
+    )
 
     for icao24, other in _flight_states.items():
         if icao24 == state.icao24:
@@ -1950,7 +1984,7 @@ def _check_taxi_separation(state: FlightState) -> bool:
             (state.latitude, state.longitude),
             (other.latitude, other.longitude)
         )
-        if dist < MIN_TAXI_SEPARATION_DEG:
+        if dist < sep_threshold:
             # Only block if the other aircraft is AHEAD of us
             dlat = other.latitude - state.latitude
             dlon = other.longitude - state.longitude
@@ -3046,23 +3080,14 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     emit_gate_event(state.icao24, state.callsign, available_gate, "assign", state.aircraft_type)
                     state.taxi_route = _get_taxi_waypoints_arrival(available_gate)
                 else:
-                    # All gates occupied — assign overflow gate (soonest to free)
-                    overflow_gate = _find_overflow_gate()
-                    if overflow_gate:
-                        state.assigned_gate = overflow_gate
-                        emit_gate_event(state.icao24, state.callsign, overflow_gate, "assign", state.aircraft_type)
-                        state.taxi_route = _get_taxi_waypoints_arrival(overflow_gate)
-                    else:
-                        # Absolute fallback: random gate from registry
-                        _init_gate_states()
-                        if _gate_states:
-                            fallback_gate = random.choice(list(_gate_states.keys()))
-                            state.assigned_gate = fallback_gate
-                            state.taxi_route = _get_taxi_waypoints_arrival(fallback_gate)
-                        else:
-                            state.assigned_gate = None
-                            state.velocity = 0
-                            return state
+                    # All gates occupied — defer assignment to taxi phase.
+                    # The TAXI_TO_GATE handler retries gate assignment every
+                    # few seconds, so a gate freed by a pushback will be
+                    # picked up before the aircraft reaches the ramp.
+                    if pre_gate and pre_gate in _gate_states and _gate_states[pre_gate].occupied_by == state.icao24:
+                        _release_gate(state.icao24, pre_gate)
+                    state.assigned_gate = None
+                    state.taxi_route = None  # Use default arrival waypoints
 
     elif state.phase == FlightPhase.TAXI_TO_GATE:
         # Taxi along waypoints to assigned gate WITH SEPARATION
@@ -3096,10 +3121,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
             # Check taxi separation before moving
             if _check_taxi_separation(state):
-                speed_deg = TAXI_SPEED_STRAIGHT_KTS * _KTS_TO_DEG_PER_SEC * dt
+                # Arriving aircraft taxi faster on the initial straight
+                # (ATC clears runway exits quickly to maintain arrival rate)
+                taxi_speed = TAXI_SPEED_STRAIGHT_KTS + 5  # 30 kts for inbound
+                speed_deg = taxi_speed * _KTS_TO_DEG_PER_SEC * dt
                 new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
                 state.latitude, state.longitude = new_pos
-                state.velocity = TAXI_SPEED_STRAIGHT_KTS
+                state.velocity = taxi_speed
             else:
                 # Hold position - too close to another aircraft
                 state.velocity = 0
@@ -3319,7 +3347,24 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
             if _distance_between((state.latitude, state.longitude), target) < max(speed_deg, 0.0005):
                 state.waypoint_index += 1
+        elif state.departure_queue_hold_s > 0:
+            # Calibrated departure queue hold — simulates real-world queue time
+            # at the runway hold line that the short waypoint path doesn't capture.
+            state.departure_queue_hold_s -= dt
+            state.velocity = 0
         else:
+            # Compute departure queue hold once when aircraft first reaches hold line
+            if not state.departure_queue_set and _calibration_taxi_out_target_s > 0:
+                # Target total taxi-out = waypoint_travel + queue_hold
+                # queue_hold = target - waypoint_estimate, with ±20% jitter
+                queue_base = max(0.0, _calibration_taxi_out_target_s - _calibration_taxi_out_waypoint_s)
+                state.departure_queue_hold_s = queue_base * random.uniform(0.80, 1.20)
+                state.departure_queue_set = True
+                if state.departure_queue_hold_s > 0:
+                    state.velocity = 0
+                    # Skip runway check this tick — start holding
+                    return state
+
             # At runway hold line - check runway clear AND departure wake separation
             runway_clear = _is_runway_clear("28R")
             if runway_clear:

@@ -47,6 +47,7 @@ from src.ingestion.fallback import (
     apply_airport_offset,
     reset_airport_offset,
     set_calibration_gate_minutes,
+    set_calibration_taxi_out,
 )
 from src.ingestion.schedule_generator import (
     AIRPORT_COORDINATES,
@@ -282,6 +283,13 @@ class SimulationEngine:
         """Reset fallback.py global state for a clean simulation."""
         # Set calibrated gate turnaround time from profile (0 = use GSE model)
         set_calibration_gate_minutes(self.airport_profile.turnaround_median_min)
+
+        # Set calibrated taxi-out hold from BTS OTP data
+        profile = self.airport_profile
+        if profile.taxi_out_mean_min > 0:
+            set_calibration_taxi_out(profile.taxi_out_mean_min)
+        else:
+            set_calibration_taxi_out(0.0)
 
         _flight_states.clear()
         _gate_states.clear()
