@@ -85,6 +85,18 @@ function snapshotToFlight(snap: PositionSnapshot): Flight {
   };
 }
 
+/** Trajectory point extracted from simulation frames. */
+export interface SimTrajectoryPoint {
+  latitude: number;
+  longitude: number;
+  altitude: number;
+  velocity: number;
+  heading: number;
+  on_ground: boolean;
+  flight_phase: string;
+  timestamp: number; // epoch seconds
+}
+
 export interface UseSimulationReplayResult {
   // State
   isActive: boolean;
@@ -118,6 +130,7 @@ export interface UseSimulationReplayResult {
   stop: () => void;
   fetchFiles: () => Promise<void>;
   pauseForSwitch: () => void;
+  getFlightTrajectory: (icao24: string) => SimTrajectoryPoint[];
 }
 
 // TypeScript declaration for the headless video renderer control API
@@ -316,6 +329,57 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setSwitchPaused(false);
   }, []);
 
+  // Extract full trajectory for a flight across all simulation frames
+  const getFlightTrajectory = useCallback((icao24: string): SimTrajectoryPoint[] => {
+    if (!simData) return [];
+    const points: SimTrajectoryPoint[] = [];
+    const timestamps = simData.frame_timestamps;
+    // Sample every Nth frame to avoid huge arrays (max ~500 points)
+    const step = Math.max(1, Math.floor(timestamps.length / 500));
+    for (let i = 0; i < timestamps.length; i += step) {
+      const ts = timestamps[i];
+      const snapshots = simData.frames[ts];
+      if (!snapshots) continue;
+      const snap = snapshots.find(s => s.icao24 === icao24);
+      if (snap && snap.latitude != null && snap.longitude != null) {
+        points.push({
+          latitude: snap.latitude,
+          longitude: snap.longitude,
+          altitude: snap.altitude,
+          velocity: snap.velocity,
+          heading: snap.heading,
+          on_ground: snap.on_ground,
+          flight_phase: snap.phase,
+          timestamp: Math.floor(new Date(ts).getTime() / 1000),
+        });
+      }
+    }
+    // Always include last frame if not already
+    if (step > 1 && timestamps.length > 0) {
+      const lastTs = timestamps[timestamps.length - 1];
+      const lastSnaps = simData.frames[lastTs];
+      if (lastSnaps) {
+        const snap = lastSnaps.find(s => s.icao24 === icao24);
+        if (snap && snap.latitude != null && snap.longitude != null) {
+          const lastEpoch = Math.floor(new Date(lastTs).getTime() / 1000);
+          if (points.length === 0 || points[points.length - 1].timestamp !== lastEpoch) {
+            points.push({
+              latitude: snap.latitude,
+              longitude: snap.longitude,
+              altitude: snap.altitude,
+              velocity: snap.velocity,
+              heading: snap.heading,
+              on_ground: snap.on_ground,
+              flight_phase: snap.phase,
+              timestamp: lastEpoch,
+            });
+          }
+        }
+      }
+    }
+    return points;
+  }, [simData]);
+
   // Expose control API on window for headless video renderer (Playwright)
   useEffect(() => {
     window.__simControl = {
@@ -364,5 +428,6 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     stop,
     fetchFiles,
     pauseForSwitch,
+    getFlightTrajectory,
   };
 }

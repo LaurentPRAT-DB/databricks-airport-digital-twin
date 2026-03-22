@@ -175,7 +175,7 @@ declare global {
   }
 }
 
-function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (flights: Flight[] | null) => void }) {
+function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: { handleSimFlightsChange: (flights: Flight[] | null) => void; handleTrajectoryProviderChange: (provider: ((icao24: string) => import('./hooks/useSimulationReplay').SimTrajectoryPoint[]) | null) => void }) {
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
   const [satellite, setSatellite] = useState(false);
@@ -313,6 +313,7 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
       onFlightsChange={handleSimFlightsChange}
       onActiveChange={setSimulationActive}
       onAirportChange={loadAirport}
+      onTrajectoryProviderChange={handleTrajectoryProviderChange}
       backendReady={backendReady}
       currentAirport={currentAirport}
       demoReady={demoReady}
@@ -411,16 +412,22 @@ function AppContent({ handleSimFlightsChange }: { handleSimFlightsChange: (fligh
 
 function App() {
   const [simulationFlights, setSimulationFlights] = useState<Flight[] | null>(null);
+  const [simTrajectoryProvider, setSimTrajectoryProvider] = useState<((icao24: string) => import('./hooks/useSimulationReplay').SimTrajectoryPoint[]) | null>(null);
 
   const handleSimFlightsChange = useCallback((flights: Flight[] | null) => {
     setSimulationFlights(flights);
   }, []);
 
+  // Wrap in useCallback-style ref to avoid re-render loops with function state
+  const handleTrajectoryProviderChange = useCallback((provider: ((icao24: string) => import('./hooks/useSimulationReplay').SimTrajectoryPoint[]) | null) => {
+    setSimTrajectoryProvider(() => provider);
+  }, []);
+
   return (
     <ThemeProvider>
       <AirportConfigProvider>
-        <FlightProvider simulationFlights={simulationFlights}>
-          <AppContent handleSimFlightsChange={handleSimFlightsChange} />
+        <FlightProvider simulationFlights={simulationFlights} simTrajectoryProvider={simTrajectoryProvider}>
+          <AppContent handleSimFlightsChange={handleSimFlightsChange} handleTrajectoryProviderChange={handleTrajectoryProviderChange} />
         </FlightProvider>
       </AirportConfigProvider>
     </ThemeProvider>

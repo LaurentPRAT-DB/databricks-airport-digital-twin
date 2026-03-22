@@ -1,6 +1,10 @@
 import { createContext, useContext, useState, useMemo, useCallback, ReactNode } from 'react';
 import { useFlights } from '../hooks/useFlights';
 import { Flight } from '../types/flight';
+import type { SimTrajectoryPoint } from '../hooks/useSimulationReplay';
+
+/** Function that extracts trajectory from simulation frames for a given flight. */
+export type SimTrajectoryProvider = (icao24: string) => SimTrajectoryPoint[];
 
 interface FlightContextType {
   flights: Flight[];
@@ -16,6 +20,7 @@ interface FlightContextType {
   error: Error | null;
   lastUpdated: string | null;
   dataSource: 'live' | 'cached' | 'synthetic' | 'simulation' | null;
+  simTrajectoryProvider: SimTrajectoryProvider | null;
 }
 
 const FlightContext = createContext<FlightContextType | null>(null);
@@ -23,9 +28,11 @@ const FlightContext = createContext<FlightContextType | null>(null);
 export function FlightProvider({
   children,
   simulationFlights,
+  simTrajectoryProvider,
 }: {
   children: ReactNode;
   simulationFlights?: Flight[] | null;
+  simTrajectoryProvider?: SimTrajectoryProvider | null;
 }) {
   const { flights: liveFlights, isLoading, error, lastUpdated, dataSource: liveDataSource } = useFlights();
 
@@ -93,7 +100,8 @@ export function FlightProvider({
     error,
     lastUpdated,
     dataSource,
-  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource]);
+    simTrajectoryProvider: simTrajectoryProvider ?? null,
+  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider]);
 
   return (
     <FlightContext.Provider value={contextValue}>

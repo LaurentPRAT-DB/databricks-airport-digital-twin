@@ -8,27 +8,64 @@ function distSq(lat1: number, lon1: number, lat2: number, lon2: number) {
   return (lat1 - lat2) ** 2 + (lon1 - lon2) ** 2;
 }
 
+/** Normalize trajectory points from either API or simulation into a common shape. */
+interface NormalizedPoint {
+  latitude: number;
+  longitude: number;
+  altitude: number | null;
+  velocity: number | null;
+  timestamp: number;
+}
+
 export default function TrajectoryLine() {
-  const { selectedFlight, showTrajectory } = useFlightContext();
-  const { data: trajectory } = useTrajectory(
+  const { selectedFlight, showTrajectory, dataSource, simTrajectoryProvider } = useFlightContext();
+
+  // API-based trajectory (for live flights)
+  const isSimulation = dataSource === 'simulation';
+  const { data: apiTrajectory } = useTrajectory(
     selectedFlight?.icao24 ?? null,
-    showTrajectory
+    showTrajectory && !isSimulation
   );
 
-  // All trajectory points with valid coordinates
-  const validPoints = useMemo(() => {
-    if (!trajectory) return [];
-    return trajectory.points.filter(
-      (p) => p.latitude !== null && p.longitude !== null
-    );
-  }, [trajectory]);
+  // Simulation-based trajectory (from frames)
+  const simPoints = useMemo(() => {
+    if (!isSimulation || !simTrajectoryProvider || !selectedFlight?.icao24) return null;
+    return simTrajectoryProvider(selectedFlight.icao24);
+  }, [isSimulation, simTrajectoryProvider, selectedFlight?.icao24]);
+
+  // Normalize to common point format
+  const validPoints: NormalizedPoint[] = useMemo(() => {
+    if (isSimulation && simPoints) {
+      return simPoints
+        .filter(p => p.latitude != null && p.longitude != null)
+        .map(p => ({
+          latitude: p.latitude,
+          longitude: p.longitude,
+          altitude: p.altitude,
+          velocity: p.velocity,
+          timestamp: p.timestamp,
+        }));
+    }
+    if (apiTrajectory) {
+      return apiTrajectory.points
+        .filter(p => p.latitude !== null && p.longitude !== null)
+        .map(p => ({
+          latitude: p.latitude!,
+          longitude: p.longitude!,
+          altitude: p.altitude,
+          velocity: p.velocity,
+          timestamp: p.timestamp,
+        }));
+    }
+    return [];
+  }, [isSimulation, simPoints, apiTrajectory]);
 
   // Split trajectory into traveled (past) and remaining (future) at the
   // aircraft's current position.  The split index is the closest trajectory
   // point to the live position.
   const { traveledPositions, remainingPositions } = useMemo(() => {
     if (validPoints.length < 2 || !selectedFlight?.latitude || !selectedFlight?.longitude) {
-      const all: [number, number][] = validPoints.map((p) => [p.latitude!, p.longitude!]);
+      const all: [number, number][] = validPoints.map((p) => [p.latitude, p.longitude]);
       return { traveledPositions: all, remainingPositions: [] as [number, number][] };
     }
 
@@ -39,7 +76,7 @@ export default function TrajectoryLine() {
     let bestIdx = 0;
     let bestDist = Infinity;
     for (let i = 0; i < validPoints.length; i++) {
-      const d = distSq(validPoints[i].latitude!, validPoints[i].longitude!, curLat, curLon);
+      const d = distSq(validPoints[i].latitude, validPoints[i].longitude, curLat, curLon);
       if (d < bestDist) {
         bestDist = d;
         bestIdx = i;
@@ -51,13 +88,13 @@ export default function TrajectoryLine() {
     // Traveled: start → closest point → current position
     const traveled: [number, number][] = validPoints
       .slice(0, bestIdx + 1)
-      .map((p) => [p.latitude!, p.longitude!]);
+      .map((p) => [p.latitude, p.longitude]);
     traveled.push(currentPos);
 
     // Remaining: current position → rest of trajectory
     const remaining: [number, number][] = [currentPos];
     for (let i = bestIdx + 1; i < validPoints.length; i++) {
-      remaining.push([validPoints[i].latitude!, validPoints[i].longitude!]);
+      remaining.push([validPoints[i].latitude, validPoints[i].longitude]);
     }
 
     return { traveledPositions: traveled, remainingPositions: remaining };
@@ -111,7 +148,7 @@ export default function TrajectoryLine() {
         .map((point, index) => (
           <CircleMarker
             key={`trajectory-point-${index}`}
-            center={[point.latitude!, point.longitude!]}
+            center={[point.latitude, point.longitude]}
             radius={4}
             pathOptions={{
               color: '#1e40af',
@@ -138,7 +175,7 @@ export default function TrajectoryLine() {
 
       {/* Start point marker */}
       <CircleMarker
-        center={[validPoints[0].latitude!, validPoints[0].longitude!]}
+        center={[validPoints[0].latitude, validPoints[0].longitude]}
         radius={8}
         pathOptions={{
           color: '#059669',

@@ -307,6 +307,7 @@ export function SimulationControls({
   onFlightsChange,
   onActiveChange,
   onAirportChange,
+  onTrajectoryProviderChange,
   backendReady,
   currentAirport,
   demoReady,
@@ -314,6 +315,7 @@ export function SimulationControls({
   onFlightsChange: (flights: import('../../types/flight').Flight[] | null) => void;
   onActiveChange: (active: boolean) => void;
   onAirportChange?: (icaoCode: string) => Promise<void>;
+  onTrajectoryProviderChange?: (provider: ((icao24: string) => import('../../hooks/useSimulationReplay').SimTrajectoryPoint[]) | null) => void;
   backendReady?: boolean;
   currentAirport?: string | null;
   demoReady?: boolean;
@@ -386,6 +388,13 @@ export function SimulationControls({
       onActiveChange(false);
     }
   }, [sim.isActive, sim.switchPaused, sim.flights, onFlightsChange, onActiveChange]);
+
+  // Push simulation trajectory provider to parent
+  useEffect(() => {
+    if (onTrajectoryProviderChange) {
+      onTrajectoryProviderChange(sim.isActive && !sim.switchPaused ? sim.getFlightTrajectory : null);
+    }
+  }, [sim.isActive, sim.switchPaused, sim.getFlightTrajectory, onTrajectoryProviderChange]);
 
   const handleLoad = (filename: string) => {
     setShowPicker(false);
