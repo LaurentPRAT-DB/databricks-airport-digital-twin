@@ -80,35 +80,43 @@ export default function PhaseFilter() {
       {isOpen && (
         <div className="absolute top-full mt-1 right-0 bg-slate-800 rounded-lg shadow-xl border border-slate-600 p-4 z-50 w-[340px]">
           <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3">Flight Phases</div>
-          <p className="text-[11px] text-slate-400 mb-3">
-            Click any phase to show/hide flights on the map.
-          </p>
-
           {PHASE_GROUPS.map(group => (
             <div key={group.label} className="mb-3 last:mb-0">
               <div className="text-[11px] font-semibold text-slate-300 mb-0.5">{group.label}</div>
               <div className="text-[10px] text-slate-500 mb-1.5">{group.description}</div>
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {group.phases.map(phase => {
-                  const hidden = hiddenPhases.has(phase.key);
+                  const visible = !hiddenPhases.has(phase.key);
                   return (
-                    <button
+                    <label
                       key={phase.key}
-                      onClick={() => togglePhase(phase.key)}
-                      className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-left transition-all cursor-pointer ${
-                        hidden
-                          ? 'opacity-40 hover:opacity-60'
-                          : 'hover:bg-slate-700/50'
-                      }`}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer hover:bg-slate-700/50 transition-colors"
                     >
-                      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${hidden ? 'bg-slate-600' : PHASE_BG_CLASSES[phase.key]}`} />
-                      <span className={`text-xs font-medium min-w-[70px] ${hidden ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+                      <input
+                        type="checkbox"
+                        checked={visible}
+                        onChange={() => togglePhase(phase.key)}
+                        className="sr-only peer"
+                      />
+                      <span className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${
+                        visible
+                          ? 'border-blue-500 bg-blue-500'
+                          : 'border-slate-500 bg-transparent'
+                      }`}>
+                        {visible && (
+                          <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M2 6l3 3 5-5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </span>
+                      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${visible ? PHASE_BG_CLASSES[phase.key] : 'bg-slate-600'}`} />
+                      <span className={`text-xs font-medium min-w-[70px] ${visible ? 'text-slate-200' : 'text-slate-500'}`}>
                         {PHASE_LABELS[phase.key]}
                       </span>
-                      <span className={`text-[11px] ${hidden ? 'text-slate-600' : 'text-slate-400'}`}>
+                      <span className={`text-[11px] ${visible ? 'text-slate-400' : 'text-slate-600'}`}>
                         {phase.description}
                       </span>
-                    </button>
+                    </label>
                   );
                 })}
               </div>
@@ -120,13 +128,13 @@ export default function PhaseFilter() {
               onClick={() => setHiddenPhases(new Set())}
               className="text-xs text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
             >
-              Show All
+              Select All
             </button>
             <button
               onClick={() => setHiddenPhases(new Set(ALL_PHASES))}
               className="text-xs text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
             >
-              Hide All
+              Deselect All
             </button>
           </div>
         </div>
