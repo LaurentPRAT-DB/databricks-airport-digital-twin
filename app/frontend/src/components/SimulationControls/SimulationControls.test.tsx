@@ -11,8 +11,7 @@ function createMockSim(overrides: Partial<UseSimulationReplayResult> = {}): UseS
     isPlaying: false,
     isLoading: false,
     isFetchingFiles: false,
-    isDemoMode: false,
-    demoPaused: false,
+    switchPaused: false,
     speed: 1 as const,
     currentFrameIndex: 0,
     totalFrames: 0,
@@ -36,7 +35,7 @@ function createMockSim(overrides: Partial<UseSimulationReplayResult> = {}): UseS
     seekToPercent: vi.fn(),
     stop: vi.fn(),
     fetchFiles: vi.fn().mockResolvedValue(undefined),
-    pauseDemo: vi.fn(),
+    pauseForSwitch: vi.fn(),
     ...overrides,
   };
 }
@@ -73,15 +72,15 @@ describe('SimulationControls', () => {
   });
 
   describe('header button states', () => {
-    it('shows "Preparing Demo..." when backend ready but demo not ready', () => {
+    it('shows "Preparing Simulation..." when backend ready but demo not ready', () => {
       render(<SimulationControls {...defaultProps()} backendReady={true} demoReady={false} />);
-      expect(screen.getByText('Preparing Demo...')).toBeInTheDocument();
+      expect(screen.getByText('Preparing Simulation...')).toBeInTheDocument();
     });
 
-    it('shows "Preparing Demo..." when sim is loading', () => {
+    it('shows "Preparing Simulation..." when sim is loading', () => {
       mockSim = createMockSim({ isLoading: true });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
-      expect(screen.getByText('Preparing Demo...')).toBeInTheDocument();
+      expect(screen.getByText('Preparing Simulation...')).toBeInTheDocument();
     });
 
     it('shows "Start Demo" button when demo is ready and sim stopped', () => {
@@ -102,47 +101,33 @@ describe('SimulationControls', () => {
       expect(screen.getByText('Simulation')).toBeInTheDocument();
     });
 
-    it('shows DEMO badge when demo is active and playing', () => {
+    it('shows SIM badge when simulation is active and playing', () => {
       mockSim = createMockSim({
         isActive: true,
-        isDemoMode: true,
         isPlaying: true,
         currentSimTime: '2026-03-22T12:00:00Z',
         speed: 5 as const,
       });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
-      expect(screen.getByText(/DEMO:/)).toBeInTheDocument();
+      expect(screen.getByText(/SIM:/)).toBeInTheDocument();
       // Speed appears in both header badge and playback bar speed buttons
       expect(screen.getAllByText('5x').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('shows SIM badge when non-demo sim is active', () => {
+    it('shows "Simulation Paused" header when simulation is paused', () => {
       mockSim = createMockSim({
         isActive: true,
-        isDemoMode: false,
-        isPlaying: true,
-        currentSimTime: '2026-03-22T12:00:00Z',
+        switchPaused: true,
       });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
-      expect(screen.getByText(/SIM:/)).toBeInTheDocument();
-    });
-
-    it('shows "Demo Paused" header when demo is paused', () => {
-      mockSim = createMockSim({
-        isActive: true,
-        isDemoMode: true,
-        demoPaused: true,
-      });
-      render(<SimulationControls {...defaultProps()} demoReady={true} />);
-      // Header shows Demo Paused, bottom bar also shows Demo Paused
-      const paused = screen.getAllByText('Demo Paused');
+      // Header shows Simulation Paused, bottom bar also shows Simulation Paused
+      const paused = screen.getAllByText('Simulation Paused');
       expect(paused.length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows scenario name when available', () => {
       mockSim = createMockSim({
         isActive: true,
-        isDemoMode: true,
         isPlaying: true,
         currentSimTime: '2026-03-22T12:00:00Z',
         scenarioName: 'Weather Disruption',
@@ -191,7 +176,7 @@ describe('SimulationControls', () => {
   describe('flight data propagation', () => {
     it('pushes flights to parent when sim active and not paused', () => {
       const flights = [{ icao24: 'abc', callsign: 'UAL1' }] as any;
-      mockSim = createMockSim({ isActive: true, demoPaused: false, flights });
+      mockSim = createMockSim({ isActive: true, switchPaused: false, flights });
 
       const onFlightsChange = vi.fn();
       const onActiveChange = vi.fn();
@@ -208,7 +193,7 @@ describe('SimulationControls', () => {
     });
 
     it('pushes null when sim is paused', () => {
-      mockSim = createMockSim({ isActive: true, demoPaused: true });
+      mockSim = createMockSim({ isActive: true, switchPaused: true });
 
       const onFlightsChange = vi.fn();
       const onActiveChange = vi.fn();
@@ -245,9 +230,8 @@ describe('SimulationControls', () => {
     it('renders PlaybackBar when sim is active and not paused', () => {
       mockSim = createMockSim({
         isActive: true,
-        isDemoMode: true,
         isPlaying: true,
-        demoPaused: false,
+        switchPaused: false,
         totalFrames: 100,
         currentFrameIndex: 50,
         currentSimTime: '2026-03-22T12:00:00Z',
@@ -264,7 +248,7 @@ describe('SimulationControls', () => {
     });
 
     it('does not render PlaybackBar when paused', () => {
-      mockSim = createMockSim({ isActive: true, demoPaused: true });
+      mockSim = createMockSim({ isActive: true, switchPaused: true });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
 
       expect(screen.queryByText('SIM TIME')).not.toBeInTheDocument();
@@ -331,27 +315,27 @@ describe('SimulationControls', () => {
     });
   });
 
-  describe('DemoPausedBar', () => {
-    it('renders when demo is paused', () => {
+  describe('PausedBar', () => {
+    it('renders when simulation is paused for switch', () => {
       mockSim = createMockSim({
         isActive: true,
-        isDemoMode: true,
-        demoPaused: true,
+        switchPaused: true,
       });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
 
-      expect(screen.getByText('Exit Demo')).toBeInTheDocument();
+      // "Simulation Paused" appears in both header badge and bottom bar
+      const paused = screen.getAllByText('Simulation Paused');
+      expect(paused.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('calls stop when Exit Demo clicked', () => {
+    it('calls stop when Exit clicked in paused bar', () => {
       mockSim = createMockSim({
         isActive: true,
-        isDemoMode: true,
-        demoPaused: true,
+        switchPaused: true,
       });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
 
-      fireEvent.click(screen.getByText('Exit Demo'));
+      fireEvent.click(screen.getByText('Exit'));
       expect(mockSim.stop).toHaveBeenCalled();
     });
   });
@@ -439,7 +423,7 @@ describe('SimulationControls', () => {
       expect(screen.getByText(/Too large for browser playback/)).toBeInTheDocument();
     });
 
-    it('calls loadDemo when Start Demo clicked with demoReady', () => {
+    it('calls loadDemo when Start Simulation clicked with demoReady', () => {
       mockSim = createMockSim();
       // Need to prevent auto-start: render without demoReady first, then switch
       // Actually we can render with auto-start already done by setting isActive once
@@ -459,8 +443,8 @@ describe('SimulationControls', () => {
       // The loadDemo was called by auto-start, reset mock to track manual click
       mockSim.loadDemo = vi.fn().mockResolvedValue(undefined);
 
-      // Find the Start Demo button (only visible when not generating)
-      const btn = screen.queryByText('Start Demo');
+      // Find the Start Simulation button (only visible when not generating)
+      const btn = screen.queryByText('Start Simulation');
       if (btn) {
         fireEvent.click(btn);
         expect(mockSim.loadDemo).toHaveBeenCalledWith('KSFO');

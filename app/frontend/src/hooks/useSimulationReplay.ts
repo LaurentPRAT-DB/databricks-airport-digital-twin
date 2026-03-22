@@ -89,8 +89,7 @@ export interface UseSimulationReplayResult {
   isPlaying: boolean;
   isLoading: boolean;
   isFetchingFiles: boolean;
-  isDemoMode: boolean;
-  demoPaused: boolean;
+  switchPaused: boolean;
   speed: PlaybackSpeed;
   currentFrameIndex: number;
   totalFrames: number;
@@ -116,7 +115,7 @@ export interface UseSimulationReplayResult {
   seekToPercent: (pct: number) => void;
   stop: () => void;
   fetchFiles: () => Promise<void>;
-  pauseDemo: () => void;
+  pauseForSwitch: () => void;
 }
 
 // TypeScript declaration for the headless video renderer control API
@@ -145,8 +144,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
   const [flights, setFlights] = useState<Flight[]>([]);
-  const [isDemoMode, setIsDemoMode] = useState(false);
-  const [demoPaused, setDemoPaused] = useState(false);
+  const [switchPaused, setSwitchPaused] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -205,7 +203,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const loadDemo = useCallback(async (airportIcao: string) => {
     setIsLoading(true);
     setIsPlaying(false);
-    setDemoPaused(false);
+    setSwitchPaused(false);
     try {
       const res = await fetch(`/api/simulation/demo/${encodeURIComponent(airportIcao)}`);
       if (res.status === 202) {
@@ -218,8 +216,6 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       setSimData(data);
       setLoadedFile(`demo_${airportIcao}`);
       setCurrentFrameIndex(0);
-      setIsDemoMode(true);
-
       // Set initial frame
       if (data.frame_timestamps.length > 0) {
         const firstTimestamp = data.frame_timestamps[0];
@@ -236,10 +232,10 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     }
   }, []);
 
-  // Pause demo (for airport switch)
-  const pauseDemo = useCallback(() => {
+  // Pause simulation (for airport switch)
+  const pauseForSwitch = useCallback(() => {
     setIsPlaying(false);
-    setDemoPaused(true);
+    setSwitchPaused(true);
   }, []);
 
   // Update flights when frame index changes
@@ -315,8 +311,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setLoadedFile(null);
     setCurrentFrameIndex(0);
     setFlights([]);
-    setIsDemoMode(false);
-    setDemoPaused(false);
+    setSwitchPaused(false);
   }, []);
 
   // Expose control API on window for headless video renderer (Playwright)
@@ -341,8 +336,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     isPlaying,
     isLoading,
     isFetchingFiles,
-    isDemoMode,
-    demoPaused,
+    switchPaused,
     speed,
     currentFrameIndex,
     totalFrames,
@@ -367,6 +361,6 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     seekToPercent,
     stop,
     fetchFiles,
-    pauseDemo,
+    pauseForSwitch,
   };
 }

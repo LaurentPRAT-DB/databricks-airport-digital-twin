@@ -71,8 +71,7 @@ describe('useSimulationReplay', () => {
       expect(result.current.isActive).toBe(false);
       expect(result.current.isPlaying).toBe(false);
       expect(result.current.isLoading).toBe(false);
-      expect(result.current.isDemoMode).toBe(false);
-      expect(result.current.demoPaused).toBe(false);
+      expect(result.current.switchPaused).toBe(false);
       expect(result.current.flights).toEqual([]);
       expect(result.current.totalFrames).toBe(0);
       expect(result.current.currentSimTime).toBeNull();
@@ -122,7 +121,6 @@ describe('useSimulationReplay', () => {
 
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/simulation/demo/KSFO');
       expect(result.current.isActive).toBe(true);
-      expect(result.current.isDemoMode).toBe(true);
       expect(result.current.isPlaying).toBe(true);
       expect(result.current.isLoading).toBe(false);
       expect(result.current.loadedFile).toBe('demo_KSFO');
@@ -148,7 +146,6 @@ describe('useSimulationReplay', () => {
       });
 
       expect(result.current.isActive).toBe(false);
-      expect(result.current.isDemoMode).toBe(false);
       expect(result.current.isLoading).toBe(false);
       consoleSpy.mockRestore();
     });
@@ -168,7 +165,7 @@ describe('useSimulationReplay', () => {
       consoleSpy.mockRestore();
     });
 
-    it('clears demoPaused when loading new demo', async () => {
+    it('clears switchPaused when loading new demo', async () => {
       const demoData = makeDemoData(3);
       globalThis.fetch = mockFetchSuccess(demoData);
 
@@ -179,17 +176,17 @@ describe('useSimulationReplay', () => {
         await result.current.loadDemo('KSFO');
       });
 
-      // Pause demo
+      // Pause for switch
       act(() => {
-        result.current.pauseDemo();
+        result.current.pauseForSwitch();
       });
-      expect(result.current.demoPaused).toBe(true);
+      expect(result.current.switchPaused).toBe(true);
 
-      // Load new demo — should clear demoPaused
+      // Load new demo — should clear switchPaused
       await act(async () => {
         await result.current.loadDemo('EGLL');
       });
-      expect(result.current.demoPaused).toBe(false);
+      expect(result.current.switchPaused).toBe(false);
       expect(result.current.isPlaying).toBe(true);
     });
   });
@@ -209,7 +206,6 @@ describe('useSimulationReplay', () => {
         '/api/simulation/data/sim_sfo.json?start_hour=6&end_hour=18'
       );
       expect(result.current.isActive).toBe(true);
-      expect(result.current.isDemoMode).toBe(false);
       expect(result.current.isPlaying).toBe(false);
       expect(result.current.loadedFile).toBe('sim_sfo.json');
     });
@@ -234,8 +230,8 @@ describe('useSimulationReplay', () => {
     });
   });
 
-  describe('pauseDemo', () => {
-    it('pauses playback and sets demoPaused flag', async () => {
+  describe('pauseForSwitch', () => {
+    it('pauses playback and sets switchPaused flag', async () => {
       globalThis.fetch = mockFetchSuccess(makeDemoData(3));
 
       const { result } = renderHook(() => useSimulationReplay());
@@ -244,14 +240,14 @@ describe('useSimulationReplay', () => {
         await result.current.loadDemo('KSFO');
       });
       expect(result.current.isPlaying).toBe(true);
-      expect(result.current.demoPaused).toBe(false);
+      expect(result.current.switchPaused).toBe(false);
 
       act(() => {
-        result.current.pauseDemo();
+        result.current.pauseForSwitch();
       });
 
       expect(result.current.isPlaying).toBe(false);
-      expect(result.current.demoPaused).toBe(true);
+      expect(result.current.switchPaused).toBe(true);
       expect(result.current.isActive).toBe(true); // still has data
     });
   });
@@ -374,14 +370,11 @@ describe('useSimulationReplay', () => {
         await result.current.loadDemo('KSFO');
       });
       expect(result.current.isActive).toBe(true);
-      expect(result.current.isDemoMode).toBe(true);
-
       act(() => result.current.stop());
 
       expect(result.current.isActive).toBe(false);
       expect(result.current.isPlaying).toBe(false);
-      expect(result.current.isDemoMode).toBe(false);
-      expect(result.current.demoPaused).toBe(false);
+      expect(result.current.switchPaused).toBe(false);
       expect(result.current.flights).toEqual([]);
       expect(result.current.loadedFile).toBeNull();
       expect(result.current.currentFrameIndex).toBe(0);

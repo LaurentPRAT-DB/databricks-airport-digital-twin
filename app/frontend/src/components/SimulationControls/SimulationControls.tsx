@@ -265,8 +265,8 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
   );
 }
 
-/** Playback bar with "Demo Paused" overlay when airport switched. */
-function DemoPausedBar({
+/** Playback bar with "Simulation Paused" overlay when airport switched. */
+function PausedBar({
   sim,
   pendingAirport,
   onRestart,
@@ -278,21 +278,21 @@ function DemoPausedBar({
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[1500] bg-amber-900/95 backdrop-blur text-white px-4 py-3 shadow-lg">
       <div className="flex items-center justify-center gap-4 max-w-screen-xl mx-auto">
-        <span className="text-amber-200 font-medium">Demo Paused</span>
+        <span className="text-amber-200 font-medium">Simulation Paused</span>
         {pendingAirport && (
           <button
             onClick={onRestart}
             disabled={sim.isLoading}
             className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-sm font-medium transition-colors disabled:opacity-50"
           >
-            {sim.isLoading ? 'Loading...' : `Start Demo for ${pendingAirport}`}
+            {sim.isLoading ? 'Loading...' : `Start Simulation for ${pendingAirport}`}
           </button>
         )}
         <button
           onClick={sim.stop}
           className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm transition-colors"
         >
-          Exit Demo
+          Exit
         </button>
       </div>
     </div>
@@ -349,14 +349,14 @@ export function SimulationControls({
   useEffect(() => {
     if (!currentAirport) return;
     // If demo is active and airport changed, pause and set pending airport
-    if (sim.isActive && sim.isDemoMode && currentAirport !== pendingAirport) {
+    if (sim.isActive && currentAirport !== pendingAirport) {
       // Check if the sim airport matches currentAirport (IATA vs ICAO)
       // The sim.airport is IATA (e.g. "SFO"), currentAirport is ICAO (e.g. "KSFO")
       const simAirportIcao = sim.airport && sim.airport.length === 3
         ? `K${sim.airport}`
         : sim.airport;
       if (simAirportIcao !== currentAirport) {
-        sim.pauseDemo();
+        sim.pauseForSwitch();
         setPendingAirport(currentAirport);
       }
     }
@@ -365,7 +365,7 @@ export function SimulationControls({
 
   // Switch airport when simulation loads a different one (manual file load)
   useEffect(() => {
-    if (sim.airport && !sim.isDemoMode && onAirportChange) {
+    if (sim.airport && onAirportChange) {
       onAirportChange(sim.airport).catch((err) => {
         console.warn('Failed to switch airport for simulation:', err);
       });
@@ -375,14 +375,14 @@ export function SimulationControls({
 
   // Push simulation flights to parent
   useEffect(() => {
-    if (sim.isActive && !sim.demoPaused) {
+    if (sim.isActive && !sim.switchPaused) {
       onFlightsChange(sim.flights);
       onActiveChange(true);
     } else {
       onFlightsChange(null);
       onActiveChange(false);
     }
-  }, [sim.isActive, sim.demoPaused, sim.flights, onFlightsChange, onActiveChange]);
+  }, [sim.isActive, sim.switchPaused, sim.flights, onFlightsChange, onActiveChange]);
 
   const handleLoad = (filename: string) => {
     setShowPicker(false);
@@ -399,11 +399,11 @@ export function SimulationControls({
   // Header button states
   const renderHeaderButton = () => {
     // Demo active & playing
-    if (sim.isActive && !sim.demoPaused) {
+    if (sim.isActive && !sim.switchPaused) {
       return (
         <div className="flex items-center gap-2 bg-indigo-600/80 px-3 py-1 rounded-full text-sm">
           <span className="w-2 h-2 rounded-full bg-indigo-300 animate-pulse" />
-          <span>{sim.isDemoMode ? 'DEMO' : 'SIM'}: {formatSimTime(sim.currentSimTime)}</span>
+          <span>SIM: {formatSimTime(sim.currentSimTime)}</span>
           <span className="text-indigo-200">{sim.speed}x</span>
           {sim.scenarioName && (
             <span className="text-amber-200 text-xs truncate max-w-[120px]" title={sim.scenarioName}>
@@ -414,11 +414,11 @@ export function SimulationControls({
       );
     }
 
-    // Demo paused (airport switched)
-    if (sim.demoPaused) {
+    // Simulation paused (airport switched)
+    if (sim.switchPaused) {
       return (
         <div className="flex items-center gap-2 bg-amber-600 px-3 py-1 rounded-full text-sm">
-          <span className="text-amber-100">Demo Paused</span>
+          <span className="text-amber-100">Simulation Paused</span>
         </div>
       );
     }
@@ -428,7 +428,7 @@ export function SimulationControls({
       return (
         <div className="flex items-center gap-2 bg-slate-600 px-3 py-1.5 rounded-lg text-sm opacity-80">
           <div className="w-3 h-3 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
-          <span className="text-slate-300">Preparing Demo...</span>
+          <span className="text-slate-300">Preparing Simulation...</span>
         </div>
       );
     }
@@ -449,7 +449,7 @@ export function SimulationControls({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        {demoReady ? 'Start Demo' : 'Simulation'}
+        {demoReady ? 'Start Simulation' : 'Simulation'}
       </button>
     );
   };
@@ -470,11 +470,11 @@ export function SimulationControls({
       )}
 
       {/* Playback bar — active demo/sim */}
-      {sim.isActive && !sim.demoPaused && <PlaybackBar sim={sim} />}
+      {sim.isActive && !sim.switchPaused && <PlaybackBar sim={sim} />}
 
-      {/* Demo paused bar */}
-      {sim.demoPaused && (
-        <DemoPausedBar sim={sim} pendingAirport={pendingAirport} onRestart={handleDemoRestart} />
+      {/* Simulation paused bar */}
+      {sim.switchPaused && (
+        <PausedBar sim={sim} pendingAirport={pendingAirport} onRestart={handleDemoRestart} />
       )}
     </>
   );
