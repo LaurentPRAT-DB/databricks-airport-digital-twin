@@ -274,7 +274,7 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
         </div>
 
         {/* Speed selector */}
-        <div className="flex items-center gap-1 flex-shrink-0 ml-auto md:ml-0">
+        <div className="flex items-center gap-0.5 md:gap-1 flex-shrink-0 ml-auto md:ml-0 overflow-x-auto">
           {SPEED_OPTIONS.map((s) => (
             <button
               key={s}

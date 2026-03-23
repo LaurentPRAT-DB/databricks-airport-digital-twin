@@ -3470,7 +3470,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # at the runway hold line that the short waypoint path doesn't capture.
             state.departure_queue_hold_s -= dt
             state.velocity = 0
+            # Face the runway while holding
+            _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
+            state.heading = dep_hdg
         else:
+            # Face the runway at the hold line
+            _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
+            state.heading = dep_hdg
             # Compute departure queue hold once when aircraft first reaches hold line
             if not state.departure_queue_set and _calibration_taxi_out_target_s > 0:
                 # Target total taxi-out = waypoint_travel + queue_hold
