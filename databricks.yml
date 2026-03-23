@@ -9,7 +9,6 @@ sync:
     - config/**
     - configs/**
     - scenarios/**
-    - scripts/**
     - simulation_output/report/**
     - data/calibration/profiles/**
     - app.yaml
@@ -33,6 +32,17 @@ sync:
     - data/calibration/download_manual/**
     - data/ml_models/**
     - data/msfs_bgl/**
+    # Frontend: only dist/ is needed at runtime
+    - app/frontend/src/**
+    - app/frontend/coverage/**
+    - app/frontend/public/**
+    - app/frontend/e2e/**
+    - app/frontend/tests/**
+    - app/frontend/test-results/**
+    - app/frontend/scripts/**
+    - app/frontend/*.config.*
+    - app/frontend/tsconfig.*
+    - app/frontend/package-lock.json
 
 include:
   - resources/*.yml
