@@ -308,6 +308,7 @@ async def _background_init(app: FastAPI):
                 app.state.startup_status = "Ready"
             except Exception as e:
                 logger.error(f"INIT | Demo simulation generation FAILED: {e}", exc_info=True)
+                app.state.init_timings["phase4_demo_sim"] = f"FAILED: {type(e).__name__}: {e}"
                 app.state.startup_status = "Ready"
 
         asyncio.create_task(_generate_demo_background())
