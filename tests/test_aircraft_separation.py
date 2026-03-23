@@ -285,12 +285,12 @@ class TestApproachSeparation:
         )
         _flight_states["lead001"] = lead
 
-        # Following aircraft only 1 NM behind (too close)
+        # Following aircraft only 1 NM behind (too close), same altitude band
         follow = make_flight_state(
             icao24="follow001",
             latitude=37.49,
             longitude=-121.97 + 1.0 * NM_TO_DEG,  # Only 1 NM behind
-            altitude=3000,
+            altitude=2500,  # Within 1000ft of lead — no vertical separation
             phase=FlightPhase.APPROACHING,
             aircraft_type="A320",
         )
@@ -317,7 +317,7 @@ class TestApproachSeparation:
             icao24="small001",
             latitude=37.49,
             longitude=-121.97 + 4.0 * NM_TO_DEG,  # 4 NM behind
-            altitude=4000,
+            altitude=2500,  # Within 1000ft of lead — no vertical separation
             phase=FlightPhase.APPROACHING,
             aircraft_type="E175",  # SMALL
         )

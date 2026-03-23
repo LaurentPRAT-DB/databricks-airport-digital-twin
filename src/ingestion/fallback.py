@@ -26,6 +26,11 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+from src.simulation.openap_profiles import (
+    get_descent_profile,
+    get_climb_profile,
+    interpolate_profile,
+)
 from faker import Faker
 
 from src.ml.gse_model import get_turnaround_timing, get_aircraft_category, PHASE_DEPENDENCIES
@@ -1866,18 +1871,36 @@ def _find_last_aircraft_on_approach() -> Optional[FlightState]:
     return last_aircraft
 
 def _check_approach_separation(state: FlightState) -> bool:
-    """Check if aircraft has sufficient separation from aircraft ahead."""
-    ahead = _find_aircraft_ahead_on_approach(state)
-    if ahead is None:
-        return True  # No one ahead, clear to proceed
+    """Check if aircraft has sufficient separation from ALL approaching/landing aircraft.
 
-    current_dist = _distance_between(
-        (state.latitude, state.longitude),
-        (ahead.latitude, ahead.longitude)
-    )
-    required_dist = _get_required_separation(ahead.aircraft_type, state.aircraft_type)
+    Uses both lateral wake separation AND ICAO vertical separation (1000ft)
+    as alternative clearance criteria — if either is satisfied the pair is safe.
+    """
+    approach_ids = _flights_by_phase[FlightPhase.APPROACHING] | _flights_by_phase[FlightPhase.LANDING]
+    for other_id in approach_ids:
+        if other_id == state.icao24:
+            continue
+        other = _flight_states.get(other_id)
+        if other is None:
+            continue
 
-    return current_dist >= required_dist
+        lateral_dist = _distance_between(
+            (state.latitude, state.longitude),
+            (other.latitude, other.longitude)
+        )
+        required_dist = _get_required_separation(other.aircraft_type, state.aircraft_type)
+
+        if lateral_dist >= required_dist:
+            continue  # Lateral separation satisfied
+
+        # Lateral separation violated — check vertical separation (1000ft)
+        vertical_sep = abs(state.altitude - other.altitude)
+        if vertical_sep >= 1000:
+            continue  # Vertical separation satisfied
+
+        return False  # Both lateral and vertical separation violated
+
+    return True
 
 def _is_runway_clear(runway: str = "28R") -> bool:
     """Check if runway is clear for landing or takeoff."""
@@ -2033,6 +2056,17 @@ def _calculate_heading(from_pos: tuple, to_pos: tuple) -> float:
 
     # Normalize to 0-360
     return (heading + 360) % 360
+
+
+def _smooth_heading(current: float, target: float, max_rate_per_sec: float, dt: float) -> float:
+    """Limit heading change to a realistic turn rate.
+
+    Standard rate turn = 3 deg/s.  Returns new heading in [0, 360).
+    """
+    diff = (target - current + 540) % 360 - 180  # shortest signed angle
+    max_change = max_rate_per_sec * dt
+    clamped = max(-max_change, min(max_change, diff))
+    return (current + clamped) % 360
 
 
 def _distance_between(pos1: tuple, pos2: tuple) -> float:
@@ -2944,50 +2978,58 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             queue_pos = _get_approach_queue_position(state.icao24)
 
             if has_separation:
-                # Clear to proceed - move toward waypoint
-                speed_factor = 0.002
-                # Slow down if close to aircraft ahead
+                # --- OpenAP-based descent profile ---
+                total_wps = len(approach_wps)
+                progress = state.waypoint_index / max(1, total_wps - 1)
+                # Map approach progress (0=far out, 1=threshold) to descent
+                # profile progress (0=TOD, 1=touchdown).  Approach waypoints
+                # only cover the last ~15 NM, which is roughly the final 50%
+                # of a full descent.  We map [0,1] → [0.5, 1.0].
+                profile_progress = 0.5 + 0.5 * progress
+                desc_prof = get_descent_profile(state.aircraft_type)
+                prof_alt, prof_spd, prof_vr = interpolate_profile(desc_prof, profile_progress)
+
+                # Speed from profile (respect separation slow-down)
+                speed_slow = 1.0
                 ahead = _find_aircraft_ahead_on_approach(state)
                 if ahead:
                     dist = _distance_nm((state.latitude, state.longitude),
                                        (ahead.latitude, ahead.longitude))
                     req_sep = _get_required_separation(ahead.aircraft_type, state.aircraft_type) / NM_TO_DEG
-                    if dist < req_sep * 1.5:  # Within 1.5x required separation
-                        speed_factor *= 0.5  # Slow down
+                    if dist < req_sep * 1.5:
+                        speed_slow = 0.5
 
-                new_pos = _move_toward((state.latitude, state.longitude), target, speed_factor)
-                state.latitude, state.longitude = new_pos
-
-                # Descend (clamp to prevent sub-ground altitudes)
-                state.altitude = max(0.0, _interpolate_altitude(state.altitude, target_alt, 300 * dt) + random.uniform(-200, 200))
-                # Type-specific approach speed: decelerate from 180 kts to Vref
+                # Clamp speed: altitude-aware Vref floor + 250kt ceiling
                 vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
-                total_wps = len(_get_approach_waypoints(state.origin_airport))
-                if total_wps > 1:
-                    progress = state.waypoint_index / (total_wps - 1)
+                raw_speed = min(prof_spd * speed_slow, MAX_SPEED_BELOW_FL100_KTS)
+                if state.altitude < 2000 or progress > 0.85:
+                    # Final approach: full Vref floor
+                    state.velocity = max(vref, raw_speed)
                 else:
-                    progress = 1.0
-                state.velocity = 180 - progress * (180 - vref) + random.uniform(-5, 5)  # Smooth decel to Vref + noise
-                # Compute vertical rate from actual altitude difference to target
-                alt_diff = state.altitude - target_alt
-                if alt_diff > 500:
-                    state.vertical_rate = -800
-                elif alt_diff > 100:
-                    state.vertical_rate = -400
-                elif alt_diff > 0:
-                    state.vertical_rate = -200
-                elif state.altitude > 0:
-                    # Still airborne but at/below target — maintain minimum descent
-                    state.vertical_rate = -100
-                else:
-                    state.vertical_rate = 0
+                    # Higher altitude: soft floor at 90% Vref (allows 180-210kt)
+                    state.velocity = max(vref * 0.9, raw_speed)
+
+                # Move based on actual velocity
+                speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+                dist_to_wp = _distance_between((state.latitude, state.longitude), target)
+                if dist_to_wp > 1e-8:
+                    dlat = target[0] - state.latitude
+                    dlon = target[1] - state.longitude
+                    ratio = min(speed_deg / dist_to_wp, 1.0)
+                    state.latitude += dlat * ratio
+                    state.longitude += dlon * ratio
+
+                # Altitude from profile, smoothly interpolated toward target
+                state.altitude = max(0.0, _interpolate_altitude(state.altitude, min(prof_alt, target_alt), 500 * dt))
+                state.vertical_rate = prof_vr
             else:
                 # Too close to aircraft ahead - slow down / hold speed
-                state.velocity = max(140, state.velocity - 10 * dt)  # Reduce speed
-                state.vertical_rate = -200  # Reduce descent rate
+                state.velocity = max(140, state.velocity - 10 * dt)
+                state.vertical_rate = -200
 
-            # Update heading regardless
-            state.heading = _calculate_heading((state.latitude, state.longitude), target)
+            # Smooth heading toward waypoint (max 3°/s standard rate turn)
+            target_hdg = _calculate_heading((state.latitude, state.longitude), target)
+            state.heading = _smooth_heading(state.heading, target_hdg, 3.0, dt)
 
             # Check if reached waypoint
             if _distance_between((state.latitude, state.longitude), target) < 0.003:
@@ -3508,22 +3550,47 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             target = (wp[1], wp[0])
             target_alt = wp[2]
 
-            new_pos = _move_toward((state.latitude, state.longitude), target, 0.002)
-            state.latitude, state.longitude = new_pos
-            state.altitude = max(0.0, _interpolate_altitude(state.altitude, target_alt, 500 * dt))
-            raw_speed = 200 + state.waypoint_index * 50
-            state.velocity = min(raw_speed, MAX_SPEED_BELOW_FL100_KTS) if state.altitude < 10000 else raw_speed
-            state.vertical_rate = 1500 if state.altitude < target_alt else 0
-            state.heading = _calculate_heading(new_pos, target)
+            # --- OpenAP-based climb profile ---
+            total_wps = len(departure_wps)
+            progress = state.waypoint_index / max(1, total_wps - 1)
+            # Departure waypoints cover initial climb only (~first 40% of full climb)
+            profile_progress = 0.4 * progress
+            climb_prof = get_climb_profile(state.aircraft_type)
+            prof_alt, prof_spd, prof_vr = interpolate_profile(climb_prof, profile_progress)
 
-            if _distance_between(new_pos, target) < 0.005:
+            # Speed from profile, respect 250kt below FL100
+            state.velocity = min(prof_spd, MAX_SPEED_BELOW_FL100_KTS) if state.altitude < 10000 else prof_spd
+
+            # Move based on actual velocity
+            speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+            dist_to_wp = _distance_between((state.latitude, state.longitude), target)
+            if dist_to_wp > 1e-8:
+                dlat = target[0] - state.latitude
+                dlon = target[1] - state.longitude
+                ratio = min(speed_deg / dist_to_wp, 1.0)
+                state.latitude += dlat * ratio
+                state.longitude += dlon * ratio
+
+            state.altitude = max(0.0, _interpolate_altitude(state.altitude, target_alt, 500 * dt))
+            state.vertical_rate = prof_vr if state.altitude < target_alt else 0
+
+            # Smooth heading toward waypoint (max 3°/s standard rate turn)
+            target_hdg = _calculate_heading((state.latitude, state.longitude), target)
+            state.heading = _smooth_heading(state.heading, target_hdg, 3.0, dt)
+
+            if _distance_between((state.latitude, state.longitude), target) < 0.005:
                 state.waypoint_index += 1
         else:
             # Waypoints exhausted — continue climbing to FL180 before ENROUTE transition
             if state.altitude < 18000:
-                state.velocity = min(state.velocity + 2 * dt, 350)
-                state.vertical_rate = 2000
-                state.altitude += 2000 / 60.0 * dt
+                # Use OpenAP climb profile for post-waypoint climb
+                climb_prof = get_climb_profile(state.aircraft_type)
+                # We're past waypoints, roughly 40-60% of climb
+                frac = min(1.0, 0.4 + 0.2 * (state.altitude / 18000.0))
+                _, prof_spd, prof_vr = interpolate_profile(climb_prof, frac)
+                state.velocity = min(prof_spd, MAX_SPEED_BELOW_FL100_KTS) if state.altitude < 10000 else prof_spd
+                state.vertical_rate = prof_vr if prof_vr > 0 else 1500
+                state.altitude += state.vertical_rate / 60.0 * dt
                 # Continue on departure heading
                 speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
                 state.latitude += math.cos(math.radians(state.heading)) * speed_deg
@@ -3661,8 +3728,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     (state.latitude, state.longitude), center
                 )
             else:
-                state.heading += random.uniform(-1, 1) * dt
-                state.heading = state.heading % 360
+                pass  # Maintain current heading — no jitter
 
             if random.random() < 0.005 * dt:
                 _set_phase(state, FlightPhase.APPROACHING)
@@ -4030,6 +4096,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         roll_dlat = _roll_distance * math.cos(_rwy_heading_rad)
         roll_dlon = _roll_distance * math.sin(_rwy_heading_rad) / math.cos(math.radians(runway_28l_lat))
 
+        _running_hdg = current_heading  # smooth heading across points
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
@@ -4056,14 +4123,22 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
                 lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
                 lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
-                alt = wp1[2] + (wp2[2] - wp1[2]) * wp_frac
 
-                # Calculate heading toward next waypoint
-                heading = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
+                # Altitude from descent profile — progress 0.5-1.0
+                _gnd_actype = current_state.aircraft_type if current_state else "A320"
+                _gnd_desc_prof = get_descent_profile(_gnd_actype)
+                _gnd_prof_prog = 0.5 + 0.5 * approach_progress
+                prof_alt, prof_spd, prof_vr = interpolate_profile(_gnd_desc_prof, _gnd_prof_prog)
+                alt = prof_alt
+
+                # Smooth heading toward next waypoint
+                target_hdg = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
+                _running_hdg = _smooth_heading(_running_hdg, target_hdg, 3.0, interval_seconds)
+                heading = _running_hdg
 
                 phase = "approaching" if alt > 500 else "landing"
-                velocity = 180 - approach_progress * 50  # Slow from 180 to 130 kts
-                vertical_rate = -700 if alt > 100 else -300
+                velocity = prof_spd
+                vertical_rate = prof_vr
 
             elif progress < 0.65:
                 # LANDING ROLL: Decelerating on runway
@@ -4166,27 +4241,15 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
             # Append point for this iteration (inside the for loop)
             timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
 
-            # Scale noise by phase and altitude:
-            # - Ground taxi: minimal noise to stay on taxiways
-            # - Low altitude approach (<1000ft): reduced noise for clean final
-            # - High altitude approach: normal noise for realistic radar scatter
-            if phase == "ground":
-                pos_noise = 0.00005
-            elif alt < 500:
-                pos_noise = 0.0001
-            elif alt < 2000:
-                pos_noise = 0.0002
-            else:
-                pos_noise = 0.0003
             points.append({
                 "timestamp": timestamp.isoformat(),
                 "icao24": icao24,
                 "callsign": callsign,
-                "latitude": lat + random.uniform(-pos_noise, pos_noise),
-                "longitude": lon + random.uniform(-pos_noise, pos_noise),
-                "altitude": max(0, alt + random.uniform(-20, 20)),
-                "velocity": max(10, velocity + random.uniform(-3, 3)),
-                "heading": heading + random.uniform(-1, 1),
+                "latitude": lat,
+                "longitude": lon,
+                "altitude": max(0, alt),
+                "velocity": max(10, velocity),
+                "heading": heading,
                 "vertical_rate": vertical_rate,
                 "on_ground": alt < 50,
                 "flight_phase": phase,
@@ -4205,23 +4268,34 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         if not _traj_dep_wps:
             return []  # No runway data, disable trajectory
 
+        # OpenAP climb profile for realistic speeds/altitudes
+        _dep_actype = current_state.aircraft_type if current_state else "A320"
+        _dep_climb_prof = get_climb_profile(_dep_actype)
+
+        _running_hdg = _dep_rwy_heading  # smooth heading across points
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
             if progress < 0.15:
-                # Takeoff roll and initial climb
+                # Takeoff roll and initial climb — profile progress 0.0-0.05
                 takeoff_progress = progress / 0.15
+                profile_prog = takeoff_progress * 0.05
+                prof_alt, prof_spd, prof_vr = interpolate_profile(_dep_climb_prof, profile_prog)
+
                 wp = _traj_dep_wps[0]
                 lat = dep_rwy_lat + takeoff_progress * (wp[1] - dep_rwy_lat)
                 lon = dep_rwy_lon + takeoff_progress * (wp[0] - dep_rwy_lon)
                 alt = takeoff_progress * wp[2]
                 heading = _dep_rwy_heading
-                velocity = 100 + takeoff_progress * 100
-                vertical_rate = 2000 if takeoff_progress > 0.3 else 0
+                _running_hdg = heading
+                velocity = prof_spd
+                vertical_rate = prof_vr if takeoff_progress > 0.3 else 0
                 phase = "takeoff" if takeoff_progress < 0.5 else "climbing"
             elif progress < 0.50:
-                # Climb out following departure waypoints
+                # Climb out following departure waypoints — profile progress 0.05-0.40
                 climb_progress = (progress - 0.15) / 0.35
+                profile_prog = 0.05 + climb_progress * 0.35
+                prof_alt, prof_spd, prof_vr = interpolate_profile(_dep_climb_prof, profile_prog)
 
                 wp_count = len(_traj_dep_wps)
                 wp_progress = climb_progress * (wp_count - 1)
@@ -4239,13 +4313,19 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
                 alt = wp1[2] + (wp2[2] - wp1[2]) * wp_frac
 
-                heading = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
-                velocity = 200 + climb_progress * 100
-                vertical_rate = 1500
+                target_hdg = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
+                _running_hdg = _smooth_heading(_running_hdg, target_hdg, 3.0, interval_seconds)
+                heading = _running_hdg
+                # Enforce 250kt below FL100
+                velocity = min(prof_spd, MAX_SPEED_BELOW_FL100_KTS) if alt < 10000 else prof_spd
+                vertical_rate = prof_vr
                 phase = "departing"
             else:
-                # Turn toward destination and continue climbing
+                # En-route extension — profile progress 0.40-0.80
                 enroute_progress = (progress - 0.50) / 0.50
+                profile_prog = 0.40 + enroute_progress * 0.40
+                prof_alt, prof_spd, prof_vr = interpolate_profile(_dep_climb_prof, profile_prog)
+
                 last_wp = _traj_dep_wps[-1]
                 start_lat_dep = last_wp[1]
                 start_lon_dep = last_wp[0]
@@ -4255,11 +4335,12 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 dist = enroute_progress * 0.15  # ~10 NM extension
                 lat = start_lat_dep + dist * math.cos(math.radians(dest_bearing))
                 lon = start_lon_dep + dist * math.sin(math.radians(dest_bearing)) / math.cos(math.radians(start_lat_dep))
-                alt = start_alt_dep + enroute_progress * 7000  # Climb to ~15000
+                alt = start_alt_dep + enroute_progress * (prof_alt - start_alt_dep)
 
-                heading = dest_bearing + random.uniform(-2, 2)
-                velocity = 300 + enroute_progress * 100
-                vertical_rate = 1000 if enroute_progress < 0.7 else 200
+                _running_hdg = _smooth_heading(_running_hdg, dest_bearing, 3.0, interval_seconds)
+                heading = _running_hdg
+                velocity = min(prof_spd, MAX_SPEED_BELOW_FL100_KTS) if alt < 10000 else prof_spd
+                vertical_rate = prof_vr if enroute_progress < 0.7 else max(200, prof_vr * 0.3)
                 phase = "departing"
 
             timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
@@ -4268,11 +4349,11 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 "timestamp": timestamp.isoformat(),
                 "icao24": icao24,
                 "callsign": callsign,
-                "latitude": lat + random.uniform(-0.001, 0.001),
-                "longitude": lon + random.uniform(-0.001, 0.001),
-                "altitude": max(0, alt + random.uniform(-50, 50)),
-                "velocity": max(50, velocity + random.uniform(-5, 5)),
-                "heading": heading + random.uniform(-2, 2),
+                "latitude": lat,
+                "longitude": lon,
+                "altitude": max(0, alt),
+                "velocity": max(50, velocity),
+                "heading": heading,
                 "vertical_rate": vertical_rate,
                 "on_ground": alt < 50,
                 "flight_phase": phase,
@@ -4376,6 +4457,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 "data_source": "synthetic",
             })
         else:
+            _running_hdg = current_heading  # smooth heading across points
             for i in range(num_points):
                 progress = i / (num_points - 1) if num_points > 1 else 0
 
@@ -4391,32 +4473,32 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
                 lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
                 lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
-                alt = wp1[2] + (wp2[2] - wp1[2]) * wp_frac
 
-                heading = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
-                velocity = 350 - progress * 210
-                vertical_rate = -1000 if alt > 2000 else (-600 if alt > 500 else -400)
+                # Altitude from descent profile — progress 0.3-1.0
+                _air_actype = current_state.aircraft_type if current_state else "A320"
+                _air_desc_prof = get_descent_profile(_air_actype)
+                _air_prof_prog = 0.3 + 0.7 * progress
+                prof_alt, prof_spd, prof_vr = interpolate_profile(_air_desc_prof, _air_prof_prog)
+                alt = prof_alt
+
+                target_hdg = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
+                _running_hdg = _smooth_heading(_running_hdg, target_hdg, 3.0, interval_seconds)
+                heading = _running_hdg
+                velocity = prof_spd
+                vertical_rate = prof_vr
                 phase = "approaching" if alt > 500 else "landing"
 
                 timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
-
-                # Scale noise by altitude — less noise on final approach
-                if alt < 500:
-                    _app_noise = 0.0002
-                elif alt < 2000:
-                    _app_noise = 0.0004
-                else:
-                    _app_noise = 0.0008
 
                 points.append({
                     "timestamp": timestamp.isoformat(),
                     "icao24": icao24,
                     "callsign": callsign,
-                    "latitude": lat + random.uniform(-_app_noise, _app_noise),
-                    "longitude": lon + random.uniform(-_app_noise, _app_noise),
-                    "altitude": max(0, alt + random.uniform(-30, 30)),
-                    "velocity": max(100, velocity + random.uniform(-5, 5)),
-                    "heading": heading + random.uniform(-2, 2),
+                    "latitude": lat,
+                    "longitude": lon,
+                    "altitude": max(0, alt),
+                    "velocity": max(100, velocity),
+                    "heading": heading,
                     "vertical_rate": vertical_rate,
                     "on_ground": alt < 50,
                     "flight_phase": phase,
