@@ -5,9 +5,12 @@ import { useSimulationReplay } from './useSimulationReplay';
 // ── Test fixtures ───────────────────────────────────────────────────
 
 function makeDemoData(frameCount = 3) {
-  const timestamps = Array.from({ length: frameCount }, (_, i) =>
-    `2026-03-22T${String(i).padStart(2, '0')}:00:00Z`
-  );
+  // Timestamps 30 seconds apart (matching real simulation snapshot interval)
+  const base = new Date('2026-03-22T00:00:00Z');
+  const timestamps = Array.from({ length: frameCount }, (_, i) => {
+    const d = new Date(base.getTime() + i * 30 * 1000);
+    return d.toISOString().replace('.000Z', 'Z');
+  });
   const frames: Record<string, Array<Record<string, unknown>>> = {};
   timestamps.forEach((ts, i) => {
     frames[ts] = [
@@ -434,7 +437,7 @@ describe('useSimulationReplay', () => {
       expect(result.current.currentSimTime).toBe('2026-03-22T00:00:00Z');
 
       act(() => result.current.seekTo(1));
-      expect(result.current.currentSimTime).toBe('2026-03-22T01:00:00Z');
+      expect(result.current.currentSimTime).toBe('2026-03-22T00:00:30Z');
     });
   });
 
@@ -470,7 +473,7 @@ describe('useSimulationReplay', () => {
       });
 
       expect(result.current.simStartTime).toBe('2026-03-22T00:00:00Z');
-      expect(result.current.simEndTime).toBe('2026-03-22T02:00:00Z');
+      expect(result.current.simEndTime).toBe('2026-03-22T00:01:00Z');
     });
   });
 

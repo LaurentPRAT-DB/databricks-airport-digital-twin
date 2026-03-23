@@ -80,14 +80,14 @@ describe('Header', () => {
       expect(screen.getByText(/enroute/i)).toBeInTheDocument()
     })
 
-    it('shows Show All and Hide All buttons in dropdown', async () => {
+    it('shows Select All and Deselect All buttons in dropdown', async () => {
       const user = userEvent.setup()
       render(<Header />)
 
       await user.click(screen.getByRole('button', { name: /legend/i }))
 
-      expect(screen.getByText(/show all/i)).toBeInTheDocument()
-      expect(screen.getByText(/hide all/i)).toBeInTheDocument()
+      expect(screen.getByText('Select All')).toBeInTheDocument()
+      expect(screen.getByText('Deselect All')).toBeInTheDocument()
     })
   })
 

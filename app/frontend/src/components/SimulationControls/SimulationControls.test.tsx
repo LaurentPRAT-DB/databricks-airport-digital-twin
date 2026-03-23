@@ -96,12 +96,12 @@ describe('SimulationControls', () => {
         isActive: true,
         isPlaying: true,
         currentSimTime: '2026-03-22T12:00:00Z',
-        speed: 5 as const,
+        speed: 4 as const,
       });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
       expect(screen.getByText(/SIM:/)).toBeInTheDocument();
       // Speed appears in both header badge and playback bar speed buttons
-      expect(screen.getAllByText('5x').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('4x').length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows "Simulation Paused" header when simulation is paused', () => {
@@ -256,7 +256,7 @@ describe('SimulationControls', () => {
 
       // "1x" appears in both header badge and speed buttons, others only in speed buttons
       expect(screen.getByText('2x')).toBeInTheDocument();
-      expect(screen.getByText('5x')).toBeInTheDocument();
+      expect(screen.getByText('4x')).toBeInTheDocument();
       expect(screen.getByText('10x')).toBeInTheDocument();
       expect(screen.getByText('30x')).toBeInTheDocument();
       expect(screen.getByText('60x')).toBeInTheDocument();

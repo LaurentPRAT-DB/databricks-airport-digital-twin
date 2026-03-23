@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Flight } from '../types/flight';
 
-export type PlaybackSpeed = 1 | 2 | 5 | 10 | 30 | 60;
+export type PlaybackSpeed = 1 | 2 | 4 | 10 | 30 | 60;
 
 export interface SimulationFile {
   filename: string;
@@ -261,7 +261,21 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setFlights(snapshots.map(snapshotToFlight));
   }, [simData, currentFrameIndex]);
 
-  // Playback interval — advances frame index
+  // Compute sim-seconds between consecutive frames from the loaded data.
+  // Falls back to 30 if data is insufficient.
+  const simSecondsPerFrame = (() => {
+    if (!simData || simData.frame_timestamps.length < 2) return 30;
+    const t0 = new Date(simData.frame_timestamps[0]).getTime();
+    const t1 = new Date(simData.frame_timestamps[1]).getTime();
+    const diff = (t1 - t0) / 1000;
+    return diff > 0 ? diff : 30;
+  })();
+
+  // Playback interval — advances frame index.
+  // Base rate: 1x = 1 sim-minute per real second (60 sim-sec/real-sec).
+  // framesPerRealSecond = 60 * speed / simSecondsPerFrame
+  // If ≤60 fps: one frame per tick at interval = 1000/fps.
+  // If >60 fps: multiple frames per 16ms tick.
   useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -270,17 +284,24 @@ export function useSimulationReplay(): UseSimulationReplayResult {
 
     if (!isPlaying || !simData) return;
 
-    // Base interval: simulation snapshots are every 30 sim-seconds.
-    // At 1x speed, advance 1 frame per 1000ms (1 real second = 30 sim seconds).
-    // At 60x speed, advance 1 frame per ~16ms.
-    const intervalMs = Math.max(16, Math.round(1000 / speed));
+    const framesPerRealSecond = (60 * speed) / simSecondsPerFrame;
+    let intervalMs: number;
+    let framesPerTick: number;
+
+    if (framesPerRealSecond <= 60) {
+      intervalMs = Math.round(1000 / framesPerRealSecond);
+      framesPerTick = 1;
+    } else {
+      intervalMs = 16;
+      framesPerTick = Math.ceil(framesPerRealSecond / 60);
+    }
 
     intervalRef.current = setInterval(() => {
       setCurrentFrameIndex((prev) => {
-        const next = prev + 1;
+        const next = prev + framesPerTick;
         if (next >= (simData?.frame_count ?? 0)) {
           setIsPlaying(false);
-          return prev;
+          return Math.min(prev, (simData?.frame_count ?? 1) - 1);
         }
         return next;
       });
@@ -289,7 +310,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isPlaying, speed, simData]);
+  }, [isPlaying, speed, simData, simSecondsPerFrame]);
 
   const play = useCallback(() => {
     if (!simData) return;

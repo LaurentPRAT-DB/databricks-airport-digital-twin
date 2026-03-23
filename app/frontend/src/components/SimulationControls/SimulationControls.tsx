@@ -7,7 +7,7 @@ import {
   ScenarioEvent,
 } from '../../hooks/useSimulationReplay';
 
-const SPEED_OPTIONS: PlaybackSpeed[] = [1, 2, 5, 10, 30, 60];
+const SPEED_OPTIONS: PlaybackSpeed[] = [1, 2, 4, 10, 30, 60];
 
 /** Format ISO timestamp to short time display. */
 function formatSimTime(iso: string | null): string {
