@@ -48,6 +48,26 @@ _TYPE_MAP: Dict[str, str] = {
 
 _FALLBACK_OPENAP_TYPE = "a320"
 
+# Hardcoded A320 profiles used when OpenAP is not installed.
+# Derived from a typical A320 approach: 35,000ft → 0ft over ~20 min.
+_N_FALLBACK = 50
+
+
+def _hardcoded_descent() -> "FlightProfile":
+    progress = np.linspace(0.0, 1.0, _N_FALLBACK)
+    alt_ft = 35000 * (1 - progress) ** 1.3
+    speed_kts = 250 + (1 - progress) * 230  # 480 → 250 kts
+    vrate_fpm = np.full(_N_FALLBACK, -1800.0)
+    return FlightProfile(progress=progress, altitude_ft=alt_ft, speed_kts=speed_kts, vertical_rate_fpm=vrate_fpm)
+
+
+def _hardcoded_climb() -> "FlightProfile":
+    progress = np.linspace(0.0, 1.0, _N_FALLBACK)
+    alt_ft = 35000 * progress ** 1.3
+    speed_kts = 160 + progress * 320  # 160 → 480 kts
+    vrate_fpm = np.full(_N_FALLBACK, 2000.0)
+    return FlightProfile(progress=progress, altitude_ft=alt_ft, speed_kts=speed_kts, vertical_rate_fpm=vrate_fpm)
+
 
 @dataclass
 class FlightProfile:
@@ -120,6 +140,36 @@ def _build_climb_profile(openap_type: str) -> FlightProfile:
     )
 
 
+def _get_fallback_descent() -> FlightProfile:
+    """Return hardcoded descent profile, using OpenAP A320 if available."""
+    if _FALLBACK_OPENAP_TYPE in _descent_cache:
+        return _descent_cache[_FALLBACK_OPENAP_TYPE]
+    try:
+        profile = _build_descent_profile(_FALLBACK_OPENAP_TYPE)
+        _descent_cache[_FALLBACK_OPENAP_TYPE] = profile
+        return profile
+    except Exception:
+        profile = _hardcoded_descent()
+        _descent_cache[_FALLBACK_OPENAP_TYPE] = profile
+        logger.info("Using hardcoded A320 descent profile (openap not available)")
+        return profile
+
+
+def _get_fallback_climb() -> FlightProfile:
+    """Return hardcoded climb profile, using OpenAP A320 if available."""
+    if _FALLBACK_OPENAP_TYPE in _climb_cache:
+        return _climb_cache[_FALLBACK_OPENAP_TYPE]
+    try:
+        profile = _build_climb_profile(_FALLBACK_OPENAP_TYPE)
+        _climb_cache[_FALLBACK_OPENAP_TYPE] = profile
+        return profile
+    except Exception:
+        profile = _hardcoded_climb()
+        _climb_cache[_FALLBACK_OPENAP_TYPE] = profile
+        logger.info("Using hardcoded A320 climb profile (openap not available)")
+        return profile
+
+
 def get_descent_profile(aircraft_type: str) -> FlightProfile:
     """Return cached OpenAP descent profile for *aircraft_type*.
 
@@ -135,9 +185,7 @@ def get_descent_profile(aircraft_type: str) -> FlightProfile:
                 "OpenAP descent failed for %s (%s), falling back to A320",
                 aircraft_type, oa_type,
             )
-            if _FALLBACK_OPENAP_TYPE not in _descent_cache:
-                _descent_cache[_FALLBACK_OPENAP_TYPE] = _build_descent_profile(_FALLBACK_OPENAP_TYPE)
-            _descent_cache[aircraft_type] = _descent_cache[_FALLBACK_OPENAP_TYPE]
+            _descent_cache[aircraft_type] = _get_fallback_descent()
     return _descent_cache[aircraft_type]
 
 
@@ -156,9 +204,7 @@ def get_climb_profile(aircraft_type: str) -> FlightProfile:
                 "OpenAP climb failed for %s (%s), falling back to A320",
                 aircraft_type, oa_type,
             )
-            if _FALLBACK_OPENAP_TYPE not in _climb_cache:
-                _climb_cache[_FALLBACK_OPENAP_TYPE] = _build_climb_profile(_FALLBACK_OPENAP_TYPE)
-            _climb_cache[aircraft_type] = _climb_cache[_FALLBACK_OPENAP_TYPE]
+            _climb_cache[aircraft_type] = _get_fallback_climb()
     return _climb_cache[aircraft_type]
 
 
