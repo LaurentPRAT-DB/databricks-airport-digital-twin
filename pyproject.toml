@@ -30,6 +30,7 @@ dependencies = [
     "matplotlib>=3.10.8",
     "scikit-learn>=1.4",
     "catboost>=1.2",
+    "openap>=2.4",
 ]
 
 [project.optional-dependencies]
