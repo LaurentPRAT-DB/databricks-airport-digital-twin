@@ -254,7 +254,9 @@ describe('SimulationControls', () => {
       });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
 
-      // "1x" appears in both header badge and speed buttons, others only in speed buttons
+      // Sub-1x speeds use fraction labels, others use Nx format
+      expect(screen.getByText('¼x')).toBeInTheDocument();
+      expect(screen.getByText('½x')).toBeInTheDocument();
       expect(screen.getByText('2x')).toBeInTheDocument();
       expect(screen.getByText('4x')).toBeInTheDocument();
       expect(screen.getByText('10x')).toBeInTheDocument();

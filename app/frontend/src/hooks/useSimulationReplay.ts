@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Flight } from '../types/flight';
 
-export type PlaybackSpeed = 1 | 2 | 4 | 10 | 30 | 60;
+export type PlaybackSpeed = 0.25 | 0.5 | 1 | 2 | 4 | 10 | 30 | 60;
 
 export interface SimulationFile {
   filename: string;

@@ -7,7 +7,7 @@ import {
   ScenarioEvent,
 } from '../../hooks/useSimulationReplay';
 
-const SPEED_OPTIONS: PlaybackSpeed[] = [1, 2, 4, 10, 30, 60];
+const SPEED_OPTIONS: PlaybackSpeed[] = [0.25, 0.5, 1, 2, 4, 10, 30, 60];
 
 /** Format ISO timestamp to HH:MM (no seconds — easier to read at speed). */
 function formatSimTime(iso: string | null): string {
@@ -285,7 +285,7 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
                   : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
               }`}
             >
-              {s}x
+              {s === 0.25 ? '¼x' : s === 0.5 ? '½x' : `${s}x`}
             </button>
           ))}
         </div>
