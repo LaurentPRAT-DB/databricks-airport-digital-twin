@@ -650,7 +650,7 @@ class TestFlightStatusStateMachine:
     def test_schedule_contains_valid_statuses(self):
         random.seed(42)
         schedule = generate_daily_schedule("SFO")
-        valid = {"on_time", "delayed", "boarding", "departed", "arrived", "cancelled"}
+        valid = {"on_time", "delayed", "boarding", "final_call", "gate_closed", "departed", "arrived", "cancelled"}
         for flight in schedule:
             assert flight["status"] in valid, f"Invalid status: {flight['status']}"
 

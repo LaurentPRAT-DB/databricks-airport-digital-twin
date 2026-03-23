@@ -133,3 +133,4 @@ class TurnaroundResponse(BaseModel):
 
     turnaround: TurnaroundStatus = Field(..., description="Turnaround status")
     timestamp: datetime = Field(default_factory=_utc_now, description="Response timestamp")
+    message: Optional[str] = Field(default=None, description="Status message (e.g., 'Aircraft not at gate')")

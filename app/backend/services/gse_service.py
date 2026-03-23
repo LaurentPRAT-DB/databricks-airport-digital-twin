@@ -126,6 +126,29 @@ class GSEService:
         # Try to get real data from simulation state
         sim_info = get_flight_turnaround_info(icao24)
 
+        # If flight exists in sim but is NOT parked, return "not at gate" status
+        # (G1 fix: turnaround phases must not start until aircraft is PARKED)
+        if sim_info is not None and not sim_info.get("parked_since"):
+            phase = sim_info.get("phase", "unknown")
+            effective_callsign = sim_info.get("callsign") or flight_number
+            effective_gate = sim_info.get("assigned_gate") or gate
+            turnaround = TurnaroundStatus(
+                icao24=icao24,
+                flight_number=effective_callsign or "",
+                gate=effective_gate or "",
+                arrival_time=datetime.now(timezone.utc),
+                current_phase=TurnaroundPhase.ARRIVAL,
+                phase_progress_pct=0,
+                total_progress_pct=0,
+                estimated_departure=datetime.now(timezone.utc) + timedelta(hours=1),
+                assigned_gse=[],
+                aircraft_type=sim_info.get("aircraft_type") or aircraft_type,
+            )
+            return TurnaroundResponse(
+                turnaround=turnaround,
+                message=f"Aircraft not at gate (phase: {phase})",
+            )
+
         if sim_info is not None and sim_info.get("parked_since"):
             # Use real simulation data
             arrival_time = sim_info["parked_since"]

@@ -33,6 +33,7 @@ from src.ingestion.fallback import (
     _release_gate,
     _release_runway,
     get_gates,
+    _get_departure_runway_name,
 )
 
 # The functions use lazy imports: `from app.backend.services.airport_config_service import get_airport_config_service`
@@ -842,9 +843,9 @@ class TestRunwayPathConstraints:
         _flight_states[state.icao24] = state
         _init_gate_states()
 
-        # Occupy the runway with another aircraft
-        from src.ingestion.fallback import _occupy_runway
-        _occupy_runway("other_aircraft", "28R")
+        # Occupy the departure runway with another aircraft
+        dep_rwy = _get_departure_runway_name()
+        _occupy_runway("other_aircraft", dep_rwy)
 
         state = _update_flight_state(state, 1.0)
 

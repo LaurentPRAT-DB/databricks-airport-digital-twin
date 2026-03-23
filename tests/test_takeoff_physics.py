@@ -32,14 +32,26 @@ def _get_runway_28R():
     return _fallback._runway_28R
 
 
+def _get_departure_runway_state():
+    """Get the runway state for the dynamically selected departure runway."""
+    dep_name = _fallback._get_departure_runway_name()
+    return _fallback._get_runway_state(dep_name)
+
+
 @pytest.fixture(autouse=True)
 def _reset_runway_state():
-    """Reset runway 28R state before each test to ensure isolation."""
+    """Reset runway states before each test to ensure isolation."""
     rwy = _get_runway_28R()
     rwy.occupied_by = None
     rwy.last_departure_time = 0.0
     rwy.last_arrival_time = 0.0
     rwy.last_departure_type = "LARGE"
+    # Also reset the departure runway state (may differ from 28R)
+    dep_rwy = _get_departure_runway_state()
+    dep_rwy.occupied_by = None
+    dep_rwy.last_departure_time = 0.0
+    dep_rwy.last_arrival_time = 0.0
+    dep_rwy.last_departure_type = "LARGE"
     yield
 
 
@@ -260,7 +272,7 @@ class TestDepartureSeparation:
         )
 
         # Simulate a HEAVY just departed 30s ago (need 120s separation)
-        rwy = _get_runway_28R()
+        rwy = _get_departure_runway_state()
         rwy.occupied_by = None
         rwy.last_departure_time = time.time() - 30
         rwy.last_departure_type = "HEAVY"
@@ -290,7 +302,7 @@ class TestDepartureSeparation:
         )
 
         # LARGE behind LARGE: 60s default, set 120s ago
-        rwy = _get_runway_28R()
+        rwy = _get_departure_runway_state()
         rwy.occupied_by = None
         rwy.last_departure_time = time.time() - 120
         rwy.last_departure_type = "LARGE"
@@ -343,7 +355,7 @@ class TestRunwayRelease:
     def test_runway_occupied_during_roll(self):
         """Runway should remain occupied during ground roll."""
         state = _make_takeoff_state()
-        rwy = _get_runway_28R()
+        rwy = _get_departure_runway_state()
         rwy.occupied_by = state.icao24
         checked_ground_phases = False
 
@@ -351,7 +363,7 @@ class TestRunwayRelease:
             subphase_before = state.takeoff_subphase
             phase_before = state.phase
             state = _update_flight_state(state, 0.5)
-            rwy = _get_runway_28R()  # Re-fetch in case of rebinding
+            rwy = _get_departure_runway_state()
             if phase_before == FlightPhase.TAKEOFF and subphase_before in ("lineup", "roll", "rotate"):
                 checked_ground_phases = True
                 assert rwy.occupied_by == state.icao24, \
@@ -363,13 +375,13 @@ class TestRunwayRelease:
     def test_runway_released_at_departing(self):
         """Runway should be released when transitioning to DEPARTING."""
         state = _make_takeoff_state()
-        rwy = _get_runway_28R()
+        rwy = _get_departure_runway_state()
         rwy.occupied_by = state.icao24
 
         for _ in range(2000):
             state = _update_flight_state(state, 0.5)
             if state.phase == FlightPhase.DEPARTING:
-                rwy = _get_runway_28R()
+                rwy = _get_departure_runway_state()
                 assert rwy.occupied_by is None, \
                     "Runway not released at DEPARTING"
                 break
@@ -377,14 +389,14 @@ class TestRunwayRelease:
     def test_release_stores_wake_category(self):
         """_release_runway should store the departing aircraft's wake category."""
         state = _make_takeoff_state(aircraft_type="A380")
-        rwy = _get_runway_28R()
+        rwy = _get_departure_runway_state()
         rwy.occupied_by = state.icao24
         rwy.last_departure_type = "LARGE"  # Reset
 
         for _ in range(2000):
             state = _update_flight_state(state, 0.5)
             if state.phase == FlightPhase.DEPARTING:
-                rwy = _get_runway_28R()
+                rwy = _get_departure_runway_state()
                 assert rwy.last_departure_type == "SUPER", \
                     f"Expected SUPER, got {rwy.last_departure_type}"
                 break
@@ -448,10 +460,9 @@ class TestDynamicRunwayGeometry:
             start, end, heading, length_ft = _get_takeoff_runway_geometry()
             # With OSM data, should NOT return SFO fallback
             assert length_ft > 1000
-            # Start = departure end (far end from approach threshold = last geoPoint)
-            assert abs(start[0] - 40.02) < 0.01
-            # End = approach threshold (first geoPoint)
-            assert abs(end[0] - 40.0) < 0.01
+            # Same-direction ops: start = threshold (first geoPoint), end = far end (last)
+            assert abs(start[0] - 40.0) < 0.01
+            assert abs(end[0] - 40.02) < 0.01
 
 
 class TestClimbGradient:
@@ -688,7 +699,7 @@ class TestRunwayOccupiedHoldShort:
             waypoint_index=999,
         )
 
-        rwy = _get_runway_28R()
+        rwy = _get_departure_runway_state()
         rwy.occupied_by = "other_aircraft"  # Runway physically occupied
         rwy.last_departure_time = 0.0  # Long ago
 

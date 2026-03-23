@@ -1701,6 +1701,7 @@ class FlightState:
     turnaround_schedule: Optional[Dict] = None # {phase: {"start_offset_s", "duration_s", "done", "started"}}
     departure_queue_hold_s: float = 0.0        # Remaining departure queue hold (seconds, calibrated)
     departure_queue_set: bool = False           # True once the hold has been computed
+    cruise_altitude: float = 0.0               # Target cruise FL (hemispheric rule)
 
 
 # Maximum simultaneous aircraft on approach (approach + landing)
@@ -1765,10 +1766,76 @@ class GateState:
     occupied_by: Optional[str] = None  # icao24 of aircraft at gate
     available_at: float = 0.0          # When gate becomes available
 
-# Global separation state
+# Global separation state — dynamic runway dict keyed by name (D1 fix: no more hardcoded "28R")
+_runway_states: Dict[str, RunwayState] = {}
+# Backward-compatible aliases for tests — these are pre-populated entries in _runway_states
 _runway_28L: RunwayState = RunwayState()
 _runway_28R: RunwayState = RunwayState()
+_runway_states["28L"] = _runway_28L
+_runway_states["28R"] = _runway_28R
 _gate_states: Dict[str, GateState] = {}
+
+
+def _get_runway_state(runway: str) -> RunwayState:
+    """Get or create a RunwayState for the given runway name."""
+    if runway not in _runway_states:
+        _runway_states[runway] = RunwayState()
+    return _runway_states[runway]
+
+
+def _get_departure_runway_name() -> str:
+    """Select the departure runway dynamically from OSM data.
+
+    Strategy: use a different runway than the arrival runway when multiple
+    runways exist (mixed-mode ops). Falls back to the arrival runway for
+    single-runway airports.
+    """
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+        runways = config.get("osmRunways", [])
+        if not runways:
+            return _get_arrival_runway_name()
+
+        # Get all runway refs
+        runway_refs = []
+        for rwy in runways:
+            ref = rwy.get("ref") or rwy.get("name", "")
+            if ref and len(rwy.get("geoPoints", [])) >= 2:
+                runway_refs.append(ref)
+
+        if not runway_refs:
+            return _get_arrival_runway_name()
+
+        arrival_rwy = _get_arrival_runway_name()
+
+        # For multi-runway airports, prefer a different runway for departures
+        if len(runway_refs) > 1:
+            # Pick the second runway (not the primary/longest used for arrivals)
+            for ref in runway_refs:
+                # OSM ref format: "10R/28L" — split and pick the reciprocal
+                names = [n.strip() for n in ref.split("/")]
+                # If any name in this runway matches the arrival runway, skip it
+                if arrival_rwy in names:
+                    continue
+                # Use the first designator of this alternate runway
+                return names[0]
+
+        # Single runway or all match arrival: use the reciprocal end
+        # E.g., arrival is "28L" (from ref "10R/28L"), departure uses "10R"
+        for ref in runway_refs:
+            names = [n.strip() for n in ref.split("/")]
+            if arrival_rwy in names:
+                # Return the other end
+                for n in names:
+                    if n != arrival_rwy:
+                        return n
+                return names[0]
+
+        return runway_refs[0].split("/")[0].strip()
+    except Exception:
+        return _get_arrival_runway_name()
 
 def _init_gate_states():
     """Initialize gate states, re-syncing if OSM gates become available."""
@@ -1902,25 +1969,29 @@ def _check_approach_separation(state: FlightState) -> bool:
 
     return True
 
-def _is_runway_clear(runway: str = "28R") -> bool:
+def _is_runway_clear(runway: str = "") -> bool:
     """Check if runway is clear for landing or takeoff."""
-    runway_state = _runway_28R if runway == "28R" else _runway_28L
-    return runway_state.occupied_by is None
+    if not runway:
+        runway = _get_arrival_runway_name()
+    return _get_runway_state(runway).occupied_by is None
 
-def _occupy_runway(icao24: str, runway: str = "28R"):
+def _occupy_runway(icao24: str, runway: str = ""):
     """Mark runway as occupied by aircraft."""
-    runway_state = _runway_28R if runway == "28R" else _runway_28L
-    runway_state.occupied_by = icao24
+    if not runway:
+        runway = _get_arrival_runway_name()
+    _get_runway_state(runway).occupied_by = icao24
 
-def _release_runway(icao24: str, runway: str = "28R", aircraft_type: str = ""):
+def _release_runway(icao24: str, runway: str = "", aircraft_type: str = ""):
     """Release runway when aircraft clears. Stores wake category for departure separation."""
-    runway_state = _runway_28R if runway == "28R" else _runway_28L
-    if runway_state.occupied_by == icao24:
-        runway_state.occupied_by = None
-        runway_state.last_arrival_time = time.time()
+    if not runway:
+        runway = _get_arrival_runway_name()
+    rs = _get_runway_state(runway)
+    if rs.occupied_by == icao24:
+        rs.occupied_by = None
+        rs.last_arrival_time = time.time()
         if aircraft_type:
-            runway_state.last_departure_type = _get_wake_category(aircraft_type)
-            runway_state.last_departure_time = time.time()
+            rs.last_departure_type = _get_wake_category(aircraft_type)
+            rs.last_departure_time = time.time()
 
 def _find_available_gate() -> Optional[str]:
     """Find a random available gate, preferring terminal gates over remote stands."""
@@ -2710,7 +2781,7 @@ def _create_new_flight(
             callsign=callsign,
             latitude=lat,
             longitude=lon,
-            altitude=alt + random.uniform(-200, 200),
+            altitude=alt + random.uniform(-30, 30),  # realistic ILS approach deviation (±30ft)
             velocity=180 + random.uniform(-10, 10),
             heading=_calculate_heading((lat, lon), center),
             vertical_rate=-800,
@@ -2831,7 +2902,11 @@ def _create_new_flight(
             )
             lat, lon = spawn_point
             heading = _calculate_heading((lat, lon), center)
-            alt = random.uniform(28000, 39000)
+            # Hemispheric rule (ICAO): eastbound (0-179°) → odd FL, westbound (180-359°) → even FL
+            if heading < 180:
+                alt = random.choice([29000, 31000, 33000, 35000, 37000, 39000])  # odd FLs
+            else:
+                alt = random.choice([28000, 30000, 32000, 34000, 36000, 38000])  # even FLs
 
         # Departing enroute flights climb; arriving ones descend
         _is_departing_enroute = destination is not None and origin is None
@@ -2863,7 +2938,8 @@ def _create_new_flight(
         _init_gate_states()
 
         # Check if runway is occupied - if so, can't spawn here
-        if not _is_runway_clear("28R"):
+        arrival_rwy = _get_arrival_runway_name()
+        if not _is_runway_clear(arrival_rwy):
             return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination)
 
         gate = _find_available_gate()
@@ -3408,10 +3484,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     return state
 
             # At runway hold line - check runway clear AND departure wake separation
-            runway_clear = _is_runway_clear("28R")
+            dep_rwy = _get_departure_runway_name()
+            runway_clear = _is_runway_clear(dep_rwy)
             if runway_clear:
                 # Check departure wake turbulence separation (FAA 7110.65 5-8-1)
-                runway_st = _runway_28R
+                runway_st = _get_runway_state(dep_rwy)
                 elapsed = time.time() - runway_st.last_departure_time
                 lead_cat = runway_st.last_departure_type
                 follow_cat = _get_wake_category(state.aircraft_type)
@@ -3431,7 +3508,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.takeoff_subphase = "lineup"
                     state.phase_progress = 0.0
                     state.takeoff_roll_dist_ft = 0.0
-                    _occupy_runway(state.icao24, "28R")
+                    _occupy_runway(state.icao24, dep_rwy)
                 else:
                     # Hold short: wake separation not yet met
                     state.velocity = 0
@@ -3530,7 +3607,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
             if state.altitude >= 500:
                 # Release runway and transition to DEPARTING
-                _release_runway(state.icao24, "28R", state.aircraft_type)
+                _release_runway(state.icao24, _get_departure_runway_name(), state.aircraft_type)
                 emit_phase_transition(
                     state.icao24, state.callsign,
                     FlightPhase.TAKEOFF.value, FlightPhase.DEPARTING.value,
@@ -3705,8 +3782,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.heading += max(-3, min(3, heading_diff)) * dt
             state.heading = state.heading % 360
 
-            # Climb toward cruise altitude
-            if state.altitude < 35000:
+            # Climb toward cruise altitude (hemispheric rule: east=odd FL, west=even FL)
+            if state.cruise_altitude == 0.0:
+                if state.heading < 180:
+                    state.cruise_altitude = random.choice([35000, 37000, 39000])
+                else:
+                    state.cruise_altitude = random.choice([34000, 36000, 38000])
+            if state.altitude < state.cruise_altitude:
                 state.altitude += 500 * dt
                 state.vertical_rate = 1500
 
@@ -4517,7 +4599,7 @@ def reset_synthetic_state() -> dict:
     Returns:
         dict with count of cleared items.
     """
-    global _flight_states, _last_update, _runway_28L, _runway_28R, _gate_states
+    global _flight_states, _last_update, _runway_states, _runway_28L, _runway_28R, _gate_states
 
     cleared_flights = len(_flight_states)
     cleared_gates = len(_gate_states)
@@ -4525,8 +4607,11 @@ def reset_synthetic_state() -> dict:
     # Clear flight state only — airport center is managed by the activate endpoint
     _flight_states.clear()
     _last_update = 0.0
+    _runway_states.clear()
     _runway_28L = RunwayState()
     _runway_28R = RunwayState()
+    _runway_states["28L"] = _runway_28L
+    _runway_states["28R"] = _runway_28R
     _gate_states.clear()
 
     # Clear event buffers

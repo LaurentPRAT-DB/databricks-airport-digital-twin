@@ -806,6 +806,19 @@ def generate_daily_schedule(
         elif effective_time < now:
             flight["status"] = "boarding" if not is_arrival else "arrived"
             flight["actual_time"] = effective_time.isoformat() if is_arrival else None
+        elif not is_arrival:
+            # Departure boarding progression (F2): gate_closed → final_call → boarding → on_time
+            minutes_to_dep = (effective_time - now).total_seconds() / 60
+            if minutes_to_dep <= 5:
+                flight["status"] = "gate_closed"
+            elif minutes_to_dep <= 10:
+                flight["status"] = "final_call"
+            elif minutes_to_dep <= 30:
+                flight["status"] = "boarding"
+            elif flight["delay_minutes"] > 0:
+                flight["status"] = "delayed"
+            else:
+                flight["status"] = "on_time"
         elif flight["delay_minutes"] > 0:
             flight["status"] = "delayed"
         else:
