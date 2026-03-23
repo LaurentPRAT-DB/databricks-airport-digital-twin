@@ -157,6 +157,7 @@ async def _background_init(app: FastAPI):
     airport_icao = DEFAULT_AIRPORT_ICAO
     airport_iata = DEFAULT_AIRPORT_IATA
     t_start = time.monotonic()
+    app.state.init_timings = {}  # phase -> seconds
 
     logger.info("=" * 70)
     logger.info(f"INIT | Airport Digital Twin — Build {BUILD_NUMBER}")
@@ -192,6 +193,7 @@ async def _background_init(app: FastAPI):
         else:
             logger.info("INIT |   Delta tables (Unity Catalog): NOT CONFIGURED")
 
+        app.state.init_timings["phase0_db_connections"] = round(time.monotonic() - t_start, 2)
         logger.info("-" * 70)
 
         # ── Phase 1: Load airport configuration ──────────────────────────
@@ -249,6 +251,8 @@ async def _background_init(app: FastAPI):
                 "synthetic data will use default 9-gate fallback until config loads"
             )
 
+        app.state.init_timings["phase1_airport_config"] = round(time.monotonic() - t_start - sum(app.state.init_timings.values()), 2)
+        app.state.init_timings["phase1_source"] = source or "none"
         logger.info("-" * 70)
 
         # ── Phase 2: Generate synthetic data ─────────────────────────────
@@ -268,6 +272,7 @@ async def _background_init(app: FastAPI):
             logger.warning("INIT |   Data initialization FAILED — using fallback generators only")
             app.state.startup_status = "Warning: data init failed, using fallback generators"
 
+        app.state.init_timings["phase2_synthetic_data"] = round(gen_ms / 1000, 2)
         logger.info("-" * 70)
 
         # ── Phase 3: Pre-warm weather cache ──────────────────────────────
@@ -279,7 +284,9 @@ async def _background_init(app: FastAPI):
         except Exception as e:
             logger.warning(f"INIT |   Weather pre-warm failed (non-critical): {e}")
 
+        app.state.init_timings["phase3_weather"] = round(time.monotonic() - t_start - sum(v for v in app.state.init_timings.values() if isinstance(v, (int, float))), 2)
         total_ms = (time.monotonic() - t_start) * 1000
+        app.state.init_timings["total_ready"] = round(total_ms / 1000, 2)
         app.state.ready = True
         app.state.startup_status = "Ready"
         logger.info("=" * 70)
@@ -297,6 +304,7 @@ async def _background_init(app: FastAPI):
                 await asyncio.to_thread(demo_svc.generate_demo, airport_icao)
                 demo_ms = (time.monotonic() - t_demo) * 1000
                 logger.info(f"INIT | Demo simulation generated in {demo_ms:.0f}ms")
+                app.state.init_timings["phase4_demo_sim"] = round(demo_ms / 1000, 2)
                 app.state.startup_status = "Ready"
             except Exception as e:
                 logger.error(f"INIT | Demo simulation generation FAILED: {e}", exc_info=True)
@@ -435,6 +443,7 @@ async def get_version(request: Request):
     import time
     ready = getattr(request.app.state, "ready", False)
     startup_status = getattr(request.app.state, "startup_status", "unknown")
+    timings = getattr(request.app.state, "init_timings", {})
     return {
         "build_number": BUILD_NUMBER,
         "git_commit": GIT_COMMIT,
@@ -442,6 +451,7 @@ async def get_version(request: Request):
         "uptime_seconds": round((datetime.now(timezone.utc) - _APP_START_TIME).total_seconds()),
         "ready": ready,
         "startup_status": startup_status,
+        "init_timings": timings,
     }
 
 
