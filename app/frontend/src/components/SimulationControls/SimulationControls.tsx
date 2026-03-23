@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   useSimulationReplay,
   UseSimulationReplayResult,
@@ -9,15 +9,35 @@ import {
 
 const SPEED_OPTIONS: PlaybackSpeed[] = [1, 2, 4, 10, 30, 60];
 
-/** Format ISO timestamp to short time display. */
+/** Format ISO timestamp to HH:MM (no seconds — easier to read at speed). */
 function formatSimTime(iso: string | null): string {
-  if (!iso) return '--:--:--';
+  if (!iso) return '--:--';
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString('en-US', { hour12: false });
+    return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
   } catch {
-    return '--:--:--';
+    return '--:--';
   }
+}
+
+/** Format ISO timestamp to short date like "Mar 23". */
+function formatSimDate(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch {
+    return '';
+  }
+}
+
+/** Format elapsed seconds as "Xm Ys". */
+function formatElapsed(seconds: number): string {
+  if (seconds < 0) return '0s';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  if (m === 0) return `${s}s`;
+  return `${m}m ${s}s`;
 }
 
 const MAX_LOADABLE_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB
@@ -136,6 +156,33 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
     ? (sim.currentFrameIndex / (sim.totalFrames - 1)) * 100
     : 0;
 
+  // Track elapsed real time since playback started
+  const playStartRef = useRef<number | null>(null);
+  const elapsedBeforePauseRef = useRef(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (sim.isPlaying) {
+      playStartRef.current = Date.now();
+      const tick = setInterval(() => {
+        const since = (Date.now() - (playStartRef.current ?? Date.now())) / 1000;
+        setElapsedSeconds(elapsedBeforePauseRef.current + since);
+      }, 500);
+      return () => {
+        elapsedBeforePauseRef.current += (Date.now() - (playStartRef.current ?? Date.now())) / 1000;
+        clearInterval(tick);
+      };
+    }
+  }, [sim.isPlaying]);
+
+  // Reset elapsed when seeking to start or stopping
+  useEffect(() => {
+    if (sim.currentFrameIndex === 0) {
+      elapsedBeforePauseRef.current = 0;
+      setElapsedSeconds(0);
+    }
+  }, [sim.currentFrameIndex === 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Collect unique visible event types for the legend
   const visibleEventTypes = [
     ...new Set(
@@ -178,12 +225,16 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
           )}
         </button>
 
-        {/* Sim time */}
+        {/* Sim time + date + elapsed */}
         <div className="flex-shrink-0 text-center">
           <div className="text-base md:text-lg font-mono font-bold tracking-tight">
             {formatSimTime(sim.currentSimTime)}
           </div>
-          <div className="text-[10px] text-slate-400 -mt-0.5">SIM TIME</div>
+          <div className="flex items-center justify-center gap-1.5 -mt-0.5">
+            <span className="text-[10px] text-slate-400">{formatSimDate(sim.currentSimTime)}</span>
+            <span className="text-[10px] text-slate-600">|</span>
+            <span className="text-[10px] text-slate-500 font-mono">{formatElapsed(elapsedSeconds)}</span>
+          </div>
         </div>
 
         {/* Progress bar — hidden on mobile */}
@@ -415,7 +466,7 @@ export function SimulationControls({
       return (
         <div className="flex items-center gap-2 bg-indigo-600/80 px-3 py-1 rounded-full text-sm">
           <span className="w-2 h-2 rounded-full bg-indigo-300 animate-pulse" />
-          <span>SIM: {formatSimTime(sim.currentSimTime)}</span>
+          <span>SIM: {formatSimTime(sim.currentSimTime)} {formatSimDate(sim.currentSimTime)}</span>
           <span className="text-indigo-200">{sim.speed}x</span>
           {sim.scenarioName && (
             <span className="text-amber-200 text-xs truncate max-w-[120px]" title={sim.scenarioName}>

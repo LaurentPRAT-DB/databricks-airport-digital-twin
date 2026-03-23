@@ -229,7 +229,7 @@ describe('SimulationControls', () => {
       });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
 
-      expect(screen.getByText('SIM TIME')).toBeInTheDocument();
+      expect(screen.getByText('Mar 22')).toBeInTheDocument();
       expect(screen.getByText('Exit')).toBeInTheDocument();
       // Speed buttons render in the playback bar (also "1x" appears in header badge)
       expect(screen.getAllByText('1x').length).toBeGreaterThanOrEqual(1);
@@ -241,7 +241,7 @@ describe('SimulationControls', () => {
       mockSim = createMockSim({ isActive: true, switchPaused: true });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
 
-      expect(screen.queryByText('SIM TIME')).not.toBeInTheDocument();
+      expect(screen.queryByText('flights')).not.toBeInTheDocument();
     });
 
     it('renders speed buttons', () => {
