@@ -18,5 +18,7 @@ Faker==40.11.1
 databricks-sql-connector==4.2.5
 psycopg2-binary==2.9.11
 databricks-sdk==0.102.0
+# Simulation physics
+openap==2.5.0
 # Scenario configs
 pyyaml==6.0.2
