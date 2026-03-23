@@ -65,7 +65,7 @@ class DemoSimulationService:
                 arrivals=arrivals,
                 departures=departures,
                 duration_hours=24.0,
-                time_step_seconds=2.0,
+                time_step_seconds=5.0,
                 seed=42,
                 start_time=datetime.now(timezone.utc).replace(
                     hour=0, minute=0, second=0, microsecond=0

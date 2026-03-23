@@ -4,6 +4,7 @@ import asyncio
 import os
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -422,13 +423,34 @@ async def get_logs(
     }
 
 
-BUILD_NUMBER = "2026-03-15-001"
+BUILD_NUMBER = "2026-03-23-002"
+_git_commit_file = Path(__file__).resolve().parent.parent.parent / "GIT_COMMIT"
+GIT_COMMIT = _git_commit_file.read_text().strip() if _git_commit_file.exists() else "unknown"
+_APP_START_TIME = datetime.now(timezone.utc)
+
+
+@app.get("/api/version")
+async def get_version(request: Request):
+    """Return build version, git commit, and startup timing."""
+    import time
+    ready = getattr(request.app.state, "ready", False)
+    startup_status = getattr(request.app.state, "startup_status", "unknown")
+    return {
+        "build_number": BUILD_NUMBER,
+        "git_commit": GIT_COMMIT,
+        "started_at": _APP_START_TIME.isoformat(),
+        "uptime_seconds": round((datetime.now(timezone.utc) - _APP_START_TIME).total_seconds()),
+        "ready": ready,
+        "startup_status": startup_status,
+    }
+
 
 @app.get("/api/config")
 async def get_demo_config():
     """Return current demo configuration."""
     return {
         "build_number": BUILD_NUMBER,
+        "git_commit": GIT_COMMIT,
         "demo_mode": DEMO_MODE,
         "default_airport_icao": DEFAULT_AIRPORT_ICAO,
         "default_airport_iata": DEFAULT_AIRPORT_IATA,
