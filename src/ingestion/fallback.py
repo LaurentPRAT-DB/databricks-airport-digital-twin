@@ -3421,14 +3421,31 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         runway_touchdown = (thr[1], thr[0]) if thr else (RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0])  # lat, lon
         new_pos = _move_toward((state.latitude, state.longitude), runway_touchdown, 0.002)
         state.latitude, state.longitude = new_pos
-        state.altitude = max(0, state.altitude - 500 * dt)
-        state.velocity = max(30, state.velocity - 20 * dt)
-        state.heading = _calculate_heading(new_pos, runway_touchdown)
 
-        if state.altitude <= 0:
+        if state.altitude > 0:
+            # Airborne: descend to touchdown
+            state.altitude = max(0, state.altitude - 500 * dt)
+            state.velocity = max(80, state.velocity - 10 * dt)
+            state.heading = _calculate_heading(new_pos, runway_touchdown)
+            if state.altitude <= 0:
+                state.altitude = 0
+                state.on_ground = True
+                state.vertical_rate = 0
+        else:
+            # On-ground rollout: decelerate from ~130kts to taxi speed
             state.altitude = 0
             state.on_ground = True
             state.vertical_rate = 0
+            # Braking deceleration: ~3 kts/s is typical (reverse thrust + brakes)
+            state.velocity = max(25, state.velocity - 3.0 * dt)
+            # Continue rolling along runway centerline toward exit
+            speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+            new_pos = _move_toward((state.latitude, state.longitude), runway_touchdown, speed_deg)
+            state.latitude, state.longitude = new_pos
+            state.heading = _calculate_heading(new_pos, runway_touchdown)
+
+        if state.on_ground and state.velocity <= 30:
+            # Rollout complete — exit runway to taxiway
             # Stagger exit position to prevent gridlock at single point
             exit_pos = _get_runway_exit_position(state)
             state.latitude, state.longitude = exit_pos
