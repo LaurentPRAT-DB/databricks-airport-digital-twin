@@ -9,12 +9,12 @@ import {
 
 const SPEED_OPTIONS: PlaybackSpeed[] = [0.25, 0.5, 1, 2, 4, 10, 30, 60];
 
-/** Format ISO timestamp to HH:MM (no seconds — easier to read at speed). */
+/** Format ISO timestamp to h:MM AM/PM — makes it obvious this is a real-world clock. */
 function formatSimTime(iso: string | null): string {
   if (!iso) return '--:--';
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit' });
   } catch {
     return '--:--';
   }
@@ -226,11 +226,13 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
         </button>
 
         {/* Sim time + date + elapsed */}
-        <div className="flex-shrink-0 text-center">
+        <div className="flex-shrink-0 text-center min-w-[100px]">
           <div className="text-base md:text-lg font-mono font-bold tracking-tight">
             {formatSimTime(sim.currentSimTime)}
           </div>
           <div className="flex items-center justify-center gap-1.5 -mt-0.5">
+            <span className="text-[10px] text-blue-300 font-medium uppercase tracking-wider">Local Time</span>
+            <span className="text-[10px] text-slate-600">|</span>
             <span className="text-[10px] text-slate-400">{formatSimDate(sim.currentSimTime)}</span>
             <span className="text-[10px] text-slate-600">|</span>
             <span className="text-[10px] text-slate-500 font-mono">{formatElapsed(elapsedSeconds)}</span>
