@@ -1,8 +1,10 @@
 """Ground Support Equipment (GSE) allocation and turnaround model.
 
-Defines GSE requirements per aircraft type and turnaround timing models.
+Defines GSE requirements per aircraft type, turnaround timing models,
+and GSE dispatch with depot-based travel time estimation.
 """
 
+import math
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
@@ -263,6 +265,8 @@ def generate_gse_positions(
     gate: str,
     aircraft_type: str = "A320",
     current_phase: str = "refueling",
+    gate_lat: Optional[float] = None,
+    gate_lon: Optional[float] = None,
 ) -> list[dict]:
     """
     Generate GSE unit positions around an aircraft at a gate.
@@ -271,9 +275,11 @@ def generate_gse_positions(
         gate: Gate identifier
         aircraft_type: Aircraft type code
         current_phase: Current turnaround phase
+        gate_lat: Gate latitude (for travel time estimation)
+        gate_lon: Gate longitude (for travel time estimation)
 
     Returns:
-        List of GSE unit dictionaries with positions
+        List of GSE unit dictionaries with positions and travel info
     """
     requirements = get_gse_requirements(aircraft_type)
     gse_units = []
@@ -335,6 +341,11 @@ def generate_gse_positions(
             else:
                 status = "en_route" if random.random() < 0.3 else "available"
 
+            # Estimate travel time from depot if gate coordinates available
+            travel_info = None
+            if gate_lat is not None and gate_lon is not None:
+                travel_info = estimate_gse_travel_time(gate_lat, gate_lon, gse_type)
+
             gse_units.append({
                 "unit_id": unit_id,
                 "gse_type": gse_type,
@@ -344,6 +355,8 @@ def generate_gse_positions(
                 "position_x": x,
                 "position_y": y,
                 "color": GSE_COLORS.get(gse_type, "#888888"),
+                "depot": travel_info["depot_type"] if travel_info else None,
+                "travel_time_min": travel_info["travel_time_min"] if travel_info else None,
             })
 
     return gse_units
@@ -414,4 +427,122 @@ def get_fleet_status(airport_code: str = "KSFO") -> dict:
         "in_service": in_service,
         "maintenance": maintenance,
         "by_type": fleet,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GSE depot model — tracks depot locations and computes dispatch travel time
+# ---------------------------------------------------------------------------
+
+# Depots are positioned relative to terminal areas.  Each depot type serves
+# a specific equipment category and has a finite capacity.
+GSE_DEPOT_TYPES = {
+    "fuel_depot":       {"serves": ["fuel_truck"], "avg_speed_kph": 20},
+    "tug_yard":         {"serves": ["pushback_tug"], "avg_speed_kph": 15},
+    "cargo_depot":      {"serves": ["belt_loader"], "avg_speed_kph": 18},
+    "catering_depot":   {"serves": ["catering_truck"], "avg_speed_kph": 25},
+    "service_depot":    {"serves": ["lavatory_truck", "ground_power", "passenger_stairs"], "avg_speed_kph": 20},
+}
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Haversine distance in metres between two coordinates."""
+    R = 6_371_000
+    rlat1, rlat2 = math.radians(lat1), math.radians(lat2)
+    dlat = rlat2 - rlat1
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _get_airport_center() -> tuple[float, float]:
+    """Get airport center coordinates from config service."""
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+        center = config.get("center", {})
+        return (float(center.get("latitude", 37.6213)),
+                float(center.get("longitude", -122.3790)))
+    except Exception:
+        return (37.6213, -122.3790)  # SFO fallback
+
+
+def get_depot_locations(airport_code: str = "KSFO") -> list[dict]:
+    """Generate depot locations around the airport perimeter.
+
+    Depots are placed at cardinal offsets from the airport center,
+    simulating real-world depot placement near terminal areas.
+    """
+    center_lat, center_lon = _get_airport_center()
+    # Offset in degrees (~500-1000m from center)
+    offsets = {
+        "fuel_depot":     (0.005, -0.008),   # South-west (fuel farm)
+        "tug_yard":       (-0.002, -0.003),  # Near terminal apron
+        "cargo_depot":    (0.006, 0.002),     # East cargo area
+        "catering_depot": (-0.004, 0.005),    # North service road
+        "service_depot":  (0.001, -0.005),    # Central maintenance
+    }
+
+    depots = []
+    for depot_type, (dlat, dlon) in offsets.items():
+        info = GSE_DEPOT_TYPES[depot_type]
+        depots.append({
+            "depot_type": depot_type,
+            "latitude": center_lat + dlat,
+            "longitude": center_lon + dlon,
+            "serves": info["serves"],
+            "avg_speed_kph": info["avg_speed_kph"],
+        })
+    return depots
+
+
+def estimate_gse_travel_time(
+    gate_lat: float,
+    gate_lon: float,
+    gse_type: str,
+    airport_code: str = "KSFO",
+) -> dict:
+    """Estimate GSE dispatch travel time from nearest depot to gate.
+
+    Args:
+        gate_lat: Gate latitude.
+        gate_lon: Gate longitude.
+        gse_type: Equipment type (e.g., "fuel_truck").
+        airport_code: ICAO airport code.
+
+    Returns:
+        Dict with depot_type, distance_m, travel_time_min, and speed_kph.
+    """
+    depots = get_depot_locations(airport_code)
+
+    # Find the depot that serves this GSE type
+    best = None
+    best_dist = float("inf")
+    for depot in depots:
+        if gse_type in depot["serves"]:
+            dist = _haversine_m(gate_lat, gate_lon, depot["latitude"], depot["longitude"])
+            # Routing factor: actual road path ~1.4x straight-line
+            road_dist = dist * 1.4
+            if road_dist < best_dist:
+                best_dist = road_dist
+                best = depot
+
+    if best is None:
+        # Fallback: generic depot at center
+        center_lat, center_lon = _get_airport_center()
+        best_dist = _haversine_m(gate_lat, gate_lon, center_lat, center_lon) * 1.4
+        speed_kph = 18
+    else:
+        speed_kph = best["avg_speed_kph"]
+
+    travel_time_min = (best_dist / 1000) / speed_kph * 60  # km / kph * 60 = min
+    # Add dispatch overhead: 1-3 min for crew to board and start equipment
+    dispatch_overhead = random.uniform(1.0, 3.0)
+
+    return {
+        "depot_type": best["depot_type"] if best else "generic",
+        "distance_m": round(best_dist),
+        "travel_time_min": round(travel_time_min + dispatch_overhead, 1),
+        "speed_kph": speed_kph,
     }

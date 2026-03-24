@@ -84,6 +84,7 @@ class CapacityManager:
         self._departure_queue: list[str] = []  # callsigns waiting
         self._departure_queue_delay_min: float = 0.0  # avg queue delay
         self._taxiway_congestion: float = 1.0  # 1.0 = normal, >1.0 = congested
+        self._holding_point_queues: dict[str, int] = {}  # per-runway queue depth
         self._cascading_delay_pool: float = 0.0  # accumulated delay minutes to propagate
         # Curfew: list of (start_hour, start_min, end_hour, end_min, max_arr_per_hour)
         self._curfews: list[tuple[int, int, int, int, int]] = []
@@ -347,7 +348,13 @@ class CapacityManager:
     # --- Multi-stage capacity: departure queue + taxiway congestion ---
 
     def update_departure_queue(self, queue_size: int) -> None:
-        """Track departure queue size → compute average queue delay."""
+        """Track departure queue size → compute average queue delay.
+
+        Models holding-point queuing: aircraft waiting for runway entry
+        experience delay proportional to queue depth.  When queue > 3,
+        each additional aircraft adds ~2.5 min.  Queue > 8 triggers
+        taxiway gridlock (1.4x slowdown for all ground traffic).
+        """
         self._departure_queue_delay_min = max(0.0, (queue_size - 3) * 2.5)
         # Taxiway congestion scales with queue (>8 creates gridlock)
         if queue_size > 8:
@@ -356,6 +363,29 @@ class CapacityManager:
             self._taxiway_congestion = 1.2
         else:
             self._taxiway_congestion = 1.0
+        # Update per-runway holding queues
+        self._update_holding_queues(queue_size)
+
+    def _update_holding_queues(self, total_queue: int) -> None:
+        """Distribute queued aircraft across active departure runways.
+
+        Each runway's holding point has a finite queue capacity (~6 aircraft).
+        When a single holding point exceeds capacity, departures spill onto
+        the taxiway, increasing taxi times for all ground traffic.
+        """
+        dep_runways = [r for r in self.active_runways if r not in self.closed_runways]
+        if not dep_runways:
+            return
+        per_runway = total_queue / len(dep_runways)
+        # Per-runway holding point capacity: 6 aircraft before spill
+        for rwy in dep_runways:
+            q = self._holding_point_queues.get(rwy, 0)
+            self._holding_point_queues[rwy] = int(per_runway)
+            if per_runway > 6 and q <= 6:
+                logger.info(
+                    "Holding point %s overflowing: %d aircraft (capacity 6)",
+                    rwy, int(per_runway),
+                )
 
     @property
     def departure_queue_delay_min(self) -> float:
@@ -364,6 +394,11 @@ class CapacityManager:
     @property
     def taxiway_congestion(self) -> float:
         return self._taxiway_congestion
+
+    @property
+    def holding_point_queues(self) -> dict[str, int]:
+        """Per-runway holding point queue depths."""
+        return dict(self._holding_point_queues)
 
     def add_cascading_delay(self, delay_minutes: float) -> None:
         """Add delay to propagation pool (e.g. late inbound → delayed turnaround → delayed departure)."""

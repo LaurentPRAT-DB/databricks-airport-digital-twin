@@ -4,9 +4,11 @@ Generates realistic baggage data with:
 - 1.2 bags per passenger average
 - 82% aircraft load factor
 - 15% connecting bags
-- 2% misconnect rate
+- Misconnect rate derived from connection time vs MCT
+- Lognormal timing distributions for realistic P50/P95 spread
 """
 
+import math
 import random
 import hashlib
 from datetime import datetime, timedelta, timezone
@@ -27,17 +29,46 @@ AIRCRAFT_CAPACITY = {
     "E175": 76,
 }
 
-# Bag status progression with typical timing (minutes from check-in)
-BAG_STATUS_TIMING = {
-    "checked_in": 0,
-    "security_screening": 5,
-    "sorted": 15,
-    "loaded": 35,
-    "in_transit": 0,  # During flight
-    "unloaded": 10,   # After arrival
-    "on_carousel": 25,
-    "claimed": 40,
+# Bag status progression — lognormal parameters (mu, sigma) in minutes.
+# Each draw gives a realistic P50/P95 spread rather than fixed offsets.
+# mu = ln(median), sigma controls tail weight.
+BAG_TIMING_DISTRIBUTIONS = {
+    # Departure: minutes from check-in to each status
+    "security_screening": (math.log(5.0), 0.35),    # median 5 min, P95 ~8 min
+    "sorted":            (math.log(15.0), 0.30),     # median 15 min, P95 ~23 min
+    "loaded":            (math.log(35.0), 0.25),     # median 35 min, P95 ~50 min
+    # Arrival: minutes after landing
+    "unloaded":          (math.log(10.0), 0.30),     # median 10 min, P95 ~15 min
+    "on_carousel":       (math.log(25.0), 0.25),     # median 25 min, P95 ~36 min
+    "claimed":           (math.log(40.0), 0.20),     # median 40 min, P95 ~53 min
 }
+
+# Minimum Connection Time (MCT) in minutes by terminal pair type.
+# Misconnect probability = sigmoid function of (MCT - actual_connection_time).
+MCT_DOMESTIC = 45   # Same terminal
+MCT_INTERNATIONAL = 90  # Cross terminal / customs
+
+
+def _sample_bag_timing(status: str, rng: random.Random) -> float:
+    """Sample a bag processing time from lognormal distribution."""
+    params = BAG_TIMING_DISTRIBUTIONS.get(status)
+    if params is None:
+        return 0.0
+    mu, sigma = params
+    return rng.lognormvariate(mu, sigma)
+
+
+def _misconnect_probability(connection_time_min: float, mct_min: float) -> float:
+    """Compute misconnect probability as sigmoid of (MCT - connection_time).
+
+    P(miss) is ~50% when connection time is 35 min below MCT (very tight),
+    drops to ~5% at MCT, and near-zero when connection time >> MCT.
+    Overall population rate lands around 3-6% for realistic schedules.
+    """
+    margin = connection_time_min - mct_min  # positive = safe, negative = tight
+    # Sigmoid centered at margin=-35: only very tight connections misconnect
+    k = 0.15
+    return 1.0 / (1.0 + math.exp(k * (margin + 35)))
 
 
 def _get_aircraft_capacity(aircraft_type: str) -> int:
@@ -65,32 +96,45 @@ def _determine_bag_status(
     flight_time: datetime,
     is_arrival: bool,
     current_time: Optional[datetime] = None,
+    rng: Optional[random.Random] = None,
 ) -> str:
-    """Determine bag status based on timing."""
+    """Determine bag status based on stochastic timing.
+
+    Departure: uses minutes-to-departure with per-bag jitter on thresholds.
+    Arrival: uses minutes-since-landing with per-bag jitter on thresholds.
+    Each bag hits each stage at a slightly different time, producing
+    realistic P50/P95 distributions while preserving ordering.
+    """
     if current_time is None:
         current_time = datetime.now(timezone.utc)
+    if rng is None:
+        rng = random.Random()
 
     if is_arrival:
-        # Arrival bag status
+        # Arrival bag status — minutes since landing with per-bag jitter
         minutes_since_arrival = (current_time - flight_time).total_seconds() / 60
         if minutes_since_arrival < 0:
             return "in_transit"
-        elif minutes_since_arrival < 10:
+        # Jitter: ±15% around nominal thresholds (preserves ordering)
+        jitter = rng.uniform(0.85, 1.15)
+        if minutes_since_arrival < 10 * jitter:
             return "unloaded"
-        elif minutes_since_arrival < 25:
+        elif minutes_since_arrival < 25 * jitter:
             return "on_carousel"
         else:
             return "claimed"
     else:
-        # Departure bag status
+        # Departure bag status — minutes to departure with per-bag jitter
         minutes_to_departure = (flight_time - current_time).total_seconds() / 60
         if minutes_to_departure < 0:
             return "in_transit"
-        elif minutes_to_departure < 15:
+        # Jitter: ±15% around nominal thresholds (preserves ordering)
+        jitter = rng.uniform(0.85, 1.15)
+        if minutes_to_departure < 15 * jitter:
             return "loaded"
-        elif minutes_to_departure < 30:
+        elif minutes_to_departure < 30 * jitter:
             return "sorted"
-        elif minutes_to_departure < 60:
+        elif minutes_to_departure < 60 * jitter:
             return "security_screening"
         else:
             return "checked_in"
@@ -148,9 +192,6 @@ def generate_bags_for_flight(
         # Determine if connecting
         is_connecting = rng.random() < connecting_rate
 
-        # Determine if misconnect (only for connecting bags)
-        is_misconnect = is_connecting and rng.random() < misconnect_rate
-
         # Check-in time (60-180 min before departure for departures)
         if not is_arrival:
             check_in_offset = timedelta(minutes=rng.randint(60, 180))
@@ -159,17 +200,29 @@ def generate_bags_for_flight(
             # For arrivals, check-in was at origin
             check_in_time = scheduled_time - timedelta(hours=rng.randint(3, 8))
 
+        # Connecting flight info
+        connecting_flight = None
+        connection_time_min = 0.0
+        if is_connecting:
+            conn_airlines = ["UA", "AA", "DL", "WN"]
+            connecting_flight = f"{rng.choice(conn_airlines)}{rng.randint(100, 2999)}"
+            # Connection time: 30-150 min window to next flight
+            connection_time_min = rng.uniform(30, 150)
+
+        # Determine if misconnect — MCT-based probability for connecting bags
+        is_misconnect = False
+        if is_connecting:
+            mct = MCT_INTERNATIONAL if rng.random() < 0.25 else MCT_DOMESTIC
+            p_miss = _misconnect_probability(connection_time_min, mct)
+            is_misconnect = rng.random() < p_miss
+
         # Determine status
         if is_misconnect:
             status = "misconnect"
         else:
-            status = _determine_bag_status(check_in_time, scheduled_time, is_arrival, current_time)
-
-        # Connecting flight if applicable
-        connecting_flight = None
-        if is_connecting:
-            conn_airlines = ["UA", "AA", "DL", "WN"]
-            connecting_flight = f"{rng.choice(conn_airlines)}{rng.randint(100, 2999)}"
+            status = _determine_bag_status(
+                check_in_time, scheduled_time, is_arrival, current_time, rng
+            )
 
         # Carousel for arrivals
         carousel = None

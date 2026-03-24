@@ -1434,17 +1434,17 @@ def _get_departure_runway() -> Optional[tuple]:
     """Get the departure runway start (lon, lat) from OSM data.
 
     Departures use the SAME active runway direction as arrivals (real-world
-    standard: both ops into the wind).  The departure start is the far end
-    of the runway from the approach threshold — aircraft line up at the far
-    end and take off TOWARD the threshold, i.e. the same direction as the
-    approach course.
+    standard: both ops into the wind).  The departure start is the threshold
+    end of the runway — aircraft taxi here, line up, and take off rolling
+    toward the far end.  For KSFO 10L/28R with heading ~284°, the threshold
+    (first geoPoint) is the east end where aircraft begin the takeoff roll.
 
     Returns (lon, lat) tuple or None when no OSM runway data is available.
     """
     rwy = _get_osm_primary_runway()
     if rwy:
-        _, far_end, _ = _osm_runway_endpoints(rwy)
-        return far_end
+        threshold, _, _ = _osm_runway_endpoints(rwy)
+        return threshold
     return None
 
 
@@ -1453,21 +1453,19 @@ def _get_takeoff_runway_geometry() -> tuple:
 
     Uses OSM data when available, falls back to SFO Runway 28R constants.
     Returns ((start_lat, start_lon), (end_lat, end_lon), heading_deg, length_ft).
-    Start is where the aircraft begins the roll; end is the far threshold.
+    Start is where the aircraft begins the roll; end is the far end (lift-off area).
     """
-    dep = _get_departure_runway()    # (lon, lat) — the start of the departure roll
-    thr = _get_runway_threshold()    # (lon, lat) — approach threshold (far end for departures)
-    hdg = _get_runway_heading()      # heading from threshold → far end
-
-    if dep is not None and thr is not None and hdg is not None:
-        # Same-direction ops: departures take off in the SAME direction as arrivals.
-        # thr = first geoPoint (takeoff roll starts here)
-        # dep = last geoPoint (takeoff roll ends / lift-off area)
-        # Aircraft rolls from thr → dep, heading matches the runway heading.
-        start = (thr[1], thr[0])    # (lat, lon) — start of takeoff roll
-        end = (dep[1], dep[0])      # (lat, lon) — lift-off end
-        dep_heading = _calculate_heading(start, end)  # heading along direction of travel
-        # Estimate length from coordinates (~111,000 m/deg lat, 1 ft = 0.3048 m)
+    rwy = _get_osm_primary_runway()
+    if rwy:
+        threshold, far_end, hdg = _osm_runway_endpoints(rwy)
+        # threshold = first geoPoint (east end for KSFO 10L/28R)
+        # far_end = last geoPoint (west end for KSFO 10L/28R)
+        # hdg = heading from threshold → far_end (~284° for KSFO)
+        # Aircraft lines up at threshold, rolls toward far_end (same direction as hdg)
+        start = (threshold[1], threshold[0])  # (lat, lon) — start of takeoff roll
+        end = (far_end[1], far_end[0])        # (lat, lon) — lift-off end
+        dep_heading = hdg  # heading along direction of travel
+        # Estimate length from coordinates
         dlat = end[0] - start[0]
         dlon = end[1] - start[1]
         dist_m = math.sqrt((dlat * 111000)**2 + (dlon * 111000 * math.cos(math.radians(start[0])))**2)
@@ -1760,11 +1758,21 @@ class RunwayState:
     departure_queue: List[str] = field(default_factory=list)  # Ordered departure sequence
     last_departure_type: str = "LARGE"  # Wake category of last departure (FAA 7110.65)
 
+# Minimum gate buffer (seconds) between consecutive occupancies.
+# Real airports require 15-30 min for jetbridge repositioning, FOD check,
+# and pushback clearance before the next aircraft can dock.
+GATE_BUFFER_SECONDS = 15 * 60  # 15 minutes
+
+# Track gate conflicts for validation reporting
+_gate_conflict_count: int = 0
+
+
 @dataclass
 class GateState:
     """Tracks gate occupancy."""
     occupied_by: Optional[str] = None  # icao24 of aircraft at gate
-    available_at: float = 0.0          # When gate becomes available
+    available_at: float = 0.0          # When gate becomes available (epoch seconds)
+    last_released: float = 0.0         # When gate was last vacated
 
 # Global separation state — dynamic runway dict keyed by name (D1 fix: no more hardcoded "28R")
 _runway_states: Dict[str, RunwayState] = {}
@@ -1994,7 +2002,12 @@ def _release_runway(icao24: str, runway: str = "", aircraft_type: str = ""):
             rs.last_departure_time = time.time()
 
 def _find_available_gate() -> Optional[str]:
-    """Find a random available gate, preferring terminal gates over remote stands."""
+    """Find a random available gate, preferring terminal gates over remote stands.
+
+    Respects GATE_BUFFER_SECONDS — gates recently vacated are not eligible.
+    Increments conflict counter when a gate is requested but all are in buffer.
+    """
+    global _gate_conflict_count
     _init_gate_states()
     current_time = time.time()
 
@@ -2003,6 +2016,13 @@ def _find_available_gate() -> Optional[str]:
         if state.occupied_by is None and current_time >= state.available_at
     ]
     if not available:
+        # Check if gates are blocked by buffer (conflict) vs truly occupied
+        in_buffer = [
+            g for g, s in _gate_states.items()
+            if s.occupied_by is None and current_time < s.available_at
+        ]
+        if in_buffer:
+            _gate_conflict_count += 1
         return None
 
     # Prefer terminal gates (non-R-prefixed) over remote stands
@@ -2034,25 +2054,46 @@ def _occupy_gate(icao24: str, gate: str):
         _gate_states[gate].occupied_by = icao24
 
 def _release_gate(icao24: str, gate: str):
-    """Release gate when aircraft departs."""
+    """Release gate when aircraft departs, enforcing minimum buffer."""
     _init_gate_states()
     if gate in _gate_states and _gate_states[gate].occupied_by == icao24:
         _gate_states[gate].occupied_by = None
-        _gate_states[gate].available_at = time.time() + 60  # 60s cooldown before gate reuse
+        _gate_states[gate].last_released = time.time()
+        _gate_states[gate].available_at = time.time() + GATE_BUFFER_SECONDS
+
+
+def get_gate_conflict_count() -> int:
+    """Return count of gate conflicts (attempted assignment before buffer expired)."""
+    return _gate_conflict_count
+
+
+def reset_gate_conflict_count() -> None:
+    """Reset gate conflict counter (call at start of validation run)."""
+    global _gate_conflict_count
+    _gate_conflict_count = 0
 
 def _check_taxi_separation(state: FlightState) -> bool:
     """Check if aircraft has sufficient separation from others on ground.
 
-    Only blocks if another ground aircraft is AHEAD (within ±90° of heading).
-    This prevents gridlock when multiple aircraft cluster at the same spawn
-    point (e.g. runway exit) — the lead aircraft can always move, and
-    followers queue naturally behind.
+    Returns True (can move at full speed) or False (must stop).
+    For graduated speed control, use _taxi_speed_factor() instead.
+    """
+    return _taxi_speed_factor(state) > 0.0
 
-    Arriving aircraft (TAXI_TO_GATE) use a reduced separation threshold
-    because ATC gives inbound traffic priority to clear the runway exit.
+
+def _taxi_speed_factor(state: FlightState) -> float:
+    """Compute taxi speed factor (0.0-1.0) based on traffic ahead.
+
+    Returns:
+        1.0 = clear, full speed
+        0.3-0.9 = traffic ahead, reduce speed proportionally
+        0.0 = must stop (too close)
+
+    Only considers aircraft AHEAD (within ±90° of heading).
+    Arriving aircraft get tighter separation (ATC inbound priority).
     """
     if not state.on_ground:
-        return True
+        return 1.0
 
     import math
     hdg_rad = math.radians(state.heading)
@@ -2065,6 +2106,10 @@ def _check_taxi_separation(state: FlightState) -> bool:
         if state.phase == FlightPhase.TAXI_TO_GATE
         else MIN_TAXI_SEPARATION_DEG
     )
+    # Graduated zone: 2x separation threshold — slow down before stopping
+    slow_zone = sep_threshold * 2.0
+
+    min_factor = 1.0
 
     for icao24, other in _flight_states.items():
         if icao24 == state.icao24:
@@ -2078,16 +2123,20 @@ def _check_taxi_separation(state: FlightState) -> bool:
             (state.latitude, state.longitude),
             (other.latitude, other.longitude)
         )
-        if dist < sep_threshold:
-            # Only block if the other aircraft is AHEAD of us
+        if dist < slow_zone:
+            # Only consider aircraft AHEAD of us
             dlat = other.latitude - state.latitude
             dlon = other.longitude - state.longitude
-            # dot product with heading vector: positive = ahead
             dot = dlon * fwd_x + dlat * fwd_y
             if dot > 0:
-                return False
+                if dist < sep_threshold:
+                    return 0.0  # Full stop
+                # Graduated: linearly reduce from 1.0 at slow_zone to 0.3 at sep_threshold
+                ratio = (dist - sep_threshold) / (slow_zone - sep_threshold)
+                factor = 0.3 + 0.7 * ratio
+                min_factor = min(min_factor, factor)
 
-    return True
+    return min_factor
 
 def _count_aircraft_in_phase(phase: FlightPhase) -> int:
     """Count how many aircraft are currently in a specific phase."""
@@ -3237,11 +3286,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             wp = taxi_wps[state.waypoint_index]
             target = (wp[1], wp[0])
 
-            # Check taxi separation before moving
-            if _check_taxi_separation(state):
+            # Graduated taxi separation — slow down near traffic, stop if too close
+            speed_factor = _taxi_speed_factor(state)
+            if speed_factor > 0:
                 # Arriving aircraft taxi faster on the initial straight
                 # (ATC clears runway exits quickly to maintain arrival rate)
-                taxi_speed = TAXI_SPEED_STRAIGHT_KTS + 5  # 30 kts for inbound
+                base_speed = TAXI_SPEED_STRAIGHT_KTS + 5  # 30 kts for inbound
+                taxi_speed = base_speed * speed_factor
                 speed_deg = taxi_speed * _KTS_TO_DEG_PER_SEC * dt
                 new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
                 state.latitude, state.longitude = new_pos
@@ -3280,11 +3331,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                         state.velocity = 0
                         return state
 
-            if _check_taxi_separation(state):
-                speed_deg = TAXI_SPEED_RAMP_KTS * _KTS_TO_DEG_PER_SEC * dt
+            speed_factor = _taxi_speed_factor(state)
+            if speed_factor > 0:
+                ramp_speed = TAXI_SPEED_RAMP_KTS * speed_factor
+                speed_deg = ramp_speed * _KTS_TO_DEG_PER_SEC * dt
                 new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
                 state.latitude, state.longitude = new_pos
-                state.velocity = TAXI_SPEED_RAMP_KTS
+                state.velocity = ramp_speed
             else:
                 state.velocity = 0
                 speed_deg = 0
@@ -3446,17 +3499,19 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.taxi_route = _get_taxi_waypoints_departure(state.assigned_gate) if state.assigned_gate else None
 
     elif state.phase == FlightPhase.TAXI_TO_RUNWAY:
-        # Taxi to runway WITH separation
+        # Taxi to runway with graduated separation
         taxi_wps = state.taxi_route or TAXI_WAYPOINTS_DEPARTURE
         if state.waypoint_index < len(taxi_wps):
             wp = taxi_wps[state.waypoint_index]
             target = (wp[1], wp[0])
 
-            if _check_taxi_separation(state):
-                speed_deg = TAXI_SPEED_STRAIGHT_KTS * _KTS_TO_DEG_PER_SEC * dt
+            speed_factor = _taxi_speed_factor(state)
+            if speed_factor > 0:
+                taxi_speed = TAXI_SPEED_STRAIGHT_KTS * speed_factor
+                speed_deg = taxi_speed * _KTS_TO_DEG_PER_SEC * dt
                 new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
                 state.latitude, state.longitude = new_pos
-                state.velocity = TAXI_SPEED_STRAIGHT_KTS
+                state.velocity = taxi_speed
             else:
                 state.velocity = 0  # Hold
                 speed_deg = 0
