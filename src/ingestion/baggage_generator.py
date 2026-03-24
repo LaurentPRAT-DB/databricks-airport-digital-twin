@@ -90,14 +90,14 @@ def _generate_bag_id(flight_number: str, index: int) -> str:
     return f"{flight_number}-{index:04d}"
 
 
-def _generate_passenger_name() -> str:
+def _generate_passenger_name(rng: random.Random) -> str:
     """Generate anonymized passenger identifier."""
     first_names = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M", "N", "P", "R", "S", "T", "W"]
     last_names = [
         "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller",
         "Davis", "Rodriguez", "Martinez", "Anderson", "Taylor", "Thomas", "Lee"
     ]
-    return f"{random.choice(first_names)}. {random.choice(last_names)}"
+    return f"{rng.choice(first_names)}. {rng.choice(last_names)}"
 
 
 def _determine_bag_status(
@@ -241,7 +241,7 @@ def generate_bags_for_flight(
         bag = {
             "bag_id": bag_id,
             "flight_number": flight_number,
-            "passenger_name": _generate_passenger_name(),
+            "passenger_name": _generate_passenger_name(rng),
             "status": status,
             "is_connecting": is_connecting,
             "connecting_flight": connecting_flight,
@@ -369,24 +369,25 @@ def generate_baggage_alerts(flight_numbers: list[str]) -> list[dict]:
     Returns:
         List of alert dictionaries
     """
+    rng = random.Random(hash(tuple(flight_numbers)))
     alerts = []
     alert_id = 1
 
     for flight_number in flight_numbers:
         # 5% chance of generating an alert per flight
-        if random.random() < 0.05:
-            alert_type = random.choice(["misconnect", "delayed_loading", "carousel_change"])
+        if rng.random() < 0.05:
+            alert_type = rng.choice(["misconnect", "delayed_loading", "carousel_change"])
 
             if alert_type == "misconnect":
                 message = f"Bag may miss connection - tight transfer time"
-                bag_id = _generate_bag_id(flight_number, random.randint(1, 100))
-                connecting = f"UA{random.randint(100, 999)}"
+                bag_id = _generate_bag_id(flight_number, rng.randint(1, 100))
+                connecting = f"UA{rng.randint(100, 999)}"
             elif alert_type == "delayed_loading":
                 message = f"Baggage loading delayed - ground crew shortage"
                 bag_id = _generate_bag_id(flight_number, 0)
                 connecting = None
             else:
-                message = f"Carousel changed from {random.randint(1, 4)} to {random.randint(5, 8)}"
+                message = f"Carousel changed from {rng.randint(1, 4)} to {rng.randint(5, 8)}"
                 bag_id = _generate_bag_id(flight_number, 0)
                 connecting = None
 
@@ -425,8 +426,9 @@ def get_overall_baggage_stats() -> dict:
         progress = current_hour / 30
 
     total_today = int(base_daily * progress)
-    bags_in_system = random.randint(2500, 4000)
-    connecting = random.randint(400, 800)
+    rng = random.Random(current_hour)
+    bags_in_system = rng.randint(2500, 4000)
+    connecting = rng.randint(400, 800)
     misconnects = int(connecting * 0.02)
 
     return {
@@ -437,7 +439,7 @@ def get_overall_baggage_stats() -> dict:
         "connecting_bags": connecting,
         "misconnects": misconnects,
         "misconnect_rate_pct": round(misconnects / max(connecting, 1) * 100, 2),
-        "avg_processing_time_min": random.randint(22, 28),
+        "avg_processing_time_min": rng.randint(22, 28),
     }
 
 

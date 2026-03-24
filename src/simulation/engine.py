@@ -756,6 +756,14 @@ class SimulationEngine:
                             aircraft_type=flight["aircraft_type"],
                             scheduled_departure=dep_time,
                         )
+                        # Generate baggage for departures spawned at gate
+                        # (arrivals generate baggage when they transition to PARKED)
+                        self._completed_flights.append({
+                            "icao24": icao24,
+                            "callsign": callsign,
+                            "schedule": flight,
+                            "parked_time": self.sim_time,
+                        })
 
                     if self.config.debug:
                         logger.debug(

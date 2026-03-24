@@ -3720,7 +3720,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         else:
             state.velocity = 0  # Hold movement if blocked, but timer still advances
 
-        state.heading = (pb_heading + 180) % 360  # Nose faces opposite of movement
+        # Smooth heading rotation: nose swings from parked heading toward
+        # the pushback nose direction (opposite of movement) over the pushback duration.
+        nose_target = (pb_heading + 180) % 360
+        state.heading = _smooth_heading(state.heading, nose_target, 3.0, dt)
 
         if state.phase_progress >= 1.0:
             # Release gate when clear of it
@@ -3973,7 +3976,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             max_climb_fpm = abs(prof_vr) if prof_vr and prof_vr > 0 else 2500
             max_climb_fpm = min(max_climb_fpm, 3500)  # hard cap for narrow-body
             alt_step = max_climb_fpm / 60.0 * dt
-            state.altitude = max(0.0, _interpolate_altitude(state.altitude, target_alt, alt_step))
+            # During departure, altitude must never decrease (monotonic climb).
+            # Waypoints may have lower altitudes from SID constraints, but the
+            # aircraft should continue climbing past them, not descend.
+            new_alt = max(0.0, _interpolate_altitude(state.altitude, target_alt, alt_step))
+            state.altitude = max(state.altitude, new_alt)
             state.vertical_rate = prof_vr if state.altitude < target_alt else 0
 
             # Smooth heading toward waypoint (max 3°/s standard rate turn)
