@@ -224,6 +224,18 @@ _turnaround_event_buffer: List[Dict[str, Any]] = []
 _turnaround_event_lock = threading.Lock()
 
 
+# When True, emit_phase_transition() skips buffering because the
+# simulation engine records transitions directly via the recorder.
+# This prevents duplicate phase transition entries (defect D05).
+_suppress_phase_transition_emit: bool = False
+
+
+def set_suppress_phase_transitions(suppress: bool) -> None:
+    """Enable/disable phase transition buffering (used by simulation engine)."""
+    global _suppress_phase_transition_emit
+    _suppress_phase_transition_emit = suppress
+
+
 def emit_phase_transition(
     icao24: str,
     callsign: str,
@@ -236,6 +248,10 @@ def emit_phase_transition(
     assigned_gate: Optional[str] = None,
 ) -> None:
     """Record a flight phase transition event."""
+    # Skip buffering when the simulation engine records transitions directly
+    if _suppress_phase_transition_emit:
+        return
+
     event = {
         "icao24": icao24,
         "callsign": callsign,
@@ -3896,7 +3912,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude += dlat * ratio
                 state.longitude += dlon * ratio
 
-            state.altitude = max(0.0, _interpolate_altitude(state.altitude, target_alt, 500 * dt))
+            # Climb rate capped at realistic values (prof_vr is ft/min from OpenAP)
+            max_climb_fpm = abs(prof_vr) if prof_vr and prof_vr > 0 else 2500
+            max_climb_fpm = min(max_climb_fpm, 3500)  # hard cap for narrow-body
+            alt_step = max_climb_fpm / 60.0 * dt
+            state.altitude = max(0.0, _interpolate_altitude(state.altitude, target_alt, alt_step))
             state.vertical_rate = prof_vr if state.altitude < target_alt else 0
 
             # Smooth heading toward waypoint (max 3°/s standard rate turn)
@@ -3914,8 +3934,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 frac = min(1.0, 0.4 + 0.2 * (state.altitude / 18000.0))
                 _, prof_spd, prof_vr = interpolate_profile(climb_prof, frac)
                 state.velocity = min(prof_spd, MAX_SPEED_BELOW_FL100_KTS) if state.altitude < 10000 else prof_spd
-                state.vertical_rate = prof_vr if prof_vr > 0 else 1500
-                state.altitude += state.vertical_rate / 60.0 * dt
+                climb_fpm = prof_vr if prof_vr > 0 else 1500
+                climb_fpm = min(climb_fpm, 3500)  # hard cap for narrow-body
+                state.vertical_rate = climb_fpm
+                state.altitude += climb_fpm / 60.0 * dt
                 # Continue on departure heading
                 speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
                 state.latitude += math.cos(math.radians(state.heading)) * speed_deg
@@ -4039,8 +4061,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 else:
                     state.cruise_altitude = random.choice([34000, 36000, 38000])
             if state.altitude < state.cruise_altitude:
-                state.altitude += 500 * dt
-                state.vertical_rate = 1500
+                # Climb rate capped at realistic values (ft/min → ft/tick)
+                # A320-family: ~2500 fpm below FL200, ~1500 fpm above
+                max_climb_fpm = 2500 if state.altitude < 20000 else 1500
+                alt_step = min(max_climb_fpm / 60.0 * dt, state.cruise_altitude - state.altitude)
+                state.altitude += alt_step
+                state.vertical_rate = max_climb_fpm
 
             # 14 CFR 91.117: 250 kts IAS below 10,000 ft MSL
             if state.altitude < 10000:

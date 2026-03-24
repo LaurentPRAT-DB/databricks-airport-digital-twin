@@ -42,6 +42,7 @@ from src.ingestion.fallback import (
     emit_gate_event,
     drain_phase_transitions,
     drain_gate_events,
+    set_suppress_phase_transitions,
     _DEFAULT_GATES,
     APPROACH_WAYPOINTS,
     DEPARTURE_WAYPOINTS,
@@ -231,6 +232,9 @@ class SimulationEngine:
 
         # Track completed flights for baggage generation
         self._completed_flights: list[dict] = []
+
+        # Track previous altitudes for vertical_rate computation (D04 fix)
+        self._prev_altitudes: dict[str, float] = {}
 
         # Passenger flow model
         gate_count = len(get_gates()) if get_gates() else 40
@@ -878,6 +882,8 @@ class SimulationEngine:
             _get_parked_heading, _compute_gate_standoff, _offset_position_by_heading,
         )
 
+        old_phase = state.phase
+
         if state.phase == FlightPhase.TAXI_TO_GATE:
             # Snap to gate
             if state.assigned_gate:
@@ -896,11 +902,27 @@ class SimulationEngine:
                 state.velocity = 0
                 state.time_at_gate = 0
                 self._phase_time[icao24] = ("parked", 0.0)
+                # Track for baggage generation (D03 fix)
+                sched = self._find_schedule_entry(icao24)
+                if sched:
+                    self._completed_flights.append({
+                        "icao24": icao24,
+                        "callsign": state.callsign,
+                        "schedule": sched,
+                        "parked_time": self.sim_time,
+                    })
+                    if sched.get("flight_type") == "arrival":
+                        self._passenger_flow.process_arrival(
+                            flight_number=state.callsign,
+                            aircraft_type=sched.get("aircraft_type", "A320"),
+                            parked_time=self.sim_time,
+                        )
 
         elif state.phase == FlightPhase.TAXI_TO_RUNWAY:
-            # Jump to takeoff
+            # Jump to takeoff — reset velocity for proper roll start
             state.phase = FlightPhase.TAKEOFF
             state.takeoff_subphase = "lineup"
+            state.velocity = 0
             state.phase_progress = 0.0
             state.takeoff_roll_dist_ft = 0.0
             self._phase_time[icao24] = ("takeoff", 0.0)
@@ -956,6 +978,16 @@ class SimulationEngine:
                     state.assigned_gate = gate
                     _occupy_gate(icao24, gate)
             self._phase_time[icao24] = ("taxi_to_gate", 0.0)
+
+        # Record the phase transition for all force-advances (D06 fix)
+        new_phase = state.phase
+        if new_phase != old_phase:
+            self.recorder.record_phase_transition(
+                self.sim_time, icao24, state.callsign,
+                old_phase.value, new_phase.value,
+                state.latitude, state.longitude, state.altitude,
+                state.aircraft_type, state.assigned_gate,
+            )
 
     def _divert_flight(self, icao24: str, state: FlightState) -> None:
         """Divert flight to an alternate airport."""
@@ -1069,12 +1101,20 @@ class SimulationEngine:
         if elapsed >= self._snapshot_interval:
             self._last_snapshot_time = self.sim_time
             for icao24, state in _flight_states.items():
+                # D04 fix: compute vertical_rate from altitude delta if state value is 0
+                vr = state.vertical_rate
+                if vr == 0 and icao24 in self._prev_altitudes:
+                    prev_alt = self._prev_altitudes[icao24]
+                    alt_diff = state.altitude - prev_alt
+                    if abs(alt_diff) > 1.0 and elapsed > 0:
+                        vr = alt_diff / (elapsed / 60.0)  # ft/min
+                self._prev_altitudes[icao24] = state.altitude
                 self.recorder.record_position(
                     self.sim_time, icao24, state.callsign,
                     state.latitude, state.longitude, state.altitude,
                     state.velocity, state.heading, state.phase.value,
                     state.on_ground, state.aircraft_type, state.assigned_gate,
-                    state.vertical_rate,
+                    vr,
                 )
 
     def _capture_gate_events(self) -> None:
@@ -1187,6 +1227,8 @@ class SimulationEngine:
 
     def run(self) -> SimulationRecorder:
         """Run the simulation from start to end, returning the recorder."""
+        # Suppress fallback emit_phase_transition — engine records directly (D05 fix)
+        set_suppress_phase_transitions(True)
         dt = self.config.time_step_seconds
         total_ticks = int(
             (self.end_time - self.sim_time).total_seconds() / dt
@@ -1270,12 +1312,18 @@ class SimulationEngine:
         }
 
         # Write diagnostics JSON if enabled
-        if self._diag:
+        if self._diag and self.config.output_file and self.config.output_file != "/dev/null":
             import os
-            base, ext = os.path.splitext(config.output_file)
+            base, ext = os.path.splitext(self.config.output_file)
             diag_path = f"{base}_diagnostics.json"
-            self._diag.write(diag_path)
-            print(f"  Diagnostics: {diag_path} ({len(self._diag.events):,} events)")
+            try:
+                self._diag.write(diag_path)
+                print(f"  Diagnostics: {diag_path} ({len(self._diag.events):,} events)")
+            except (PermissionError, OSError):
+                pass
+
+        # Re-enable fallback phase transition buffering for non-engine callers
+        set_suppress_phase_transitions(False)
 
         elapsed_wall = wall_time.time() - start_wall
         print(f"\n  Completed in {elapsed_wall:.1f}s wall time")
