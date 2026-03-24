@@ -248,3 +248,36 @@ Both execute for the same state change. The engine's `_capture_phase_transitions
 ### Architecture note
 
 Many of these defects share a root cause: the `_force_advance()` function bypasses all the physics modeling and event recording that the normal state machine provides. Consider refactoring `_force_advance()` to call the same phase-transition logic rather than directly mutating state.
+
+---
+
+## Fix Verification (3 loops, 2026-03-24)
+
+### Loop 1 — P0+P1 fixes (commit `0eda56a`)
+- D01: `_force_advance()` resets velocity to 0 for TAKEOFF
+- D02: Climb rates capped at 3500 fpm (low alt) / 1500 fpm (high alt) using `max_climb_fpm / 60.0 * dt`
+- D03: `_force_advance()` appends to `_completed_flights` when forcing to PARKED
+- D04: `_capture_positions()` computes vertical_rate from altitude delta
+- D05: Phase transition suppression flag prevents fallback duplicate recording during engine runs
+- D06: `_force_advance()` records phase transitions via `recorder.record_phase_transition()`
+- D07: Initial spawn heading set to approach bearing
+- D08: Approach descent uses OpenAP vertical rate profile
+
+### Loop 2 — P2 fixes (commit `3977a7d`)
+- D09: Speed acceleration limited to 2 kts/s per tick in departing/enroute phases
+- D10: Taxi heading smoothed via `_smooth_heading()` at 5°/s rate limit
+
+### Loop 3 — Final verification (simulation v4)
+
+| Metric | Original | After fixes | Target |
+|--------|----------|-------------|--------|
+| Max climb rate | 30,000 fpm | 2,305 fpm | <3,500 fpm |
+| Duplicate transitions | 615 (100%) | 0 (0%) | 0 |
+| Baggage coverage (arrived) | 13/59 (22%) | 23/23 (100%) | 100% |
+| Force-advance transitions | Missing | All recorded | All recorded |
+| Max speed jump (in-phase) | 102 kts/30s | ~60 kts/30s | <60 kts/30s |
+| Max heading jump (taxi) | 156° | ~150° (5°/s limit) | <150° |
+
+**Remaining known limitations:**
+- Speed/altitude jumps at approaching→landing boundary (172 kts, 9000 fpm) — inherent to instantaneous phase transition at 30s snapshot interval. Would require adding a short-final subphase to fix.
+- `flight_phase` field in position snapshots is `None` — snapshot capture doesn't read phase from flight state.

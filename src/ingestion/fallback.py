@@ -2998,15 +2998,26 @@ def _create_new_flight(
                     best_dist = d
                     best_wp_idx = wi
 
+        # Initialize speed from OpenAP descent profile at the spawn waypoint
+        # to avoid the visible speed jump on the first tick when the profile
+        # overrides the initial velocity.
+        _total_wps = len(approach_wps) if approach_wps else 1
+        _spawn_progress = best_wp_idx / max(1, _total_wps - 1)
+        _prof_progress = 0.5 + 0.5 * _spawn_progress
+        _dp = get_descent_profile(aircraft_type)
+        _prof_alt, _prof_spd, _prof_vr = interpolate_profile(_dp, _prof_progress)
+        vref = VREF_SPEEDS.get(aircraft_type, _DEFAULT_VREF)
+        init_speed = max(vref, min(_prof_spd, MAX_SPEED_BELOW_FL100_KTS))
+
         return FlightState(
             icao24=icao24,
             callsign=callsign,
             latitude=lat,
             longitude=lon,
             altitude=alt + random.uniform(-30, 30),  # realistic ILS approach deviation (±30ft)
-            velocity=180 + random.uniform(-10, 10),
+            velocity=init_speed + random.uniform(-5, 5),
             heading=_calculate_heading((lat, lon), center),
-            vertical_rate=-800,
+            vertical_rate=_prof_vr if _prof_vr else -800,
             on_ground=False,
             phase=phase,
             aircraft_type=aircraft_type,
@@ -3272,7 +3283,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         # Helper: execute go-around (missed approach procedure)
         def _execute_go_around(reason: str = "runway_busy") -> None:
             state.waypoint_index = 0
-            state.altitude = max(state.altitude, DECISION_HEIGHT_FT)
+            # Missed approach altitude: climb to at least 1500ft (ICAO missed approach)
+            # This prevents a visible altitude "pop" when re-entering the approach.
+            state.altitude = max(state.altitude, 1500.0)
             # Missed approach speed: Vref + 20 kts (per aircraft type)
             vref_ga = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
             state.velocity = vref_ga + 20
@@ -3500,9 +3513,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude, state.longitude = new_pos
                 state.velocity = taxi_speed
             else:
-                # Hold position - too close to another aircraft
-                state.velocity = 0
-                speed_deg = 0
+                # Slow creep (2kt) to avoid frozen-marker appearance on the map.
+                # Real aircraft don't perfectly hold position — they inch forward.
+                creep_speed = 2.0
+                speed_deg = creep_speed * _KTS_TO_DEG_PER_SEC * dt
+                new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
+                state.latitude, state.longitude = new_pos
+                state.velocity = creep_speed
 
             # Smooth heading toward waypoint (max 5°/s for taxi turns)
             target_hdg = _calculate_heading((state.latitude, state.longitude), target)
@@ -3546,7 +3563,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.velocity = 0
                 speed_deg = 0
 
-            state.heading = _calculate_heading((state.latitude, state.longitude), target)
+            target_hdg = _calculate_heading((state.latitude, state.longitude), target)
+            state.heading = _smooth_heading(state.heading, target_hdg, 5.0, dt)
 
             if _distance_between((state.latitude, state.longitude), target) < max(speed_deg, 0.0003):
                 emit_phase_transition(
@@ -3717,8 +3735,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude, state.longitude = new_pos
                 state.velocity = taxi_speed
             else:
-                state.velocity = 0  # Hold
-                speed_deg = 0
+                # Slow creep (2kt) to avoid frozen-marker appearance on the map.
+                creep_speed = 2.0
+                speed_deg = creep_speed * _KTS_TO_DEG_PER_SEC * dt
+                new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
+                state.latitude, state.longitude = new_pos
+                state.velocity = creep_speed
 
             # Smooth heading toward waypoint (max 5°/s for taxi turns)
             target_hdg = _calculate_heading((state.latitude, state.longitude), target)
@@ -3730,9 +3752,17 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # Calibrated departure queue hold — simulates real-world queue time
             # at the runway hold line that the short waypoint path doesn't capture.
             state.departure_queue_hold_s -= dt
-            state.velocity = 0
-            # Smoothly face the runway while holding
+            # Creep forward slowly (1kt) so the marker doesn't freeze on screen
             _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
+            creep_speed = 1.0
+            speed_deg = creep_speed * _KTS_TO_DEG_PER_SEC * dt
+            # Move toward the runway threshold to form a visible queue
+            thr_start, _, _, _ = _get_takeoff_runway_geometry()
+            if thr_start:
+                thr_pos = (thr_start[1], thr_start[0])
+                new_pos = _move_toward((state.latitude, state.longitude), thr_pos, speed_deg)
+                state.latitude, state.longitude = new_pos
+            state.velocity = creep_speed
             state.heading = _smooth_heading(state.heading, dep_hdg, 5.0, dt)
         else:
             # Smoothly face the runway at the hold line
@@ -3778,11 +3808,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.sid_name = _get_sid_name(state.destination_airport)
                     _occupy_runway(state.icao24, dep_rwy)
                 else:
-                    # Hold short: wake separation not yet met
-                    state.velocity = 0
+                    # Hold short: wake separation not yet met — creep 1kt
+                    state.velocity = 1
             else:
-                # Hold short of runway
-                state.velocity = 0
+                # Hold short of runway — creep 1kt to avoid frozen marker
+                state.velocity = 1
 
     elif state.phase == FlightPhase.TAKEOFF:
         # Realistic takeoff with sub-phases (14 CFR 25.107/111)
@@ -4025,6 +4055,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 _set_phase(state, FlightPhase.APPROACHING)
                 state.waypoint_index = 0
                 state.star_name = _get_star_name(state.origin_airport)
+                # Smooth speed transition: set speed from OpenAP descent profile
+                # to prevent a visible speed jump on the first approach tick
+                _dp = get_descent_profile(state.aircraft_type)
+                _, _ps, _pv = interpolate_profile(_dp, 0.5)
+                _vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
+                state.velocity = max(_vref, min(_ps, MAX_SPEED_BELOW_FL100_KTS))
+                state.vertical_rate = _pv if _pv else -800
             elif can_start_approach and random.random() < 0.01 * dt and dist_from_airport < 0.35:
                 emit_phase_transition(
                     state.icao24, state.callsign,
@@ -4035,6 +4072,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 _set_phase(state, FlightPhase.APPROACHING)
                 state.waypoint_index = 0
                 state.star_name = _get_star_name(state.origin_airport)
+                _dp = get_descent_profile(state.aircraft_type)
+                _, _ps, _pv = interpolate_profile(_dp, 0.5)
+                _vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
+                state.velocity = max(_vref, min(_ps, MAX_SPEED_BELOW_FL100_KTS))
+                state.vertical_rate = _pv if _pv else -800
             elif not can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
                 # Approach full — FAA standard racetrack holding pattern
                 # 1-minute inbound/outbound legs, standard rate turns (3°/s)
