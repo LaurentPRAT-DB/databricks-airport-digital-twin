@@ -3295,8 +3295,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.latitude += dlat * ratio
                     state.longitude += dlon * ratio
 
-                # Altitude from profile, smoothly interpolated toward target
-                state.altitude = max(0.0, _interpolate_altitude(state.altitude, min(prof_alt, target_alt), 500 * dt))
+                # Altitude from profile — use OpenAP vertical rate (ft/min→ft/s)
+                # instead of flat 500/tick for smooth, realistic descent.
+                # Floor at 25 ft/s (~1500 fpm) to maintain approach separation.
+                descent_fps = max(25.0, min(30.0, abs(prof_vr) / 60.0)) if prof_vr else 25.0
+                state.altitude = max(0.0, _interpolate_altitude(state.altitude, min(prof_alt, target_alt), descent_fps * dt))
                 state.vertical_rate = prof_vr
 
                 # P1: Decision height-based approach→landing transition
