@@ -64,7 +64,8 @@ from src.ingestion.schedule_generator import (
 )
 from src.ml.gse_model import get_turnaround_timing, get_aircraft_category, PHASE_DEPENDENCIES
 from src.ingestion.weather_generator import generate_metar
-from src.ingestion.baggage_generator import generate_bags_for_flight
+from src.ingestion.baggage_generator import generate_bags_for_flight, simulate_bhs_throughput
+from src.simulation.passenger_flow import PassengerFlowModel
 from src.calibration.profile import AirportProfile, AirportProfileLoader
 
 logger = logging.getLogger(__name__)
@@ -221,6 +222,13 @@ class SimulationEngine:
 
         # Track completed flights for baggage generation
         self._completed_flights: list[dict] = []
+
+        # Passenger flow model
+        gate_count = len(get_gates()) if get_gates() else 40
+        self._passenger_flow = PassengerFlowModel(
+            gate_count=gate_count,
+            seed=config.seed,
+        )
 
         # Position snapshot interval (sim-seconds)
         self._snapshot_interval = 30.0
@@ -719,6 +727,15 @@ class SimulationEngine:
                         state.aircraft_type, state.assigned_gate,
                     )
 
+                    # Process departure passengers through checkpoint
+                    if flight["flight_type"] == "departure":
+                        dep_time = datetime.fromisoformat(flight["scheduled_time"])
+                        self._passenger_flow.process_departure(
+                            flight_number=callsign,
+                            aircraft_type=flight["aircraft_type"],
+                            scheduled_departure=dep_time,
+                        )
+
                     if self.config.debug:
                         logger.debug(
                             "[%s] Spawned %s (%s) as %s",
@@ -775,7 +792,7 @@ class SimulationEngine:
                         state.aircraft_type, state.assigned_gate,
                     )
 
-                    # Track flights that reach PARKED (for baggage generation)
+                    # Track flights that reach PARKED (for baggage + passenger flow)
                     if new_phase == FlightPhase.PARKED:
                         sched = self._find_schedule_entry(icao24)
                         if sched:
@@ -785,6 +802,13 @@ class SimulationEngine:
                                 "schedule": sched,
                                 "parked_time": self.sim_time,
                             })
+                            # Process arrival passengers
+                            if sched.get("flight_type") == "arrival":
+                                self._passenger_flow.process_arrival(
+                                    flight_number=state.callsign,
+                                    aircraft_type=sched.get("aircraft_type", "A320"),
+                                    parked_time=self.sim_time,
+                                )
 
                     # Go-around check: APPROACHING → LANDING transition
                     if (old_phase == FlightPhase.APPROACHING
@@ -1197,6 +1221,23 @@ class SimulationEngine:
         for idx, flight in enumerate(self.flight_schedule):
             flight["actual_spawn_time"] = self._spawn_times[idx].isoformat() if idx in self._spawn_times else None
             flight["spawned"] = idx in self._spawned_indices
+
+        # Store passenger flow results
+        pax_results = self._passenger_flow.get_results()
+        self.recorder.passenger_events = pax_results.events
+
+        # Run BHS throughput model on all scheduled flights
+        gate_count = len(get_gates()) if get_gates() else 40
+        bhs_result = simulate_bhs_throughput(
+            self.flight_schedule, gate_count=gate_count, seed=self.config.seed,
+        )
+        self.recorder.bhs_metrics = {
+            "peak_throughput_bpm": bhs_result.peak_throughput_bpm,
+            "total_injection_capacity_bpm": bhs_result.total_injection_capacity_bpm,
+            "jam_count": bhs_result.jam_count,
+            "max_queue_depth": bhs_result.max_queue_depth,
+            "p95_processing_time_min": bhs_result.p95_processing_time_min,
+        }
 
         elapsed_wall = wall_time.time() - start_wall
         print(f"\n  Completed in {elapsed_wall:.1f}s wall time")

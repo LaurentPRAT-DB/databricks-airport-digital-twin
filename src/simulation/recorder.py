@@ -17,6 +17,8 @@ class SimulationRecorder:
         self.scenario_events: list[dict[str, Any]] = []
         self.schedule: list[dict[str, Any]] = []
         self.scenario_name: str | None = None
+        self.passenger_events: list[dict[str, Any]] = []
+        self.bhs_metrics: dict[str, Any] | None = None
 
     def record_position(
         self,
@@ -239,6 +241,8 @@ class SimulationRecorder:
             "total_holdings": total_holdings,
             "total_cancellations": total_cancellations,
             "scenario_name": self.scenario_name,
+            "total_passenger_events": len(self.passenger_events),
+            "has_bhs_metrics": self.bhs_metrics is not None,
         }
         return result
 
@@ -256,6 +260,8 @@ class SimulationRecorder:
             "baggage_events": self.baggage_events,
             "weather_snapshots": self.weather_snapshots,
             "scenario_events": self.scenario_events,
+            "passenger_events": self.passenger_events,
+            "bhs_metrics": self.bhs_metrics,
         }
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         # Write to temp file first, then atomic rename for crash safety.

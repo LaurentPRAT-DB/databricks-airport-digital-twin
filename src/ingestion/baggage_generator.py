@@ -11,8 +11,10 @@ Generates realistic baggage data with:
 import math
 import random
 import hashlib
+from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 # Aircraft capacity reference
 AIRCRAFT_CAPACITY = {
@@ -47,6 +49,13 @@ BAG_TIMING_DISTRIBUTIONS = {
 # Misconnect probability = sigmoid function of (MCT - actual_connection_time).
 MCT_DOMESTIC = 45   # Same terminal
 MCT_INTERNATIONAL = 90  # Cross terminal / customs
+
+# BHS belt capacity
+BHS_INJECTION_RATE = 30        # bags/min per injection belt
+BHS_INJECTION_POINTS = 4       # parallel injection belts (scaled by gate count)
+BHS_CAROUSEL_RATE = 25         # bags/min per carousel
+BHS_CAROUSEL_COUNT = 8         # carousels (scaled by gate count)
+BHS_SORT_TIME_MIN = 8          # median sort routing time (minutes)
 
 
 def _sample_bag_timing(status: str, rng: random.Random) -> float:
@@ -430,3 +439,135 @@ def get_overall_baggage_stats() -> dict:
         "misconnect_rate_pct": round(misconnects / max(connecting, 1) * 100, 2),
         "avg_processing_time_min": random.randint(22, 28),
     }
+
+
+# ---------------------------------------------------------------------------
+# BHS Throughput Model (B02)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class BHSThroughputResult:
+    """Results from BHS conveyor throughput simulation."""
+    peak_throughput_bpm: float = 0.0      # bags per minute at peak
+    total_injection_capacity_bpm: float = 0.0  # max injection rate
+    jam_count: int = 0                     # times queue > 2x capacity
+    max_queue_depth: int = 0               # peak queue at injection
+    p95_processing_time_min: float = 0.0   # P95 sort-to-carousel time
+    window_metrics: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _bhs_injection_points_from_gates(gate_count: int) -> int:
+    """Scale BHS injection points by gate count (1 per ~10 gates, min 4)."""
+    return max(BHS_INJECTION_POINTS, gate_count // 10)
+
+
+def _bhs_carousels_from_gates(gate_count: int) -> int:
+    """Scale BHS carousels by gate count (1 per ~5 gates, min 4)."""
+    return max(4, min(BHS_CAROUSEL_COUNT, gate_count // 5))
+
+
+def simulate_bhs_throughput(
+    flights: list[dict[str, Any]],
+    gate_count: int = 40,
+    seed: int | None = None,
+) -> BHSThroughputResult:
+    """Simulate BHS throughput with conveyor capacity limits.
+
+    Takes a list of flights with bag counts and scheduled times. Bins bags
+    into 5-minute windows by injection time and computes throughput, queue
+    depth, and jam events.
+
+    Args:
+        flights: list of dicts with keys:
+            - flight_number, aircraft_type, scheduled_time (ISO str or datetime),
+              flight_type ("arrival" or "departure")
+        gate_count: airport gate count (for scaling injection points)
+        seed: random seed for reproducibility
+
+    Returns:
+        BHSThroughputResult with throughput metrics
+    """
+    rng = random.Random(seed)
+    injection_points = _bhs_injection_points_from_gates(gate_count)
+    carousels = _bhs_carousels_from_gates(gate_count)
+
+    injection_capacity_bpm = injection_points * BHS_INJECTION_RATE  # bags/min
+    result = BHSThroughputResult(total_injection_capacity_bpm=injection_capacity_bpm)
+
+    # Bin bags into 5-minute windows
+    bag_bins: defaultdict[int, int] = defaultdict(int)  # bin_key → bag count
+
+    for flight in flights:
+        aircraft_type = flight.get("aircraft_type", "A320")
+        capacity = _get_aircraft_capacity(aircraft_type)
+        pax = int(capacity * 0.82)
+        bag_count = int(pax * 1.2)
+
+        sched = flight.get("scheduled_time")
+        if isinstance(sched, str):
+            sched = datetime.fromisoformat(sched)
+        if sched is None:
+            continue
+
+        is_arrival = flight.get("flight_type") == "arrival"
+
+        if is_arrival:
+            # Arrival bags: unloaded 10–25 min after parking, then injected into BHS
+            for _ in range(bag_count):
+                offset = rng.lognormvariate(math.log(15), 0.3)
+                inject_time = sched + timedelta(minutes=offset)
+                bin_key = int(inject_time.timestamp() // 300)
+                bag_bins[bin_key] += 1
+        else:
+            # Departure bags: checked in 60–180 min before, injected at check-in
+            for _ in range(bag_count):
+                offset = rng.uniform(60, 180)
+                inject_time = sched - timedelta(minutes=offset)
+                bin_key = int(inject_time.timestamp() // 300)
+                bag_bins[bin_key] += 1
+
+    if not bag_bins:
+        return result
+
+    # Process bins in order, applying capacity limits
+    sorted_bins = sorted(bag_bins.keys())
+    carry_over = 0
+    processing_times: list[float] = []
+    jam_capacity_threshold = injection_capacity_bpm * 5 * 2  # 2x 5-min capacity
+
+    for bk in sorted_bins:
+        arrivals = bag_bins[bk] + carry_over
+        capacity_5min = int(injection_capacity_bpm * 5)  # 5-min capacity
+        processed = min(arrivals, capacity_5min)
+        carry_over = arrivals - processed
+
+        throughput_bpm = processed / 5.0
+        is_jam = carry_over > jam_capacity_threshold
+
+        if is_jam:
+            result.jam_count += 1
+
+        result.max_queue_depth = max(result.max_queue_depth, carry_over)
+        result.peak_throughput_bpm = max(result.peak_throughput_bpm, throughput_bpm)
+
+        # Processing time = sort time + queue wait
+        sort_time = rng.lognormvariate(math.log(BHS_SORT_TIME_MIN), 0.25)
+        queue_wait = carry_over / max(1, injection_capacity_bpm)
+        processing_times.append(sort_time + queue_wait)
+
+        result.window_metrics.append({
+            "bin_key": bk,
+            "bags_arrived": bag_bins[bk],
+            "bags_processed": processed,
+            "queue_depth": carry_over,
+            "throughput_bpm": round(throughput_bpm, 1),
+            "jam": is_jam,
+        })
+
+    # P95 processing time
+    if processing_times:
+        sorted_times = sorted(processing_times)
+        idx = min(int(len(sorted_times) * 0.95), len(sorted_times) - 1)
+        result.p95_processing_time_min = sorted_times[idx]
+
+    return result
