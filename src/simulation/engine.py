@@ -9,6 +9,7 @@ from typing import Optional
 from src.simulation.config import SimulationConfig
 from src.simulation.recorder import SimulationRecorder
 from src.simulation.capacity import CapacityManager
+from src.simulation.diagnostics import DiagnosticLogger, set_diagnostics, diag_log
 from src.simulation.scenario import (
     SimulationScenario,
     ResolvedEvent,
@@ -145,6 +146,14 @@ class SimulationEngine:
     def __init__(self, config: SimulationConfig) -> None:
         self.config = config
         self.recorder = SimulationRecorder()
+
+        # Diagnostic logger
+        if config.diagnostics:
+            self._diag = DiagnosticLogger(enabled=True)
+            set_diagnostics(self._diag)
+        else:
+            self._diag = None
+            set_diagnostics(None)
 
         # Virtual clock
         self.sim_time = config.effective_start_time()
@@ -679,6 +688,10 @@ class SimulationEngine:
                                 f"Arrival {callsign} holding — arrival rate at capacity",
                                 {"callsign": callsign, "action": "hold"},
                             )
+                            diag_log(
+                                "DEPARTURE_HOLD", self.sim_time,
+                                icao24=icao24, reason="arrival_rate_capacity",
+                            )
                         continue  # will retry next tick
                     self._holding_flights.discard(icao24)
                 else:
@@ -689,6 +702,10 @@ class SimulationEngine:
                                 self.sim_time, "capacity",
                                 f"Departure {callsign} held — departure rate at capacity",
                                 {"callsign": callsign, "action": "hold"},
+                            )
+                            diag_log(
+                                "DEPARTURE_HOLD", self.sim_time,
+                                icao24=icao24, reason="departure_rate_capacity",
                             )
                         continue
                     self._holding_flights.discard(icao24)
@@ -1189,6 +1206,8 @@ class SimulationEngine:
 
         tick = 0
         while self.sim_time < self.end_time:
+            tick_start = wall_time.time()
+
             # 0. Process scenario events at current sim_time
             if self.scenario:
                 self._process_scenario_events()
@@ -1211,11 +1230,21 @@ class SimulationEngine:
             # 4. Generate baggage for newly parked flights
             self._generate_baggage()
 
-            # 5. Advance time
+            # 5. Emit tick diagnostics
+            if self._diag:
+                tick_ms = (wall_time.time() - tick_start) * 1000
+                diag_log(
+                    "TICK_STATS", self.sim_time,
+                    tick=tick,
+                    active_flights=len(_flight_states),
+                    elapsed_ms=round(tick_ms, 2),
+                )
+
+            # 6. Advance time
             self.sim_time += timedelta(seconds=dt)
             tick += 1
 
-            # 6. Progress
+            # 7. Progress
             self._print_progress()
 
         # Enrich schedule with actual spawn times for metrics
@@ -1239,6 +1268,14 @@ class SimulationEngine:
             "max_queue_depth": bhs_result.max_queue_depth,
             "p95_processing_time_min": bhs_result.p95_processing_time_min,
         }
+
+        # Write diagnostics JSON if enabled
+        if self._diag:
+            import os
+            base, ext = os.path.splitext(config.output_file)
+            diag_path = f"{base}_diagnostics.json"
+            self._diag.write(diag_path)
+            print(f"  Diagnostics: {diag_path} ({len(self._diag.events):,} events)")
 
         elapsed_wall = wall_time.time() - start_wall
         print(f"\n  Completed in {elapsed_wall:.1f}s wall time")

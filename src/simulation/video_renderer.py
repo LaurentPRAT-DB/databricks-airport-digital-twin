@@ -167,6 +167,7 @@ class VideoRenderer:
         end_hour: float = 24,
         crop_to_canvas: bool = True,
         view_mode: str = "2d",
+        track_flight: str | None = None,
     ):
         self.app_url = app_url.rstrip("/")
         self.output_path = Path(output_path)
@@ -179,6 +180,7 @@ class VideoRenderer:
         self.end_hour = end_hour
         self.crop_to_canvas = crop_to_canvas
         self.view_mode = view_mode
+        self.track_flight = track_flight
 
     def estimate(self) -> VideoEstimate:
         """Read the simulation file and estimate output size without rendering.
@@ -361,6 +363,10 @@ class VideoRenderer:
             if self.crop_to_canvas:
                 clip = await self._get_canvas_clip(page)
 
+            # Track whether we've selected the flight (done after first seek
+            # so the flight exists in the current frame)
+            flight_selected = False
+
             for i, frame_idx in enumerate(frame_indices):
                 # Seek to frame
                 await page.evaluate(
@@ -377,6 +383,20 @@ class VideoRenderer:
                     await page.evaluate(
                         "() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))"
                     )
+
+                # Select tracked flight if requested (re-select each frame
+                # because the flight may appear/disappear between frames)
+                if self.track_flight:
+                    await page.evaluate(
+                        "icao24 => window.__flightControl?.selectFlight(icao24)",
+                        self.track_flight,
+                    )
+                    if not flight_selected:
+                        # Give trajectory a moment to render on first selection
+                        await page.evaluate(
+                            "() => new Promise(r => setTimeout(r, 200))"
+                        )
+                        flight_selected = True
 
                 # Screenshot
                 screenshot_path = tmp_dir / f"frame_{captured:05d}.png"

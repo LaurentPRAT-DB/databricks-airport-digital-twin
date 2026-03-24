@@ -26,6 +26,8 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+from src.simulation.diagnostics import diag_log
+
 from src.simulation.openap_profiles import (
     get_descent_profile,
     get_climb_profile,
@@ -250,6 +252,13 @@ def emit_phase_transition(
         _phase_transition_buffer.append(event)
         if len(_phase_transition_buffer) > _MAX_BUFFER_SIZE:
             del _phase_transition_buffer[: _MAX_BUFFER_SIZE // 2]
+
+    diag_log(
+        "PHASE_TRANSITION", datetime.now(timezone.utc),
+        icao24=icao24, callsign=callsign,
+        from_phase=from_phase, to_phase=to_phase,
+        alt=altitude, vel=0,
+    )
 
 
 def emit_gate_event(
@@ -2104,6 +2113,13 @@ def _check_approach_separation(state: FlightState) -> bool:
         if vertical_sep >= 1000:
             continue  # Vertical separation satisfied
 
+        diag_log(
+            "SEPARATION_LOSS", datetime.now(timezone.utc),
+            icao24=state.icao24, leader=other_id,
+            distance_nm=round(lateral_dist / NM_TO_DEG, 2),
+            required_nm=round(required_dist / NM_TO_DEG, 2),
+            vertical_ft=round(vertical_sep),
+        )
         return False  # Both lateral and vertical separation violated
 
     return True
@@ -2118,7 +2134,13 @@ def _occupy_runway(icao24: str, runway: str = ""):
     """Mark runway as occupied by aircraft."""
     if not runway:
         runway = _get_arrival_runway_name()
-    _get_runway_state(runway).occupied_by = icao24
+    rs = _get_runway_state(runway)
+    if rs.occupied_by is not None and rs.occupied_by != icao24:
+        diag_log(
+            "RUNWAY_CONFLICT", datetime.now(timezone.utc),
+            runway=runway, occupant=rs.occupied_by, requester=icao24,
+        )
+    rs.occupied_by = icao24
 
 def _release_runway(icao24: str, runway: str = "", aircraft_type: str = ""):
     """Release runway when aircraft clears. Stores wake category for departure separation."""
@@ -2154,6 +2176,10 @@ def _find_available_gate() -> Optional[str]:
         ]
         if in_buffer:
             _gate_conflict_count += 1
+            diag_log(
+                "GATE_CONFLICT", datetime.now(timezone.utc),
+                gates_in_buffer=len(in_buffer),
+            )
         return None
 
     # Prefer terminal gates (non-R-prefixed) over remote stands
@@ -3242,6 +3268,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 "GO-AROUND #%d %s (%s): %s at %.0fft",
                 state.go_around_count, state.callsign, state.aircraft_type,
                 reason, state.altitude,
+            )
+            diag_log(
+                "GO_AROUND", datetime.now(timezone.utc),
+                icao24=state.icao24, callsign=state.callsign,
+                reason=reason, alt=state.altitude,
+                count=state.go_around_count,
             )
 
         if state.waypoint_index < len(approach_wps):

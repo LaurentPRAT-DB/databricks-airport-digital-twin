@@ -130,6 +130,33 @@ function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
   return null;
 }
 
+// Expose __mapControl for headless video renderer (Playwright)
+declare global {
+  interface Window {
+    __mapControl?: {
+      setView: (lat: number, lon: number, zoom: number) => void;
+      getView: () => { lat: number; lon: number; zoom: number };
+    };
+  }
+}
+
+function MapControlExposer() {
+  const map = useMap();
+  useEffect(() => {
+    window.__mapControl = {
+      setView: (lat: number, lon: number, zoom: number) => {
+        map.setView([lat, lon], zoom, { animate: false });
+      },
+      getView: () => {
+        const c = map.getCenter();
+        return { lat: c.lat, lon: c.lng, zoom: map.getZoom() };
+      },
+    };
+    return () => { delete window.__mapControl; };
+  }, [map]);
+  return null;
+}
+
 const STREET_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const STREET_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
@@ -159,6 +186,7 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
         />
         <MapRecenter sharedViewport={sharedViewport} />
         <MapViewportSaver onViewportChange={onViewportChange} />
+        <MapControlExposer />
         <ZoomTracker onZoom={setZoom} />
         <AirportOverlay />
         <TrajectoryLine />

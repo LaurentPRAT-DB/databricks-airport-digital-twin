@@ -38,6 +38,9 @@ class SimulationConfig(BaseModel):
         default=None,
         description="Path to calibration profile JSON (auto-loaded by airport code if not set)",
     )
+    diagnostics: bool = Field(
+        default=True, description="Enable diagnostic event logging"
+    )
 
     def effective_start_time(self) -> datetime:
         """Return start_time, or midnight of start_date, or midnight UTC today."""

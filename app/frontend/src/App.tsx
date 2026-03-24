@@ -172,6 +172,12 @@ declare global {
       loadAirport: (icaoCode: string) => Promise<void>;
       getCurrentAirport: () => string | null;
     };
+    __flightControl?: {
+      selectFlight: (icao24: string | null) => void;
+      getSelectedFlight: () => string | null;
+      getSelectedFlightPosition: () => { lat: number; lon: number; alt: number } | null;
+      getFlights: () => { icao24: string; callsign: string | null; flight_phase: string }[];
+    };
   }
 }
 
@@ -223,6 +229,30 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
       delete window.__airportControl;
     };
   }, [loadAirport, currentAirport]);
+
+  // Expose flight control API on window for headless video renderer (Playwright)
+  useEffect(() => {
+    window.__flightControl = {
+      selectFlight: (icao24: string | null) => {
+        if (!icao24) {
+          setSelectedFlight(null);
+          return;
+        }
+        const flight = flights.find(f => f.icao24 === icao24);
+        if (flight) setSelectedFlight(flight);
+      },
+      getSelectedFlight: () => selectedFlight?.icao24 ?? null,
+      getSelectedFlightPosition: () => {
+        if (!selectedFlight?.latitude || !selectedFlight?.longitude) return null;
+        return { lat: selectedFlight.latitude, lon: selectedFlight.longitude, alt: selectedFlight.altitude ?? 0 };
+      },
+      getFlights: () => flights.map(f => ({ icao24: f.icao24, callsign: f.callsign, flight_phase: f.flight_phase })),
+    };
+    return () => {
+      delete window.__flightControl;
+    };
+  }, [flights, selectedFlight, setSelectedFlight]);
+
   const { viewport, setViewport, setLastSource } = useViewportState();
 
   // Clear shared viewport when airport changes so map recenters on new airport

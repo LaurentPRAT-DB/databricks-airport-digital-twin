@@ -95,6 +95,11 @@ def main() -> None:
         help="Map view mode: 2d (Leaflet bird's eye) or 3d (Three.js). Default: 2d",
     )
     parser.add_argument(
+        "--track-flight",
+        default=None,
+        help="Select and track a specific flight by icao24 ID (shows trajectory)",
+    )
+    parser.add_argument(
         "--estimate-only",
         action="store_true",
         help="Print size estimate and exit without rendering",
@@ -133,6 +138,7 @@ def main() -> None:
         end_hour=args.end_hour,
         crop_to_canvas=not args.no_crop,
         view_mode=args.view_mode,
+        track_flight=args.track_flight,
     )
 
     # Always compute and show the estimate first

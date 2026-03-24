@@ -351,20 +351,56 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setSwitchPaused(false);
   }, []);
 
-  // Extract full trajectory for a flight across all simulation frames
+  // Phase groups for trajectory segmentation.
+  // Airborne segments only — taxi/ground movement creates messy zigzag lines.
+  const ARRIVAL_AIRBORNE = new Set(['approaching', 'landing']);
+  const DEPARTURE_AIRBORNE = new Set(['takeoff', 'departing', 'enroute']);
+  // Ground segments shown separately when the flight is on the ground.
+  const ARRIVAL_GROUND = new Set(['taxi_to_gate']);
+  const DEPARTURE_GROUND = new Set(['pushback', 'taxi_to_runway']);
+
+  // Extract trajectory for a flight, scoped to the current phase segment
   const getFlightTrajectory = useCallback((icao24: string): SimTrajectoryPoint[] => {
     if (!simData) return [];
-    const points: SimTrajectoryPoint[] = [];
+
     const timestamps = simData.frame_timestamps;
-    // Sample every Nth frame to avoid huge arrays (max ~500 points)
-    const step = Math.max(1, Math.floor(timestamps.length / 500));
-    for (let i = 0; i < timestamps.length; i += step) {
+    if (timestamps.length === 0) return [];
+
+    // Determine the flight's current phase from the current frame
+    const currentTs = timestamps[currentFrameIndex];
+    const currentSnaps = currentTs ? simData.frames[currentTs] : null;
+    const currentSnap = currentSnaps?.find(s => s.icao24 === icao24);
+    const currentPhase = currentSnap?.phase ?? '';
+
+    // Pick the right phase set based on current flight phase:
+    // - Airborne arrival (approaching/landing) → show approach trajectory
+    // - Ground arrival (taxi_to_gate) → show taxi-in path
+    // - Parked → no trajectory
+    // - Ground departure (pushback/taxi_to_runway) → show taxi-out path
+    // - Airborne departure (takeoff/departing/enroute) → show departure trajectory
+    let allowedPhases: Set<string>;
+    if (ARRIVAL_AIRBORNE.has(currentPhase)) {
+      allowedPhases = ARRIVAL_AIRBORNE;
+    } else if (ARRIVAL_GROUND.has(currentPhase)) {
+      allowedPhases = ARRIVAL_GROUND;
+    } else if (DEPARTURE_GROUND.has(currentPhase)) {
+      allowedPhases = DEPARTURE_GROUND;
+    } else if (DEPARTURE_AIRBORNE.has(currentPhase)) {
+      allowedPhases = DEPARTURE_AIRBORNE;
+    } else {
+      // parked or unknown — no trajectory
+      return [];
+    }
+
+    // Collect all points for this flight in the allowed phase group
+    const allPoints: SimTrajectoryPoint[] = [];
+    for (let i = 0; i < timestamps.length; i++) {
       const ts = timestamps[i];
       const snapshots = simData.frames[ts];
       if (!snapshots) continue;
       const snap = snapshots.find(s => s.icao24 === icao24);
-      if (snap && snap.latitude != null && snap.longitude != null) {
-        points.push({
+      if (snap && snap.latitude != null && snap.longitude != null && allowedPhases.has(snap.phase)) {
+        allPoints.push({
           latitude: snap.latitude,
           longitude: snap.longitude,
           altitude: snap.altitude,
@@ -376,31 +412,20 @@ export function useSimulationReplay(): UseSimulationReplayResult {
         });
       }
     }
-    // Always include last frame if not already
-    if (step > 1 && timestamps.length > 0) {
-      const lastTs = timestamps[timestamps.length - 1];
-      const lastSnaps = simData.frames[lastTs];
-      if (lastSnaps) {
-        const snap = lastSnaps.find(s => s.icao24 === icao24);
-        if (snap && snap.latitude != null && snap.longitude != null) {
-          const lastEpoch = Math.floor(new Date(lastTs).getTime() / 1000);
-          if (points.length === 0 || points[points.length - 1].timestamp !== lastEpoch) {
-            points.push({
-              latitude: snap.latitude,
-              longitude: snap.longitude,
-              altitude: snap.altitude,
-              velocity: snap.velocity,
-              heading: snap.heading,
-              on_ground: snap.on_ground,
-              flight_phase: snap.phase,
-              timestamp: lastEpoch,
-            });
-          }
-        }
-      }
+
+    // Downsample to max ~500 points if needed
+    if (allPoints.length <= 500) return allPoints;
+    const step = Math.ceil(allPoints.length / 500);
+    const sampled: SimTrajectoryPoint[] = [];
+    for (let i = 0; i < allPoints.length; i += step) {
+      sampled.push(allPoints[i]);
     }
-    return points;
-  }, [simData]);
+    // Always include the last point
+    if (sampled[sampled.length - 1] !== allPoints[allPoints.length - 1]) {
+      sampled.push(allPoints[allPoints.length - 1]);
+    }
+    return sampled;
+  }, [simData, currentFrameIndex]);
 
   // Expose control API on window for headless video renderer (Playwright)
   useEffect(() => {
