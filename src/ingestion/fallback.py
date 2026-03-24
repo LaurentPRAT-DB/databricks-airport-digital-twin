@@ -3504,7 +3504,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.velocity = 0
                 speed_deg = 0
 
-            state.heading = _calculate_heading((state.latitude, state.longitude), target)
+            # Smooth heading toward waypoint (max 5°/s for taxi turns)
+            target_hdg = _calculate_heading((state.latitude, state.longitude), target)
+            state.heading = _smooth_heading(state.heading, target_hdg, 5.0, dt)
 
             if _distance_between((state.latitude, state.longitude), target) < max(speed_deg, 0.0005):
                 state.waypoint_index += 1
@@ -3718,7 +3720,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.velocity = 0  # Hold
                 speed_deg = 0
 
-            state.heading = _calculate_heading((state.latitude, state.longitude), target)
+            # Smooth heading toward waypoint (max 5°/s for taxi turns)
+            target_hdg = _calculate_heading((state.latitude, state.longitude), target)
+            state.heading = _smooth_heading(state.heading, target_hdg, 5.0, dt)
 
             if _distance_between((state.latitude, state.longitude), target) < max(speed_deg, 0.0005):
                 state.waypoint_index += 1
@@ -3727,13 +3731,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # at the runway hold line that the short waypoint path doesn't capture.
             state.departure_queue_hold_s -= dt
             state.velocity = 0
-            # Face the runway while holding
+            # Smoothly face the runway while holding
             _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
-            state.heading = dep_hdg
+            state.heading = _smooth_heading(state.heading, dep_hdg, 5.0, dt)
         else:
-            # Face the runway at the hold line
+            # Smoothly face the runway at the hold line
             _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
-            state.heading = dep_hdg
+            state.heading = _smooth_heading(state.heading, dep_hdg, 5.0, dt)
             # Compute departure queue hold once when aircraft first reaches hold line
             if not state.departure_queue_set and _calibration_taxi_out_target_s > 0:
                 # Target total taxi-out = waypoint_travel + queue_hold
@@ -3900,7 +3904,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             prof_alt, prof_spd, prof_vr = interpolate_profile(climb_prof, profile_progress)
 
             # Speed from profile, respect 250kt below FL100
-            state.velocity = min(prof_spd, MAX_SPEED_BELOW_FL100_KTS) if state.altitude < 10000 else prof_spd
+            target_spd = min(prof_spd, MAX_SPEED_BELOW_FL100_KTS) if state.altitude < 10000 else prof_spd
+            # Limit acceleration to ~2 kts/s (realistic for commercial jets)
+            max_accel = 2.0 * dt  # kts per tick
+            if target_spd > state.velocity:
+                state.velocity = min(target_spd, state.velocity + max_accel)
+            else:
+                state.velocity = max(target_spd, state.velocity - max_accel)
 
             # Move based on actual velocity
             speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
@@ -3933,7 +3943,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 # We're past waypoints, roughly 40-60% of climb
                 frac = min(1.0, 0.4 + 0.2 * (state.altitude / 18000.0))
                 _, prof_spd, prof_vr = interpolate_profile(climb_prof, frac)
-                state.velocity = min(prof_spd, MAX_SPEED_BELOW_FL100_KTS) if state.altitude < 10000 else prof_spd
+                target_spd = min(prof_spd, MAX_SPEED_BELOW_FL100_KTS) if state.altitude < 10000 else prof_spd
+                max_accel = 2.0 * dt
+                if target_spd > state.velocity:
+                    state.velocity = min(target_spd, state.velocity + max_accel)
+                else:
+                    state.velocity = max(target_spd, state.velocity - max_accel)
                 climb_fpm = prof_vr if prof_vr > 0 else 1500
                 climb_fpm = min(climb_fpm, 3500)  # hard cap for narrow-body
                 state.vertical_rate = climb_fpm
@@ -4068,9 +4083,17 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.altitude += alt_step
                 state.vertical_rate = max_climb_fpm
 
-            # 14 CFR 91.117: 250 kts IAS below 10,000 ft MSL
+            # Speed management: 250 kts below FL100, accelerate above
             if state.altitude < 10000:
-                state.velocity = min(state.velocity, MAX_SPEED_BELOW_FL100_KTS)
+                target_spd = min(state.velocity, MAX_SPEED_BELOW_FL100_KTS)
+            else:
+                # Cruise speed ~450 kts for jets, limit acceleration to 2 kts/s
+                target_spd = 450 if state.altitude > 20000 else 300
+            max_accel = 2.0 * dt
+            if target_spd > state.velocity:
+                state.velocity = min(target_spd, state.velocity + max_accel)
+            elif target_spd < state.velocity:
+                state.velocity = max(target_spd, state.velocity - max_accel)
 
             # Remove when exiting visibility circle
             if dist_from_airport > EXIT_RADIUS_DEG:
