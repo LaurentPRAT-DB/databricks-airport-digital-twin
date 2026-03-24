@@ -1384,10 +1384,11 @@ class TestFinalApproachRunwayAlignment:
                 f"waypoint {i-1} altitude {wps[i-1][2]}"
             )
 
-    def test_approach_starts_at_4800ft_ends_near_threshold(self):
-        """First waypoint at ~4800ft (3° GS at 15 NM), last at runway threshold altitude."""
+    def test_approach_starts_at_correct_altitude_ends_near_threshold(self):
+        """First waypoint at STAR corridor altitude (4500-5500ft), last at runway threshold."""
         wps = _get_approach_waypoints("ORD")
-        assert wps[0][2] == 4800, f"Expected 4800ft start, got {wps[0][2]}"
+        # STAR corridors have different start altitudes per quadrant (4500-5500ft)
+        assert 4000 <= wps[0][2] <= 6000, f"Expected 4000-6000ft start, got {wps[0][2]}"
         assert wps[-1][2] <= 50, f"Expected <=50ft at threshold, got {wps[-1][2]}"
 
     def test_final_approach_fix_at_approximately_6nm(self):

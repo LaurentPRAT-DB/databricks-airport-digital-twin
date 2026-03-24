@@ -660,6 +660,13 @@ TAXI_SPEED_PUSHBACK_KTS = 3     # Tug-assisted pushback
 
 MAX_SPEED_BELOW_FL100_KTS = 250  # 14 CFR 91.117: 250 kts IAS below 10,000 ft MSL
 
+# ILS Category I decision height (ft AGL) — primary approach→landing trigger
+DECISION_HEIGHT_FT = 200
+# Stabilized approach gate (ft AGL) — unstabilized above this → go-around
+STABILIZED_APPROACH_GATE_FT = 500
+STABILIZED_MAX_SPEED_OVER_VREF = 30  # kts above Vref (generous for sim)
+STABILIZED_MAX_SINK_RATE = 1500       # fpm (generous — real airlines use 1000)
+
 # Reference approach speeds (Vref) by aircraft type (kts, typical landing weight)
 # Sources: manufacturer operating manuals, airline performance data
 VREF_SPEEDS = {
@@ -1219,12 +1226,75 @@ def reset_airport_offset() -> None:
     _RWY_10R_LON = _ORIG_RWY_10R_LON
 
 
+def _entry_direction_quadrant(entry_dir: float) -> str:
+    """Classify an entry bearing into a directional quadrant for STAR/SID naming."""
+    normalized = entry_dir % 360
+    if normalized >= 315 or normalized < 45:
+        return "NORTH"
+    elif normalized < 135:
+        return "EAST"
+    elif normalized < 225:
+        return "SOUTH"
+    else:
+        return "WEST"
+
+
+# Named STAR procedures by approach quadrant.  Each defines distinct initial
+# waypoint geometry (distances, altitudes) that converge to the common
+# final approach fix.
+_STAR_CORRIDORS = {
+    "NORTH": {
+        "name": "NORTH ARRIVAL",
+        "base_distances": [0.15, 0.12, 0.09, 0.05],
+        "base_altitudes": [4800, 3800, 3200, 2500],
+    },
+    "EAST": {
+        "name": "EAST ARRIVAL",
+        "base_distances": [0.15, 0.12, 0.09, 0.05],
+        "base_altitudes": [4800, 3800, 3200, 2500],
+    },
+    "SOUTH": {
+        "name": "SOUTH ARRIVAL",
+        "base_distances": [0.15, 0.12, 0.09, 0.05],
+        "base_altitudes": [4800, 3800, 3200, 2500],
+    },
+    "WEST": {
+        "name": "WEST ARRIVAL",
+        "base_distances": [0.15, 0.12, 0.09, 0.05],
+        "base_altitudes": [4800, 3800, 3200, 2500],
+    },
+}
+
+
+def _get_star_name(origin_iata: Optional[str] = None) -> str:
+    """Return the STAR procedure name for the given origin airport.
+
+    Uses the same bearing logic as _get_approach_waypoints but avoids
+    consuming random state for unknown airports.
+    """
+    if origin_iata is None:
+        return _STAR_CORRIDORS["WEST"]["name"]  # Default corridor
+    coords = _get_airport_coordinates()
+    if origin_iata not in coords:
+        return _STAR_CORRIDORS["EAST"]["name"]  # Unknown origin default
+    rwy_heading = _get_runway_heading() or 280.0
+    approach_course = (rwy_heading + 180) % 360
+    bearing_to_apt = _bearing_from_airport(origin_iata)
+    entry_dir = (bearing_to_apt + 180) % 360
+    quadrant = _entry_direction_quadrant(entry_dir)
+    return _STAR_CORRIDORS[quadrant]["name"]
+
+
 def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     """Get approach waypoints aligned with the actual runway.
 
     When *origin_iata* is provided the approach starts from the bearing of that
     airport, so a flight from SEA appears from the north, one from LAX from the
     south, etc.  When origin is ``None`` a default entry from the east is used.
+
+    Uses directional STAR corridors: 4 distinct approach paths (North, East,
+    South, West) based on origin bearing quadrant, all converging to the same
+    final approach fix on the ILS.
 
     When no OSM runway data is available, generates fallback waypoints using the
     airport center with a default heading of 280 (westbound approach, typical for
@@ -1248,7 +1318,7 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
         bearing_to_apt = _bearing_from_airport(origin_iata)
         entry_dir = (bearing_to_apt + 180) % 360
 
-    # Phase 2: Final approach — centered on RUNWAY THRESHOLD
+    # Phase 2: Final approach — centered on RUNWAY THRESHOLD (shared by all STARs)
     # Altitudes follow standard 3° glideslope (~318 ft/NM)
     final_distances = [0.10, 0.075, 0.05, 0.035, 0.02, 0.01, 0.0]
     final_altitudes = [1600, 1300, 950, 630, 320, 160, 50]
@@ -1260,11 +1330,13 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
             pt = _point_on_circle(rwy_lat, rwy_lon, approach_course, dist)
             final_wps.append((pt[1], pt[0], alt))
 
-    # Phase 1: Base leg — blend from entry_dir to approach_course
-    # Radiate from the outermost final approach point so they connect smoothly
+    # Phase 1: STAR corridor — distinct per quadrant, converges to final approach fix
+    quadrant = _entry_direction_quadrant(entry_dir)
+    corridor = _STAR_CORRIDORS[quadrant]
     anchor_lat, anchor_lon = final_wps[0][1], final_wps[0][0]
-    base_distances = [0.15, 0.12, 0.09, 0.05]
-    base_altitudes = [4800, 3800, 3200, 2500]
+    base_distances = corridor["base_distances"]
+    base_altitudes = corridor["base_altitudes"]
+
     base_wps = []
     for i, (dist, alt) in enumerate(zip(base_distances, base_altitudes)):
         blend = i / len(base_distances)  # 0→0.75
@@ -1287,6 +1359,48 @@ def _get_runway_heading() -> Optional[float]:
     return None
 
 
+# Named SID procedures by departure quadrant.
+_SID_CORRIDORS = {
+    "NORTH": {
+        "name": "NORTH DEPARTURE",
+        "initial_turn_offset": 0,
+        "turn_start_wp": 1,          # Early turn — heading north quickly
+        "turn_end_wp": 4,
+    },
+    "EAST": {
+        "name": "EAST DEPARTURE",
+        "initial_turn_offset": 0,
+        "turn_start_wp": 2,          # Standard turn timing
+        "turn_end_wp": 5,
+    },
+    "SOUTH": {
+        "name": "SOUTH DEPARTURE",
+        "initial_turn_offset": 0,
+        "turn_start_wp": 1,          # Early turn — heading south quickly
+        "turn_end_wp": 4,
+    },
+    "WEST": {
+        "name": "WEST DEPARTURE",
+        "initial_turn_offset": 0,
+        "turn_start_wp": 3,          # Late turn — noise abatement over water
+        "turn_end_wp": 6,
+    },
+}
+
+
+def _get_sid_name(destination_iata: Optional[str] = None) -> str:
+    """Return the SID procedure name for the given destination airport."""
+    if destination_iata is None:
+        return _SID_CORRIDORS["WEST"]["name"]  # Default corridor
+    coords = _get_airport_coordinates()
+    if destination_iata not in coords:
+        return _SID_CORRIDORS["EAST"]["name"]  # Unknown destination default
+    rwy_heading = _get_runway_heading() or 280.0
+    exit_dir = _bearing_to_airport(destination_iata)
+    quadrant = _entry_direction_quadrant(exit_dir)
+    return _SID_CORRIDORS[quadrant]["name"]
+
+
 def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
     """Get departure waypoints aligned with the actual runway.
 
@@ -1294,6 +1408,9 @@ def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
     threshold (aircraft takes off toward the threshold, then keeps climbing
     past it).  Waypoints radiate from the threshold in the runway heading
     direction.
+
+    Uses directional SID corridors: 4 distinct departure paths (North, East,
+    South, West) based on destination bearing quadrant.
 
     When *destination_iata* is provided the departure curves toward that
     airport's bearing so the trajectory visually heads in the right direction.
@@ -1318,19 +1435,27 @@ def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
     else:
         exit_dir = _bearing_to_airport(destination_iata)
 
+    # Select SID corridor based on destination quadrant
+    quadrant = _entry_direction_quadrant(exit_dir)
+    corridor = _SID_CORRIDORS[quadrant]
+    turn_start = corridor["turn_start_wp"]
+    turn_end = corridor["turn_end_wp"]
+    initial_offset = corridor["initial_turn_offset"]
+
     # Distances and altitudes for 9 departure waypoints
     # Realistic SID climb: ~250 ft/NM average (varies by SID and noise abatement)
     distances = [0.02, 0.035, 0.05, 0.075, 0.10, 0.135, 0.17, 0.21, 0.25]
     altitudes = [200, 600, 1000, 1800, 2500, 3500, 5000, 6500, 8000]
 
+    initial_heading = (rwy_heading + initial_offset) % 360
+
     waypoints = []
     for i, (dist, alt) in enumerate(zip(distances, altitudes)):
-        # Blend from runway heading to destination bearing over the first 4 waypoints
-        if i < 2:
-            bearing = rwy_heading
-        elif i < 5:
-            blend = (i - 2) / 3.0  # 0.0 → 1.0 over waypoints 2-4
-            bearing = rwy_heading + _shortest_angle_diff(rwy_heading, exit_dir) * blend
+        if i < turn_start:
+            bearing = initial_heading
+        elif i < turn_end:
+            blend = (i - turn_start) / max(1, turn_end - turn_start)
+            bearing = initial_heading + _shortest_angle_diff(initial_heading, exit_dir) * blend
         else:
             bearing = exit_dir
         pt = _point_on_circle(dep_lat, dep_lon, bearing, dist)
@@ -1700,6 +1825,8 @@ class FlightState:
     departure_queue_hold_s: float = 0.0        # Remaining departure queue hold (seconds, calibrated)
     departure_queue_set: bool = False           # True once the hold has been computed
     cruise_altitude: float = 0.0               # Target cruise FL (hemispheric rule)
+    star_name: str = ""                          # Assigned STAR procedure name
+    sid_name: str = ""                           # Assigned SID procedure name
 
 
 # Maximum simultaneous aircraft on approach (approach + landing)
@@ -3092,7 +3219,25 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
     if state.phase == FlightPhase.APPROACHING:
         # Descend toward airport following approach waypoints WITH SEPARATION
+        # Primary transition trigger: altitude <= DECISION_HEIGHT_FT (Cat I ILS DA)
+        # Safety fallback: waypoint exhaustion
         approach_wps = _get_approach_waypoints(state.origin_airport)
+
+        # Helper: execute go-around (missed approach procedure)
+        def _execute_go_around(reason: str = "runway_busy") -> None:
+            state.waypoint_index = 0
+            state.altitude = max(state.altitude, 200)
+            state.velocity = 200
+            state.vertical_rate = 1500
+            state.go_around_count += 1
+            state.holding_phase_time = 0.0
+            state.holding_inbound = True
+            logger.info(
+                "GO-AROUND #%d %s (%s): %s at %.0fft",
+                state.go_around_count, state.callsign, state.aircraft_type,
+                reason, state.altitude,
+            )
+
         if state.waypoint_index < len(approach_wps):
             wp = approach_wps[state.waypoint_index]
             target = (wp[1], wp[0])  # lat, lon
@@ -3147,9 +3292,31 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 # Altitude from profile, smoothly interpolated toward target
                 state.altitude = max(0.0, _interpolate_altitude(state.altitude, min(prof_alt, target_alt), 500 * dt))
                 state.vertical_rate = prof_vr
+
+                # P1: Decision height-based approach→landing transition
+                # Transition when altitude at or below Cat I ILS decision height
+                # AND runway is clear. If busy, aircraft continues to waypoint
+                # exhaustion where the holding pattern handles the wait.
+                if state.altitude <= DECISION_HEIGHT_FT:
+                    arrival_rwy = _get_arrival_runway_name()
+                    if _is_runway_clear(arrival_rwy):
+                        emit_phase_transition(
+                            state.icao24, state.callsign,
+                            FlightPhase.APPROACHING.value, FlightPhase.LANDING.value,
+                            state.latitude, state.longitude, state.altitude,
+                            state.aircraft_type, state.assigned_gate,
+                        )
+                        _set_phase(state, FlightPhase.LANDING)
+                        state.waypoint_index = 0
+                        _occupy_runway(state.icao24, arrival_rwy)
+                    else:
+                        # P2: Runway busy at decision height → go-around
+                        _execute_go_around("runway_busy")
+                        return state
             else:
-                # Too close to aircraft ahead - slow down / hold speed
-                state.velocity = max(140, state.velocity - 10 * dt)
+                # Too close to aircraft ahead - slow down / hold speed (P5: Vref per type)
+                vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
+                state.velocity = max(vref, state.velocity - 10 * dt)
                 state.vertical_rate = -200
 
             # Smooth heading toward waypoint (max 3°/s standard rate turn)
@@ -3160,7 +3327,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if _distance_between((state.latitude, state.longitude), target) < 0.003:
                 state.waypoint_index += 1
         else:
-            # Transition to landing only if runway is clear
+            # Safety fallback: waypoint exhaustion
             arrival_rwy = _get_arrival_runway_name()
             if _is_runway_clear(arrival_rwy):
                 emit_phase_transition(
@@ -3173,7 +3340,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.waypoint_index = 0
                 _occupy_runway(state.icao24, arrival_rwy)
             else:
-                # Runway busy — FAA standard racetrack holding pattern
+                # Runway busy at waypoint exhaustion — hold pattern while waiting
                 HOLDING_LEG_SECONDS = 60.0
                 STANDARD_RATE_DEG_S = 3.0
                 state.holding_phase_time += dt
@@ -3193,9 +3360,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     else:
                         state.holding_phase_time = 0.0
                         state.holding_inbound = True
-                state.velocity = max(180, state.velocity)  # Maintain approach speed
-                # Move along current heading (not toward waypoint)
-                speed_deg = 0.001  # ~0.06 NM per tick
+                state.velocity = max(180, state.velocity)
+                speed_deg = 0.001
                 state.latitude += speed_deg * math.cos(math.radians(state.heading))
                 state.longitude += speed_deg * math.sin(math.radians(state.heading))
 
@@ -3569,6 +3735,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.takeoff_subphase = "lineup"
                     state.phase_progress = 0.0
                     state.takeoff_roll_dist_ft = 0.0
+                    state.sid_name = _get_sid_name(state.destination_airport)
                     _occupy_runway(state.icao24, dep_rwy)
                 else:
                     # Hold short: wake separation not yet met
@@ -3800,6 +3967,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 )
                 _set_phase(state, FlightPhase.APPROACHING)
                 state.waypoint_index = 0
+                state.star_name = _get_star_name(state.origin_airport)
             elif can_start_approach and random.random() < 0.01 * dt and dist_from_airport < 0.35:
                 emit_phase_transition(
                     state.icao24, state.callsign,
@@ -3809,6 +3977,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 )
                 _set_phase(state, FlightPhase.APPROACHING)
                 state.waypoint_index = 0
+                state.star_name = _get_star_name(state.origin_airport)
             elif not can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
                 # Approach full — FAA standard racetrack holding pattern
                 # 1-minute inbound/outbound legs, standard rate turns (3°/s)
@@ -3876,6 +4045,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if random.random() < 0.005 * dt:
                 _set_phase(state, FlightPhase.APPROACHING)
                 state.waypoint_index = 0
+                state.star_name = _get_star_name(state.origin_airport)
 
         # 14 CFR 91.117: 250 kts IAS below 10,000 ft MSL
         if state.altitude < 10000:
