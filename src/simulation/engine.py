@@ -1057,6 +1057,7 @@ class SimulationEngine:
                     state.latitude, state.longitude, state.altitude,
                     state.velocity, state.heading, state.phase.value,
                     state.on_ground, state.aircraft_type, state.assigned_gate,
+                    state.vertical_rate,
                 )
 
     def _capture_gate_events(self) -> None:

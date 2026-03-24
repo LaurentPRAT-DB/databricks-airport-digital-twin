@@ -1241,27 +1241,31 @@ def _entry_direction_quadrant(entry_dir: float) -> str:
 
 # Named STAR procedures by approach quadrant.  Each defines distinct initial
 # waypoint geometry (distances, altitudes) that converge to the common
-# final approach fix.
+# final approach fix.  Named after real SFO STARs where applicable.
+#
+# Distinct distances and altitudes per corridor create visually different
+# approach paths — longer corridors for oceanic arrivals (BDEGA from the
+# north Pacific), shorter for nearby domestic (DYAMD from Central Valley).
 _STAR_CORRIDORS = {
     "NORTH": {
-        "name": "NORTH ARRIVAL",
-        "base_distances": [0.15, 0.12, 0.09, 0.05],
-        "base_altitudes": [4800, 3800, 3200, 2500],
+        "name": "BDEGA",          # Real SFO STAR from Point Reyes (north Pacific)
+        "base_distances": [0.20, 0.16, 0.12, 0.07],
+        "base_altitudes": [6000, 4500, 3200, 2500],
     },
     "EAST": {
-        "name": "EAST ARRIVAL",
-        "base_distances": [0.15, 0.12, 0.09, 0.05],
-        "base_altitudes": [4800, 3800, 3200, 2500],
+        "name": "DYAMD",          # Real SFO STAR from Central Valley
+        "base_distances": [0.14, 0.11, 0.08, 0.05],
+        "base_altitudes": [4800, 3800, 3000, 2500],
     },
     "SOUTH": {
-        "name": "SOUTH ARRIVAL",
-        "base_distances": [0.15, 0.12, 0.09, 0.05],
-        "base_altitudes": [4800, 3800, 3200, 2500],
+        "name": "SERFR",          # Real SFO STAR from Monterey Bay (SE)
+        "base_distances": [0.18, 0.14, 0.10, 0.06],
+        "base_altitudes": [5500, 4200, 3200, 2500],
     },
     "WEST": {
-        "name": "WEST ARRIVAL",
-        "base_distances": [0.15, 0.12, 0.09, 0.05],
-        "base_altitudes": [4800, 3800, 3200, 2500],
+        "name": "OCEANIC",        # Trans-Pacific arrivals over the ocean
+        "base_distances": [0.22, 0.17, 0.12, 0.07],
+        "base_altitudes": [7000, 5000, 3500, 2500],
     },
 }
 
@@ -3226,8 +3230,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         # Helper: execute go-around (missed approach procedure)
         def _execute_go_around(reason: str = "runway_busy") -> None:
             state.waypoint_index = 0
-            state.altitude = max(state.altitude, 200)
-            state.velocity = 200
+            state.altitude = max(state.altitude, DECISION_HEIGHT_FT)
+            # Missed approach speed: Vref + 20 kts (per aircraft type)
+            vref_ga = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
+            state.velocity = vref_ga + 20
             state.vertical_rate = 1500
             state.go_around_count += 1
             state.holding_phase_time = 0.0
@@ -3340,30 +3346,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.waypoint_index = 0
                 _occupy_runway(state.icao24, arrival_rwy)
             else:
-                # Runway busy at waypoint exhaustion — hold pattern while waiting
-                HOLDING_LEG_SECONDS = 60.0
-                STANDARD_RATE_DEG_S = 3.0
-                state.holding_phase_time += dt
-                if state.holding_inbound:
-                    center = get_airport_center()
-                    state.heading = _calculate_heading(
-                        (state.latitude, state.longitude), center
-                    )
-                    if state.holding_phase_time >= HOLDING_LEG_SECONDS:
-                        state.holding_phase_time = 0.0
-                        state.holding_inbound = False
-                else:
-                    if state.holding_phase_time < 30.0:
-                        state.heading = (state.heading + STANDARD_RATE_DEG_S * dt) % 360
-                    elif state.holding_phase_time < 30.0 + HOLDING_LEG_SECONDS:
-                        pass  # Straight outbound leg
-                    else:
-                        state.holding_phase_time = 0.0
-                        state.holding_inbound = True
-                state.velocity = max(180, state.velocity)
-                speed_deg = 0.001
-                state.latitude += speed_deg * math.cos(math.radians(state.heading))
-                state.longitude += speed_deg * math.sin(math.radians(state.heading))
+                # Runway busy at waypoint exhaustion — execute missed approach
+                # per ICAO Doc 8168: climb to missed approach altitude, re-sequence
+                _execute_go_around("runway_busy_at_threshold")
 
     elif state.phase == FlightPhase.LANDING:
         # Final touchdown sequence - land on active arrival runway
