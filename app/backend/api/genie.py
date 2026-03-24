@@ -133,6 +133,13 @@ def _parse_message_response(msg: dict) -> GenieResponse:
         if att_text and not result.text_response:
             result.text_response = att_text
 
+    # Ensure text_response is always set for terminal statuses
+    if not result.text_response:
+        if status == "FAILED":
+            result.text_response = result.error or "Genie could not process this question."
+        elif status == "CANCELLED":
+            result.text_response = "The query was cancelled."
+
     return result
 
 
@@ -184,7 +191,13 @@ async def _poll_message(
 
         await _async_sleep(_POLL_INTERVAL)
 
-    return GenieResponse(status="TIMEOUT", error="Genie response timed out")
+    return GenieResponse(
+        status="TIMEOUT",
+        error="Genie response timed out",
+        text_response="The query took too long to complete. Try a simpler question or try again later.",
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
 
 
 async def _async_sleep(seconds: float):
@@ -196,7 +209,14 @@ async def _async_sleep(seconds: float):
 @genie_router.post("/ask", response_model=GenieResponse)
 async def ask_genie(body: AskRequest, request: Request):
     """Start a new Genie conversation with a question."""
-    host, token = _get_databricks_auth(request)
+    try:
+        host, token = _get_databricks_auth(request)
+    except HTTPException as e:
+        return GenieResponse(
+            status="FAILED",
+            error=e.detail,
+            text_response="The assistant service is not available. Please try again later.",
+        )
 
     try:
         resp = await _genie_api(
@@ -206,11 +226,22 @@ async def ask_genie(body: AskRequest, request: Request):
             token,
             json_body={"content": body.question},
         )
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        error_msg = e.detail[:200] if e.detail else f"HTTP {e.status_code}"
+        if e.status_code == 403:
+            text = "Access denied. You may not have permission to use the assistant."
+        elif e.status_code == 404:
+            text = "The Genie Space could not be found. It may have been deleted."
+        else:
+            text = f"The assistant encountered an error. Please try again."
+        return GenieResponse(status="FAILED", error=error_msg, text_response=text)
     except Exception as e:
         logger.error(f"Genie start-conversation failed: {e}")
-        raise HTTPException(status_code=502, detail=str(e))
+        return GenieResponse(
+            status="FAILED",
+            error=str(e),
+            text_response="Failed to connect to the assistant. Please try again.",
+        )
 
     conversation_id = resp.get("conversation_id")
     message_id = resp.get("message_id")
@@ -219,6 +250,7 @@ async def ask_genie(body: AskRequest, request: Request):
         return GenieResponse(
             status="FAILED",
             error="Missing conversation_id or message_id in response",
+            text_response="The assistant returned an unexpected response. Please try again.",
         )
 
     return await _poll_message(host, token, conversation_id, message_id)
@@ -227,7 +259,15 @@ async def ask_genie(body: AskRequest, request: Request):
 @genie_router.post("/followup", response_model=GenieResponse)
 async def followup_genie(body: FollowupRequest, request: Request):
     """Send a follow-up message in an existing Genie conversation."""
-    host, token = _get_databricks_auth(request)
+    try:
+        host, token = _get_databricks_auth(request)
+    except HTTPException as e:
+        return GenieResponse(
+            conversation_id=body.conversation_id,
+            status="FAILED",
+            error=e.detail,
+            text_response="The assistant service is not available. Please try again later.",
+        )
 
     try:
         resp = await _genie_api(
@@ -237,11 +277,28 @@ async def followup_genie(body: FollowupRequest, request: Request):
             token,
             json_body={"content": body.question},
         )
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        error_msg = e.detail[:200] if e.detail else f"HTTP {e.status_code}"
+        if e.status_code == 403:
+            text = "Access denied. You may not have permission to use the assistant."
+        elif e.status_code == 404:
+            text = "The conversation could not be found. Please start a new one."
+        else:
+            text = "The assistant encountered an error. Please try again."
+        return GenieResponse(
+            conversation_id=body.conversation_id,
+            status="FAILED",
+            error=error_msg,
+            text_response=text,
+        )
     except Exception as e:
         logger.error(f"Genie followup failed: {e}")
-        raise HTTPException(status_code=502, detail=str(e))
+        return GenieResponse(
+            conversation_id=body.conversation_id,
+            status="FAILED",
+            error=str(e),
+            text_response="Failed to connect to the assistant. Please try again.",
+        )
 
     message_id = resp.get("message_id") or resp.get("id")
     if not message_id:
@@ -249,6 +306,7 @@ async def followup_genie(body: FollowupRequest, request: Request):
             conversation_id=body.conversation_id,
             status="FAILED",
             error="Missing message_id in response",
+            text_response="The assistant returned an unexpected response. Please try again.",
         )
 
     return await _poll_message(host, token, body.conversation_id, message_id)

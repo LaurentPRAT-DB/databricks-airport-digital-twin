@@ -225,7 +225,14 @@ describe('GenieChat', () => {
 
   describe('Error handling', () => {
     it('shows error message when fetch fails', async () => {
-      vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Network error'))
+      const originalFetch = global.fetch
+      vi.spyOn(global, 'fetch').mockImplementation((input, init?) => {
+        const url = typeof input === 'string' ? input : (input as Request).url
+        if (url.startsWith('/api/genie/')) {
+          return Promise.reject(new Error('Network error'))
+        }
+        return originalFetch(input, init)
+      })
 
       const user = userEvent.setup()
       render(<GenieChat />)
@@ -235,7 +242,7 @@ describe('GenieChat', () => {
       await user.click(screen.getByTestId('genie-send'))
 
       await waitFor(() => {
-        expect(screen.getByText(/failed to connect to genie/i)).toBeInTheDocument()
+        expect(screen.getByText(/failed to connect to the assistant/i)).toBeInTheDocument()
       })
     })
   })
@@ -276,6 +283,276 @@ describe('GenieChat', () => {
 
       await user.click(screen.getByTestId('genie-fab'))
       expect(screen.getByTitle('Open in Databricks Genie')).toBeInTheDocument()
+    })
+  })
+
+  describe('Response hardening', () => {
+    it('shows result count when COMPLETED with data but no text_response', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        json: () => Promise.resolve({
+          conversation_id: 'conv-1',
+          message_id: 'msg-1',
+          status: 'COMPLETED',
+          sql: 'SELECT * FROM flights',
+          columns: ['flight', 'gate'],
+          data: [['UAL100', 'A1'], ['DAL200', 'B2'], ['AAL300', 'C3']],
+          row_count: 3,
+          text_response: null,
+          error: null,
+        }),
+        ok: true,
+      } as Response)
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'Show flights')
+      await user.click(screen.getByTestId('genie-send'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Found 3 results:')).toBeInTheDocument()
+      })
+    })
+
+    it('shows no-results message when COMPLETED with SQL but 0 rows', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        json: () => Promise.resolve({
+          conversation_id: 'conv-1',
+          message_id: 'msg-1',
+          status: 'COMPLETED',
+          sql: 'SELECT * FROM flights WHERE 1=0',
+          columns: null,
+          data: null,
+          row_count: 0,
+          text_response: null,
+          error: null,
+        }),
+        ok: true,
+      } as Response)
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'test')
+      await user.click(screen.getByTestId('genie-send'))
+
+      await waitFor(() => {
+        expect(screen.getByText(/returned no results/i)).toBeInTheDocument()
+      })
+    })
+
+    it('shows error message when FAILED with error field', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        json: () => Promise.resolve({
+          conversation_id: 'conv-1',
+          message_id: 'msg-1',
+          status: 'FAILED',
+          sql: null,
+          columns: null,
+          data: null,
+          row_count: 0,
+          text_response: null,
+          error: 'Column not found: foobar',
+        }),
+        ok: true,
+      } as Response)
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'test')
+      await user.click(screen.getByTestId('genie-send'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Column not found: foobar')).toBeInTheDocument()
+      })
+    })
+
+    it('shows fallback when FAILED with no error and no text', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        json: () => Promise.resolve({
+          conversation_id: 'conv-1',
+          message_id: 'msg-1',
+          status: 'FAILED',
+          sql: null,
+          columns: null,
+          data: null,
+          row_count: 0,
+          text_response: null,
+          error: null,
+        }),
+        ok: true,
+      } as Response)
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'test')
+      await user.click(screen.getByTestId('genie-send'))
+
+      await waitFor(() => {
+        expect(screen.getByText(/couldn't answer that question/i)).toBeInTheDocument()
+      })
+    })
+
+    it('shows timeout message for TIMEOUT status', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        json: () => Promise.resolve({
+          conversation_id: 'conv-1',
+          message_id: 'msg-1',
+          status: 'TIMEOUT',
+          sql: null,
+          columns: null,
+          data: null,
+          row_count: 0,
+          text_response: null,
+          error: null,
+        }),
+        ok: true,
+      } as Response)
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'test')
+      await user.click(screen.getByTestId('genie-send'))
+
+      await waitFor(() => {
+        expect(screen.getByText(/took too long/i)).toBeInTheDocument()
+      })
+    })
+
+    it('shows permission denied for HTTP 403', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        json: () => Promise.resolve({ detail: 'Forbidden' }),
+        ok: false,
+        status: 403,
+      } as Response)
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'test')
+      await user.click(screen.getByTestId('genie-send'))
+
+      await waitFor(() => {
+        expect(screen.getByText(/access denied/i)).toBeInTheDocument()
+      })
+    })
+
+    it('shows service unavailable for HTTP 503', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        json: () => Promise.resolve({ detail: 'No auth' }),
+        ok: false,
+        status: 503,
+      } as Response)
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'test')
+      await user.click(screen.getByTestId('genie-send'))
+
+      await waitFor(() => {
+        expect(screen.getByText(/not available/i)).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Retry', () => {
+    it('shows retry button on error and re-sends last question', async () => {
+      let callCount = 0
+      const originalFetch = global.fetch
+      const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((input, init?) => {
+        const url = typeof input === 'string' ? input : (input as Request).url
+        if (url.startsWith('/api/genie/')) {
+          callCount++
+          if (callCount === 1) {
+            return Promise.reject(new Error('Network error'))
+          }
+          return Promise.resolve({
+            json: () => Promise.resolve({
+              conversation_id: 'conv-1',
+              message_id: 'msg-1',
+              status: 'COMPLETED',
+              sql: null,
+              columns: null,
+              data: null,
+              row_count: 0,
+              text_response: 'Success on retry!',
+              error: null,
+            }),
+            ok: true,
+          } as Response)
+        }
+        return originalFetch(input, init)
+      })
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'test question')
+      await user.click(screen.getByTestId('genie-send'))
+
+      // Wait for error + retry button
+      await waitFor(() => {
+        expect(screen.getByTestId('genie-retry')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('genie-retry'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Success on retry!')).toBeInTheDocument()
+      })
+
+      expect(callCount).toBe(2)
+      fetchSpy.mockRestore()
+    })
+  })
+
+  describe('Keyboard shortcuts', () => {
+    it('closes panel when Escape key is pressed', async () => {
+      const user = userEvent.setup()
+      render(<GenieChat />)
+
+      await user.click(screen.getByTestId('genie-fab'))
+      expect(screen.getByTestId('genie-panel')).toBeInTheDocument()
+
+      await user.keyboard('{Escape}')
+      expect(screen.queryByTestId('genie-panel')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Timestamps', () => {
+    it('shows relative timestamps on messages', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        json: () => Promise.resolve({
+          conversation_id: 'conv-1',
+          message_id: 'msg-1',
+          status: 'COMPLETED',
+          sql: null,
+          columns: null,
+          data: null,
+          row_count: 0,
+          text_response: 'Answer',
+          error: null,
+        }),
+        ok: true,
+      } as Response)
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'test')
+      await user.click(screen.getByTestId('genie-send'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Answer')).toBeInTheDocument()
+      })
+
+      // Both user and assistant messages should show "just now"
+      const timestamps = screen.getAllByText('just now')
+      expect(timestamps.length).toBeGreaterThanOrEqual(2)
     })
   })
 })

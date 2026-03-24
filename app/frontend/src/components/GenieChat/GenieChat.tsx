@@ -25,6 +25,48 @@ interface GenieApiResponse {
   error: string | null;
 }
 
+/** Derive user-friendly content from a Genie API response. */
+function getAssistantContent(data: GenieApiResponse): string {
+  // 1. If Genie provided text, use it
+  if (data.text_response) return data.text_response;
+
+  // 2. Status-specific fallbacks
+  switch (data.status) {
+    case 'COMPLETED':
+      if (data.data && data.data.length > 0)
+        return `Found ${data.row_count} result${data.row_count !== 1 ? 's' : ''}:`;
+      if (data.sql)
+        return 'The query ran successfully but returned no results. Try broadening your question.';
+      return 'Query completed.';
+    case 'FAILED':
+      return data.error || "I couldn't answer that question. Try rephrasing or ask something else.";
+    case 'TIMEOUT':
+      return 'The query took too long to complete. Try a simpler question or try again later.';
+    case 'CANCELLED':
+      return 'The query was cancelled.';
+    default:
+      return data.error || 'Something unexpected happened. Please try again.';
+  }
+}
+
+/** Derive user-friendly content from an HTTP error response. */
+function getHttpErrorContent(status: number, detail: string | null): string {
+  if (status === 403) return 'Access denied. You may not have permission to use the assistant.';
+  if (status === 503) return 'The assistant service is not available. Please try again later.';
+  if (status === 404) return 'The assistant could not be found. It may have been removed.';
+  return detail ? `Error: ${detail}` : `Server error (${status}). Please try again.`;
+}
+
+/** Format a relative timestamp (e.g., "just now", "2m ago"). */
+function formatRelativeTime(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+}
+
 const SAMPLE_QUESTIONS = [
   'How many flights are approaching KJFK right now?',
   'Which gates are most used in the last 6 hours?',
@@ -55,8 +97,10 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [panelVisible, setPanelVisible] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastQuestionRef = useRef<string>('');
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -65,15 +109,31 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
     }
   }, [messages, isLoading]);
 
-  // Focus input when panel opens
+  // Focus input when panel opens + trigger slide-in animation
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
+    if (isOpen) {
+      // Trigger slide-in on next frame
+      requestAnimationFrame(() => setPanelVisible(true));
+      if (inputRef.current) inputRef.current.focus();
+    } else {
+      setPanelVisible(false);
     }
+  }, [isOpen]);
+
+  // Escape key to close panel
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen]);
 
   const sendMessage = useCallback(async (question: string) => {
     if (!question.trim() || isLoading) return;
+
+    lastQuestionRef.current = question.trim();
 
     const userMsg: GenieMessage = {
       id: `user-${Date.now()}`,
@@ -97,6 +157,22 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
         body: JSON.stringify(body),
       });
 
+      if (!res.ok) {
+        // Try to parse error detail from backend
+        const errorData = await res.json().catch(() => null);
+        const detail = errorData?.detail || null;
+        const content = getHttpErrorContent(res.status, detail);
+        setMessages(prev => [...prev, {
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content,
+          error: detail || `HTTP ${res.status}`,
+          status: 'FAILED',
+          timestamp: Date.now(),
+        }]);
+        return;
+      }
+
       const data: GenieApiResponse = await res.json();
 
       if (data.conversation_id && !conversationId) {
@@ -106,7 +182,7 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
       const assistantMsg: GenieMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: data.text_response || (data.status === 'COMPLETED' ? 'Query completed.' : `Status: ${data.status}`),
+        content: getAssistantContent(data),
         sql: data.sql || undefined,
         columns: data.columns || undefined,
         data: data.data || undefined,
@@ -120,7 +196,7 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
       const errorMsg: GenieMessage = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: 'Failed to connect to Genie. Please try again.',
+        content: 'Failed to connect to the assistant. Check your network and try again.',
         error: err instanceof Error ? err.message : 'Unknown error',
         status: 'ERROR',
         timestamp: Date.now(),
@@ -130,6 +206,12 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
       setIsLoading(false);
     }
   }, [conversationId, isLoading]);
+
+  const handleRetry = useCallback(() => {
+    if (lastQuestionRef.current) {
+      sendMessage(lastQuestionRef.current);
+    }
+  }, [sendMessage]);
 
   const handleNewConversation = () => {
     setMessages([]);
@@ -163,7 +245,7 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
       {/* Chat Panel */}
       {isOpen && (
         <div
-          className="fixed right-0 top-14 bottom-0 w-[400px] z-[1100] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 flex flex-col shadow-2xl"
+          className={`fixed right-0 top-14 bottom-0 w-full sm:w-[400px] z-[1100] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 flex flex-col shadow-2xl transition-transform duration-300 ease-out ${panelVisible ? 'translate-x-0' : 'translate-x-full'}`}
           data-testid="genie-panel"
         >
           {/* Header */}
@@ -237,24 +319,46 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
 
             {messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                    msg.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : msg.error
-                      ? 'bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                <div className="max-w-[85%]">
+                  <div
+                    className={`rounded-lg px-3 py-2 text-sm ${
+                      msg.role === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : msg.error
+                        ? 'bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
+                        : msg.status === 'COMPLETED' && msg.sql && (!msg.data || msg.data.length === 0)
+                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
 
-                  {/* SQL block */}
-                  {msg.sql && <SqlBlock sql={msg.sql} />}
+                    {/* SQL block */}
+                    {msg.sql && <SqlBlock sql={msg.sql} />}
 
-                  {/* Data table */}
-                  {msg.columns && msg.data && msg.data.length > 0 && (
-                    <DataTable columns={msg.columns} data={msg.data} rowCount={msg.rowCount || 0} />
-                  )}
+                    {/* Data table */}
+                    {msg.columns && msg.data && msg.data.length > 0 && (
+                      <DataTable columns={msg.columns} data={msg.data} rowCount={msg.rowCount || 0} />
+                    )}
+
+                    {/* Retry button for errors */}
+                    {msg.error && !isLoading && (
+                      <button
+                        onClick={handleRetry}
+                        className="mt-2 text-xs text-red-600 dark:text-red-400 hover:underline flex items-center gap-1"
+                        data-testid="genie-retry"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                  {/* Timestamp */}
+                  <div className={`text-[10px] mt-0.5 text-slate-400 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
+                    {formatRelativeTime(msg.timestamp)}
+                  </div>
                 </div>
               </div>
             ))}
@@ -263,10 +367,13 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-slate-100 dark:bg-slate-800 rounded-lg px-4 py-3">
-                  <div className="flex gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Thinking</span>
+                    <div className="flex gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -344,6 +451,11 @@ function DataTable({
 
   return (
     <div className="mt-2 overflow-x-auto">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">
+          {rowCount} row{rowCount !== 1 ? 's' : ''}
+        </span>
+      </div>
       <table className="text-xs w-full border-collapse">
         <thead>
           <tr>
