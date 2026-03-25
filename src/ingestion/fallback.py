@@ -1595,29 +1595,25 @@ def _get_arrival_runway_name() -> str:
 
 
 def _get_runway_exit_position(state) -> tuple:
-    """Compute a staggered runway exit position for LANDING→TAXI_TO_GATE transition.
+    """Compute a runway exit position for LANDING→TAXI_TO_GATE transition.
 
-    Offsets the aircraft along the runway heading by 100-500m from the touchdown
-    point, simulating different runway exit points (high-speed turnoff vs end-of-runway).
+    Offsets the aircraft perpendicular to the runway (toward the terminal side)
+    from its current rollout position, simulating a high-speed turnoff exit.
     Returns (lat, lon).
     """
-    # Get touchdown point
-    thr = _get_runway_threshold()
-    if thr:
-        base_lat, base_lon = thr[1], thr[0]  # (lon, lat) → (lat, lon)
-    else:
-        base_lat, base_lon = RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0]
+    base_lat, base_lon = state.latitude, state.longitude
 
-    # Get runway heading — exit direction is toward the terminal (reverse of approach)
+    # Get runway heading to compute perpendicular exit direction
     hdg = _get_runway_heading()
     if hdg is None:
         hdg = 284.0  # SFO fallback
 
-    # Reverse heading: aircraft exits away from the approach direction (toward terminal)
-    exit_heading = (hdg + 180) % 360
+    # Exit perpendicular to runway toward terminal (right side = +90°)
+    # At most airports, terminals are on one side of the runway
+    exit_heading = (hdg + 90) % 360
 
-    # Random offset 100-500m along exit heading to simulate different exit points
-    offset_m = random.uniform(100, 500)
+    # Offset 50-150m perpendicular to clear the runway centerline
+    offset_m = random.uniform(50, 150)
     offset_deg_lat = (offset_m / 111000) * math.cos(math.radians(exit_heading))
     offset_deg_lon = (offset_m / (111000 * math.cos(math.radians(base_lat)))) * math.sin(math.radians(exit_heading))
 
@@ -3602,11 +3598,21 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         # Runway should already be marked as occupied
         thr = _get_runway_threshold()
         runway_touchdown = (thr[1], thr[0]) if thr else (RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0])  # lat, lon
-        new_pos = _move_toward((state.latitude, state.longitude), runway_touchdown, 0.002)
-        state.latitude, state.longitude = new_pos
+
+        # Get runway far end for rollout direction (aircraft rolls past threshold)
+        rwy_data = _get_osm_primary_runway()
+        if rwy_data:
+            _, far_end_lonlat, rwy_hdg = _osm_runway_endpoints(rwy_data)
+            runway_far_end = (far_end_lonlat[1], far_end_lonlat[0])  # lat, lon
+        else:
+            runway_far_end = (RUNWAY_28L_WEST[1], RUNWAY_28L_WEST[0])
+            rwy_hdg = 284.0
 
         if state.altitude > 0:
-            # Airborne: descend to touchdown
+            # Airborne: descend to touchdown point
+            speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+            new_pos = _move_toward((state.latitude, state.longitude), runway_touchdown, speed_deg)
+            state.latitude, state.longitude = new_pos
             state.altitude = max(0, state.altitude - 500 * dt)
             state.velocity = max(80, state.velocity - 10 * dt)
             state.heading = _calculate_heading(new_pos, runway_touchdown)
@@ -3616,16 +3622,17 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.vertical_rate = 0
         else:
             # On-ground rollout: decelerate from ~130kts to taxi speed
+            # Aircraft rolls ALONG the runway (toward far end), not back toward threshold
             state.altitude = 0
             state.on_ground = True
             state.vertical_rate = 0
             # Braking deceleration: ~3 kts/s is typical (reverse thrust + brakes)
             state.velocity = max(25, state.velocity - 3.0 * dt)
-            # Continue rolling along runway centerline toward exit
+            # Roll along runway centerline toward far end
             speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
-            new_pos = _move_toward((state.latitude, state.longitude), runway_touchdown, speed_deg)
+            new_pos = _move_toward((state.latitude, state.longitude), runway_far_end, speed_deg)
             state.latitude, state.longitude = new_pos
-            state.heading = _calculate_heading(new_pos, runway_touchdown)
+            state.heading = rwy_hdg  # Maintain runway heading during rollout
 
         if state.on_ground and state.velocity <= 30:
             # Rollout complete — exit runway to taxiway

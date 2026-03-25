@@ -32,13 +32,6 @@ const platformLinks: PlatformLink[] = [
     description: 'Ask natural language questions about flight ops',
   },
   {
-    id: 'lineage',
-    label: 'Data Lineage',
-    icon: '🔗',
-    url: `${WORKSPACE_URL}/explore/data/${CATALOG}/${SCHEMA}/flight_status_gold/lineage`,
-    description: 'View data pipeline flow in Unity Catalog',
-  },
-  {
     id: 'mlflow',
     label: 'ML Experiments',
     icon: '📈',

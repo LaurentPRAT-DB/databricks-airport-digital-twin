@@ -1,14 +1,20 @@
 """Go-Around Video Test — Records a simulation "video" and validates go-around behavior.
 
-Runs a high-arrival-pressure simulation, records every position snapshot as
-frames (what the user sees each tick), and validates that go-arounds:
+Runs a simulation with a runway-closure scenario to FORCE go-arounds.
+Records every position snapshot as frames (what the user sees each tick),
+saves the go-around flight trajectory as GeoJSON for map inspection, and
+saves the full video recording as JSON for replay.
+
+Validates that go-arounds:
   - Are recorded as phase transitions
   - Produce altitude gain (missed approach climb)
   - Keep the aircraft flying FORWARD (not backward toward waypoint 0)
   - Stay within holding pattern geometry
   - Re-enter approach and eventually land
 
-The full simulation is saved as JSON for end-user review/replay.
+Output files (in tests/output/):
+  - go_around_trajectory.geojson — trajectory line of the go-around flight
+  - go_around_video.json — full frame-by-frame recording of all aircraft
 
 Test IDs:
   GA01 — Go-around events recorded
@@ -19,13 +25,16 @@ Test IDs:
   GA06 — Re-enters approach
   GA07 — Eventually lands or parks
   GA08 — Holding pattern stays near airport
+  GA09 — Trajectory GeoJSON saved
+  GA10 — Video recording saved
 """
 
+import json
 import math
 import os
-import tempfile
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -33,6 +42,9 @@ from src.simulation.config import SimulationConfig
 from src.simulation.engine import SimulationEngine
 from src.simulation.recorder import SimulationRecorder
 from src.ingestion.fallback import VREF_SPEEDS, _DEFAULT_VREF
+
+OUTPUT_DIR = Path(__file__).parent / "output"
+SCENARIO_PATH = str(Path(__file__).parent.parent / "scenarios" / "sfo_go_around_test.yaml")
 
 
 # ---------------------------------------------------------------------------
@@ -101,35 +113,32 @@ def _heading_abs_diff(h1, h2):
 
 @pytest.fixture(scope="module")
 def sim():
-    """Run a 4h sim with 20 arrivals + 5 departures at SFO (high arrival pressure).
+    """Run a 3h sim with 15 arrivals + 5 departures at SFO with runway-closure scenario.
 
-    Uses seed=7 for reproducibility. The high arrival-to-departure ratio
-    creates runway contention that triggers go-arounds via both the fallback
-    (runway busy) and engine (probabilistic) code paths.
+    Uses the sfo_go_around_test.yaml scenario that closes runway 28R for 30 min
+    during the approach window, forcing go-arounds for arriving traffic.
+    High gusts further increase go-around probability after reopening.
     """
     config = SimulationConfig(
         airport="SFO",
-        arrivals=20,
+        arrivals=15,
         departures=5,
-        duration_hours=4.0,
+        duration_hours=3.0,
         time_step_seconds=2.0,
-        seed=7,
+        seed=42,
         diagnostics=True,
+        scenario_file=SCENARIO_PATH,
     )
     engine = SimulationEngine(config)
     recorder = engine.run()
 
-    # Save simulation output as JSON for end-user review
-    output_dir = os.path.join(tempfile.gettempdir(), "airport_sim_go_around")
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "go_around_video.json")
-    recorder.write_output(output_path, config.model_dump())
-    print(f"\n  Go-around video saved: {output_path}")
+    # Save simulation output to tests/output/ for inspection
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     # Print go-around summary
     ga_transitions = _find_go_around_transitions(recorder)
     ga_events = _find_go_around_scenario_events(recorder)
-    print(f"  Go-around phase transitions: {len(ga_transitions)}")
+    print(f"\n  Go-around phase transitions: {len(ga_transitions)}")
     print(f"  Go-around scenario events: {len(ga_events)}")
     print(f"  Total position snapshots: {len(recorder.position_snapshots)}")
     print(f"  Total phase transitions: {len(recorder.phase_transitions)}")
@@ -544,3 +553,185 @@ class TestGA08HoldingGeometry:
             f"GA08: {len(violations)}/{checked} flights drifted beyond 35 NM during hold:\n"
             + "\n".join(violations[:5])
         )
+
+
+# ============================================================================
+# GA09 — Trajectory GeoJSON Saved
+# ============================================================================
+
+def _trace_to_geojson(trace, callsign, phases):
+    """Convert a flight trace to a GeoJSON FeatureCollection.
+
+    Creates a LineString for the full trajectory and Point markers at each
+    phase transition (go-around climb-out, re-approach, landing, etc.).
+    """
+    coords = [[snap["longitude"], snap["latitude"], snap["altitude"]]
+              for snap in trace]
+
+    features = [
+        {
+            "type": "Feature",
+            "properties": {
+                "callsign": callsign,
+                "type": "trajectory",
+                "phases": phases,
+                "start_time": trace[0]["time"],
+                "end_time": trace[-1]["time"],
+                "num_positions": len(trace),
+            },
+            "geometry": {
+                "type": "LineString",
+                "coordinates": coords,
+            },
+        }
+    ]
+
+    # Point markers at each phase transition
+    prev_phase = trace[0]["phase"]
+    for snap in trace[1:]:
+        if snap["phase"] != prev_phase:
+            features.append({
+                "type": "Feature",
+                "properties": {
+                    "callsign": callsign,
+                    "type": "phase_transition",
+                    "from_phase": prev_phase,
+                    "to_phase": snap["phase"],
+                    "time": snap["time"],
+                    "altitude": snap["altitude"],
+                    "velocity": snap["velocity"],
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [snap["longitude"], snap["latitude"], snap["altitude"]],
+                },
+            })
+            prev_phase = snap["phase"]
+
+    return {"type": "FeatureCollection", "features": features}
+
+
+def _phase_sequence(trace):
+    """Return ordered list of distinct phases a flight goes through."""
+    if not trace:
+        return []
+    phases = [trace[0]["phase"]]
+    for p in trace[1:]:
+        if p["phase"] != phases[-1]:
+            phases.append(p["phase"])
+    return phases
+
+
+class TestGA09TrajectoryExport:
+    """Save go-around flight trajectory as GeoJSON for map inspection."""
+
+    def test_GA09_save_trajectory_geojson(self, traces, go_arounds):
+        """Export the first go-around flight's full trajectory as GeoJSON.
+
+        Output: tests/output/go_around_trajectory.geojson
+        Open in geojson.io or QGIS to see the approach, go-around climb-out,
+        holding pattern, re-approach, and landing.
+        """
+        if not go_arounds:
+            pytest.skip("GA09: no go-arounds to export")
+
+        ga = go_arounds[0]
+        icao24 = ga["icao24"]
+        trace = traces[icao24]
+        callsign = ga["transition"]["callsign"]
+        phases = _phase_sequence(trace)
+
+        geojson = _trace_to_geojson(trace, callsign, phases)
+
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        out_path = OUTPUT_DIR / "go_around_trajectory.geojson"
+        with open(out_path, "w") as f:
+            json.dump(geojson, f, indent=2)
+
+        assert out_path.exists()
+        with open(out_path) as f:
+            data = json.load(f)
+        assert data["type"] == "FeatureCollection"
+        assert len(data["features"]) >= 2  # trajectory line + at least 1 phase transition
+
+        line = data["features"][0]
+        assert line["geometry"]["type"] == "LineString"
+        assert len(line["geometry"]["coordinates"]) > 10, "Trajectory too short"
+
+        print(f"\n  GA09 Trajectory saved: {out_path}")
+        print(f"    Flight: {callsign} ({icao24})")
+        print(f"    Phases: {' -> '.join(phases)}")
+        print(f"    Positions: {len(trace)}")
+        print(f"    Phase transitions: {len(data['features']) - 1}")
+
+
+# ============================================================================
+# GA10 — Video Recording Saved
+# ============================================================================
+
+class TestGA10VideoRecording:
+    """Save full simulation as a frame-by-frame video recording JSON."""
+
+    def test_GA10_save_video_recording(self, sim, go_arounds):
+        """Export all frames as a video JSON for replay inspection.
+
+        Output: tests/output/go_around_video.json
+        Contains every time-step with all aircraft positions, plus
+        go-around events as a separate array for easy filtering.
+        """
+        recorder, config = sim
+        frames = _build_frames(recorder)
+
+        ga_events = _find_go_around_scenario_events(recorder)
+
+        video_frames = []
+        for time_key, snaps in frames.items():
+            video_frames.append({
+                "time": time_key,
+                "aircraft_count": len(snaps),
+                "aircraft": [
+                    {
+                        "icao24": s["icao24"],
+                        "callsign": s["callsign"],
+                        "lat": s["latitude"],
+                        "lon": s["longitude"],
+                        "alt": s["altitude"],
+                        "heading": s["heading"],
+                        "velocity": s["velocity"],
+                        "phase": s["phase"],
+                        "on_ground": s["on_ground"],
+                    }
+                    for s in snaps
+                ],
+            })
+
+        video = {
+            "airport": config.airport,
+            "scenario": "sfo_go_around_test",
+            "total_frames": len(video_frames),
+            "time_step_seconds": config.time_step_seconds,
+            "go_around_events": ga_events,
+            "scenario_events": recorder.scenario_events,
+            "frames": video_frames,
+        }
+
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        out_path = OUTPUT_DIR / "go_around_video.json"
+        with open(out_path, "w") as f:
+            json.dump(video, f, default=str)
+
+        assert out_path.exists()
+        with open(out_path) as f:
+            data = json.load(f)
+        assert data["total_frames"] > 0
+        assert len(data["frames"]) == data["total_frames"]
+
+        frames_with_aircraft = sum(1 for f in data["frames"] if f["aircraft_count"] > 0)
+        assert frames_with_aircraft > 10
+
+        print(f"\n  GA10 Video saved: {out_path}")
+        print(f"    Total frames: {data['total_frames']}")
+        print(f"    Frames with aircraft: {frames_with_aircraft}")
+        print(f"    Go-around events: {len(data['go_around_events'])}")
+        print(f"    Scenario events: {len(data['scenario_events'])}")
+        print(f"    File size: {out_path.stat().st_size / 1024:.0f} KB")
