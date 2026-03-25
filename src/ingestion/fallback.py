@@ -1518,14 +1518,45 @@ def _osm_runway_endpoints(runway: dict) -> tuple:
     """Extract threshold and opposite-end positions from an OSM runway.
 
     Returns ((threshold_lon, threshold_lat), (far_lon, far_lat), heading_deg).
-    The 'threshold' is the first geoPoint and 'far end' is the last one.
-    Heading is computed from threshold → far end.
+
+    The 'threshold' is the APPROACH end — aircraft land here, flying in the
+    direction of *heading_deg*.  The 'far end' is opposite.
+
+    OSM geoPoints don't guarantee which end comes first, so we use the runway
+    ref tag (e.g. "10R/28L") to orient correctly.  The ref encodes two
+    designators: the first matches the heading from geoPoint[0]→geoPoint[-1].
+    We pick the designator with the HIGHER number as the active arrival
+    direction (standard for prevailing-wind operations at most airports).
+    If the higher designator corresponds to the reverse direction, we swap
+    the endpoints.
     """
     pts = runway["geoPoints"]
-    t_lat, t_lon = pts[0]["latitude"], pts[0]["longitude"]
-    f_lat, f_lon = pts[-1]["latitude"], pts[-1]["longitude"]
-    heading = _calculate_heading((t_lat, t_lon), (f_lat, f_lon))
-    return (t_lon, t_lat), (f_lon, f_lat), heading
+    p0_lat, p0_lon = pts[0]["latitude"], pts[0]["longitude"]
+    pN_lat, pN_lon = pts[-1]["latitude"], pts[-1]["longitude"]
+    raw_heading = _calculate_heading((p0_lat, p0_lon), (pN_lat, pN_lon))
+
+    # Parse ref to decide orientation: "10R/28L" → [10, 28]
+    ref = runway.get("ref") or runway.get("name", "")
+    import re as _re
+    designators = [int(m) for m in _re.findall(r'\d+', ref)]
+
+    need_swap = False
+    if len(designators) >= 2:
+        # The first designator matches raw_heading (first→last geoPoint)
+        # The second designator matches the reciprocal
+        first_des, second_des = designators[0], designators[1]
+        # Use the higher-numbered designator as the active arrival direction
+        # (prevailing westerly winds → higher number in US/Europe)
+        if second_des > first_des:
+            # The active arrival matches the SECOND designator = reciprocal
+            # Swap so threshold = last geoPoint, heading = reciprocal
+            need_swap = True
+
+    if need_swap:
+        heading = (raw_heading + 180) % 360
+        return (pN_lon, pN_lat), (p0_lon, p0_lat), heading
+    else:
+        return (p0_lon, p0_lat), (pN_lon, pN_lat), raw_heading
 
 
 def _get_runway_threshold() -> Optional[tuple]:
@@ -1544,13 +1575,22 @@ def _get_arrival_runway_name() -> str:
     """Get the arrival runway name from OSM ref tag or fall back to '28R'.
 
     Derives the runway name dynamically from OSM data instead of hardcoding.
+    Uses the same orientation logic as _osm_runway_endpoints: the active
+    arrival is the HIGHER-numbered designator (prevailing wind direction).
     """
     rwy = _get_osm_primary_runway()
     if rwy:
         ref = rwy.get("ref") or rwy.get("name", "")
         if ref:
-            # OSM ref is like "10R/28L" — pick the first designator
-            return ref.split("/")[0].strip()
+            import re as _re
+            parts = [p.strip() for p in ref.split("/")]
+            designators = [int(m) for m in _re.findall(r'\d+', ref)]
+            if len(parts) >= 2 and len(designators) >= 2:
+                # Pick the designator with the higher number
+                if designators[1] > designators[0]:
+                    return parts[1]
+                return parts[0]
+            return parts[0]
     return "28R"
 
 
@@ -1948,6 +1988,27 @@ def _get_runway_state(runway: str) -> RunwayState:
     return _runway_states[runway]
 
 
+def _get_reciprocal_designator(runway: str) -> Optional[str]:
+    """Get the reciprocal designator for a runway (e.g. '28L' ↔ '10R').
+
+    Runway designators are heading/10 rounded. The reciprocal is +18 (mod 36).
+    L↔R suffix swaps; C stays C.
+    Returns None if the designator cannot be parsed.
+    """
+    import re as _re
+    m = _re.match(r'^(\d{1,2})([LRC]?)$', runway.strip())
+    if not m:
+        return None
+    num = int(m.group(1))
+    suffix = m.group(2)
+    recip_num = (num + 18) % 36
+    if recip_num == 0:
+        recip_num = 36
+    suffix_map = {'L': 'R', 'R': 'L', 'C': 'C', '': ''}
+    recip_suffix = suffix_map.get(suffix, '')
+    return f"{recip_num:02d}{recip_suffix}" if recip_num >= 10 else f"{recip_num}{recip_suffix}"
+
+
 def _get_departure_runway_name() -> str:
     """Select the departure runway dynamically from OSM data.
 
@@ -2142,13 +2203,22 @@ def _check_approach_separation(state: FlightState) -> bool:
     return True
 
 def _is_runway_clear(runway: str = "") -> bool:
-    """Check if runway is clear for landing or takeoff."""
+    """Check if runway is clear for landing or takeoff.
+
+    Checks BOTH the given designator AND its reciprocal (e.g. '28L' and '10R')
+    because they are the same physical runway.
+    """
     if not runway:
         runway = _get_arrival_runway_name()
-    return _get_runway_state(runway).occupied_by is None
+    if _get_runway_state(runway).occupied_by is not None:
+        return False
+    recip = _get_reciprocal_designator(runway)
+    if recip and recip in _runway_states and _runway_states[recip].occupied_by is not None:
+        return False
+    return True
 
 def _occupy_runway(icao24: str, runway: str = ""):
-    """Mark runway as occupied by aircraft."""
+    """Mark runway as occupied by aircraft (both designators for same physical runway)."""
     if not runway:
         runway = _get_arrival_runway_name()
     rs = _get_runway_state(runway)
@@ -2158,6 +2228,10 @@ def _occupy_runway(icao24: str, runway: str = ""):
             runway=runway, occupant=rs.occupied_by, requester=icao24,
         )
     rs.occupied_by = icao24
+    # Also mark reciprocal designator (same physical runway)
+    recip = _get_reciprocal_designator(runway)
+    if recip:
+        _get_runway_state(recip).occupied_by = icao24
 
 def _release_runway(icao24: str, runway: str = "", aircraft_type: str = ""):
     """Release runway when aircraft clears. Stores wake category for departure separation."""
@@ -2170,6 +2244,16 @@ def _release_runway(icao24: str, runway: str = "", aircraft_type: str = ""):
         if aircraft_type:
             rs.last_departure_type = _get_wake_category(aircraft_type)
             rs.last_departure_time = time.time()
+    # Also release reciprocal designator (same physical runway)
+    recip = _get_reciprocal_designator(runway)
+    if recip and recip in _runway_states:
+        rrs = _runway_states[recip]
+        if rrs.occupied_by == icao24:
+            rrs.occupied_by = None
+            rrs.last_arrival_time = time.time()
+            if aircraft_type:
+                rrs.last_departure_type = _get_wake_category(aircraft_type)
+                rrs.last_departure_time = time.time()
 
 def _find_available_gate() -> Optional[str]:
     """Find a random available gate, preferring terminal gates over remote stands.
@@ -3336,11 +3420,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if target_ga_speed > state.velocity:
                 state.velocity = min(target_ga_speed, state.velocity + 10)
 
-            # Maintain runway heading (fly FORWARD, not backward to waypoint 0)
-            rwy_hdg = _get_runway_heading()
-            if rwy_hdg is not None:
-                state.heading = rwy_hdg
-            # else: keep current heading — still forward
+            # Keep current heading — the aircraft is already pointing in the
+            # correct approach direction from _smooth_heading during APPROACHING.
+            # Don't override with _get_runway_heading() which depends on OSM
+            # geoPoint ordering and could be 180° off.
 
             # Transition to ENROUTE which has holding pattern + re-approach logic
             emit_phase_transition(

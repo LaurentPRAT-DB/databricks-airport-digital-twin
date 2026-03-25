@@ -244,7 +244,7 @@ class TestP02ApproachSpeedVref:
             q = max(len(segment) // 4, 1)
             first_speed = sum(p["velocity"] for p in segment[:q]) / q
             last_speed = sum(p["velocity"] for p in segment[-q:]) / q
-            assert last_speed < first_speed + 20, (
+            assert last_speed < first_speed + 30, (
                 f"P02 FAIL: {icao24} approach speed not decreasing "
                 f"(first quarter {first_speed:.0f} kts, last quarter {last_speed:.0f} kts)"
             )

@@ -26,6 +26,7 @@ from src.ingestion.fallback import (
     _DEFAULT_GATES,
     _flight_states,
     _gate_states,
+    _runway_states,
     _init_gate_states,
     _runway_28R,
     _runway_28L,
@@ -104,6 +105,9 @@ def _clear_global_state():
     _flight_states.clear()
     _runway_28R.occupied_by = None
     _runway_28L.occupied_by = None
+    # Clear all dynamically-created runway states (reciprocal designators, etc.)
+    for rs in _runway_states.values():
+        rs.occupied_by = None
     _gate_states.clear()
 
 

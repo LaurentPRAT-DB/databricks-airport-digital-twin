@@ -843,16 +843,14 @@ class SimulationEngine:
                     if (old_phase == FlightPhase.APPROACHING
                             and new_phase == FlightPhase.LANDING
                             and random.random() < self.capacity.go_around_probability()):
-                        from src.ingestion.fallback import _release_runway, VREF_SPEEDS, _get_runway_heading
+                        from src.ingestion.fallback import _release_runway, VREF_SPEEDS
                         _release_runway(icao24, "28R")
                         # Transition to ENROUTE (not APPROACHING wp 0) so the
-                        # aircraft flies FORWARD on runway heading, climbs, then
+                        # aircraft flies FORWARD on current heading, climbs, then
                         # re-sequences via the holding pattern logic.
+                        # Keep current heading — already correct from approach.
                         new_state.phase = FlightPhase.ENROUTE
                         new_state.waypoint_index = 0
-                        rwy_hdg = _get_runway_heading()
-                        if rwy_hdg is not None:
-                            new_state.heading = rwy_hdg
                         new_state.go_around_target_alt = max(1500.0, new_state.altitude + 300)
                         vref_ga = VREF_SPEEDS.get(new_state.aircraft_type, 137)
                         new_state.velocity = min(new_state.velocity + 10, vref_ga + 20)
@@ -958,16 +956,13 @@ class SimulationEngine:
             self._phase_time[icao24] = ("taxi_to_runway", 0.0)
 
         elif state.phase == FlightPhase.APPROACHING:
-            from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway, VREF_SPEEDS, _get_runway_heading
+            from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway, VREF_SPEEDS
             if _is_runway_clear("28R"):
                 # Apply go-around check (same as normal transition)
                 if random.random() < self.capacity.go_around_probability():
-                    # Transition to ENROUTE so aircraft flies FORWARD, not backward
+                    # Transition to ENROUTE; keep current heading (correct from approach)
                     state.phase = FlightPhase.ENROUTE
                     state.waypoint_index = 0
-                    rwy_hdg = _get_runway_heading()
-                    if rwy_hdg is not None:
-                        state.heading = rwy_hdg
                     state.go_around_target_alt = max(1500.0, state.altitude + 300)
                     vref_ga = VREF_SPEEDS.get(state.aircraft_type, 137)
                     state.velocity = min(state.velocity + 10, vref_ga + 20)
@@ -990,9 +985,6 @@ class SimulationEngine:
                     if state.altitude > 800:
                         state.phase = FlightPhase.ENROUTE
                         state.waypoint_index = 0
-                        rwy_hdg = _get_runway_heading()
-                        if rwy_hdg is not None:
-                            state.heading = rwy_hdg
                         state.go_around_target_alt = max(1500.0, state.altitude + 300)
                         state.vertical_rate = 1500
                         state.go_around_count += 1
