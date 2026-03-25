@@ -148,13 +148,17 @@ def parse_summary_from_stdout(stdout: str) -> dict:
         "Departures": "departures",
         "On-time": "on_time_pct",
         "Cancellation rate": "cancellation_rate_pct",
+        "Schedule delay (avg)": "schedule_delay_min",
         "Capacity hold (avg)": "avg_capacity_hold_min",
         "Capacity hold (max)": "max_capacity_hold_min",
+        "Avg turnaround": "avg_turnaround_min",
         "Peak simultaneous": "peak_simultaneous_flights",
         "Gates used": "gate_utilization_gates_used",
         "Position snapshots": "total_position_snapshots",
         "Go-arounds": "total_go_arounds",
         "Diversions": "total_diversions",
+        "Holdings": "total_holdings",
+        "Cancellations": "total_cancellations",
         "Spawned": "spawned_count",
         "Scenario": "scenario_name",
     }
@@ -225,20 +229,36 @@ if os.path.isfile(local_output):
         peak_simultaneous_flights = {summary.get('peak_simultaneous_flights', 0)},
         total_go_arounds = {summary.get('total_go_arounds', 0)},
         total_diversions = {summary.get('total_diversions', 0)},
+        avg_turnaround_min = {summary.get('avg_turnaround_min', 0)},
+        schedule_delay_min = {summary.get('schedule_delay_min', 0)},
+        avg_capacity_hold_min = {summary.get('avg_capacity_hold_min', 0)},
+        max_capacity_hold_min = {summary.get('max_capacity_hold_min', 0)},
+        gate_utilization_gates_used = {summary.get('gate_utilization_gates_used', 0)},
+        total_holdings = {summary.get('total_holdings', 0)},
+        total_cancellations = {summary.get('total_cancellations', 0)},
         size_bytes = {size_bytes},
         created_at = CURRENT_TIMESTAMP(),
         volume_path = '{volume_output}'
     WHEN NOT MATCHED THEN INSERT (
         filename, airport, scenario_name, total_flights, arrivals, departures,
         duration_hours, on_time_pct, cancellation_rate_pct, peak_simultaneous_flights,
-        total_go_arounds, total_diversions, size_bytes, created_at, volume_path
+        total_go_arounds, total_diversions,
+        avg_turnaround_min, schedule_delay_min, avg_capacity_hold_min,
+        max_capacity_hold_min, gate_utilization_gates_used,
+        total_holdings, total_cancellations,
+        size_bytes, created_at, volume_path
     ) VALUES (
         '{fname}', '{airport}', '{scenario_name}',
         {summary.get('total_flights', 0)}, {summary.get('arrivals', 0)},
         {summary.get('departures', 0)}, {config.get('duration_hours', 0)},
         {summary.get('on_time_pct', 0)}, {summary.get('cancellation_rate_pct', 0)},
         {summary.get('peak_simultaneous_flights', 0)}, {summary.get('total_go_arounds', 0)},
-        {summary.get('total_diversions', 0)}, {size_bytes}, CURRENT_TIMESTAMP(), '{volume_output}'
+        {summary.get('total_diversions', 0)},
+        {summary.get('avg_turnaround_min', 0)}, {summary.get('schedule_delay_min', 0)},
+        {summary.get('avg_capacity_hold_min', 0)}, {summary.get('max_capacity_hold_min', 0)},
+        {summary.get('gate_utilization_gates_used', 0)},
+        {summary.get('total_holdings', 0)}, {summary.get('total_cancellations', 0)},
+        {size_bytes}, CURRENT_TIMESTAMP(), '{volume_output}'
     )
     """
     spark.sql(merge_sql)

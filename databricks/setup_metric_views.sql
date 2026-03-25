@@ -85,6 +85,27 @@ measures:
     comment: "Peak concurrent flights"
   - name: Arrival Departure Ratio
     expr: ROUND(SUM(arrivals) * 1.0 / NULLIF(SUM(departures), 0), 2)
+  - name: Avg Turnaround Time
+    expr: ROUND(AVG(avg_turnaround_min), 1)
+    comment: "Average turnaround time in minutes"
+  - name: Avg Schedule Delay
+    expr: ROUND(AVG(schedule_delay_min), 1)
+    comment: "Average schedule delay in minutes"
+  - name: Avg Capacity Hold
+    expr: ROUND(AVG(avg_capacity_hold_min), 1)
+    comment: "Average capacity hold delay in minutes"
+  - name: Max Capacity Hold
+    expr: ROUND(MAX(max_capacity_hold_min), 1)
+    comment: "Maximum capacity hold delay in minutes"
+  - name: Avg Gates Used
+    expr: ROUND(AVG(gate_utilization_gates_used), 0)
+    comment: "Average number of gates used"
+  - name: Total Holdings
+    expr: SUM(total_holdings)
+    comment: "Total holding patterns"
+  - name: Total Cancellations
+    expr: SUM(total_cancellations)
+    comment: "Total flight cancellations"
 $$;
 
 -- 2b. Airside Efficiency KPIs (source: flight_phase_durations)
