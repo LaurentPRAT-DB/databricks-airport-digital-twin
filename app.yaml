@@ -6,12 +6,12 @@ command:
   - "--port"
   - "8000"
   - "--log-level"
-  - "debug"
+  - "info"
 
 env:
-  # Debug mode — set to "false" to disable verbose logging
+  # Debug mode — set to "true" only for local troubleshooting
   - name: DEBUG_MODE
-    value: "true"
+    value: "false"
 
   # Demo mode configuration
   - name: DEMO_MODE

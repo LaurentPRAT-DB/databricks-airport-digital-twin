@@ -2256,15 +2256,17 @@ def _check_taxi_separation(state: FlightState) -> bool:
 
 
 def _taxi_speed_factor(state: FlightState) -> float:
-    """Compute taxi speed factor (0.0-1.0) based on traffic ahead.
+    """Compute taxi speed factor based on traffic ahead and head-on conflicts.
 
     Returns:
         1.0 = clear, full speed
         0.3-0.9 = traffic ahead, reduce speed proportionally
-        0.0 = must stop (too close)
+        0.0 = must stop (too close to traffic ahead)
+       -1.0 = head-on hold (must yield to oncoming traffic, no creep)
 
-    Only considers aircraft AHEAD (within ±90° of heading).
-    Arriving aircraft get tighter separation (ATC inbound priority).
+    Checks both same-direction traffic (ahead) and head-on conflicts.
+    Head-on priority: arrivals (TAXI_TO_GATE) have right of way over
+    departures (TAXI_TO_RUNWAY). Same-phase ties broken by icao24.
     """
     if not state.on_ground:
         return 1.0
@@ -2282,8 +2284,11 @@ def _taxi_speed_factor(state: FlightState) -> float:
     )
     # Graduated zone: 2x separation threshold — slow down before stopping
     slow_zone = sep_threshold * 2.0
+    # Head-on detection zone: 3x separation (detect earlier for smooth stop)
+    head_on_zone = sep_threshold * 3.0
 
     min_factor = 1.0
+    head_on_hold = False
 
     for icao24, other in _flight_states.items():
         if icao24 == state.icao24:
@@ -2297,18 +2302,40 @@ def _taxi_speed_factor(state: FlightState) -> float:
             (state.latitude, state.longitude),
             (other.latitude, other.longitude)
         )
+
+        # Head-on conflict detection (wider zone)
+        if dist < head_on_zone and other.phase in (
+            FlightPhase.TAXI_TO_GATE, FlightPhase.TAXI_TO_RUNWAY,
+            FlightPhase.PUSHBACK,
+        ):
+            # Check if headings are roughly opposite (>120° difference)
+            heading_diff = abs(((state.heading - other.heading + 180) % 360) - 180)
+            if heading_diff > 120:
+                # Determine priority: arrival > departure; else lower icao24 wins
+                state_priority = 1 if state.phase == FlightPhase.TAXI_TO_GATE else 0
+                other_priority = 1 if other.phase == FlightPhase.TAXI_TO_GATE else 0
+                if state_priority != other_priority:
+                    must_yield = state_priority < other_priority
+                else:
+                    must_yield = state.icao24 > other.icao24
+                if must_yield:
+                    head_on_hold = True
+
         if dist < slow_zone:
-            # Only consider aircraft AHEAD of us
+            # Consider aircraft AHEAD of us (same direction or approaching)
             dlat = other.latitude - state.latitude
             dlon = other.longitude - state.longitude
             dot = dlon * fwd_x + dlat * fwd_y
             if dot > 0:
                 if dist < sep_threshold:
-                    return 0.0  # Full stop
+                    return -1.0 if head_on_hold else 0.0
                 # Graduated: linearly reduce from 1.0 at slow_zone to 0.3 at sep_threshold
                 ratio = (dist - sep_threshold) / (slow_zone - sep_threshold)
                 factor = 0.3 + 0.7 * ratio
                 min_factor = min(min_factor, factor)
+
+    if head_on_hold:
+        return -1.0
 
     return min_factor
 
@@ -2337,15 +2364,24 @@ def _shortest_angle_diff(from_deg: float, to_deg: float) -> float:
 
 
 def _calculate_heading(from_pos: tuple, to_pos: tuple) -> float:
-    """Calculate heading from one position to another."""
+    """Calculate heading (bearing) from one position to another.
+
+    Uses latitude-corrected longitude to account for Mercator distortion.
+    Without this correction, headings are skewed at higher latitudes
+    because 1° of longitude is shorter than 1° of latitude.
+    """
     lat1, lon1 = from_pos
     lat2, lon2 = to_pos
 
-    dlon = lon2 - lon1
     dlat = lat2 - lat1
+    dlon = lon2 - lon1
 
-    # Calculate bearing
-    angle = math.atan2(dlon, dlat)
+    # Scale longitude by cos(latitude) to convert to approximate meters
+    avg_lat = math.radians((lat1 + lat2) / 2)
+    dlon_corrected = dlon * math.cos(avg_lat)
+
+    # Calculate bearing (clockwise from north)
+    angle = math.atan2(dlon_corrected, dlat)
     heading = math.degrees(angle)
 
     # Normalize to 0-360
@@ -3282,25 +3318,42 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         approach_wps = _get_approach_waypoints(state.origin_airport)
 
         # Helper: execute go-around (missed approach procedure)
+        # Transitions to ENROUTE so the aircraft flies FORWARD (on runway heading),
+        # climbs to missed approach altitude, then re-sequences via the holding
+        # pattern / approach capacity logic — instead of flying backward to wp 0.
         def _execute_go_around(reason: str = "runway_busy") -> None:
-            state.waypoint_index = 0
-            # Missed approach: set positive climb rate and let altitude increase
-            # gradually over subsequent ticks (no instant altitude jump — O05 fix).
-            # Target: 1500ft AGL; climb at 1500 ft/min via vertical_rate.
-            state.go_around_target_alt = max(1500.0, state.altitude + 300)
-            # Missed approach speed: gradual acceleration to Vref + 20 kts
-            # (avoid instant speed jump visible in recorded snapshots)
-            vref_ga = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
-            target_ga_speed = vref_ga + 20
-            # Accelerate smoothly — max 5 kts/s for 2s tick = 10 kts
-            if target_ga_speed > state.velocity:
-                state.velocity = min(target_ga_speed, state.velocity + 10)
-            state.vertical_rate = 1500
             state.go_around_count += 1
             state.holding_phase_time = 0.0
             state.holding_inbound = True
+
+            # Missed approach: climb to 1500ft AGL minimum
+            state.go_around_target_alt = max(1500.0, state.altitude + 300)
+            state.vertical_rate = 1500
+
+            # Missed approach speed: gradual acceleration to Vref + 20 kts
+            vref_ga = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
+            target_ga_speed = vref_ga + 20
+            if target_ga_speed > state.velocity:
+                state.velocity = min(target_ga_speed, state.velocity + 10)
+
+            # Maintain runway heading (fly FORWARD, not backward to waypoint 0)
+            rwy_hdg = _get_runway_heading()
+            if rwy_hdg is not None:
+                state.heading = rwy_hdg
+            # else: keep current heading — still forward
+
+            # Transition to ENROUTE which has holding pattern + re-approach logic
+            emit_phase_transition(
+                state.icao24, state.callsign,
+                FlightPhase.APPROACHING.value, FlightPhase.ENROUTE.value,
+                state.latitude, state.longitude, state.altitude,
+                state.aircraft_type, state.assigned_gate,
+            )
+            _set_phase(state, FlightPhase.ENROUTE)
+            state.waypoint_index = 0
+
             logger.info(
-                "GO-AROUND #%d %s (%s): %s at %.0fft",
+                "GO-AROUND #%d %s (%s): %s at %.0fft → ENROUTE for re-sequence",
                 state.go_around_count, state.callsign, state.aircraft_type,
                 reason, state.altitude,
             )
@@ -3347,7 +3400,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 # visible speed jumps in 30s snapshot intervals (A05 fix).
                 vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
                 raw_speed = min(prof_spd * speed_slow, MAX_SPEED_BELOW_FL100_KTS)
-                if state.altitude < 2000 or progress > 0.85:
+                if state.altitude < 1000:
+                    # Below 1000ft: hard ceiling at Vref + 30 (stabilized approach)
+                    # This also handles post-go-around re-entry at low altitude
+                    target_speed = min(vref + 30, max(vref, raw_speed))
+                elif state.altitude < 2000 or progress > 0.85:
                     target_speed = max(vref, raw_speed)
                 else:
                     target_speed = max(vref * 0.9, raw_speed)
@@ -3380,8 +3437,16 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     # Floor at 25 ft/s (~1500 fpm) to maintain approach separation.
                     state.go_around_target_alt = 0.0
                     descent_fps = max(25.0, min(30.0, abs(prof_vr) / 60.0)) if prof_vr else 25.0
-                    state.altitude = max(0.0, _interpolate_altitude(state.altitude, min(prof_alt, target_alt), descent_fps * dt))
-                    state.vertical_rate = prof_vr
+                    effective_target = min(prof_alt, target_alt)
+                    prev_alt = state.altitude
+                    state.altitude = max(0.0, _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
+                    # Set vertical_rate to match actual altitude direction (O05 fix):
+                    # after go-around, waypoint target may be higher than current alt,
+                    # causing a climb. Report positive vrate so snapshots are consistent.
+                    if state.altitude > prev_alt:
+                        state.vertical_rate = abs(prof_vr) if prof_vr else 1500
+                    else:
+                        state.vertical_rate = prof_vr
 
                 # P1: Decision height-based approach→landing transition
                 # Transition when altitude at or below Cat I ILS decision height
@@ -3570,6 +3635,14 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
                 state.latitude, state.longitude = new_pos
                 state.velocity = taxi_speed
+            elif speed_factor < 0:
+                # Head-on hold: yielding to oncoming traffic — jitter in place,
+                # do NOT creep toward waypoint (would pass through oncoming aircraft)
+                state.velocity = 0
+                speed_deg = 0
+                jitter = random.uniform(-0.00002, 0.00002)
+                state.latitude += jitter
+                state.longitude += jitter
             else:
                 # Slow creep (2kt) to avoid frozen-marker appearance on the map.
                 # Real aircraft don't perfectly hold position — they inch forward.
@@ -3795,6 +3868,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
                 state.latitude, state.longitude = new_pos
                 state.velocity = taxi_speed
+            elif speed_factor < 0:
+                # Head-on hold: yielding to oncoming traffic — jitter in place
+                state.velocity = 0
+                jitter = random.uniform(-0.00002, 0.00002)
+                state.latitude += jitter
+                state.longitude += jitter
+                speed_deg = 0
             else:
                 # Slow creep (2kt) to avoid frozen-marker appearance on the map.
                 creep_speed = 2.0
@@ -4087,6 +4167,21 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
         if state.origin_airport and not state.destination_airport:
             # ARRIVING enroute: heading toward airport, transition to approach when close
+
+            # Go-around climb: if aircraft just executed a missed approach,
+            # climb to target altitude before resuming normal enroute behavior.
+            if state.go_around_target_alt > 0 and state.altitude < state.go_around_target_alt:
+                climb_fps = 25.0  # ~1500 ft/min
+                state.altitude = min(state.go_around_target_alt, state.altitude + climb_fps * dt)
+                state.vertical_rate = 1500
+                # Continue flying forward on current heading during climb
+                speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+                state.latitude += math.cos(math.radians(state.heading)) * speed_deg
+                state.longitude += math.sin(math.radians(state.heading)) * speed_deg / max(0.01, math.cos(math.radians(state.latitude)))
+                if state.altitude >= state.go_around_target_alt:
+                    state.go_around_target_alt = 0.0
+                return state
+
             target_heading = _calculate_heading(
                 (state.latitude, state.longitude), center
             )

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -355,12 +355,25 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS middleware
+# Configure CORS middleware — restrict to known origins
+_CORS_ORIGINS = [
+    # Databricks App production URL
+    "https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.com",
+    # Local development
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:8000",
+]
+# Allow override via environment variable (comma-separated)
+_extra_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+if _extra_origins:
+    _CORS_ORIGINS.extend(o.strip() for o in _extra_origins.split(",") if o.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -401,6 +414,9 @@ async def readiness():
     }
 
 
+_DEBUG_MODE_ENABLED = os.environ.get("DEBUG_MODE", "false").lower() == "true"
+
+
 @app.get("/api/logs")
 async def get_logs(
     n: int = 200,
@@ -410,12 +426,11 @@ async def get_logs(
 ):
     """Return recent application log lines from the in-memory ring buffer.
 
-    Query params:
-        n: Number of most recent lines to return (default 200, max 2000)
-        level: Filter by log level (e.g. ERROR, WARNING, INFO)
-        search: Case-insensitive substring search
-        format: "json" (default) or "text" for plain-text output
+    Only available when DEBUG_MODE=true.
     """
+    if not _DEBUG_MODE_ENABLED:
+        raise HTTPException(status_code=403, detail="Debug endpoints are disabled in production")
+
     from fastapi.responses import PlainTextResponse
 
     n = min(n, 2000)
@@ -471,7 +486,10 @@ async def get_demo_config():
 
 @app.get("/api/debug/paths")
 async def debug_paths():
-    """Debug endpoint to check file paths in production."""
+    """Debug endpoint to check file paths. Only available when DEBUG_MODE=true."""
+    if not _DEBUG_MODE_ENABLED:
+        raise HTTPException(status_code=403, detail="Debug endpoints are disabled in production")
+
     models_dir = FRONTEND_DIST / "models"
     models_aircraft_dir = models_dir / "aircraft"
 

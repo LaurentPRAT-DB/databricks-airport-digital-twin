@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 import traceback
 from collections import deque
 from datetime import datetime, timezone
@@ -17,6 +18,21 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
+
+_ICAO_RE = re.compile(r"^[A-Z0-9]{3,4}$")
+
+
+def _validate_icao(icao_code: str) -> str:
+    """Validate ICAO code at the API boundary. Returns 400 on invalid input."""
+    if not icao_code or not isinstance(icao_code, str):
+        raise HTTPException(status_code=400, detail=f"Invalid ICAO code: {icao_code!r}")
+    code = icao_code.strip().upper()
+    if not _ICAO_RE.match(code):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid ICAO code: {icao_code!r} — must be 3-4 uppercase alphanumeric characters",
+        )
+    return code
 
 
 # ── In-memory ring-buffer log handler for /api/debug/logs ──
@@ -770,6 +786,7 @@ async def import_osm(
     Returns:
         Import result with element counts and warnings
     """
+    icao_code = _validate_icao(icao_code)
     service = get_airport_config_service()
 
     try:
@@ -947,6 +964,7 @@ async def get_airport(icao_code: str) -> dict:
     Returns:
         Airport configuration with source info
     """
+    icao_code = _validate_icao(icao_code)
     service = get_airport_config_service()
 
     loaded = service.initialize_from_lakehouse(
@@ -985,6 +1003,7 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
     Returns:
         202 Accepted with {"status": "activating", "icaoCode": icao_code}
     """
+    icao_code = _validate_icao(icao_code)
     from app.backend.api.websocket import broadcaster
 
     # Serialize concurrent activations (prevents global state corruption from multiple tabs)
@@ -1381,6 +1400,7 @@ async def delete_airport(icao_code: str) -> dict:
     Returns:
         Success confirmation
     """
+    icao_code = _validate_icao(icao_code)
     service = get_airport_config_service()
 
     if service.delete_persisted_airport(icao_code):
@@ -1552,9 +1572,11 @@ async def get_debug_logs(
 ) -> dict:
     """Return recent log lines matching a pattern.
 
-    Hit /api/debug/logs after an airport switch to see tier timings
-    and failure reasons. Default filter is [DIAG] lines.
+    Only available when DEBUG_MODE=true.
     """
+    if os.environ.get("DEBUG_MODE", "false").lower() != "true":
+        raise HTTPException(status_code=403, detail="Debug endpoints are disabled in production")
+
     lines = _ring_handler.get_lines(pattern if pattern else None)
     return {
         "pattern": pattern,

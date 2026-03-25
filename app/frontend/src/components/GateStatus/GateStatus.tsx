@@ -26,10 +26,10 @@ const congestionColors: Record<string, { bg: string; text: string; border: strin
 };
 
 const gateStatusColors: Record<GateStatusLabel, { bg: string; text: string; hover: string }> = {
-  'ON STAND': { bg: 'bg-red-100', text: 'text-red-700', hover: 'hover:bg-red-200' },
-  'TAXI IN': { bg: 'bg-amber-100', text: 'text-amber-700', hover: 'hover:bg-amber-200' },
-  'INBOUND': { bg: 'bg-amber-100', text: 'text-amber-700', hover: 'hover:bg-amber-200' },
-  'VACANT': { bg: 'bg-green-100', text: 'text-green-700', hover: 'hover:bg-green-200' },
+  'ON STAND': { bg: 'bg-red-200 dark:bg-red-500/40', text: 'text-red-800 dark:text-red-200', hover: 'hover:bg-red-300 dark:hover:bg-red-500/60' },
+  'TAXI IN': { bg: 'bg-amber-200 dark:bg-amber-500/40', text: 'text-amber-800 dark:text-amber-200', hover: 'hover:bg-amber-300 dark:hover:bg-amber-500/60' },
+  'INBOUND': { bg: 'bg-amber-200 dark:bg-amber-500/40', text: 'text-amber-800 dark:text-amber-200', hover: 'hover:bg-amber-300 dark:hover:bg-amber-500/60' },
+  'VACANT': { bg: 'bg-green-100 dark:bg-slate-700/60', text: 'text-green-700 dark:text-slate-400', hover: 'hover:bg-green-200 dark:hover:bg-slate-600' },
 };
 
 const statusBadgeColors: Record<GateStatusLabel, string> = {

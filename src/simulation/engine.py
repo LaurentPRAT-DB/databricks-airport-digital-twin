@@ -843,23 +843,37 @@ class SimulationEngine:
                     if (old_phase == FlightPhase.APPROACHING
                             and new_phase == FlightPhase.LANDING
                             and random.random() < self.capacity.go_around_probability()):
-                        from src.ingestion.fallback import _release_runway
+                        from src.ingestion.fallback import _release_runway, VREF_SPEEDS, _get_runway_heading
                         _release_runway(icao24, "28R")
-                        new_state.phase = FlightPhase.APPROACHING
+                        # Transition to ENROUTE (not APPROACHING wp 0) so the
+                        # aircraft flies FORWARD on runway heading, climbs, then
+                        # re-sequences via the holding pattern logic.
+                        new_state.phase = FlightPhase.ENROUTE
                         new_state.waypoint_index = 0
-                        new_state.altitude = 2000
-                        new_state.velocity = 200
+                        rwy_hdg = _get_runway_heading()
+                        if rwy_hdg is not None:
+                            new_state.heading = rwy_hdg
+                        new_state.go_around_target_alt = max(1500.0, new_state.altitude + 300)
+                        vref_ga = VREF_SPEEDS.get(new_state.aircraft_type, 137)
+                        new_state.velocity = min(new_state.velocity + 10, vref_ga + 20)
                         new_state.vertical_rate = 1500
                         new_state.go_around_count += 1
                         new_state.holding_phase_time = 0.0
                         new_state.holding_inbound = True
+                        self.recorder.record_phase_transition(
+                            self.sim_time, icao24, state.callsign,
+                            "approaching", "enroute",
+                            new_state.latitude, new_state.longitude,
+                            new_state.altitude, new_state.aircraft_type,
+                            new_state.assigned_gate,
+                        )
                         self.recorder.record_scenario_event(
                             self.sim_time, "go_around",
                             f"{state.callsign} go-around #{new_state.go_around_count} ({self.capacity.current_category})",
                             {"callsign": state.callsign, "icao24": icao24,
                              "attempt": new_state.go_around_count, "weather": self.capacity.current_category},
                         )
-                        if new_state.go_around_count >= 2:
+                        if new_state.go_around_count >= 3:
                             self._divert_flight(icao24, new_state)
 
             # Divert airborne flights if all runways closed
@@ -944,13 +958,19 @@ class SimulationEngine:
             self._phase_time[icao24] = ("taxi_to_runway", 0.0)
 
         elif state.phase == FlightPhase.APPROACHING:
-            from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway
+            from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway, VREF_SPEEDS, _get_runway_heading
             if _is_runway_clear("28R"):
                 # Apply go-around check (same as normal transition)
                 if random.random() < self.capacity.go_around_probability():
+                    # Transition to ENROUTE so aircraft flies FORWARD, not backward
+                    state.phase = FlightPhase.ENROUTE
                     state.waypoint_index = 0
-                    state.altitude = 2000
-                    state.velocity = 200
+                    rwy_hdg = _get_runway_heading()
+                    if rwy_hdg is not None:
+                        state.heading = rwy_hdg
+                    state.go_around_target_alt = max(1500.0, state.altitude + 300)
+                    vref_ga = VREF_SPEEDS.get(state.aircraft_type, 137)
+                    state.velocity = min(state.velocity + 10, vref_ga + 20)
                     state.vertical_rate = 1500
                     state.go_around_count += 1
                     state.holding_phase_time = 0.0
@@ -961,14 +981,31 @@ class SimulationEngine:
                         {"callsign": state.callsign, "icao24": icao24,
                          "attempt": state.go_around_count, "weather": self.capacity.current_category},
                     )
-                    if state.go_around_count >= 2:
+                    if state.go_around_count >= 3:
                         self._divert_flight(icao24, state)
-                    self._phase_time[icao24] = ("approaching", 0.0)
+                    self._phase_time[icao24] = ("enroute", 0.0)
                 else:
-                    state.phase = FlightPhase.LANDING
-                    state.waypoint_index = 0
-                    _occupy_runway(icao24, "28R")
-                    self._phase_time[icao24] = ("landing", 0.0)
+                    # Only transition to landing if altitude is reasonable (<800ft)
+                    # Otherwise execute go-around to avoid high-altitude landing (A09 fix)
+                    if state.altitude > 800:
+                        state.phase = FlightPhase.ENROUTE
+                        state.waypoint_index = 0
+                        rwy_hdg = _get_runway_heading()
+                        if rwy_hdg is not None:
+                            state.heading = rwy_hdg
+                        state.go_around_target_alt = max(1500.0, state.altitude + 300)
+                        state.vertical_rate = 1500
+                        state.go_around_count += 1
+                        state.holding_phase_time = 0.0
+                        state.holding_inbound = True
+                        self._phase_time[icao24] = ("enroute", 0.0)
+                        if state.go_around_count >= 3:
+                            self._divert_flight(icao24, state)
+                    else:
+                        state.phase = FlightPhase.LANDING
+                        state.waypoint_index = 0
+                        _occupy_runway(icao24, "28R")
+                        self._phase_time[icao24] = ("landing", 0.0)
             else:
                 # Runway still blocked — reset timer to check again in 5 min
                 self._phase_time[icao24] = ("approaching", 600.0)

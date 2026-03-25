@@ -715,7 +715,11 @@ class TestFlightDynamics:
         assert len(go_around_events) >= 1, "Go-around event not recorded"
         assert test_state.go_around_count >= 1, "Go-around count not incremented"
         assert test_state.phase == FlightPhase.APPROACHING, "Should stay in APPROACHING after go-around"
-        assert test_state.altitude == 2000, "Should climb to 2000ft after go-around"
+        # Smooth go-around: altitude isn't instantly set — instead, go_around_target_alt
+        # is set and the aircraft climbs gradually over subsequent ticks.
+        assert test_state.go_around_target_alt > test_state.altitude, \
+            "Go-around target alt should be set above current altitude"
+        assert test_state.vertical_rate == 1500, "Should have positive climb rate"
 
         # Clean up
         if "gotest01" in _flight_states:
@@ -796,7 +800,7 @@ class TestFlightDynamics:
         assert gate_state is None or gate_state.occupied_by != "test01"
 
     def test_diversion_after_two_go_arounds(self):
-        """Flight with 2 go-arounds gets diverted."""
+        """Flight with 3 go-arounds gets diverted."""
         from src.simulation.engine import SimulationEngine
         from src.ingestion.fallback import FlightState, FlightPhase, _flight_states, _runway_28R
         from unittest.mock import patch
@@ -810,7 +814,7 @@ class TestFlightDynamics:
         # Set up LIFR weather
         engine.capacity.apply_weather(0.1, 50, 60)
 
-        # Place a test flight with 1 go-around already
+        # Place a test flight with 2 go-arounds already
         _runway_28R.occupied_by = None
         test_state = FlightState(
             icao24="divtest01", callsign="DV101",
@@ -819,7 +823,7 @@ class TestFlightDynamics:
             on_ground=False, phase=FlightPhase.APPROACHING,
             aircraft_type="A320",
         )
-        test_state.go_around_count = 1
+        test_state.go_around_count = 2
         _flight_states["divtest01"] = test_state
 
         # Force go-around (returns small random value)

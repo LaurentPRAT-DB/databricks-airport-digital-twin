@@ -17,6 +17,7 @@ from src.ingestion.fallback import (
     _create_new_flight,
     _distance_between,
     _calculate_heading,
+    _taxi_speed_factor,
     FlightPhase,
     FlightState,
     TAXI_WAYPOINTS_ARRIVAL,
@@ -1212,3 +1213,184 @@ class TestCreateNewFlightGraphIntegration:
                 break
 
         assert reached_takeoff, "Aircraft should reach TAKEOFF via graph route"
+
+
+# ============================================================================
+# Head-On Taxi Conflict Detection
+# ============================================================================
+
+
+class TestHeadOnTaxiConflict:
+    """Validate head-on conflict detection and priority-based yielding.
+
+    When two aircraft taxi toward each other on the same path,
+    the lower-priority aircraft must yield (stop without creeping forward).
+    Priority: arrivals (TAXI_TO_GATE) > departures (TAXI_TO_RUNWAY).
+    """
+
+    def setup_method(self):
+        _clear_global_state()
+
+    def teardown_method(self):
+        _clear_global_state()
+
+    def test_head_on_departure_yields_to_arrival(self):
+        """Departure should yield (factor -1) when facing oncoming arrival."""
+        arrival = _make_state(
+            icao24="arr001",
+            phase=FlightPhase.TAXI_TO_GATE,
+            lat=37.615, lon=-122.370,
+            heading=270.0,  # heading west
+            gate="G1",
+        )
+        departure = _make_state(
+            icao24="dep001",
+            phase=FlightPhase.TAXI_TO_RUNWAY,
+            lat=37.615, lon=-122.371,  # ~100m west of arrival
+            heading=90.0,  # heading east (toward arrival)
+            gate="G2",
+        )
+        _flight_states["arr001"] = arrival
+        _flight_states["dep001"] = departure
+        _init_gate_states()
+
+        factor = _taxi_speed_factor(departure)
+        assert factor < 0, f"Departure should yield (factor<0), got {factor}"
+
+    def test_head_on_arrival_has_priority(self):
+        """Arrival should NOT yield when facing oncoming departure."""
+        arrival = _make_state(
+            icao24="arr001",
+            phase=FlightPhase.TAXI_TO_GATE,
+            lat=37.615, lon=-122.370,
+            heading=270.0,  # heading west
+            gate="G1",
+        )
+        departure = _make_state(
+            icao24="dep001",
+            phase=FlightPhase.TAXI_TO_RUNWAY,
+            lat=37.615, lon=-122.371,  # ~100m west
+            heading=90.0,  # heading east (toward arrival)
+            gate="G2",
+        )
+        _flight_states["arr001"] = arrival
+        _flight_states["dep001"] = departure
+        _init_gate_states()
+
+        factor = _taxi_speed_factor(arrival)
+        # Arrival has priority — should NOT get -1.0
+        # It may slow down (0.0-1.0) due to traffic ahead, but not head-on yield
+        assert factor >= 0, f"Arrival should not yield (factor>=0), got {factor}"
+
+    def test_same_direction_no_head_on(self):
+        """Aircraft heading same direction should not trigger head-on logic."""
+        leader = _make_state(
+            icao24="lead01",
+            phase=FlightPhase.TAXI_TO_GATE,
+            lat=37.615, lon=-122.371,
+            heading=270.0,
+            gate="G1",
+        )
+        follower = _make_state(
+            icao24="fol001",
+            phase=FlightPhase.TAXI_TO_GATE,
+            lat=37.615, lon=-122.370,
+            heading=270.0,
+            gate="G2",
+        )
+        _flight_states["lead01"] = leader
+        _flight_states["fol001"] = follower
+        _init_gate_states()
+
+        factor = _taxi_speed_factor(follower)
+        # Should be a normal slowdown (>=0), not head-on yield (-1)
+        assert factor >= 0, f"Same direction should not trigger head-on, got {factor}"
+
+    def test_head_on_same_phase_tiebreak(self):
+        """When both are same phase, higher icao24 yields."""
+        a1 = _make_state(
+            icao24="aaa001",
+            phase=FlightPhase.TAXI_TO_GATE,
+            lat=37.615, lon=-122.370,
+            heading=270.0,
+            gate="G1",
+        )
+        a2 = _make_state(
+            icao24="zzz001",
+            phase=FlightPhase.TAXI_TO_GATE,
+            lat=37.615, lon=-122.371,
+            heading=90.0,
+            gate="G2",
+        )
+        _flight_states["aaa001"] = a1
+        _flight_states["zzz001"] = a2
+        _init_gate_states()
+
+        # zzz001 has higher icao24 → should yield
+        factor_z = _taxi_speed_factor(a2)
+        assert factor_z < 0, f"Higher icao24 should yield, got {factor_z}"
+
+        # aaa001 has lower icao24 → should NOT yield
+        factor_a = _taxi_speed_factor(a1)
+        assert factor_a >= 0, f"Lower icao24 should not yield, got {factor_a}"
+
+    def test_head_on_hold_prevents_creep(self):
+        """Aircraft yielding to head-on should not advance toward waypoint."""
+        # Set up a departure facing an oncoming arrival
+        arrival = _make_state(
+            icao24="arr001",
+            phase=FlightPhase.TAXI_TO_GATE,
+            lat=37.615, lon=-122.372,
+            heading=270.0,
+            gate="G1",
+            taxi_route=TAXI_WAYPOINTS_ARRIVAL,
+        )
+        departure = _make_state(
+            icao24="dep001",
+            phase=FlightPhase.TAXI_TO_RUNWAY,
+            lat=37.615, lon=-122.373,  # west of arrival
+            heading=90.0,
+            gate="G2",
+            taxi_route=TAXI_WAYPOINTS_DEPARTURE,
+            waypoint_index=0,
+        )
+        _flight_states["arr001"] = arrival
+        _flight_states["dep001"] = departure
+        _init_gate_states()
+
+        initial_lon = departure.longitude
+        # Run several ticks
+        for _ in range(10):
+            departure = _update_flight_state(departure, 1.0)
+            _flight_states["dep001"] = departure
+
+        # Departure should NOT have moved significantly eastward (toward arrival)
+        lon_change = departure.longitude - initial_lon
+        # Positive lon_change = moved east = toward the arrival = bad
+        assert lon_change < 0.0002, (
+            f"Yielding aircraft should not creep toward oncoming traffic, "
+            f"lon moved {lon_change:.6f}"
+        )
+
+    def test_far_apart_no_conflict(self):
+        """Aircraft far apart should not detect head-on conflict."""
+        a = _make_state(
+            icao24="far001",
+            phase=FlightPhase.TAXI_TO_RUNWAY,
+            lat=37.615, lon=-122.370,
+            heading=90.0,
+            gate="G1",
+        )
+        b = _make_state(
+            icao24="far002",
+            phase=FlightPhase.TAXI_TO_GATE,
+            lat=37.615, lon=-122.390,  # ~1.7km away
+            heading=270.0,
+            gate="G2",
+        )
+        _flight_states["far001"] = a
+        _flight_states["far002"] = b
+        _init_gate_states()
+
+        factor = _taxi_speed_factor(a)
+        assert factor == 1.0, f"Far apart aircraft should be clear, got {factor}"

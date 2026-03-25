@@ -9,6 +9,7 @@ Supports two execution backends:
 import json
 import logging
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -97,6 +98,31 @@ class AirportRepository:
             else:
                 raise RuntimeError("WorkspaceClient creation timed out (headless env)")
         return self._client
+
+    # Strict ICAO code pattern: 3-4 uppercase alphanumeric characters
+    _ICAO_RE = re.compile(r"^[A-Z0-9]{3,4}$")
+
+    @staticmethod
+    def _validate_icao(icao_code: str) -> str:
+        """Validate and sanitize ICAO code to prevent SQL injection.
+
+        Args:
+            icao_code: Raw ICAO code from caller
+
+        Returns:
+            Validated uppercase ICAO code
+
+        Raises:
+            ValueError: If icao_code does not match ^[A-Z0-9]{3,4}$
+        """
+        if not icao_code or not isinstance(icao_code, str):
+            raise ValueError(f"Invalid ICAO code: {icao_code!r}")
+        code = icao_code.strip().upper()
+        if not AirportRepository._ICAO_RE.match(code):
+            raise ValueError(
+                f"Invalid ICAO code: {icao_code!r} — must be 3-4 uppercase alphanumeric characters"
+            )
+        return code
 
     def _get_sql_connection(self):
         """Create a databricks-sql-connector connection.
@@ -248,6 +274,7 @@ class AirportRepository:
         Returns:
             True if successful
         """
+        icao_code = self._validate_icao(icao_code)
         self._ensure_tables()
 
         now = datetime.now(timezone.utc).isoformat()
@@ -803,6 +830,7 @@ class AirportRepository:
         Returns:
             Configuration dictionary or None if not found
         """
+        icao_code = self._validate_icao(icao_code)
         self._ensure_tables()
 
         # Load metadata
@@ -1215,6 +1243,7 @@ class AirportRepository:
         Returns:
             True if successful
         """
+        icao_code = self._validate_icao(icao_code)
         self._ensure_tables()
 
         tables = [
@@ -1231,6 +1260,7 @@ class AirportRepository:
 
     def airport_exists(self, icao_code: str) -> bool:
         """Check if airport exists in lakehouse."""
+        icao_code = self._validate_icao(icao_code)
         self._ensure_tables()
 
         rows = self._execute(
