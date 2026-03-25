@@ -13,7 +13,7 @@ interface PlatformLink {
   description: string;
 }
 
-const DASHBOARD_ID = '01f11945a61c16f3becdef0ec04c0a8c';
+const DASHBOARD_ID = '01f1288ade9c12418399b38be2b35960';
 const GENIE_SPACE_ID = '01f12612fa6314ae943d0526f5ae3a00';
 
 const platformLinks: PlatformLink[] = [
