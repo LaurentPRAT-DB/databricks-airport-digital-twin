@@ -3609,25 +3609,26 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             rwy_hdg = 284.0
 
         if state.altitude > 0:
-            # Airborne: descend to touchdown point
+            # Airborne: descend to touchdown — maintain approach speed (Vref)
+            # Real aircraft hold Vref until flare; no deceleration here.
             speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
             new_pos = _move_toward((state.latitude, state.longitude), runway_touchdown, speed_deg)
             state.latitude, state.longitude = new_pos
             state.altitude = max(0, state.altitude - 500 * dt)
-            state.velocity = max(80, state.velocity - 10 * dt)
             state.heading = _calculate_heading(new_pos, runway_touchdown)
             if state.altitude <= 0:
                 state.altitude = 0
                 state.on_ground = True
                 state.vertical_rate = 0
         else:
-            # On-ground rollout: decelerate from ~130kts to taxi speed
-            # Aircraft rolls ALONG the runway (toward far end), not back toward threshold
+            # On-ground rollout: decelerate from touchdown speed (~135kts) to taxi speed
+            # Aircraft rolls ALONG the runway (toward far end), not back toward threshold.
+            # Typical rollout: 1500-2500m from touchdown to taxi turnoff.
+            # Deceleration ~2 kts/s (reverse thrust + brakes + spoilers).
             state.altitude = 0
             state.on_ground = True
             state.vertical_rate = 0
-            # Braking deceleration: ~3 kts/s is typical (reverse thrust + brakes)
-            state.velocity = max(25, state.velocity - 3.0 * dt)
+            state.velocity = max(25, state.velocity - 2.0 * dt)
             # Roll along runway centerline toward far end
             speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
             new_pos = _move_toward((state.latitude, state.longitude), runway_far_end, speed_deg)
@@ -4770,14 +4771,15 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
     if is_on_ground:
         # Aircraft is on ground - show approach + landing + taxi trajectory
-        # Divide trajectory: 55% approach, 10% landing roll, 35% taxi
+        # Divide trajectory: 45% approach, 20% landing roll, 35% taxi
+        # Realistic rollout: 1500-2500m from touchdown to taxi turnoff.
 
         # Landing roll direction along actual runway heading
         _rwy_heading = _get_runway_heading()
         if _rwy_heading is None:
             return []
         _rwy_heading_rad = math.radians(_rwy_heading)
-        _roll_distance = 0.012  # ~1.3 km roll in degrees
+        _roll_distance = 0.020  # ~2.2 km roll in degrees (typical landing rollout)
         roll_dlat = _roll_distance * math.cos(_rwy_heading_rad)
         roll_dlon = _roll_distance * math.sin(_rwy_heading_rad) / math.cos(math.radians(runway_28l_lat))
 
@@ -4785,9 +4787,9 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         for i in range(num_points):
             progress = i / (num_points - 1) if num_points > 1 else 0
 
-            if progress < 0.55:
+            if progress < 0.45:
                 # APPROACH PHASE: Following ILS glideslope
-                approach_progress = progress / 0.55  # 0 to 1
+                approach_progress = progress / 0.45  # 0 to 1
 
                 # Interpolate along the approach waypoints
                 # Start from initial approach fix, end at threshold
@@ -4826,8 +4828,8 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 vertical_rate = prof_vr
 
             elif progress < 0.65:
-                # LANDING ROLL: Decelerating on runway
-                roll_progress = (progress - 0.55) / 0.10
+                # LANDING ROLL: Decelerating on runway (20% of trajectory)
+                roll_progress = (progress - 0.45) / 0.20
 
                 # Move along runway heading
                 lat = runway_28l_lat + roll_progress * roll_dlat
