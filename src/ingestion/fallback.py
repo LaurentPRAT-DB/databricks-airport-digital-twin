@@ -1847,6 +1847,7 @@ class FlightState:
     holding_phase_time: float = 0.0            # Elapsed time in current holding leg (seconds)
     holding_inbound: bool = True               # True = inbound leg, False = outbound leg
     go_around_count: int = 0                   # Number of go-arounds for this approach
+    go_around_target_alt: float = 0.0           # Target altitude for current go-around climb
     gate_retry_at: float = 0.0                 # time.time() when to next retry gate assignment
     parked_since: float = 0.0                  # time.time() when aircraft entered PARKED phase
     turnaround_phase: str = ""                 # Current turnaround sub-phase (e.g. "deboarding")
@@ -2978,7 +2979,7 @@ def _create_new_flight(
             )
             lat = new_pos[0] + random.uniform(-0.005, 0.005)
             lon = new_pos[1]
-            alt = last_aircraft.altitude + 500
+            alt = max(last_aircraft.altitude + 500, 600)
 
         # Pre-assign a gate so it shows as INBOUND on the gate status panel
         _init_gate_states()
@@ -3283,12 +3284,17 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         # Helper: execute go-around (missed approach procedure)
         def _execute_go_around(reason: str = "runway_busy") -> None:
             state.waypoint_index = 0
-            # Missed approach altitude: climb to at least 1500ft (ICAO missed approach)
-            # This prevents a visible altitude "pop" when re-entering the approach.
-            state.altitude = max(state.altitude, 1500.0)
-            # Missed approach speed: Vref + 20 kts (per aircraft type)
+            # Missed approach: set positive climb rate and let altitude increase
+            # gradually over subsequent ticks (no instant altitude jump — O05 fix).
+            # Target: 1500ft AGL; climb at 1500 ft/min via vertical_rate.
+            state.go_around_target_alt = max(1500.0, state.altitude + 300)
+            # Missed approach speed: gradual acceleration to Vref + 20 kts
+            # (avoid instant speed jump visible in recorded snapshots)
             vref_ga = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
-            state.velocity = vref_ga + 20
+            target_ga_speed = vref_ga + 20
+            # Accelerate smoothly — max 5 kts/s for 2s tick = 10 kts
+            if target_ga_speed > state.velocity:
+                state.velocity = min(target_ga_speed, state.velocity + 10)
             state.vertical_rate = 1500
             state.go_around_count += 1
             state.holding_phase_time = 0.0
@@ -3337,14 +3343,19 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                         speed_slow = 0.5
 
                 # Clamp speed: altitude-aware Vref floor + 250kt ceiling
+                # Smooth acceleration/deceleration (max 5 kts/s) to prevent
+                # visible speed jumps in 30s snapshot intervals (A05 fix).
                 vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
                 raw_speed = min(prof_spd * speed_slow, MAX_SPEED_BELOW_FL100_KTS)
                 if state.altitude < 2000 or progress > 0.85:
-                    # Final approach: full Vref floor
-                    state.velocity = max(vref, raw_speed)
+                    target_speed = max(vref, raw_speed)
                 else:
-                    # Higher altitude: soft floor at 90% Vref (allows 180-210kt)
-                    state.velocity = max(vref * 0.9, raw_speed)
+                    target_speed = max(vref * 0.9, raw_speed)
+                max_speed_change = 5.0 * dt  # 5 kts/s
+                if target_speed > state.velocity:
+                    state.velocity = min(target_speed, state.velocity + max_speed_change)
+                elif target_speed < state.velocity:
+                    state.velocity = max(target_speed, state.velocity - max_speed_change)
 
                 # Move based on actual velocity
                 speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
@@ -3356,12 +3367,21 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.latitude += dlat * ratio
                     state.longitude += dlon * ratio
 
-                # Altitude from profile — use OpenAP vertical rate (ft/min→ft/s)
-                # instead of flat 500/tick for smooth, realistic descent.
-                # Floor at 25 ft/s (~1500 fpm) to maintain approach separation.
-                descent_fps = max(25.0, min(30.0, abs(prof_vr) / 60.0)) if prof_vr else 25.0
-                state.altitude = max(0.0, _interpolate_altitude(state.altitude, min(prof_alt, target_alt), descent_fps * dt))
-                state.vertical_rate = prof_vr
+                # Go-around climb: if target alt is set, climb gradually (O05 fix)
+                if state.go_around_target_alt > 0 and state.altitude < state.go_around_target_alt:
+                    climb_fps = 25.0  # ~1500 ft/min
+                    state.altitude = min(state.go_around_target_alt, state.altitude + climb_fps * dt)
+                    state.vertical_rate = 1500
+                    if state.altitude >= state.go_around_target_alt:
+                        state.go_around_target_alt = 0.0  # Done climbing, resume descent
+                else:
+                    # Altitude from profile — use OpenAP vertical rate (ft/min→ft/s)
+                    # instead of flat 500/tick for smooth, realistic descent.
+                    # Floor at 25 ft/s (~1500 fpm) to maintain approach separation.
+                    state.go_around_target_alt = 0.0
+                    descent_fps = max(25.0, min(30.0, abs(prof_vr) / 60.0)) if prof_vr else 25.0
+                    state.altitude = max(0.0, _interpolate_altitude(state.altitude, min(prof_alt, target_alt), descent_fps * dt))
+                    state.vertical_rate = prof_vr
 
                 # P1: Decision height-based approach→landing transition
                 # Transition when altitude at or below Cat I ILS decision height
@@ -3384,10 +3404,21 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                         _execute_go_around("runway_busy")
                         return state
             else:
-                # Too close to aircraft ahead - slow down / hold speed (P5: Vref per type)
+                # Too close to aircraft ahead - slow down but keep creeping forward
+                # so the map marker doesn't freeze in place (A03 stuck marker fix)
                 vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
-                state.velocity = max(vref, state.velocity - 10 * dt)
+                # Smooth deceleration: max 5 kts/s (matches accel rate in A05 fix)
+                state.velocity = max(vref * 0.7, state.velocity - 5.0 * dt)
                 state.vertical_rate = -200
+                # Creep forward at reduced speed to avoid stuck markers
+                creep_deg = state.velocity * 0.3 * _KTS_TO_DEG_PER_SEC * dt
+                dist_to_wp = _distance_between((state.latitude, state.longitude), target)
+                if dist_to_wp > 1e-8:
+                    dlat = target[0] - state.latitude
+                    dlon = target[1] - state.longitude
+                    ratio = min(creep_deg / dist_to_wp, 0.3)
+                    state.latitude += dlat * ratio
+                    state.longitude += dlon * ratio
 
             # Smooth heading toward waypoint (max 3°/s standard rate turn)
             target_hdg = _calculate_heading((state.latitude, state.longitude), target)
@@ -3398,21 +3429,25 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.waypoint_index += 1
         else:
             # Safety fallback: waypoint exhaustion
-            arrival_rwy = _get_arrival_runway_name()
-            if _is_runway_clear(arrival_rwy):
-                emit_phase_transition(
-                    state.icao24, state.callsign,
-                    FlightPhase.APPROACHING.value, FlightPhase.LANDING.value,
-                    state.latitude, state.longitude, state.altitude,
-                    state.aircraft_type, state.assigned_gate,
-                )
-                _set_phase(state, FlightPhase.LANDING)
-                state.waypoint_index = 0
-                _occupy_runway(state.icao24, arrival_rwy)
+            if state.altitude > 1000:
+                # Still too high — go around rather than starting landing from altitude
+                _execute_go_around("high_altitude_at_threshold")
             else:
-                # Runway busy at waypoint exhaustion — execute missed approach
-                # per ICAO Doc 8168: climb to missed approach altitude, re-sequence
-                _execute_go_around("runway_busy_at_threshold")
+                arrival_rwy = _get_arrival_runway_name()
+                if _is_runway_clear(arrival_rwy):
+                    emit_phase_transition(
+                        state.icao24, state.callsign,
+                        FlightPhase.APPROACHING.value, FlightPhase.LANDING.value,
+                        state.latitude, state.longitude, state.altitude,
+                        state.aircraft_type, state.assigned_gate,
+                    )
+                    _set_phase(state, FlightPhase.LANDING)
+                    state.waypoint_index = 0
+                    _occupy_runway(state.icao24, arrival_rwy)
+                else:
+                    # Runway busy at waypoint exhaustion — execute missed approach
+                    # per ICAO Doc 8168: climb to missed approach altitude, re-sequence
+                    _execute_go_around("runway_busy_at_threshold")
 
     elif state.phase == FlightPhase.LANDING:
         # Final touchdown sequence - land on active arrival runway
@@ -3495,8 +3530,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         if state.assigned_gate is None:
             now = time.time()
             if now < state.gate_retry_at:
-                # Still waiting for retry — hold position
-                state.velocity = 0
+                # Still waiting for retry — micro-move to avoid stuck marker (A03)
+                state.velocity = 1
+                jitter = random.uniform(-0.00002, 0.00002)
+                state.latitude += jitter
+                state.longitude += jitter
                 return state
             available_gate = _find_available_gate()
             if not available_gate:
@@ -3509,7 +3547,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             else:
                 # No gates available — retry in 5 seconds (sim time)
                 state.gate_retry_at = now + 5.0
-                state.velocity = 0
+                state.velocity = 1
+                jitter = random.uniform(-0.00002, 0.00002)
+                state.latitude += jitter
+                state.longitude += jitter
                 return state
 
         # Use cached taxi route (dynamic from OSM graph or fallback)
@@ -3828,11 +3869,20 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.sid_name = _get_sid_name(state.destination_airport)
                     _occupy_runway(state.icao24, dep_rwy)
                 else:
-                    # Hold short: wake separation not yet met — creep 1kt
+                    # Hold short: wake separation not yet met — creep/wiggle
                     state.velocity = 1
+                    # Micro-movement to avoid stuck marker (A03 fix)
+                    _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
+                    jitter = random.uniform(-0.00002, 0.00002)
+                    state.latitude += jitter
+                    state.longitude += jitter
             else:
-                # Hold short of runway — creep 1kt to avoid frozen marker
+                # Hold short of runway — creep to avoid frozen marker
                 state.velocity = 1
+                _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
+                jitter = random.uniform(-0.00002, 0.00002)
+                state.latitude += jitter
+                state.longitude += jitter
 
     elif state.phase == FlightPhase.TAKEOFF:
         # Realistic takeoff with sub-phases (14 CFR 25.107/111)
@@ -3981,7 +4031,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # aircraft should continue climbing past them, not descend.
             new_alt = max(0.0, _interpolate_altitude(state.altitude, target_alt, alt_step))
             state.altitude = max(state.altitude, new_alt)
-            state.vertical_rate = prof_vr if state.altitude < target_alt else 0
+            # Use profile altitude ceiling (not waypoint) so VR stays positive
+            # during climb even when current alt exceeds the low initial waypoint.
+            state.vertical_rate = prof_vr if (state.altitude < target_alt or state.altitude < prof_alt) else 0
 
             # Smooth heading toward waypoint (max 3°/s standard rate turn)
             target_hdg = _calculate_heading((state.latitude, state.longitude), target)
