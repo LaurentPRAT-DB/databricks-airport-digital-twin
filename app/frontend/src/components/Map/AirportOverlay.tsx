@@ -5,6 +5,8 @@ import { Feature, Geometry } from 'geojson';
 import { airportLayout, getFeaturesByType } from '../../constants/airportLayout';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { GeoPosition } from '../../types/airportFormats';
+import { useCongestion } from '../../hooks/usePredictions';
+import { CongestionArea } from '../../types/flight';
 
 // Zoom thresholds for gate rendering (exported for testing)
 export const GATE_LABEL_ZOOM = 17; // Show permanent text labels at this zoom and above (17 avoids overlap at medium zoom)
@@ -85,8 +87,39 @@ function geoToLatLng(geoPoints: GeoPosition[] | undefined): LatLngExpression[] {
   return geoPoints.map((p) => [Number(p.latitude), Number(p.longitude)] as LatLngExpression);
 }
 
+// Congestion level → polygon fill/border colors
+const CONGESTION_FILL: Record<string, { fill: string; border: string }> = {
+  low:      { fill: '#22c55e', border: '#16a34a' },   // green-500/600
+  moderate: { fill: '#eab308', border: '#ca8a04' },   // yellow-500/600
+  high:     { fill: '#f97316', border: '#ea580c' },    // orange-500/600
+  critical: { fill: '#ef4444', border: '#dc2626' },    // red-500/600
+};
+
+const CONGESTION_EMOJI: Record<string, string> = {
+  low: '\u{1f7e2}', moderate: '\u{1f7e1}', high: '\u{1f7e0}', critical: '\u{1f534}',
+};
+
+// Match a terminal/apron name to a CongestionArea by normalized name
+function findCongestion(name: string | undefined, areas: CongestionArea[]): CongestionArea | undefined {
+  if (!name || areas.length === 0) return undefined;
+  const norm = name.toLowerCase().replace(/\s+/g, '_');
+  return areas.find((c) => {
+    const cNorm = c.area_id.toLowerCase();
+    return cNorm === norm || cNorm === `${norm}_apron` || cNorm.includes(norm);
+  });
+}
+
+// Build tooltip text for a congested area
+function congestionTooltipText(name: string, cong: CongestionArea): string {
+  const emoji = CONGESTION_EMOJI[cong.level] || '';
+  const label = cong.level.charAt(0).toUpperCase() + cong.level.slice(1);
+  const wait = cong.wait_minutes > 0 ? `, ~${cong.wait_minutes} min wait` : '';
+  return `${name}\n${emoji} ${label} \u2014 ${cong.flight_count} flights${wait}`;
+}
+
 export default function AirportOverlay() {
   const { getGates, getTerminals, getTaxiways, getAprons, getOSMRunways } = useAirportConfigContext();
+  const { congestion } = useCongestion();
   const [zoom, setZoom] = useState(14);
   useMapEvents({
     zoomend: (e) => setZoom(e.target.getZoom()),
@@ -123,47 +156,53 @@ export default function AirportOverlay() {
         />
       )}
 
-      {/* Render OSM aprons (parking areas) - bottom layer */}
+      {/* Render OSM aprons (parking areas) - bottom layer, tinted by congestion */}
       {useOsmAprons && osmAprons.map((apron) => {
         const positions = geoToLatLng(apron.geoPolygon);
         if (positions.length < 3) return null;
+        const cong = findCongestion(apron.name, congestion);
+        const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
         return (
           <Polygon
             key={apron.id}
             positions={positions}
             pathOptions={{
-              fillColor: '#6b7280', // gray-500
-              fillOpacity: 0.3,
-              color: '#4b5563', // gray-600
-              weight: 1,
+              fillColor: colors?.fill || '#6b7280',
+              fillOpacity: cong ? 0.45 : 0.3,
+              color: colors?.border || '#4b5563',
+              weight: cong ? 2 : 1,
             }}
           >
-            {apron.name && (
-              <Tooltip direction="center">
-                {apron.name}
-              </Tooltip>
-            )}
+            <Tooltip direction="center">
+              {cong && apron.name
+                ? congestionTooltipText(apron.name, cong)
+                : apron.name || 'Apron'}
+            </Tooltip>
           </Polygon>
         );
       })}
 
-      {/* Render OSM terminals - below runways, taxiways, and gates */}
+      {/* Render OSM terminals - below runways, taxiways, and gates, tinted by congestion */}
       {useOsmTerminals && osmTerminals.map((terminal) => {
         const positions = geoToLatLng(terminal.geoPolygon);
         if (positions.length < 3) return null;
+        const cong = findCongestion(terminal.name, congestion);
+        const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
         return (
           <Polygon
             key={terminal.id}
             positions={positions}
             pathOptions={{
-              fillColor: '#3b82f6', // blue-500
-              fillOpacity: 0.6,
-              color: '#1d4ed8', // blue-700
+              fillColor: colors?.fill || '#3b82f6',
+              fillOpacity: cong ? 0.6 : 0.6,
+              color: colors?.border || '#1d4ed8',
               weight: 2,
             }}
           >
             <Tooltip direction="center">
-              {terminal.name}
+              {cong
+                ? congestionTooltipText(terminal.name, cong)
+                : terminal.name}
             </Tooltip>
           </Polygon>
         );

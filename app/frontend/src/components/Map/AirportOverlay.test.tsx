@@ -68,6 +68,10 @@ vi.mock('../../constants/airportLayout', () => ({
   getFeaturesByType: () => [],
 }))
 
+vi.mock('../../hooks/usePredictions', () => ({
+  useCongestion: () => ({ congestion: [], bottlenecks: [], isLoading: false, error: null }),
+}))
+
 // Import after mocks
 import AirportOverlay, { getGateDotRadius, GATE_LABEL_ZOOM } from './AirportOverlay'
 
