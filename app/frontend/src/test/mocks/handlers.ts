@@ -101,8 +101,8 @@ export const mockGateRecommendations = [
 // Mock congestion data
 export const mockCongestion = {
   areas: [
-    { area_id: 'runway_28L', area_type: 'runway', level: 'low', flight_count: 1, wait_minutes: 0 },
-    { area_id: 'taxiway_A', area_type: 'taxiway', level: 'moderate', flight_count: 3, wait_minutes: 5 },
+    { area_id: 'runway_28L', area_type: 'runway', level: 'low', flight_count: 1, capacity: 4, wait_minutes: 0 },
+    { area_id: 'taxiway_A', area_type: 'taxiway', level: 'moderate', flight_count: 3, capacity: 5, wait_minutes: 5 },
   ],
   count: 2,
   timestamp: new Date().toISOString(),

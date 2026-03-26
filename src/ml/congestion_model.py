@@ -31,6 +31,7 @@ class AreaCongestion:
     flight_count: int
     predicted_wait_minutes: int
     confidence: float
+    capacity: int = 0
 
 
 @dataclass
@@ -367,7 +368,8 @@ class CongestionPredictor:
                 level=level,
                 flight_count=count,
                 predicted_wait_minutes=wait_time,
-                confidence=confidence
+                confidence=confidence,
+                capacity=effective_capacity,
             ))
 
         return results

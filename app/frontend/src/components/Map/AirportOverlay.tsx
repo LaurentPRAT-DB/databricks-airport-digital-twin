@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { GeoJSON, CircleMarker, Tooltip, Polygon, Polyline, useMapEvents } from 'react-leaflet';
-import { PathOptions, LatLngExpression } from 'leaflet';
+import L, { PathOptions, LatLngExpression } from 'leaflet';
 import { Feature, Geometry } from 'geojson';
 import { airportLayout, getFeaturesByType } from '../../constants/airportLayout';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
@@ -121,7 +121,7 @@ function congestionTooltipText(name: string, cong: CongestionArea): string {
 export default function AirportOverlay() {
   const { getGates, getTerminals, getTaxiways, getAprons, getOSMRunways } = useAirportConfigContext();
   const { congestion } = useCongestion();
-  const { activeLevel } = useCongestionFilter();
+  const { activeLevel, selectedArea, setSelectedArea } = useCongestionFilter();
   const [zoom, setZoom] = useState(14);
   useMapEvents({
     zoomend: (e) => setZoom(e.target.getZoom()),
@@ -169,6 +169,7 @@ export default function AirportOverlay() {
         const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
         const matches = isFilterActive && cong?.level === activeLevel;
         const dimmed = isFilterActive && !matches;
+        const isSelected = selectedArea && cong && selectedArea.area_id === cong.area_id;
         return (
           <Polygon
             key={apron.id}
@@ -176,10 +177,16 @@ export default function AirportOverlay() {
             pathOptions={{
               fillColor: matches ? (colors?.fill || '#ef4444') : dimmed ? '#d1d5db' : colors?.fill || '#6b7280',
               fillOpacity: dimmed ? 0.03 : matches ? 0.85 : cong ? 0.45 : 0.3,
-              color: matches ? '#ffffff' : dimmed ? '#d1d5db' : colors?.border || '#4b5563',
-              weight: matches ? 5 : dimmed ? 0.5 : cong ? 2 : 1,
+              color: isSelected ? '#3b82f6' : matches ? '#ffffff' : dimmed ? '#d1d5db' : colors?.border || '#4b5563',
+              weight: isSelected ? 4 : matches ? 5 : dimmed ? 0.5 : cong ? 2 : 1,
               opacity: dimmed ? 0.2 : 1,
             }}
+            eventHandlers={cong ? {
+              click: (e) => {
+                L.DomEvent.stopPropagation(e);
+                setSelectedArea(isSelected ? null : cong);
+              },
+            } : undefined}
           >
             <Tooltip direction="center">
               {cong && apron.name
@@ -198,6 +205,7 @@ export default function AirportOverlay() {
         const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
         const matches = isFilterActive && cong?.level === activeLevel;
         const dimmed = isFilterActive && !matches;
+        const isSelected = selectedArea && cong && selectedArea.area_id === cong.area_id;
         return (
           <Polygon
             key={terminal.id}
@@ -205,10 +213,16 @@ export default function AirportOverlay() {
             pathOptions={{
               fillColor: matches ? (colors?.fill || '#ef4444') : dimmed ? '#d1d5db' : colors?.fill || '#3b82f6',
               fillOpacity: dimmed ? 0.05 : matches ? 0.85 : 0.6,
-              color: matches ? '#ffffff' : dimmed ? '#d1d5db' : colors?.border || '#1d4ed8',
-              weight: matches ? 5 : dimmed ? 0.5 : 2,
+              color: isSelected ? '#3b82f6' : matches ? '#ffffff' : dimmed ? '#d1d5db' : colors?.border || '#1d4ed8',
+              weight: isSelected ? 4 : matches ? 5 : dimmed ? 0.5 : 2,
               opacity: dimmed ? 0.2 : 1,
             }}
+            eventHandlers={cong ? {
+              click: (e) => {
+                L.DomEvent.stopPropagation(e);
+                setSelectedArea(isSelected ? null : cong);
+              },
+            } : undefined}
           >
             <Tooltip direction="center" permanent={matches}>
               {cong

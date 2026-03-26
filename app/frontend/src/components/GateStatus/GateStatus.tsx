@@ -190,15 +190,20 @@ function getTerminalCongestion(
 }
 
 // Congestion indicator component
-function CongestionIndicator({ congestion }: { congestion?: CongestionArea }) {
+function CongestionIndicator({ congestion, onClick }: { congestion?: CongestionArea; onClick?: (area: CongestionArea) => void }) {
   if (!congestion) return null;
   const colors = congestionColors[congestion.level] || congestionColors.low;
   const levelLabel = congestion.level.charAt(0).toUpperCase() + congestion.level.slice(1);
+  const Tag = onClick ? 'button' : 'span';
   return (
-    <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] border ${colors.bg} ${colors.text} ${colors.border}`}>
+    <Tag
+      className={`ml-2 px-1.5 py-0.5 rounded text-[10px] border ${colors.bg} ${colors.text} ${colors.border} ${onClick ? 'cursor-pointer hover:ring-1 hover:ring-blue-400' : ''}`}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick(congestion); } : undefined}
+      title={onClick ? 'Click to see congestion details' : undefined}
+    >
       {levelLabel}
       {congestion.wait_minutes > 0 && <span className="ml-1">({congestion.wait_minutes}m)</span>}
-    </span>
+    </Tag>
   );
 }
 
@@ -268,6 +273,88 @@ function GateDetailCard({
   );
 }
 
+// Congestion detail card — shown when an area is selected on the map
+function CongestionDetailCard({
+  area,
+  onClose,
+}: {
+  area: CongestionArea;
+  onClose: () => void;
+}) {
+  const colors = congestionColors[area.level] || congestionColors.low;
+  const levelLabel = area.level.charAt(0).toUpperCase() + area.level.slice(1);
+  const areaLabel = area.area_id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const utilization = area.capacity > 0 ? Math.round((area.flight_count / area.capacity) * 100) : 0;
+
+  return (
+    <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 text-xs">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-slate-700 dark:text-slate-200">{areaLabel}</span>
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}>
+            {levelLabel}
+          </span>
+        </div>
+        <button
+          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-sm leading-none"
+          onClick={onClose}
+          aria-label="Close congestion detail"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Metrics */}
+      <div className="grid grid-cols-3 gap-2 mb-2">
+        <div className="text-center p-1.5 bg-white dark:bg-slate-800 rounded border border-slate-100 dark:border-slate-600">
+          <div className="text-lg font-bold text-slate-700 dark:text-slate-200">{area.flight_count}</div>
+          <div className="text-[9px] text-slate-400">flights</div>
+        </div>
+        <div className="text-center p-1.5 bg-white dark:bg-slate-800 rounded border border-slate-100 dark:border-slate-600">
+          <div className="text-lg font-bold text-slate-700 dark:text-slate-200">{area.capacity}</div>
+          <div className="text-[9px] text-slate-400">capacity</div>
+        </div>
+        <div className="text-center p-1.5 bg-white dark:bg-slate-800 rounded border border-slate-100 dark:border-slate-600">
+          <div className={`text-lg font-bold ${utilization >= 90 ? 'text-red-600' : utilization >= 75 ? 'text-orange-600' : utilization >= 50 ? 'text-yellow-600' : 'text-green-600'}`}>
+            {utilization}%
+          </div>
+          <div className="text-[9px] text-slate-400">utilization</div>
+        </div>
+      </div>
+
+      {/* Utilization bar */}
+      <div className="mb-2">
+        <div className="w-full h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${
+              utilization >= 90 ? 'bg-red-500' : utilization >= 75 ? 'bg-orange-500' : utilization >= 50 ? 'bg-yellow-500' : 'bg-green-500'
+            }`}
+            style={{ width: `${Math.min(utilization, 100)}%` }}
+          />
+        </div>
+      </div>
+
+      {area.wait_minutes > 0 && (
+        <div className="text-slate-500 dark:text-slate-400 mb-2">
+          Est. wait: ~{area.wait_minutes} min
+        </div>
+      )}
+
+      {/* Explanation */}
+      <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-600">
+        <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">How is this calculated?</div>
+        <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
+          Congestion = flights / area capacity. Thresholds: <span className="text-green-600">Low &lt;50%</span>,{' '}
+          <span className="text-yellow-600">Moderate 50-75%</span>,{' '}
+          <span className="text-orange-600">High 75-90%</span>,{' '}
+          <span className="text-red-600">Critical &gt;90%</span>.
+          Capacity is scaled by time-of-day traffic patterns.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GateStatus() {
   const { getGates } = useAirportConfigContext();
   const osmGates = getGates();
@@ -284,7 +371,7 @@ export default function GateStatus() {
   );
 
   const { congestion, isLoading: isCongestionLoading } = useCongestion();
-  const { activeLevel, setActiveLevel } = useCongestionFilter();
+  const { activeLevel, setActiveLevel, selectedArea, setSelectedArea } = useCongestionFilter();
 
   const occupiedCount = gates.filter((g) => g.status !== 'VACANT').length;
   const availableCount = gates.length - occupiedCount;
@@ -380,7 +467,7 @@ export default function GateStatus() {
                 <div className="flex items-center">
                   <span className={`text-xs font-medium ${matchesFilter ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'}`}>{name}</span>
                   {!isCongestionLoading && (
-                    <CongestionIndicator congestion={termCong} />
+                    <CongestionIndicator congestion={termCong} onClick={termCong ? (a) => setSelectedArea(selectedArea?.area_id === a.area_id ? null : a) : undefined} />
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-[11px]">
@@ -402,7 +489,10 @@ export default function GateStatus() {
             <div className="flex items-center">
               <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{selectedTerminal}</span>
               {!isCongestionLoading && (
-                <CongestionIndicator congestion={getTerminalCongestion(selectedTerminal, congestion)} />
+                <CongestionIndicator
+                  congestion={getTerminalCongestion(selectedTerminal, congestion)}
+                  onClick={(a) => setSelectedArea(selectedArea?.area_id === a.area_id ? null : a)}
+                />
               )}
             </div>
             <span className="text-[11px] text-slate-400">
@@ -493,6 +583,14 @@ export default function GateStatus() {
           )}
         </div>
       </div>
+
+      {/* Congestion detail card (shown when area selected on map) */}
+      {selectedArea && (
+        <CongestionDetailCard
+          area={selectedArea}
+          onClose={() => setSelectedArea(null)}
+        />
+      )}
     </div>
   );
 }

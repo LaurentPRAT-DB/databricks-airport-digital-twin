@@ -48,6 +48,7 @@ export interface CongestionArea {
   area_type: "runway" | "taxiway" | "apron" | "terminal";
   level: "low" | "moderate" | "high" | "critical";
   flight_count: number;
+  capacity: number;
   wait_minutes: number;
 }
 

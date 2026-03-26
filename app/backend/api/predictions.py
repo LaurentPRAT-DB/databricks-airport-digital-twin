@@ -42,6 +42,7 @@ class CongestionResponse(BaseModel):
     area_type: str = Field(description="Area type: runway, taxiway, apron, terminal")
     level: str = Field(description="Congestion level: low, moderate, high, critical")
     flight_count: int = Field(ge=0, description="Number of flights in area")
+    capacity: int = Field(ge=0, description="Area capacity (max concurrent flights)")
     wait_minutes: int = Field(ge=0, description="Estimated wait time in minutes")
 
 
@@ -194,6 +195,7 @@ async def get_congestion(
             area_type=c.area_type,
             level=c.level.value,
             flight_count=c.flight_count,
+            capacity=c.capacity,
             wait_minutes=c.predicted_wait_minutes,
         )
         for c in congestion
@@ -204,6 +206,7 @@ async def get_congestion(
             "area_type": c.area_type,
             "level": c.level.value,
             "flight_count": c.flight_count,
+            "capacity": c.capacity,
             "wait_minutes": c.predicted_wait_minutes,
         })
 
@@ -232,6 +235,7 @@ async def get_bottlenecks(
             area_type=c.area_type,
             level=c.level.value,
             flight_count=c.flight_count,
+            capacity=c.capacity,
             wait_minutes=c.predicted_wait_minutes,
         )
         for c in bottlenecks
@@ -262,6 +266,7 @@ async def get_congestion_summary(
             area_type=c.area_type,
             level=c.level.value,
             flight_count=c.flight_count,
+            capacity=c.capacity,
             wait_minutes=c.predicted_wait_minutes,
         )
         for c in congestion

@@ -218,18 +218,19 @@ class TestCongestionSummaryEndpoint:
         from src.ml.congestion_model import CongestionLevel
 
         class MockCongestion:
-            def __init__(self, area_id, area_type, level, flight_count, wait_minutes):
+            def __init__(self, area_id, area_type, level, flight_count, wait_minutes, capacity=10):
                 self.area_id = area_id
                 self.area_type = area_type
                 self.level = level
                 self.flight_count = flight_count
                 self.predicted_wait_minutes = wait_minutes
+                self.capacity = capacity
 
         return [
-            MockCongestion("runway_28L", "runway", CongestionLevel.LOW, 1, 0),
-            MockCongestion("taxiway_A", "taxiway", CongestionLevel.MODERATE, 3, 5),
-            MockCongestion("apron_north", "apron", CongestionLevel.HIGH, 8, 15),
-            MockCongestion("terminal_1", "terminal", CongestionLevel.CRITICAL, 12, 25),
+            MockCongestion("runway_28L", "runway", CongestionLevel.LOW, 1, 0, 4),
+            MockCongestion("taxiway_A", "taxiway", CongestionLevel.MODERATE, 3, 5, 5),
+            MockCongestion("apron_north", "apron", CongestionLevel.HIGH, 8, 15, 10),
+            MockCongestion("terminal_1", "terminal", CongestionLevel.CRITICAL, 12, 25, 12),
         ]
 
     def test_returns_all_areas_and_bottlenecks(self, client, mock_congestion_data):
@@ -258,6 +259,7 @@ class TestCongestionSummaryEndpoint:
                 self.level = CongestionLevel.LOW
                 self.flight_count = 1
                 self.predicted_wait_minutes = 0
+                self.capacity = 4
 
         self._setup_mocks([MockCongestion("r1"), MockCongestion("r2")])
 
