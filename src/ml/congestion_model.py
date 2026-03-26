@@ -133,6 +133,35 @@ class CongestionPredictor:
                 lon_range=(min(lons), max(lons)),
             )
 
+        # Build terminal areas from OSM terminals (each gets its own area)
+        osm_terminals = config.get("terminals", [])
+        for i, terminal in enumerate(osm_terminals):
+            geo_poly = terminal.get("geoPolygon", [])
+            if not geo_poly or len(geo_poly) < 3:
+                continue
+            lats = [float(p["latitude"]) for p in geo_poly]
+            lons = [float(p["longitude"]) for p in geo_poly]
+            raw_name = terminal.get("name", f"terminal_{i}")
+            # Normalize name to snake_case area_id
+            area_id = raw_name.lower().replace(" ", "_").replace("-", "_")
+            # Count gates inside this terminal polygon to set capacity
+            osm_gates = config.get("gates", [])
+            gate_count = 0
+            for gate_data in osm_gates:
+                geo = gate_data if "latitude" in gate_data else gate_data.get("geo", {})
+                g_lat = float(geo.get("latitude", 0))
+                g_lon = float(geo.get("longitude", 0))
+                if (min(lats) <= g_lat <= max(lats)
+                        and min(lons) <= g_lon <= max(lons)):
+                    gate_count += 1
+            areas[area_id] = AirportArea(
+                area_id=area_id,
+                area_type="terminal",
+                capacity=max(5, gate_count),
+                lat_range=(min(lats), max(lats)),
+                lon_range=(min(lons), max(lons)),
+            )
+
         # If we got at least some areas, merge aprons into fewer groups for readability
         if areas:
             # If too many small aprons, consolidate into a single apron area
@@ -263,6 +292,11 @@ class CongestionPredictor:
                 if on_ground and (velocity is None or velocity <= 5):
                     count += 1
 
+            elif area.area_type == "terminal":
+                # Terminal: on ground within terminal bounds (any speed)
+                if on_ground:
+                    count += 1
+
         return count
 
     def _compute_congestion_level(self, count: int, capacity: int) -> CongestionLevel:
@@ -291,6 +325,7 @@ class CongestionPredictor:
             "runway": {"low": 0, "moderate": 3, "high": 8, "critical": 15},
             "taxiway": {"low": 0, "moderate": 2, "high": 5, "critical": 10},
             "apron": {"low": 0, "moderate": 1, "high": 3, "critical": 5},
+            "terminal": {"low": 0, "moderate": 2, "high": 5, "critical": 8},
         }
 
         area_times = base_times.get(area_type, base_times["taxiway"])

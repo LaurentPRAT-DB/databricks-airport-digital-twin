@@ -101,13 +101,21 @@ const CONGESTION_EMOJI: Record<string, string> = {
 };
 
 // Match a terminal/apron name to a CongestionArea by normalized name
-function findCongestion(name: string | undefined, areas: CongestionArea[]): CongestionArea | undefined {
+function findCongestion(name: string | undefined, areas: CongestionArea[], areaType?: string): CongestionArea | undefined {
   if (!name || areas.length === 0) return undefined;
-  const norm = name.toLowerCase().replace(/\s+/g, '_');
-  return areas.find((c) => {
-    const cNorm = c.area_id.toLowerCase();
-    return cNorm === norm || cNorm === `${norm}_apron` || cNorm.includes(norm);
-  });
+  const norm = name.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
+
+  // If area type is specified, prefer matching areas of that type first
+  const typed = areaType ? areas.filter((c) => c.area_type === areaType) : [];
+  const candidates = typed.length > 0 ? typed : areas;
+
+  // Try exact match first, then prefix match, then substring as fallback
+  return candidates.find((c) => c.area_id.toLowerCase() === norm)
+    || candidates.find((c) => c.area_id.toLowerCase() === `${norm}_apron`)
+    || candidates.find((c) => {
+      const cNorm = c.area_id.toLowerCase();
+      return cNorm.includes(norm) || norm.includes(cNorm);
+    });
 }
 
 // Build tooltip text for a congested area
@@ -165,7 +173,7 @@ export default function AirportOverlay() {
       {useOsmAprons && osmAprons.map((apron) => {
         const positions = geoToLatLng(apron.geoPolygon);
         if (positions.length < 3) return null;
-        const cong = findCongestion(apron.name, congestion);
+        const cong = findCongestion(apron.name, congestion, 'apron');
         const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
         const matches = isFilterActive && cong?.level === activeLevel;
         const dimmed = isFilterActive && !matches;
@@ -201,7 +209,7 @@ export default function AirportOverlay() {
       {useOsmTerminals && osmTerminals.map((terminal) => {
         const positions = geoToLatLng(terminal.geoPolygon);
         if (positions.length < 3) return null;
-        const cong = findCongestion(terminal.name, congestion);
+        const cong = findCongestion(terminal.name, congestion, 'terminal');
         const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
         const matches = isFilterActive && cong?.level === activeLevel;
         const dimmed = isFilterActive && !matches;
