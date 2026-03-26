@@ -1594,31 +1594,6 @@ def _get_arrival_runway_name() -> str:
     return "28R"
 
 
-def _get_runway_exit_position(state) -> tuple:
-    """Compute a runway exit position for LANDING→TAXI_TO_GATE transition.
-
-    Offsets the aircraft perpendicular to the runway (toward the terminal side)
-    from its current rollout position, simulating a high-speed turnoff exit.
-    Returns (lat, lon).
-    """
-    base_lat, base_lon = state.latitude, state.longitude
-
-    # Get runway heading to compute perpendicular exit direction
-    hdg = _get_runway_heading()
-    if hdg is None:
-        hdg = 284.0  # SFO fallback
-
-    # Exit perpendicular to runway toward terminal (right side = +90°)
-    # At most airports, terminals are on one side of the runway
-    exit_heading = (hdg + 90) % 360
-
-    # Offset 50-150m perpendicular to clear the runway centerline
-    offset_m = random.uniform(50, 150)
-    offset_deg_lat = (offset_m / 111000) * math.cos(math.radians(exit_heading))
-    offset_deg_lon = (offset_m / (111000 * math.cos(math.radians(base_lat)))) * math.sin(math.radians(exit_heading))
-
-    return (base_lat + offset_deg_lat, base_lon + offset_deg_lon)
-
 
 def _get_departure_runway() -> Optional[tuple]:
     """Get the departure runway start (lon, lat) from OSM data.
@@ -3637,9 +3612,6 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
         if state.on_ground and state.velocity <= 30:
             # Rollout complete — exit runway to taxiway
-            # Stagger exit position to prevent gridlock at single point
-            exit_pos = _get_runway_exit_position(state)
-            state.latitude, state.longitude = exit_pos
             emit_phase_transition(
                 state.icao24, state.callsign,
                 FlightPhase.LANDING.value, FlightPhase.TAXI_TO_GATE.value,
@@ -3647,8 +3619,6 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.aircraft_type, state.assigned_gate,
             )
             _set_phase(state, FlightPhase.TAXI_TO_GATE)
-            state.waypoint_index = 0
-            state.taxi_route = None  # Will be computed below
             # Release runway when exiting to taxiway
             arrival_rwy = _get_arrival_runway_name()
             _release_runway(state.icao24, arrival_rwy)
@@ -3678,6 +3648,26 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                         _release_gate(state.icao24, pre_gate)
                     state.assigned_gate = None
                     state.taxi_route = None  # Use default arrival waypoints
+
+            # Snap position to nearest taxi waypoint to avoid trajectory jump.
+            # The aircraft just finished rolling on the runway; placing it at
+            # the closest waypoint on the taxi route makes the trajectory line
+            # connect smoothly from rollout to taxi without a visible teleport.
+            taxi_wps = state.taxi_route or TAXI_WAYPOINTS_ARRIVAL
+            if taxi_wps and len(taxi_wps) >= 2:
+                best_idx = 0
+                best_dist = float("inf")
+                for _wi, wp in enumerate(taxi_wps):
+                    wp_lat, wp_lon = wp[1], wp[0]  # (lon, lat) → (lat, lon)
+                    d = _distance_between((state.latitude, state.longitude), (wp_lat, wp_lon))
+                    if d < best_dist:
+                        best_dist = d
+                        best_idx = _wi
+                state.latitude, state.longitude = taxi_wps[best_idx][1], taxi_wps[best_idx][0]
+                # Start from the next waypoint (we're already AT best_idx)
+                state.waypoint_index = best_idx + 1
+            else:
+                state.waypoint_index = 0
 
     elif state.phase == FlightPhase.TAXI_TO_GATE:
         # Taxi along waypoints to assigned gate WITH SEPARATION
