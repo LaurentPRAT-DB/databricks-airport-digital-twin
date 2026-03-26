@@ -6,6 +6,7 @@ import { airportLayout, getFeaturesByType } from '../../constants/airportLayout'
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { GeoPosition } from '../../types/airportFormats';
 import { useCongestion } from '../../hooks/usePredictions';
+import { useCongestionFilter } from '../../context/CongestionFilterContext';
 import { CongestionArea } from '../../types/flight';
 
 // Zoom thresholds for gate rendering (exported for testing)
@@ -120,6 +121,7 @@ function congestionTooltipText(name: string, cong: CongestionArea): string {
 export default function AirportOverlay() {
   const { getGates, getTerminals, getTaxiways, getAprons, getOSMRunways } = useAirportConfigContext();
   const { congestion } = useCongestion();
+  const { activeLevel } = useCongestionFilter();
   const [zoom, setZoom] = useState(14);
   useMapEvents({
     zoomend: (e) => setZoom(e.target.getZoom()),
@@ -142,6 +144,9 @@ export default function AirportOverlay() {
   const useOsmAprons = osmAprons.length > 0;
   const useOsmRunways = osmRunways.length > 0;
 
+  // When a congestion filter is active, check if an area matches
+  const isFilterActive = activeLevel !== null;
+
   // Hide all hardcoded elements when ANY OSM data is present (matches 3D behavior)
   const hasOSMData = useOsmTerminals || useOsmRunways || useOsmTaxiways || useOsmAprons;
 
@@ -162,15 +167,18 @@ export default function AirportOverlay() {
         if (positions.length < 3) return null;
         const cong = findCongestion(apron.name, congestion);
         const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
+        const matches = isFilterActive && cong?.level === activeLevel;
+        const dimmed = isFilterActive && !matches;
         return (
           <Polygon
             key={apron.id}
             positions={positions}
             pathOptions={{
               fillColor: colors?.fill || '#6b7280',
-              fillOpacity: cong ? 0.45 : 0.3,
-              color: colors?.border || '#4b5563',
-              weight: cong ? 2 : 1,
+              fillOpacity: dimmed ? 0.08 : matches ? 0.7 : cong ? 0.45 : 0.3,
+              color: matches ? '#2563eb' : dimmed ? '#94a3b8' : colors?.border || '#4b5563',
+              weight: matches ? 4 : dimmed ? 1 : cong ? 2 : 1,
+              dashArray: matches ? '6 3' : undefined,
             }}
           >
             <Tooltip direction="center">
@@ -188,15 +196,18 @@ export default function AirportOverlay() {
         if (positions.length < 3) return null;
         const cong = findCongestion(terminal.name, congestion);
         const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
+        const matches = isFilterActive && cong?.level === activeLevel;
+        const dimmed = isFilterActive && !matches;
         return (
           <Polygon
             key={terminal.id}
             positions={positions}
             pathOptions={{
-              fillColor: colors?.fill || '#3b82f6',
-              fillOpacity: cong ? 0.6 : 0.6,
-              color: colors?.border || '#1d4ed8',
-              weight: 2,
+              fillColor: dimmed ? '#94a3b8' : colors?.fill || '#3b82f6',
+              fillOpacity: dimmed ? 0.1 : matches ? 0.8 : 0.6,
+              color: matches ? '#2563eb' : dimmed ? '#94a3b8' : colors?.border || '#1d4ed8',
+              weight: matches ? 4 : dimmed ? 1 : 2,
+              dashArray: matches ? '6 3' : undefined,
             }}
           >
             <Tooltip direction="center">

@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect } from 'react';
 import { useCongestion } from '../../hooks/usePredictions';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { useFlightContext } from '../../context/FlightContext';
+import { useCongestionFilter } from '../../context/CongestionFilterContext';
 import { CongestionArea, Flight } from '../../types/flight';
 import { OSMGate } from '../../types/airportFormats';
 import { isGroundPhase, isArrivalPhase } from '../../utils/phaseUtils';
@@ -283,6 +284,7 @@ export default function GateStatus() {
   );
 
   const { congestion, isLoading: isCongestionLoading } = useCongestion();
+  const { activeLevel, setActiveLevel } = useCongestionFilter();
 
   const occupiedCount = gates.filter((g) => g.status !== 'VACANT').length;
   const availableCount = gates.length - occupiedCount;
@@ -451,18 +453,35 @@ export default function GateStatus() {
         </div>
       </div>
 
-      {/* Congestion Legend */}
+      {/* Congestion Filter */}
       <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
         <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">Area Congestion</div>
         <div className="flex flex-wrap gap-1.5">
-          {Object.entries(congestionColors).map(([level, colors]) => (
-            <span
-              key={level}
-              className={`px-1.5 py-0.5 rounded text-[10px] ${colors.bg} ${colors.text}`}
+          {Object.entries(congestionColors).map(([level, colors]) => {
+            const isActive = activeLevel === level;
+            return (
+              <button
+                key={level}
+                onClick={() => setActiveLevel(isActive ? null : level)}
+                className={`px-1.5 py-0.5 rounded text-[10px] border transition-all cursor-pointer
+                  ${colors.bg} ${colors.text} ${colors.border}
+                  ${isActive ? 'ring-2 ring-offset-1 ring-blue-500 font-bold scale-110' : 'opacity-80 hover:opacity-100'}
+                `}
+                title={isActive ? 'Click to clear filter' : `Filter by ${level} congestion`}
+              >
+                {level.charAt(0).toUpperCase() + level.slice(1)}
+              </button>
+            );
+          })}
+          {activeLevel && (
+            <button
+              onClick={() => setActiveLevel(null)}
+              className="px-1.5 py-0.5 rounded text-[10px] border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              title="Clear congestion filter"
             >
-              {level.charAt(0).toUpperCase() + level.slice(1)}
-            </span>
-          ))}
+              Clear
+            </button>
+          )}
         </div>
       </div>
     </div>

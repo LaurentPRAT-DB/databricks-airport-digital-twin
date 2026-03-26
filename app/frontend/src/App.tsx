@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { FlightProvider, useFlightContext } from './context/FlightContext';
 import { AirportConfigProvider, useAirportConfigContext } from './context/AirportConfigContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { CongestionFilterProvider } from './context/CongestionFilterContext';
 import Header from './components/Header/Header';
 import MobileHeader from './components/Header/MobileHeader';
 import FlightList from './components/FlightList/FlightList';
@@ -457,7 +458,9 @@ function App() {
     <ThemeProvider>
       <AirportConfigProvider>
         <FlightProvider simulationFlights={simulationFlights} simTrajectoryProvider={simTrajectoryProvider}>
-          <AppContent handleSimFlightsChange={handleSimFlightsChange} handleTrajectoryProviderChange={handleTrajectoryProviderChange} />
+          <CongestionFilterProvider>
+            <AppContent handleSimFlightsChange={handleSimFlightsChange} handleTrajectoryProviderChange={handleTrajectoryProviderChange} />
+          </CongestionFilterProvider>
         </FlightProvider>
       </AirportConfigProvider>
     </ThemeProvider>
