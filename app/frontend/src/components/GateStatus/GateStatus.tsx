@@ -362,16 +362,25 @@ export default function GateStatus() {
             const tGates = terminalGroups.get(name) || [];
             const occ = tGates.filter((g) => g.status !== 'VACANT').length;
             const avail = tGates.length - occ;
+            const termCong = getTerminalCongestion(name, congestion);
+            const matchesFilter = activeLevel && termCong?.level === activeLevel;
+            const dimmedByFilter = activeLevel && !matchesFilter;
             return (
               <button
                 key={name}
-                className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
+                className={`w-full flex items-center justify-between px-2 py-1.5 rounded transition-all text-left
+                  ${matchesFilter
+                    ? 'bg-blue-50 dark:bg-blue-900/30 ring-1 ring-blue-400'
+                    : dimmedByFilter
+                      ? 'opacity-30'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
                 onClick={() => setSelectedTerminal(name)}
               >
                 <div className="flex items-center">
-                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{name}</span>
+                  <span className={`text-xs font-medium ${matchesFilter ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'}`}>{name}</span>
                   {!isCongestionLoading && (
-                    <CongestionIndicator congestion={getTerminalCongestion(name, congestion)} />
+                    <CongestionIndicator congestion={termCong} />
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-[11px]">

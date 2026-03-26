@@ -174,11 +174,11 @@ export default function AirportOverlay() {
             key={apron.id}
             positions={positions}
             pathOptions={{
-              fillColor: colors?.fill || '#6b7280',
-              fillOpacity: dimmed ? 0.08 : matches ? 0.7 : cong ? 0.45 : 0.3,
-              color: matches ? '#2563eb' : dimmed ? '#94a3b8' : colors?.border || '#4b5563',
-              weight: matches ? 4 : dimmed ? 1 : cong ? 2 : 1,
-              dashArray: matches ? '6 3' : undefined,
+              fillColor: matches ? (colors?.fill || '#ef4444') : dimmed ? '#d1d5db' : colors?.fill || '#6b7280',
+              fillOpacity: dimmed ? 0.03 : matches ? 0.85 : cong ? 0.45 : 0.3,
+              color: matches ? '#ffffff' : dimmed ? '#d1d5db' : colors?.border || '#4b5563',
+              weight: matches ? 5 : dimmed ? 0.5 : cong ? 2 : 1,
+              opacity: dimmed ? 0.2 : 1,
             }}
           >
             <Tooltip direction="center">
@@ -203,14 +203,14 @@ export default function AirportOverlay() {
             key={terminal.id}
             positions={positions}
             pathOptions={{
-              fillColor: dimmed ? '#94a3b8' : colors?.fill || '#3b82f6',
-              fillOpacity: dimmed ? 0.1 : matches ? 0.8 : 0.6,
-              color: matches ? '#2563eb' : dimmed ? '#94a3b8' : colors?.border || '#1d4ed8',
-              weight: matches ? 4 : dimmed ? 1 : 2,
-              dashArray: matches ? '6 3' : undefined,
+              fillColor: matches ? (colors?.fill || '#ef4444') : dimmed ? '#d1d5db' : colors?.fill || '#3b82f6',
+              fillOpacity: dimmed ? 0.05 : matches ? 0.85 : 0.6,
+              color: matches ? '#ffffff' : dimmed ? '#d1d5db' : colors?.border || '#1d4ed8',
+              weight: matches ? 5 : dimmed ? 0.5 : 2,
+              opacity: dimmed ? 0.2 : 1,
             }}
           >
-            <Tooltip direction="center">
+            <Tooltip direction="center" permanent={matches}>
               {cong
                 ? congestionTooltipText(terminal.name, cong)
                 : terminal.name}
