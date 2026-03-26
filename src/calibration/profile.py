@@ -147,26 +147,52 @@ class AirportProfile:
 
 
 class AirportProfileLoader:
-    """Loads airport profiles with fallback chain: local JSON → Unity Catalog → hardcoded."""
+    """Loads airport profiles with fallback chain.
+
+    On Databricks (DATABRICKS_WAREHOUSE_ID set): UC first, local JSON as fallback.
+    Locally: local JSON first, UC as fallback.
+    """
 
     def __init__(self, profiles_dir: Optional[Path] = None):
         self._profiles_dir = profiles_dir or _PROFILES_DIR
         self._cache: dict[str, AirportProfile] = {}
+        # Detect Databricks environment
+        import os
+        self._on_databricks = bool(os.environ.get("DATABRICKS_WAREHOUSE_ID", ""))
 
     def get_profile(self, airport_code: str) -> AirportProfile:
         """Get profile for an airport (IATA or ICAO code).
 
-        Loading order:
+        Loading order on Databricks:
         1. In-memory cache
-        2. Local JSON file (data/calibration/profiles/{ICAO}.json)
-        3. Unity Catalog table (when running on Databricks)
-        4. Hardcoded fallback (current distributions, always works)
+        2. Unity Catalog airport_profiles table
+        3. Local JSON file (data/calibration/profiles/{ICAO}.json)
+        4. Known-stats profiles (known_profiles.py)
+        5. OpenFlights auto-build (if routes.dat cached locally)
+        6. Hardcoded fallback
+
+        Loading order locally (no warehouse ID):
+        1. In-memory cache
+        2. Local JSON file
+        3. Known-stats profiles
+        4. OpenFlights auto-build
+        5. Unity Catalog (skipped — no warehouse)
+        6. Hardcoded fallback
         """
         # Normalize to ICAO
         icao = _iata_to_icao(airport_code)
 
         if icao in self._cache:
             return self._cache[icao]
+
+        iata = _icao_to_iata(icao) if len(icao) == 4 else airport_code
+
+        # On Databricks: UC first (source of truth)
+        if self._on_databricks:
+            uc_profile = self._load_from_unity_catalog(icao)
+            if uc_profile is not None:
+                self._cache[icao] = uc_profile
+                return uc_profile
 
         # Try local JSON
         json_path = self._profiles_dir / f"{icao}.json"
@@ -181,7 +207,6 @@ class AirportProfileLoader:
 
         # Try hand-researched known profiles (known_profiles.py)
         from src.calibration.known_profiles import get_known_profile
-        iata = _icao_to_iata(icao) if len(icao) == 4 else airport_code
         known = get_known_profile(iata)
         if known is not None:
             self._cache[icao] = known
@@ -194,11 +219,12 @@ class AirportProfileLoader:
             self._cache[icao] = openflights_profile
             return openflights_profile
 
-        # Try Unity Catalog
-        uc_profile = self._load_from_unity_catalog(icao)
-        if uc_profile is not None:
-            self._cache[icao] = uc_profile
-            return uc_profile
+        # Local dev: try UC as late fallback (usually skipped — no warehouse)
+        if not self._on_databricks:
+            uc_profile = self._load_from_unity_catalog(icao)
+            if uc_profile is not None:
+                self._cache[icao] = uc_profile
+                return uc_profile
 
         # Fallback to hardcoded
         profile = _build_fallback_profile(airport_code)
