@@ -3797,7 +3797,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     _h = (hash(state.icao24) ^ hash(state.callsign[:3] if state.callsign else "")) & 0xFFFF
                     inbound_delay = (5 + ((_h >> 8) % 41)) if ((_h >> 4) % 5 == 0) else 0
                     _gate_last_delay[state.assigned_gate] = float(inbound_delay)
-                # Offset aircraft away from terminal based on OSM geometry + aircraft dimensions
+                # Snap to gate position, then offset away from terminal
+                gate_pos = get_gates().get(state.assigned_gate)
+                if gate_pos:
+                    state.latitude, state.longitude = gate_pos
                 parked_heading = _get_parked_heading(state.latitude, state.longitude)
                 state.heading = parked_heading
                 standoff = _compute_gate_standoff(
