@@ -1,0 +1,20 @@
+resources:
+  jobs:
+    profile_sync:
+      name: "[${bundle.target}] Airport DT - Sync Calibration Profiles to UC"
+      description: "One-time bulk upload of local JSON calibration profiles to airport_profiles Delta table"
+
+      tasks:
+        - task_key: sync_profiles
+          description: "Load all profile JSONs and MERGE into airport_profiles table"
+          notebook_task:
+            notebook_path: ../databricks/notebooks/sync_profiles_to_uc.py
+          environment_key: default
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+            dependencies:
+              - pyyaml
+              - pydantic

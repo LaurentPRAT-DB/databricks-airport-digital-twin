@@ -86,7 +86,7 @@ print(f"\nBuilt {len(profiles)} profiles")
 # COMMAND ----------
 
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.sql import StatementState
+from src.calibration.profile import save_batch_to_unity_catalog
 
 # Get warehouse ID from environment (set by app.yaml or job config)
 warehouse_id = os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
@@ -103,39 +103,7 @@ if not warehouse_id:
     dbutils.notebook.exit("no_warehouse_id")
 
 client = WorkspaceClient()
-persisted = 0
-
-for p in profiles:
-    profile_json = p.to_json().replace("'", "''")
-    sql = (
-        f"MERGE INTO {catalog}.{schema}.airport_profiles AS target "
-        f"USING (SELECT '{p.icao_code}' AS icao_code) AS source "
-        f"ON target.icao_code = source.icao_code "
-        f"WHEN MATCHED THEN UPDATE SET "
-        f"  iata_code = '{p.iata_code}', "
-        f"  profile_json = '{profile_json}', "
-        f"  data_source = '{p.data_source}', "
-        f"  sample_size = {p.sample_size}, "
-        f"  profile_date = current_timestamp(), "
-        f"  updated_at = current_timestamp() "
-        f"WHEN NOT MATCHED THEN INSERT "
-        f"  (icao_code, iata_code, profile_json, data_source, sample_size, profile_date, created_at, updated_at) "
-        f"VALUES ('{p.icao_code}', '{p.iata_code}', '{profile_json}', '{p.data_source}', "
-        f"  {p.sample_size}, current_timestamp(), current_timestamp(), current_timestamp())"
-    )
-    try:
-        response = client.statement_execution.execute_statement(
-            warehouse_id=warehouse_id,
-            statement=sql,
-            wait_timeout="30s",
-        )
-        if response.status and response.status.state == StatementState.SUCCEEDED:
-            persisted += 1
-            print(f"  ✓ {p.icao_code} ({p.iata_code})")
-        else:
-            print(f"  ✗ {p.icao_code}: {response.status}")
-    except Exception as e:
-        print(f"  ✗ {p.icao_code}: {e}")
+persisted = save_batch_to_unity_catalog(profiles, client, warehouse_id, catalog, schema)
 
 print(f"\nPersisted {persisted}/{len(profiles)} profiles to {catalog}.{schema}.airport_profiles")
 

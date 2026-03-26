@@ -305,11 +305,27 @@ def auto_calibrate_airport(
         sample_size=total_flights,
     )
 
-    # Save profile
+    # Save profile locally
     try:
         saved_path = profile.save()
         logger.info("Saved auto-calibrated profile for %s to %s", icao_code, saved_path)
     except Exception as e:
         logger.warning("Failed to save profile for %s: %s", icao_code, e)
+
+    # Also persist to Unity Catalog when running on Databricks
+    try:
+        import os
+        wh_id = os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
+        if wh_id:
+            from databricks.sdk import WorkspaceClient
+            from src.calibration.profile import save_to_unity_catalog
+            client = WorkspaceClient()
+            catalog = os.environ.get("DATABRICKS_CATALOG", "serverless_stable_3n0ihb_catalog")
+            schema = os.environ.get("DATABRICKS_SCHEMA", "airport_digital_twin")
+            save_to_unity_catalog(profile, client, wh_id, catalog, schema)
+    except ImportError:
+        logger.debug("Databricks SDK not available, skipping UC persistence")
+    except Exception as e:
+        logger.debug("UC persistence for %s failed: %s", icao_code, e)
 
     return profile

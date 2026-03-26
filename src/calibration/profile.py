@@ -291,6 +291,74 @@ class AirportProfileLoader:
 
 
 # ============================================================================
+# Unity Catalog persistence
+# ============================================================================
+
+def save_to_unity_catalog(
+    profile: AirportProfile,
+    client: "WorkspaceClient",
+    warehouse_id: str,
+    catalog: str = "serverless_stable_3n0ihb_catalog",
+    schema: str = "airport_digital_twin",
+) -> bool:
+    """Persist a single AirportProfile to the airport_profiles Delta table.
+
+    Uses MERGE to upsert by icao_code. Returns True on success, False on failure.
+    """
+    from databricks.sdk.service.sql import StatementState
+
+    profile_json = profile.to_json().replace("'", "''")
+    sql = (
+        f"MERGE INTO {catalog}.{schema}.airport_profiles AS target "
+        f"USING (SELECT '{profile.icao_code}' AS icao_code) AS source "
+        f"ON target.icao_code = source.icao_code "
+        f"WHEN MATCHED THEN UPDATE SET "
+        f"  iata_code = '{profile.iata_code}', "
+        f"  profile_json = '{profile_json}', "
+        f"  data_source = '{profile.data_source}', "
+        f"  sample_size = {profile.sample_size}, "
+        f"  profile_date = current_timestamp(), "
+        f"  updated_at = current_timestamp() "
+        f"WHEN NOT MATCHED THEN INSERT "
+        f"  (icao_code, iata_code, profile_json, data_source, sample_size, "
+        f"   profile_date, created_at, updated_at) "
+        f"VALUES ('{profile.icao_code}', '{profile.iata_code}', '{profile_json}', "
+        f"  '{profile.data_source}', {profile.sample_size}, "
+        f"  current_timestamp(), current_timestamp(), current_timestamp())"
+    )
+    try:
+        response = client.statement_execution.execute_statement(
+            warehouse_id=warehouse_id,
+            statement=sql,
+            wait_timeout="30s",
+        )
+        if response.status and response.status.state == StatementState.SUCCEEDED:
+            logger.info("Persisted %s (%s) to UC", profile.icao_code, profile.iata_code)
+            return True
+        logger.warning("Failed to persist %s: %s", profile.icao_code, response.status)
+        return False
+    except Exception as e:
+        logger.error("Error persisting %s to UC: %s", profile.icao_code, e)
+        return False
+
+
+def save_batch_to_unity_catalog(
+    profiles: list[AirportProfile],
+    client: "WorkspaceClient",
+    warehouse_id: str,
+    catalog: str = "serverless_stable_3n0ihb_catalog",
+    schema: str = "airport_digital_twin",
+) -> int:
+    """Persist multiple profiles to UC. Returns count of successfully persisted."""
+    persisted = 0
+    for p in profiles:
+        if save_to_unity_catalog(p, client, warehouse_id, catalog, schema):
+            persisted += 1
+    logger.info("Persisted %d/%d profiles to %s.%s.airport_profiles", persisted, len(profiles), catalog, schema)
+    return persisted
+
+
+# ============================================================================
 # IATA ↔ ICAO mapping (common airports)
 # ============================================================================
 
