@@ -202,6 +202,15 @@ out body geom;
         )
 
         logger.info(f"Fetching OSM data for {icao_code}")
+
+        # Check for local file cache (avoids rate-limit issues during development)
+        import pathlib
+        cache_path = pathlib.Path(f"/tmp/{icao_code.lower()}_osm_cache.json")
+        if cache_path.exists():
+            logger.info(f"Using cached OSM data from {cache_path}")
+            import json as _json
+            return _json.loads(cache_path.read_text())
+
         logger.debug(f"Overpass query:\n{query}")
 
         last_error = None

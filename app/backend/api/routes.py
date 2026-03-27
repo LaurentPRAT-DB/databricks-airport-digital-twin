@@ -12,7 +12,7 @@ from typing import Optional
 # Serialize concurrent airport activations to prevent global state corruption
 _activation_lock = asyncio.Lock()
 # Timeout for the entire activation flow (config load + gate reload + ML retrain)
-_ACTIVATION_TIMEOUT_S = 45
+_ACTIVATION_TIMEOUT_S = 90
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
