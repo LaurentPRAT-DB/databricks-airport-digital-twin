@@ -539,6 +539,7 @@ AIRPORTS: dict[str, tuple[float, float, str, str]] = {
     "KAD": (   10.6960,      7.3201, "DNKA", "NG"),
     "KAN": (   12.0456,      8.5236, "DNKN", "NG"),
     "KBL": (   34.5659,     69.2123, "OAKB", "AF"),
+    "KBP": (   50.3450,     30.8947, "UKBB", "UA"),
     "KBV": (    8.0956,     98.9890, "VTSG", "TH"),
     "KCH": (    1.4874,    110.3529, "WBGG", "MY"),
     "KCZ": (   33.5452,    133.6702, "RJOK", "JP"),

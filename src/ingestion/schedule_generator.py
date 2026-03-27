@@ -61,6 +61,9 @@ AIRLINES = {
     "VIR": {"name": "Virgin Atlantic", "weight": 0.005, "hubs": ["LHR"], "scope": "international"},
     "RYR": {"name": "Ryanair", "weight": 0.005, "hubs": ["STN", "DUB"], "scope": "regional_eu"},
     "EZY": {"name": "easyJet", "weight": 0.005, "hubs": ["LGW", "LTN"], "scope": "regional_eu"},
+    # Ukrainian carriers (Easter egg: KBP airport)
+    "AUI": {"name": "Ukraine International Airlines", "weight": 0.005, "hubs": ["KBP"], "scope": "full"},
+    "UAF": {"name": "Ukrainian Air Force", "weight": 0.003, "hubs": ["KBP"], "scope": "domestic"},
 }
 
 # Regional airport sets for scope validation (populated after DOMESTIC_AIRPORTS defined)
@@ -99,6 +102,7 @@ COUNTRY_DOMESTIC_AIRPORTS: dict[str, list[str]] = {
     "CA": ["YYZ", "YVR", "YUL", "YOW", "YEG", "YWG"],
     "MX": ["CUN", "GDL", "MTY", "TIJ", "CJS"],
     "TW": ["TSA", "KHH", "RMQ", "TNN"],
+    "UA": ["KBP", "LWO", "ODS", "OZH", "UDJ"],
     "CL": ["SCL", "CCP", "PMC", "IQQ"],
 }
 
@@ -193,6 +197,7 @@ def get_nearby_airports(
 # Aircraft types by category
 NARROW_BODY = ["A320", "A321", "B737", "B738", "A319", "E175"]
 WIDE_BODY = ["B777", "B787", "A330", "A350", "A380"]
+FIGHTER_JETS = ["F16", "F15", "F22", "F35"]
 
 # Turnaround times by aircraft category (minutes)
 NARROW_BODY_TURNAROUND = 45
@@ -433,6 +438,10 @@ def _select_aircraft(
     sample from the fleet distribution. Otherwise fall back to narrow/wide
     body selection based on route type.
     """
+    # Easter egg: military airline gets fighter jets
+    if airline_code == "UAF":
+        return random.choice(FIGHTER_JETS)
+
     if profile and airline_code and airline_code in profile.fleet_mix:
         fleet = profile.fleet_mix[airline_code]
         if fleet:

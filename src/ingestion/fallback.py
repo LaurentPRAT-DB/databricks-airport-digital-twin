@@ -701,6 +701,8 @@ VREF_SPEEDS = {
     "A330": 140, "A340": 145, "A345": 145,
     "A350": 142, "B777": 149, "B787": 143,
     "B747": 152, "A380": 145,
+    # Fighter jets (Easter egg) — approach at ~150-160 kts
+    "F14": 155, "F15": 150, "F16": 148, "F18": 150, "F22": 155, "F35": 152,
 }
 _DEFAULT_VREF = 135  # A320-class fallback
 
@@ -2510,6 +2512,10 @@ def _get_aircraft_type_for_airline(callsign: str, is_international: bool = False
     Uses calibrated fleet mix from the airport profile when available.
     """
     airline_code = callsign[:3].upper() if callsign and len(callsign) >= 3 else None
+
+    # Easter egg: Ukrainian Air Force gets fighter jets
+    if airline_code == "UAF":
+        return random.choice(["F16", "F15", "F22", "F35"])
 
     # Try calibrated fleet mix first
     if airline_code:
@@ -4523,6 +4529,21 @@ def generate_synthetic_flights(
             _OTH_REPLACEMENTS = ["SKW", "RPA", "ENY", "PDT", "EDV"]
             if prefix == "OTH":
                 prefix = random.choice(_OTH_REPLACEMENTS)
+
+            # Easter egg: ~15% chance of Ukrainian Air Force at UA airports
+            try:
+                from src.ingestion.airport_table import AIRPORTS as _apt_table
+                _apt_entry = _apt_table.get(local_iata)
+                _icao_to_iata_map = {v[2]: k for k, v in _apt_table.items()}
+                _resolved_iata = _icao_to_iata_map.get(local_iata, local_iata)
+                _apt_entry2 = _apt_table.get(_resolved_iata)
+                _check = _apt_entry or _apt_entry2
+                if _check and _check[3] == "UA":
+                    if random.random() < 0.15:
+                        prefix = "UAF"
+                        logger.info("Easter egg: UAF fighter jet spawning at %s (resolved: %s)", local_iata, _resolved_iata)
+            except Exception:
+                pass
 
             # Validate airline scope — only for non-profile airlines.
             # If the profile explicitly includes a carrier for this airport, trust it.

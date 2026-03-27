@@ -29,6 +29,8 @@ AIRCRAFT_CAPACITY = {
     "B777": 380,
     "B787": 300,
     "E175": 76,
+    # Fighter jets (Easter egg)
+    "F14": 2, "F15": 1, "F16": 1, "F18": 2, "F22": 1, "F35": 1,
 }
 
 # Bag status progression — lognormal parameters (mu, sigma) in minutes.

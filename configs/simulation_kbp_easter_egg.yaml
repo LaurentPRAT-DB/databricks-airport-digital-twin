@@ -1,0 +1,7 @@
+airport: KBP
+arrivals: 30
+departures: 30
+duration_hours: 24
+time_step_seconds: 2.0
+seed: 2022
+output_file: simulation_output_kbp.json

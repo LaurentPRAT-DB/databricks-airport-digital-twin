@@ -224,6 +224,9 @@ class SimulationEngine:
         self.flight_schedule: list[dict] = []
         self._generate_schedule()
 
+        # Easter egg: inject fighter jet sorties for Ukrainian airports
+        self._inject_fighter_sorties()
+
         # Inject traffic modifiers from scenario
         if self.scenario:
             self._inject_traffic_modifiers()
@@ -504,6 +507,75 @@ class SimulationEngine:
             surplus,
             duration_h,
         )
+
+    def _inject_fighter_sorties(self) -> None:
+        """Easter egg: inject Ukrainian Air Force fighter jet sorties for UA airports."""
+        from src.ingestion.schedule_generator import FIGHTER_JETS
+
+        # Only inject for Ukrainian airports (country code UA in airport table)
+        from src.ingestion.airport_table import AIRPORTS as _apt
+        entry = _apt.get(self.config.airport)
+        if not entry or entry[3] != "UA":
+            return
+
+        start = self.config.effective_start_time()
+        duration_h = self.config.effective_duration_hours()
+        local_iata = self.config.airport
+
+        # Get nearby Ukrainian airports for sortie destinations
+        ua_airports = [code for code, e in _apt.items() if e[3] == "UA" and code != local_iata]
+        if not ua_airports:
+            ua_airports = [local_iata]
+
+        # Inject ~15-20% fighter sorties (proportional to total flights)
+        total = len(self.flight_schedule)
+        n_sorties = max(4, int(total * 0.18))
+
+        for _ in range(n_sorties):
+            aircraft = random.choice(FIGHTER_JETS)
+            flight_num = f"UAF{random.randint(100, 999)}"
+            hour = random.uniform(0, duration_h)
+            sched_time = start + timedelta(hours=hour)
+
+            # Fighter sortie: depart, fly patrol, return
+            dest = random.choice(ua_airports)
+            self.flight_schedule.append({
+                "flight_number": flight_num,
+                "airline": "Ukrainian Air Force",
+                "airline_code": "UAF",
+                "origin": local_iata,
+                "destination": dest,
+                "aircraft_type": aircraft,
+                "flight_type": "departure",
+                "scheduled_time": sched_time.isoformat(),
+                "delay_minutes": 0,
+                "delay_code": None,
+                "delay_reason": None,
+                "scenario_injected": True,
+            })
+
+            # Return sortie 30-90 min later
+            return_time = sched_time + timedelta(minutes=random.randint(30, 90))
+            if return_time < start + timedelta(hours=duration_h):
+                self.flight_schedule.append({
+                    "flight_number": f"UAF{random.randint(100, 999)}",
+                    "airline": "Ukrainian Air Force",
+                    "airline_code": "UAF",
+                    "origin": dest,
+                    "destination": local_iata,
+                    "aircraft_type": aircraft,
+                    "flight_type": "arrival",
+                    "scheduled_time": return_time.isoformat(),
+                    "delay_minutes": 0,
+                    "delay_code": None,
+                    "delay_reason": None,
+                    "scenario_injected": True,
+                })
+
+        self.flight_schedule.sort(key=lambda f: f["scheduled_time"])
+        self.recorder.schedule = self.flight_schedule
+        n_fighters = sum(1 for f in self.flight_schedule if f.get("airline_code") == "UAF")
+        logger.info("Easter egg: injected %d Ukrainian Air Force fighter sorties", n_fighters)
 
     def _inject_traffic_modifiers(self) -> None:
         """Inject extra flights from scenario traffic modifiers into the schedule."""
