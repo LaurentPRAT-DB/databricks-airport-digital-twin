@@ -9,6 +9,8 @@ resources:
           description: "Load all profile JSONs and MERGE into airport_profiles table"
           notebook_task:
             notebook_path: ../databricks/notebooks/sync_profiles_to_uc.py
+            base_parameters:
+              warehouse_id: "b868e84cedeb4262"
           environment_key: default
 
       environments:

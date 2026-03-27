@@ -21,20 +21,40 @@ dbutils.library.restartPython()
 
 dbutils.widgets.text("catalog", "serverless_stable_3n0ihb_catalog", "UC Catalog")
 dbutils.widgets.text("schema", "airport_digital_twin", "UC Schema")
+dbutils.widgets.text("warehouse_id", "", "SQL Warehouse ID")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
+_wh_param = dbutils.widgets.get("warehouse_id")
 
 print(f"Target: {catalog}.{schema}.airport_profiles")
+if _wh_param:
+    print(f"Warehouse ID (from param): {_wh_param}")
 
 # COMMAND ----------
 
 import os, sys
 from pathlib import Path
 
-repo_root = os.getcwd()
-if repo_root not in sys.path:
-    sys.path.insert(0, repo_root)
+# Derive bundle root from notebook path (works on serverless + classic)
+try:
+    nb_path = (
+        dbutils.notebook.entry_point  # noqa: F821
+        .getDbutils()
+        .notebook()
+        .getContext()
+        .notebookPath()
+        .get()
+    )
+    ws_path = "/Workspace" + nb_path
+    # notebook is at <bundle_root>/databricks/notebooks/<this_file>
+    bundle_root = os.path.dirname(os.path.dirname(os.path.dirname(ws_path)))
+except Exception:
+    bundle_root = os.getcwd()
+
+print(f"Bundle root: {bundle_root}")
+if bundle_root not in sys.path:
+    sys.path.insert(0, bundle_root)
 
 from src.calibration.profile import AirportProfile, save_to_unity_catalog
 
@@ -45,7 +65,7 @@ from src.calibration.profile import AirportProfile, save_to_unity_catalog
 
 # COMMAND ----------
 
-profiles_dir = Path(repo_root) / "data" / "calibration" / "profiles"
+profiles_dir = Path(bundle_root) / "data" / "calibration" / "profiles"
 json_files = sorted(profiles_dir.glob("*.json"))
 print(f"Found {len(json_files)} profile JSON files in {profiles_dir}")
 
@@ -72,7 +92,7 @@ if errors:
 
 from databricks.sdk import WorkspaceClient
 
-warehouse_id = os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
+warehouse_id = _wh_param or os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
 if not warehouse_id:
     try:
         warehouse_id = spark.conf.get("spark.databricks.sql.warehouse.id", "")
@@ -80,7 +100,7 @@ if not warehouse_id:
         pass
 
 if not warehouse_id:
-    print("ERROR: No warehouse ID found.")
+    print("ERROR: No warehouse ID found. Pass warehouse_id parameter or set DATABRICKS_WAREHOUSE_ID.")
     dbutils.notebook.exit("no_warehouse_id")
 
 client = WorkspaceClient()
