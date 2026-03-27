@@ -81,6 +81,55 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false, flightPhase
   const clonedScene = useMemo(() => {
     const clone = scene.clone(true);
 
+    // If nodePrefix is set, hide non-matching top-level nodes and auto-center
+    if (modelConfig.nodePrefix) {
+      const box = new THREE.Box3();
+      clone.traverse((child) => {
+        // Find the GLTF_SceneRootNode level — its children are the individual models
+        if (child.children && child.children.length > 5) {
+          for (const grandchild of child.children) {
+            if (grandchild.name && !grandchild.name.startsWith(modelConfig.nodePrefix!)) {
+              grandchild.visible = false;
+            }
+          }
+        }
+      });
+      // Compute bounding box of visible geometry and re-center
+      clone.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.visible && child.geometry) {
+          // Walk parents to check visibility
+          let node: THREE.Object3D | null = child;
+          let allVisible = true;
+          while (node) {
+            if (!node.visible) { allVisible = false; break; }
+            node = node.parent;
+          }
+          if (allVisible) {
+            child.geometry.computeBoundingBox();
+            if (child.geometry.boundingBox) {
+              box.expandByObject(child);
+            }
+          }
+        }
+      });
+      if (!box.isEmpty()) {
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        // Offset all visible geometry so the jet is centered at origin
+        clone.traverse((child) => {
+          if (child.children && child.children.length > 5) {
+            for (const grandchild of child.children) {
+              if (grandchild.visible) {
+                grandchild.position.x -= center.x;
+                grandchild.position.y -= center.y;
+                grandchild.position.z -= center.z;
+              }
+            }
+          }
+        });
+      }
+    }
+
     // Apply airline colors to materials
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {

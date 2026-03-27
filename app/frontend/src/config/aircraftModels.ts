@@ -23,6 +23,8 @@ export interface AircraftModelConfig {
   url: string;
   scale: number;
   rotationOffset: { x: number; y: number; z: number };
+  /** When set, only show nodes whose name starts with this prefix (for multi-model GLBs) */
+  nodePrefix?: string;
 }
 
 export interface AirlineConfig {
@@ -75,6 +77,20 @@ export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   // Boeing wide body (wingspan ~60-65m)
   'B777': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
   'B787': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
+
+  // Fighter jets (from fighter jet collection GLB — units are ~10x real meters)
+  // F-14 Tomcat: real wingspan 19.5m, model Y span ~196 units → scale 19.5/196 ≈ 0.0995
+  'F14': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-14' },
+  // F-15 Eagle: real wingspan 13.1m, model Y span ~131 → scale 13.1/131 ≈ 0.1
+  'F15': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-15' },
+  // F-16 Falcon: real wingspan 9.4m, model Y span ~94 → scale 9.4/94 ≈ 0.1
+  'F16': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-16' },
+  // F/A-18 Hornet: real wingspan 11.4m, model Y span ~130 → scale 11.4/130 ≈ 0.088
+  'F18': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.088 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-18' },
+  // F-22 Raptor: real wingspan 13.6m, model Y span ~136 → scale 13.6/136 ≈ 0.1
+  'F22': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-22' },
+  // F-35 Lightning: real wingspan 10.7m, model Y span ~132 → scale 10.7/132 ≈ 0.081
+  'F35': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.081 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-35' },
 
   // Generic fallback - generic-jet.glb native 2.0 units, target 35m wingspan
   'DEFAULT': { url: '/models/aircraft/generic-jet.glb', scale: 17.5 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI, z: 0 } },
@@ -130,6 +146,10 @@ export const AIRLINES: Record<string, AirlineConfig> = {
   'QFA': { name: 'Qantas', primaryColor: 0xE0001A, secondaryColor: 0xFFFFFF },
   'UAE': { name: 'Emirates', primaryColor: 0xD71921, secondaryColor: 0xC69C6D },
   'CPA': { name: 'Cathay Pacific', primaryColor: 0x006564, secondaryColor: 0xA6A8AA },
+
+  // Ukrainian (Easter egg)
+  'AUI': { name: 'Ukraine International Airlines', primaryColor: 0x005BBB, secondaryColor: 0xFFD500 },
+  'UAF': { name: 'Ukrainian Air Force', primaryColor: 0x005BBB, secondaryColor: 0xFFD500 },
 
   // Default
   'DEFAULT': { name: 'Unknown Airline', primaryColor: 0x888888, secondaryColor: 0xCCCCCC },
