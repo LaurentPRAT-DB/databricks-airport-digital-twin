@@ -516,13 +516,35 @@ if FRONTEND_DIST.exists():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
         logger.info(f"Mounted /assets from {assets_dir}")
 
-    # Serve 3D model files (GLB, GLTF)
+    # Serve 3D model files from UC Volumes (with local dist/ fallback for dev)
+    UC_VOLUMES_MODEL_PATH = "/Volumes/serverless_stable_3n0ihb_catalog/airport_digital_twin/static_assets/models"
     models_dir = FRONTEND_DIST / "models"
-    if models_dir.exists():
-        app.mount("/models", StaticFiles(directory=models_dir), name="models")
-        logger.info(f"Mounted /models from {models_dir} (files: {list(models_dir.glob('**/*'))})")
-    else:
-        logger.warning(f"Models directory not found at {models_dir}")
+
+    @app.get("/models/{subpath:path}")
+    async def serve_model(subpath: str):
+        """Serve 3D model files from UC Volumes, falling back to local dist/models/."""
+        import re
+        # Sanitize path to prevent directory traversal
+        if ".." in subpath or not re.match(r'^[\w/._-]+$', subpath):
+            raise HTTPException(status_code=400, detail="Invalid path")
+
+        # Try UC Volumes first (Databricks deployment)
+        uc_path = f"{UC_VOLUMES_MODEL_PATH}/{subpath}"
+        workspace_path = f"/Workspace{uc_path}"
+        wp = Path(workspace_path)
+        if wp.exists():
+            media = "model/gltf-binary" if subpath.endswith(".glb") else "application/octet-stream"
+            return FileResponse(wp, media_type=media, headers={"Cache-Control": "public, max-age=86400"})
+
+        # Fallback to local dist/models/ (local dev)
+        local_path = models_dir / subpath
+        if local_path.exists():
+            media = "model/gltf-binary" if subpath.endswith(".glb") else "application/octet-stream"
+            return FileResponse(local_path, media_type=media, headers={"Cache-Control": "public, max-age=86400"})
+
+        raise HTTPException(status_code=404, detail=f"Model not found: {subpath}")
+
+    logger.info(f"Registered /models route (UC Volumes: {UC_VOLUMES_MODEL_PATH}, fallback: {models_dir})")
     # Serve service worker with correct MIME type
     @app.get("/sw.js")
     async def serve_service_worker():

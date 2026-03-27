@@ -32,7 +32,8 @@ sync:
     - data/calibration/download_manual/**
     - data/ml_models/**
     - data/msfs_bgl/**
-    # Frontend: only dist/ is needed at runtime
+    # Frontend: only dist/ is needed at runtime (3D models served from UC Volumes)
+    - app/frontend/dist/models/**
     - app/frontend/src/**
     - app/frontend/coverage/**
     - app/frontend/public/**
