@@ -409,6 +409,78 @@ class CongestionPredictor:
 
         return results
 
+    @staticmethod
+    def _infer_terminal(ref: str, is_remote_stand: bool = False) -> str:
+        """Infer terminal name from gate ref prefix, matching frontend logic."""
+        import re
+        if is_remote_stand:
+            return "PP"
+        # Letter prefix: "A12" → "Terminal A"
+        m = re.match(r'^([A-Za-z]+)', ref)
+        if m:
+            return f"Terminal {m.group(1).upper()}"
+        # Numeric prefix: "17B" → "Terminal 1"
+        m = re.match(r'^(\d)', ref)
+        if m:
+            return f"Terminal {m.group(1)}"
+        return "Other"
+
+    def compute_terminal_congestion(
+        self, flights: List[dict], gates: List[dict]
+    ) -> List[AreaCongestion]:
+        """Compute per-terminal congestion from gate occupancy.
+
+        Groups gates by inferred terminal (same logic as frontend), then
+        computes occupancy ratio to determine congestion level.
+
+        Args:
+            flights: List of flight dicts (needs assigned_gate field).
+            gates: List of gate dicts from airport config service.
+
+        Returns:
+            List of AreaCongestion with terminal-type entries.
+        """
+        if not gates:
+            return []
+
+        # Build set of occupied gate refs
+        occupied_gates: set = set()
+        for f in flights:
+            gate_ref = f.get("assigned_gate")
+            if gate_ref:
+                occupied_gates.add(gate_ref)
+
+        # Group gates by terminal
+        terminal_gates: Dict[str, List[str]] = {}
+        for g in gates:
+            ref = g.get("ref") or g.get("id", "")
+            is_remote = bool(g.get("is_remote_stand", False))
+            terminal = g.get("terminal") or self._infer_terminal(ref, is_remote)
+            if terminal in ("PP", "Other"):
+                continue  # Skip remote stands and unclassified
+            terminal_gates.setdefault(terminal, []).append(ref)
+
+        results = []
+        for terminal_name, gate_refs in sorted(terminal_gates.items()):
+            total = len(gate_refs)
+            occupied = sum(1 for r in gate_refs if r in occupied_gates)
+            level = self._compute_congestion_level(occupied, total)
+            wait = self._estimate_wait_time(level, "terminal")
+            confidence = self._compute_confidence(occupied, "terminal")
+            # area_id matches frontend expectation: "terminal_a", "terminal_1", etc.
+            area_id = terminal_name.lower().replace(" ", "_")
+            results.append(AreaCongestion(
+                area_id=area_id,
+                area_type="terminal",
+                level=level,
+                flight_count=occupied,
+                predicted_wait_minutes=wait,
+                confidence=confidence,
+                capacity=total,
+            ))
+
+        return results
+
     def get_bottlenecks(self, flights: List[dict]) -> List[AreaCongestion]:
         """
         Get only HIGH and CRITICAL congestion areas.

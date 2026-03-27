@@ -190,7 +190,27 @@ class PredictionService:
     ) -> List[AreaCongestion]:
         if flights is None:
             flights = []
-        return self.congestion_predictor.predict(flights)
+        results = self.congestion_predictor.predict(flights)
+
+        # Replace OSM-polygon terminal areas with gate-occupancy terminal areas
+        # (aligns with frontend terminal grouping by gate ref prefix)
+        try:
+            from app.backend.services.airport_config_service import (
+                get_airport_config_service,
+            )
+            gates = get_airport_config_service().get_config().get("gates", [])
+            if gates:
+                terminal_congestion = self.congestion_predictor.compute_terminal_congestion(
+                    flights, gates
+                )
+                if terminal_congestion:
+                    # Remove OSM-polygon terminal areas, keep runway/taxiway/apron
+                    results = [r for r in results if r.area_type != "terminal"]
+                    results.extend(terminal_congestion)
+        except Exception as e:
+            logger.debug(f"Terminal congestion skipped: {e}")
+
+        return results
 
     async def get_bottlenecks(
         self, flights: Optional[List[Dict[str, Any]]] = None
