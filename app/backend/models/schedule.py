@@ -18,6 +18,8 @@ class FlightStatus(str, Enum):
     ON_TIME = "on_time"
     DELAYED = "delayed"
     BOARDING = "boarding"
+    FINAL_CALL = "final_call"
+    GATE_CLOSED = "gate_closed"
     DEPARTED = "departed"
     ARRIVED = "arrived"
     CANCELLED = "cancelled"
