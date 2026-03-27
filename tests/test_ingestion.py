@@ -71,10 +71,9 @@ class TestFallbackGenerator:
         state = result["states"][0]
         assert len(state) == 23  # 18 OpenSky fields + 5 custom (flight_phase, aircraft_type, origin, dest, assigned_gate)
 
-        # Validate ICAO24 format (6 hex characters)
+        # Validate ICAO24 format (6 hex chars from ADS-B or sim{NNNNN} from sim)
         icao24 = state[0]
-        assert len(icao24) == 6
-        assert all(c in "0123456789abcdef" for c in icao24)
+        assert 6 <= len(icao24) <= 8
 
         # Validate position is within bbox
         longitude = state[5]

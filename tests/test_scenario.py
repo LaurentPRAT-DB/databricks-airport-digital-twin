@@ -714,7 +714,7 @@ class TestFlightDynamics:
                             if e.get("event_type") == "go_around"]
         assert len(go_around_events) >= 1, "Go-around event not recorded"
         assert test_state.go_around_count >= 1, "Go-around count not incremented"
-        assert test_state.phase == FlightPhase.APPROACHING, "Should stay in APPROACHING after go-around"
+        assert test_state.phase == FlightPhase.ENROUTE, "Go-around transitions to ENROUTE for re-sequencing"
         # Smooth go-around: altitude isn't instantly set — instead, go_around_target_alt
         # is set and the aircraft climbs gradually over subsequent ticks.
         assert test_state.go_around_target_alt > test_state.altitude, \
@@ -851,7 +851,7 @@ class TestFlightDynamics:
         from src.simulation.engine import SimulationEngine
         from src.ingestion.fallback import (
             FlightState, FlightPhase, _flight_states,
-            _runway_28R, _occupy_runway,
+            _get_arrival_runway_name, _get_runway_state,
         )
 
         config = SimulationConfig(
@@ -860,8 +860,9 @@ class TestFlightDynamics:
         )
         engine = SimulationEngine(config)
 
-        # Occupy the runway so it's not clear
-        _runway_28R.occupied_by = "blocker01"
+        # Occupy the actual arrival runway so it's not clear
+        arr_rwy = _get_arrival_runway_name()
+        _get_runway_state(arr_rwy).occupied_by = "blocker01"
 
         state = FlightState(
             icao24="stuck01", callsign="STK001",
@@ -879,7 +880,7 @@ class TestFlightDynamics:
         assert engine._phase_time["stuck01"] == ("approaching", 600.0)
 
         # Clean up
-        _runway_28R.occupied_by = None
+        _get_runway_state(arr_rwy).occupied_by = None
         _flight_states.pop("stuck01", None)
 
 

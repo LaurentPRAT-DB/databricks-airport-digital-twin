@@ -170,9 +170,9 @@ class TestFlightDataIntegrity:
             assert "icao24" in flight
             assert "data_source" in flight
 
-            # Check icao24 format (should be hex string)
+            # Check icao24 format (hex string from ADS-B or sim{NNNNN} from sim)
             assert isinstance(flight["icao24"], str)
-            assert len(flight["icao24"]) == 6
+            assert 6 <= len(flight["icao24"]) <= 8
 
     def test_flight_positions_have_coordinates(self, client):
         """Test that flights have valid coordinate data."""

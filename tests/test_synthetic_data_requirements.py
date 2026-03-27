@@ -401,13 +401,13 @@ class TestApproachSeparation:
         follow = FlightState(
             icao24="follow", callsign="TST002",
             latitude=37.60, longitude=-122.28,  # ~0.02 deg = ~1.2 NM (too close)
-            altitude=4000, velocity=180, heading=270,
+            altitude=3500, velocity=180, heading=270,
             vertical_rate=-800, on_ground=False,
             phase=FlightPhase.APPROACHING, aircraft_type="E175",
         )
         _flight_states["lead"] = lead
         _flight_states["follow"] = follow
-        # HEAVY→SMALL = 6 NM, these are ~1.2 NM apart
+        # HEAVY→SMALL = 6 NM, these are ~1.2 NM apart, 500ft vertical (< 1000ft min)
         assert _check_approach_separation(follow) is False
 
     def test_sufficient_separation_passes(self):
@@ -487,13 +487,14 @@ class TestTaxiSeparation:
         )
         state2 = FlightState(
             icao24="taxi2", callsign="TST002",
-            latitude=37.6162, longitude=-122.3782,  # Very close
+            latitude=37.6158, longitude=-122.3782,  # Very close, BEHIND taxi1 (heading north)
             altitude=0, velocity=15, heading=0,
             vertical_rate=0, on_ground=True,
             phase=FlightPhase.TAXI_TO_GATE,
         )
         _flight_states["taxi1"] = state1
         _flight_states["taxi2"] = state2
+        # taxi2 behind taxi1, both heading north → taxi1 is ahead of taxi2
         assert _check_taxi_separation(state2) is False
 
 

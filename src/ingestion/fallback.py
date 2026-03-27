@@ -2263,13 +2263,23 @@ def _find_available_gate() -> Optional[str]:
 def _find_overflow_gate() -> Optional[str]:
     """Find a gate for overflow (all occupied). Distributes across gates.
 
-    Instead of always picking the single soonest-to-free gate (which causes
-    stacking when multiple flights overflow simultaneously), pick randomly
-    from the N gates that will free soonest.
+    Prefers gates whose occupant is departing (PUSHBACK/TAXI_TO_RUNWAY)
+    over gates with parked aircraft, to avoid true double-occupancy.
+    Falls back to soonest-to-free if no departing gates found.
     """
     _init_gate_states()
     if not _gate_states:
         return None
+    # Prefer gates where the occupant is actively departing
+    departing_gates = []
+    for gate, gs in _gate_states.items():
+        if gs.occupied_by and gs.occupied_by in _flight_states:
+            fs = _flight_states[gs.occupied_by]
+            if fs.phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY,
+                            FlightPhase.TAKEOFF, FlightPhase.DEPARTING):
+                departing_gates.append(gate)
+    if departing_gates:
+        return random.choice(departing_gates)
     # Sort gates by available_at, pick randomly from top 5 soonest
     sorted_gates = sorted(_gate_states.keys(), key=lambda g: _gate_states[g].available_at)
     top_n = min(5, len(sorted_gates))

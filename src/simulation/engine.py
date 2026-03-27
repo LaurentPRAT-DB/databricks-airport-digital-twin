@@ -29,6 +29,7 @@ from src.ingestion.fallback import (
     _release_gate,
     _gate_states,
     _flight_states,
+    _runway_states,
     _runway_28L,
     _runway_28R,
     RunwayState,
@@ -315,20 +316,14 @@ class SimulationEngine:
         _flight_states.clear()
         _gate_states.clear()
 
-        # Reset runway states
-        _runway_28L.occupied_by = None
-        _runway_28L.last_departure_time = 0.0
-        _runway_28L.last_arrival_time = 0.0
-        _runway_28L.approach_queue.clear()
-        _runway_28L.departure_queue.clear()
-        _runway_28L.last_departure_type = "LARGE"
-
-        _runway_28R.occupied_by = None
-        _runway_28R.last_departure_time = 0.0
-        _runway_28R.last_arrival_time = 0.0
-        _runway_28R.approach_queue.clear()
-        _runway_28R.departure_queue.clear()
-        _runway_28R.last_departure_type = "LARGE"
+        # Reset ALL runway states — clear the entire dict and re-init defaults.
+        # Previous sims may have created dynamic entries (e.g. reciprocal "10L"
+        # for "28R") that would otherwise persist and block arrivals.
+        _runway_states.clear()
+        _runway_28L.__init__()
+        _runway_28R.__init__()
+        _runway_states["28L"] = _runway_28L
+        _runway_states["28R"] = _runway_28R
 
         # Reset gate cache so simulation uses default gates
         _fb._loaded_gates = None
@@ -844,7 +839,8 @@ class SimulationEngine:
                             and new_phase == FlightPhase.LANDING
                             and random.random() < self.capacity.go_around_probability()):
                         from src.ingestion.fallback import _release_runway, VREF_SPEEDS
-                        _release_runway(icao24, "28R")
+                        from src.ingestion.fallback import _get_arrival_runway_name
+                        _release_runway(icao24, _get_arrival_runway_name())
                         # Transition to ENROUTE (not APPROACHING wp 0) so the
                         # aircraft flies FORWARD on current heading, climbs, then
                         # re-sequences via the holding pattern logic.
@@ -956,8 +952,9 @@ class SimulationEngine:
             self._phase_time[icao24] = ("taxi_to_runway", 0.0)
 
         elif state.phase == FlightPhase.APPROACHING:
-            from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway, VREF_SPEEDS
-            if _is_runway_clear("28R"):
+            from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway, VREF_SPEEDS, _get_arrival_runway_name
+            _arr_rwy = _get_arrival_runway_name()
+            if _is_runway_clear(_arr_rwy):
                 # Apply go-around check (same as normal transition)
                 if random.random() < self.capacity.go_around_probability():
                     # Transition to ENROUTE; keep current heading (correct from approach)
@@ -996,7 +993,7 @@ class SimulationEngine:
                     else:
                         state.phase = FlightPhase.LANDING
                         state.waypoint_index = 0
-                        _occupy_runway(icao24, "28R")
+                        _occupy_runway(icao24, _arr_rwy)
                         self._phase_time[icao24] = ("landing", 0.0)
             else:
                 # Runway still blocked — reset timer to check again in 5 min
@@ -1004,11 +1001,12 @@ class SimulationEngine:
 
         elif state.phase == FlightPhase.LANDING:
             # Force taxi
+            from src.ingestion.fallback import _release_runway, _get_arrival_runway_name
             state.altitude = 0
             state.on_ground = True
             state.phase = FlightPhase.TAXI_TO_GATE
             state.waypoint_index = 0
-            _release_runway(icao24, "28R")
+            _release_runway(icao24, _get_arrival_runway_name())
             if not state.assigned_gate:
                 gate = _find_available_gate()
                 if gate:
