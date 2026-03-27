@@ -575,55 +575,76 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
             elif state.turnaround_phase in ("boarding", "loading", "chocks_off"):
                 status = "boarding"
             else:
-                status = "on_time"
-        elif phase in (FlightPhase.APPROACHING, FlightPhase.LANDING, FlightPhase.TAXI_TO_GATE):
-            status = "on_time"
-        elif phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY, FlightPhase.TAKEOFF):
-            status = "boarding" if is_arrival else "on_time"
+                status = "scheduled"
+        elif phase == FlightPhase.APPROACHING:
+            status = "scheduled"  # approaching = not yet arrived, show as upcoming
+        elif phase == FlightPhase.LANDING:
+            status = "final_call"  # actively landing
+        elif phase == FlightPhase.TAXI_TO_GATE:
+            status = "arrived"  # on the ground, taxiing in
+        elif phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY):
+            status = "gate_closed" if not is_arrival else "on_time"
+        elif phase == FlightPhase.TAKEOFF:
+            status = "departed"
         elif phase == FlightPhase.DEPARTING:
             status = "departed"
         elif phase == FlightPhase.ENROUTE:
-            status = "on_time" if is_arrival else "departed"
+            status = "scheduled" if is_arrival else "departed"
         else:
             status = "on_time"
 
-        # Spread scheduled times across a 3-hour window centered on now.
-        # Deterministic hash per icao24 ensures stability across FIDS refreshes.
-        _h = (hash(icao24) ^ hash(airline_code)) & 0xFFFF
-        spread_minutes = (_h % 180) - 90  # -90 to +90 min from now
+        # Deterministic per-flight hash for stable FIDS ordering across refreshes.
+        # Use a large prime multiplier to spread hash values evenly.
+        _h = ((hash(icao24) * 2654435761) ^ hash(airline_code)) & 0xFFFFFFFF
+        # Per-flight unique offset within a 4-hour window
+        spread_minutes = (_h % 240) - 120  # -120 to +120 min from now
 
         # Delay jitter: ~20% of flights have 5-45 min delay
         delay_minutes = 0
         if (_h >> 4) % 5 == 0:  # deterministic 20% chance
             delay_minutes = 5 + ((_h >> 8) % 41)  # 5-45 min
 
+        # Compute scheduled times based on actual flight phase and state
         if is_arrival:
             if phase in (FlightPhase.PARKED,):
-                # Already arrived: scheduled in the past
-                scheduled_time = (now - timedelta(minutes=abs(spread_minutes) + 5)).isoformat()
-            elif phase in (FlightPhase.TAXI_TO_GATE,):
-                scheduled_time = (now - timedelta(minutes=abs(spread_minutes) % 10)).isoformat()
+                # Already arrived: scheduled in the past (5-60 min ago)
+                past_offset = 5 + (_h % 55)
+                scheduled_time = (now - timedelta(minutes=past_offset)).isoformat()
+            elif phase == FlightPhase.TAXI_TO_GATE:
+                # Just landed, taxiing in: arrived ~2-8 min ago
+                scheduled_time = (now - timedelta(minutes=2 + _h % 6)).isoformat()
             elif phase == FlightPhase.LANDING:
-                scheduled_time = (now + timedelta(minutes=2 + abs(spread_minutes) % 8)).isoformat()
+                # Actively landing: ETA is now
+                scheduled_time = (now + timedelta(minutes=1 + _h % 3)).isoformat()
             elif phase == FlightPhase.APPROACHING:
-                descent_min = state.altitude / 800.0 if state.altitude > 0 else 2.0
-                eta_min = max(3, int(descent_min + 5 + (_h % 15)))
+                # Use altitude to compute realistic ETA
+                descent_rate = 800.0  # ft/min typical descent
+                descent_min = state.altitude / descent_rate if state.altitude > 0 else 5.0
+                eta_min = max(3, int(descent_min))
                 scheduled_time = (now + timedelta(minutes=eta_min)).isoformat()
             elif phase == FlightPhase.ENROUTE:
-                # Spread enroute arrivals into the future
-                scheduled_time = (now + timedelta(minutes=20 + abs(spread_minutes))).isoformat()
+                # Far out: spread 30-90 min into the future
+                scheduled_time = (now + timedelta(minutes=30 + _h % 60)).isoformat()
             else:
-                scheduled_time = now.isoformat()
+                scheduled_time = (now + timedelta(minutes=_h % 30)).isoformat()
         else:
             if phase == FlightPhase.PARKED:
-                # Departures waiting: spread into the future
-                scheduled_time = (now + timedelta(minutes=10 + abs(spread_minutes))).isoformat()
+                # Departures waiting: spread 10-90 min into the future
+                scheduled_time = (now + timedelta(minutes=10 + _h % 80)).isoformat()
             elif phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY):
-                scheduled_time = (now - timedelta(minutes=abs(spread_minutes) % 10)).isoformat()
+                # About to depart: scheduled 0-5 min ago
+                scheduled_time = (now - timedelta(minutes=_h % 5)).isoformat()
             elif phase in (FlightPhase.TAKEOFF, FlightPhase.DEPARTING):
-                scheduled_time = (now - timedelta(minutes=5 + abs(spread_minutes) % 20)).isoformat()
+                # Departed: scheduled 5-25 min ago
+                scheduled_time = (now - timedelta(minutes=5 + _h % 20)).isoformat()
             else:
-                scheduled_time = now.isoformat()
+                scheduled_time = (now + timedelta(minutes=_h % 30)).isoformat()
+
+        # Compute estimated_time for delayed flights or approaching aircraft
+        estimated_time = None
+        if delay_minutes > 0:
+            sched_dt = datetime.fromisoformat(scheduled_time)
+            estimated_time = (sched_dt + timedelta(minutes=delay_minutes)).isoformat()
 
         schedule.append({
             "flight_number": callsign,
@@ -632,7 +653,7 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
             "origin": origin,
             "destination": destination,
             "scheduled_time": scheduled_time,
-            "estimated_time": None,
+            "estimated_time": estimated_time,
             "actual_time": now.isoformat() if status in ("arrived", "departed") else None,
             "gate": state.assigned_gate,
             "status": status,

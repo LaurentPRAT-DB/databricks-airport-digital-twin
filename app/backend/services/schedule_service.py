@@ -78,8 +78,8 @@ class ScheduleService:
         """
         Get arrival flights for the specified time window.
 
-        Reads from Lakebase first for persistence, otherwise merges live
-        flights (matching the map) with future scheduled flights.
+        Always includes live sim flights (matching the map), supplemented
+        by Lakebase persisted data or the schedule generator.
 
         Args:
             hours_ahead: Hours into future to include
@@ -89,25 +89,7 @@ class ScheduleService:
         Returns:
             ScheduleResponse with arrival flights
         """
-        # Try Lakebase first (persisted data)
-        lakebase = get_lakebase_service()
-        raw_arrivals = None
-
-        if lakebase.is_available:
-            raw_arrivals = lakebase.get_schedule(
-                flight_type="arrival",
-                hours_behind=hours_behind,
-                hours_ahead=hours_ahead,
-                limit=limit,
-                airport_icao=self._airport_icao,
-            )
-            if raw_arrivals:
-                logger.debug(f"Schedule arrivals from Lakebase: {len(raw_arrivals)}")
-
-        # Merge live flights + future schedule
-        if not raw_arrivals:
-            raw_arrivals = self._merge_live_and_future("arrival", limit)
-
+        raw_arrivals = self._get_merged_schedule("arrival", hours_ahead, hours_behind, limit)
         flights = [_dict_to_scheduled_flight(f) for f in raw_arrivals[:limit]]
 
         logger.info(f"Schedule service returning {len(flights)} arrivals")
@@ -128,8 +110,8 @@ class ScheduleService:
         """
         Get departure flights for the specified time window.
 
-        Reads from Lakebase first for persistence, otherwise merges live
-        flights (matching the map) with future scheduled flights.
+        Always includes live sim flights (matching the map), supplemented
+        by Lakebase persisted data or the schedule generator.
 
         Args:
             hours_ahead: Hours into future to include
@@ -139,25 +121,7 @@ class ScheduleService:
         Returns:
             ScheduleResponse with departure flights
         """
-        # Try Lakebase first (persisted data)
-        lakebase = get_lakebase_service()
-        raw_departures = None
-
-        if lakebase.is_available:
-            raw_departures = lakebase.get_schedule(
-                flight_type="departure",
-                hours_behind=hours_behind,
-                hours_ahead=hours_ahead,
-                limit=limit,
-                airport_icao=self._airport_icao,
-            )
-            if raw_departures:
-                logger.debug(f"Schedule departures from Lakebase: {len(raw_departures)}")
-
-        # Merge live flights + future schedule
-        if not raw_departures:
-            raw_departures = self._merge_live_and_future("departure", limit)
-
+        raw_departures = self._get_merged_schedule("departure", hours_ahead, hours_behind, limit)
         flights = [_dict_to_scheduled_flight(f) for f in raw_departures[:limit]]
 
         logger.info(f"Schedule service returning {len(flights)} departures")
@@ -169,60 +133,72 @@ class ScheduleService:
             flight_type=FlightType.DEPARTURE,
         )
 
-    def _merge_live_and_future(
-        self, flight_type: str, limit: int,
+    def _get_merged_schedule(
+        self,
+        flight_type: str,
+        hours_ahead: int,
+        hours_behind: int,
+        limit: int,
     ) -> list[dict]:
-        """Merge live map flights with future scheduled flights.
+        """Get schedule merging live sim flights with background schedule data.
 
         Live flights (from the simulation) always take priority since they
-        match what the user sees on the map. Future flights from the schedule
-        generator fill out the rest of the FIDS.
+        match what the user sees on the map. Background data (Lakebase or
+        schedule generator) fills out the rest of the FIDS.
 
         Args:
             flight_type: "arrival" or "departure"
+            hours_ahead: Hours into future to include
+            hours_behind: Hours into past to include
             limit: Maximum total flights to return
 
         Returns:
             Merged, deduplicated, sorted list of flight dicts
         """
-        # 1. Get live flights (same data as map)
+        # 1. Always get live flights first (same data as map)
         live_schedule = get_flights_as_schedule()
         live_flights = [f for f in live_schedule if f["flight_type"] == flight_type]
         if live_flights:
             logger.debug(f"FIDS {flight_type}s: {len(live_flights)} live flights from map")
 
-        # 2. Determine cutoff: latest scheduled_time among live flights
-        #    Future flights will supplement after this point
-        now = datetime.now(timezone.utc)
-        if live_flights:
-            latest_live = max(
-                datetime.fromisoformat(f["scheduled_time"]) for f in live_flights
+        # 2. Get background schedule data (Lakebase or generator)
+        background_flights: list[dict] = []
+        lakebase = get_lakebase_service()
+        if lakebase.is_available:
+            lb_data = lakebase.get_schedule(
+                flight_type=flight_type,
+                hours_behind=hours_behind,
+                hours_ahead=hours_ahead,
+                limit=limit,
+                airport_icao=self._airport_icao,
             )
-            cutoff = latest_live
-        else:
-            cutoff = now - timedelta(minutes=30)
+            if lb_data:
+                background_flights = lb_data
+                logger.debug(f"FIDS {flight_type}s: {len(lb_data)} from Lakebase")
 
-        # 3. Get future flights from schedule generator
-        future_flights = get_future_schedule(
-            airport=self._airport,
-            after=cutoff,
-            flight_type=flight_type,
-            limit=limit,
-        )
-        if future_flights:
-            logger.debug(
-                f"FIDS {flight_type}s: {len(future_flights)} future flights from generator"
+        if not background_flights:
+            now = datetime.now(timezone.utc)
+            cutoff = now - timedelta(hours=hours_behind)
+            background_flights = get_future_schedule(
+                airport=self._airport,
+                after=cutoff,
+                flight_type=flight_type,
+                limit=limit,
             )
+            if background_flights:
+                logger.debug(
+                    f"FIDS {flight_type}s: {len(background_flights)} from generator"
+                )
 
-        # 4. Merge and deduplicate by flight_number (live wins)
+        # 3. Merge: live flights win over background by flight_number
         seen_numbers = {f["flight_number"] for f in live_flights}
         merged = list(live_flights)
-        for f in future_flights:
+        for f in background_flights:
             if f["flight_number"] not in seen_numbers:
                 seen_numbers.add(f["flight_number"])
                 merged.append(f)
 
-        # 5. Sort by scheduled_time
+        # 4. Sort by scheduled_time
         merged.sort(key=lambda x: x["scheduled_time"])
         return merged[:limit]
 

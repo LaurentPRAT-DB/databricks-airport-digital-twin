@@ -124,8 +124,8 @@ export default function FIDS({ onClose }: FIDSProps) {
     }
 
     fetchSchedule();
-    // Refresh every minute
-    const interval = setInterval(fetchSchedule, 60 * 1000);
+    // Refresh every 15 seconds to stay in sync with live sim flights
+    const interval = setInterval(fetchSchedule, 15 * 1000);
     return () => clearInterval(interval);
   }, [currentAirport]);
 
@@ -195,11 +195,13 @@ export default function FIDS({ onClose }: FIDSProps) {
               <tbody className="divide-y divide-slate-800">
                 {flights.map((flight, index) => {
                   const isTracked = callsignToFlight.has(flight.flight_number.toUpperCase());
+                  const trackedFlight = isTracked ? callsignToFlight.get(flight.flight_number.toUpperCase()) : undefined;
+                  const flightPhase = trackedFlight?.flight_phase;
                   return (
                   <tr
                     key={`${flight.flight_number}-${index}`}
                     className={`text-white hover:bg-slate-800/50 ${
-                      isTracked ? 'cursor-pointer hover:bg-blue-900/30' : ''
+                      isTracked ? 'cursor-pointer bg-blue-900/20 hover:bg-blue-900/40 border-l-2 border-l-blue-500' : ''
                     }`}
                     onClick={isTracked ? () => handleFlightClick(flight.flight_number) : undefined}
                   >
@@ -215,12 +217,19 @@ export default function FIDS({ onClose }: FIDSProps) {
                       <div className="font-bold flex items-center gap-2">
                         {flight.flight_number}
                         {isTracked && (
-                          <span className="px-1.5 py-0.5 bg-blue-600 text-[10px] rounded uppercase">
+                          <span className="px-1.5 py-0.5 bg-blue-600 text-[10px] rounded uppercase font-semibold animate-pulse">
                             Live
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-slate-400">{flight.airline}</div>
+                      <div className="text-xs text-slate-400">
+                        {flight.airline}
+                        {flightPhase && (
+                          <span className="ml-1 text-blue-400">
+                            ({flightPhase.replace(/_/g, ' ')})
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 font-mono">
                       {activeTab === 'arrivals' ? flight.origin : flight.destination}
@@ -255,7 +264,7 @@ export default function FIDS({ onClose }: FIDSProps) {
 
         {/* Footer */}
         <div className="p-3 border-t border-slate-700 text-xs text-slate-500 text-center">
-          {flights.length} {activeTab} | Auto-refresh: 1 min | Synthetic data for demo
+          {flights.length} {activeTab} | Auto-refresh: 15s | Synthetic data for demo
         </div>
       </div>
     </div>

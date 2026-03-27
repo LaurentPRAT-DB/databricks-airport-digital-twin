@@ -688,6 +688,9 @@ class TestScheduleServiceLakebaseFallback:
         with patch(
             "app.backend.services.schedule_service.get_lakebase_service",
             return_value=mock_lakebase,
+        ), patch(
+            "app.backend.services.schedule_service.get_flights_as_schedule",
+            return_value=[],
         ):
             service = ScheduleService()
             result = service.get_arrivals(hours_ahead=2, hours_behind=1, limit=20)
@@ -743,6 +746,9 @@ class TestScheduleServiceLakebaseFallback:
         with patch(
             "app.backend.services.schedule_service.get_lakebase_service",
             return_value=mock_lakebase,
+        ), patch(
+            "app.backend.services.schedule_service.get_flights_as_schedule",
+            return_value=[],
         ):
             service = ScheduleService()
             result = service.get_departures(hours_ahead=2, hours_behind=1, limit=20)
