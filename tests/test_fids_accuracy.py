@@ -382,9 +382,11 @@ class TestFIDSMerge:
             service = ScheduleService()
             result = service.get_arrivals(hours_ahead=2, limit=50)
 
-        # Live flights should NOT be called since Lakebase had data
-        mock_live.assert_not_called()
-        assert result.flights[0].flight_number == "LB100"
+        # Live flights are always fetched (merged with background data)
+        mock_live.assert_called_once()
+        # Lakebase data should be included in results
+        flight_numbers = [f.flight_number for f in result.flights]
+        assert "LB100" in flight_numbers
 
 
 class TestGetFutureSchedule:

@@ -1390,6 +1390,20 @@ class LakebaseService:
                             event_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
                         )
                     """)
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS turnaround_events (
+                            id BIGSERIAL,
+                            session_id VARCHAR(36) NOT NULL,
+                            airport_icao VARCHAR(4) NOT NULL,
+                            icao24 VARCHAR(10) NOT NULL,
+                            callsign VARCHAR(10),
+                            gate VARCHAR(10),
+                            turnaround_phase VARCHAR(20) NOT NULL,
+                            event_type VARCHAR(15) NOT NULL,
+                            aircraft_type VARCHAR(10),
+                            event_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        )
+                    """)
                     # Indexes for efficient querying
                     cur.execute("""
                         CREATE INDEX IF NOT EXISTS idx_fps_session_airport
@@ -1406,6 +1420,10 @@ class LakebaseService:
                     cur.execute("""
                         CREATE INDEX IF NOT EXISTS idx_mlp_session_airport
                         ON ml_predictions (session_id, airport_icao, event_time)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_tae_session_airport
+                        ON turnaround_events (session_id, airport_icao, event_time)
                     """)
                     conn.commit()
             self._ml_tables_ensured = True
@@ -1543,6 +1561,46 @@ class LakebaseService:
                     return len(values)
         except Exception as e:
             logger.warning(f"Failed to insert gate events: {e}")
+            self._invalidate_credentials_if_auth_error(e)
+            return 0
+
+    def insert_turnaround_events(
+        self, events: list[dict], session_id: str, airport_icao: str
+    ) -> int:
+        """Batch-insert turnaround phase events for ML training."""
+        if not self.is_available or not events:
+            return 0
+
+        self._ensure_ml_tables()
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    values = [
+                        (
+                            session_id, airport_icao,
+                            e["icao24"], e.get("callsign"),
+                            e.get("gate"), e["turnaround_phase"],
+                            e["event_type"], e.get("aircraft_type"),
+                            e.get("event_time"),
+                        )
+                        for e in events
+                    ]
+                    execute_values(
+                        cur,
+                        """INSERT INTO turnaround_events (
+                            session_id, airport_icao,
+                            icao24, callsign,
+                            gate, turnaround_phase,
+                            event_type, aircraft_type,
+                            event_time
+                        ) VALUES %s""",
+                        values,
+                    )
+                    conn.commit()
+                    return len(values)
+        except Exception as e:
+            logger.warning(f"Failed to insert turnaround events: {e}")
             self._invalidate_credentials_if_auth_error(e)
             return 0
 

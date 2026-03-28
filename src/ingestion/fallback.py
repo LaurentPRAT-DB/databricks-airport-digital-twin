@@ -596,19 +596,18 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
         # Deterministic per-flight hash for stable FIDS ordering across refreshes.
         # Use a large prime multiplier to spread hash values evenly.
         _h = ((hash(icao24) * 2654435761) ^ hash(airline_code)) & 0xFFFFFFFF
-        # Per-flight unique offset within a 4-hour window
-        spread_minutes = (_h % 240) - 120  # -120 to +120 min from now
 
         # Delay jitter: ~20% of flights have 5-45 min delay
         delay_minutes = 0
         if (_h >> 4) % 5 == 0:  # deterministic 20% chance
             delay_minutes = 5 + ((_h >> 8) % 41)  # 5-45 min
 
-        # Compute scheduled times based on actual flight phase and state
+        # Compute scheduled times based on actual flight phase and state.
+        # Wide modulo ranges prevent clustering on the FIDS display.
         if is_arrival:
             if phase in (FlightPhase.PARKED,):
-                # Already arrived: scheduled in the past (5-60 min ago)
-                past_offset = 5 + (_h % 55)
+                # Already arrived: scheduled in the past (5-120 min ago)
+                past_offset = 5 + (_h % 115)
                 scheduled_time = (now - timedelta(minutes=past_offset)).isoformat()
             elif phase == FlightPhase.TAXI_TO_GATE:
                 # Just landed, taxiing in: arrived ~2-8 min ago
@@ -623,14 +622,14 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
                 eta_min = max(3, int(descent_min))
                 scheduled_time = (now + timedelta(minutes=eta_min)).isoformat()
             elif phase == FlightPhase.ENROUTE:
-                # Far out: spread 30-90 min into the future
-                scheduled_time = (now + timedelta(minutes=30 + _h % 60)).isoformat()
+                # Far out: spread 15-135 min into the future
+                scheduled_time = (now + timedelta(minutes=15 + _h % 120)).isoformat()
             else:
-                scheduled_time = (now + timedelta(minutes=_h % 30)).isoformat()
+                scheduled_time = (now + timedelta(minutes=_h % 90)).isoformat()
         else:
             if phase == FlightPhase.PARKED:
-                # Departures waiting: spread 10-90 min into the future
-                scheduled_time = (now + timedelta(minutes=10 + _h % 80)).isoformat()
+                # Departures waiting: spread 10-120 min into the future
+                scheduled_time = (now + timedelta(minutes=10 + _h % 110)).isoformat()
             elif phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY):
                 # About to depart: scheduled 0-5 min ago
                 scheduled_time = (now - timedelta(minutes=_h % 5)).isoformat()
@@ -638,7 +637,7 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
                 # Departed: scheduled 5-25 min ago
                 scheduled_time = (now - timedelta(minutes=5 + _h % 20)).isoformat()
             else:
-                scheduled_time = (now + timedelta(minutes=_h % 30)).isoformat()
+                scheduled_time = (now + timedelta(minutes=_h % 90)).isoformat()
 
         # Compute estimated_time for delayed flights or approaching aircraft
         estimated_time = None

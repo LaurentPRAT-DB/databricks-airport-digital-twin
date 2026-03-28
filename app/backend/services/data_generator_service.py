@@ -455,10 +455,7 @@ class DataGeneratorService:
         gate_count = lakebase.insert_gate_events(gate_events, session_id, airport_icao)
         pred_count = lakebase.insert_ml_predictions(predictions, session_id, airport_icao)
 
-        # Log turnaround events (Lakebase table pending)
-        ta_count = len(turnaround_events)
-        if ta_count > 0:
-            logger.debug(f"Drained {ta_count} turnaround events for {airport_icao}")
+        ta_count = lakebase.insert_turnaround_events(turnaround_events, session_id, airport_icao)
 
         return {
             "snapshots": snap_count,
