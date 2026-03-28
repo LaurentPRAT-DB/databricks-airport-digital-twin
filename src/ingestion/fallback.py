@@ -1905,7 +1905,10 @@ class _FlightStateDict(dict):
 
     def __setitem__(self, key: str, value: FlightState):
         old = self.get(key)
-        if old is not None:
+        if old is not None and old is not value:
+            # Different object replacing an existing entry — update the index.
+            # When old IS value (same reference, modified in-place by _update_flight_state),
+            # _set_phase already updated the index, so skip to avoid double-counting.
             _flights_by_phase[old.phase].discard(key)
         super().__setitem__(key, value)
         _flights_by_phase[value.phase].add(key)
@@ -2428,8 +2431,12 @@ def _taxi_speed_factor(state: FlightState) -> float:
     return min_factor
 
 def _count_aircraft_in_phase(phase: FlightPhase) -> int:
-    """Count how many aircraft are currently in a specific phase."""
-    return len(_flights_by_phase[phase])
+    """Count how many aircraft are currently in a specific phase.
+
+    Counts from actual flight state rather than the phase index to avoid
+    desync issues where the index retains stale entries.
+    """
+    return sum(1 for s in _flight_states.values() if s.phase == phase)
 
 def _get_approach_queue_position(icao24: str) -> int:
     """Get position in approach queue (0 = first/next to land)."""
@@ -4336,6 +4343,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                               + _count_aircraft_in_phase(FlightPhase.LANDING))
             can_start_approach = approach_count < MAX_APPROACH_AIRCRAFT
 
+
             if can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
                 # Close enough — transition to approach
                 emit_phase_transition(
@@ -4670,13 +4678,17 @@ def generate_synthetic_flights(
 
             local_iata = get_current_airport_iata()
             if is_arriving:
+                # Convention: arriving flights have origin set, NO destination
+                # (_update_flight_state checks `origin and not destination` for arrivals)
                 origin = _pick_random_origin()
-                dest = local_iata
+                dest = None
             elif is_departing:
-                origin = local_iata
+                # Convention: departing flights have destination set, NO origin
+                # (_update_flight_state checks `destination` for departures)
+                origin = None
                 dest = _pick_random_destination()
             elif selected_phase == FlightPhase.PARKED:
-                # Parked at local airport: randomly arrived here or about to depart
+                # Parked: set both — parked flights don't use the enroute direction logic
                 if random.random() < 0.5:
                     origin = _pick_random_origin()
                     dest = local_iata
