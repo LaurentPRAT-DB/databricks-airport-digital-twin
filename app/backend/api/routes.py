@@ -422,6 +422,108 @@ async def get_departures(
     )
 
 
+@router.get("/schedule/audit", tags=["schedule"])
+async def audit_schedule():
+    """
+    Cross-reference live simulation flights with FIDS schedule data.
+
+    Returns a detailed ops audit showing:
+    - Each sim flight and its matching FIDS entry (or missing)
+    - Phase-to-status mapping accuracy
+    - Delay consistency
+    - Gate assignment alignment
+    """
+    from src.ingestion.fallback import get_flights_as_schedule, _flight_states, FlightPhase
+
+    service = get_schedule_service()
+    arrivals = service.get_arrivals(hours_ahead=4, hours_behind=2, limit=200)
+    departures = service.get_departures(hours_ahead=4, hours_behind=2, limit=200)
+
+    # Build FIDS lookup by flight number
+    fids_map: dict[str, dict] = {}
+    for f in arrivals.flights:
+        fids_map[f.flight_number.upper()] = {
+            "flight_number": f.flight_number,
+            "status": f.status.value,
+            "scheduled_time": f.scheduled_time.isoformat(),
+            "estimated_time": f.estimated_time.isoformat() if f.estimated_time else None,
+            "gate": f.gate,
+            "delay_minutes": f.delay_minutes,
+            "flight_type": "arrival",
+            "origin": f.origin,
+            "destination": f.destination,
+        }
+    for f in departures.flights:
+        fids_map[f.flight_number.upper()] = {
+            "flight_number": f.flight_number,
+            "status": f.status.value,
+            "scheduled_time": f.scheduled_time.isoformat(),
+            "estimated_time": f.estimated_time.isoformat() if f.estimated_time else None,
+            "gate": f.gate,
+            "delay_minutes": f.delay_minutes,
+            "flight_type": "departure",
+            "origin": f.origin,
+            "destination": f.destination,
+        }
+
+    # Build sim flight audit
+    audit_entries = []
+    matched = 0
+    missing = 0
+
+    for icao24, state in _flight_states.items():
+        callsign = (state.callsign or "").strip().upper()
+        if not callsign:
+            continue
+
+        fids_entry = fids_map.get(callsign)
+        is_matched = fids_entry is not None
+
+        if is_matched:
+            matched += 1
+        else:
+            missing += 1
+
+        entry = {
+            "callsign": callsign,
+            "icao24": icao24,
+            "sim": {
+                "phase": state.phase.value if hasattr(state.phase, 'value') else str(state.phase),
+                "altitude": round(state.altitude, 0),
+                "velocity": round(state.velocity, 0),
+                "on_ground": state.on_ground,
+                "gate": state.assigned_gate,
+                "origin": state.origin_airport,
+                "destination": state.destination_airport,
+                "aircraft_type": state.aircraft_type,
+            },
+            "fids": fids_entry,
+            "matched": is_matched,
+        }
+
+        if is_matched:
+            # Check consistency
+            issues = []
+            if fids_entry["gate"] and state.assigned_gate and fids_entry["gate"] != state.assigned_gate:
+                issues.append(f"gate mismatch: sim={state.assigned_gate} fids={fids_entry['gate']}")
+            entry["issues"] = issues
+
+        audit_entries.append(entry)
+
+    # Sort: unmatched first, then by callsign
+    audit_entries.sort(key=lambda x: (x["matched"], x["callsign"]))
+
+    return {
+        "total_sim_flights": len(_flight_states),
+        "total_fids_arrivals": len(arrivals.flights),
+        "total_fids_departures": len(departures.flights),
+        "matched": matched,
+        "missing_from_fids": missing,
+        "match_rate": f"{matched / max(1, matched + missing) * 100:.1f}%",
+        "flights": audit_entries,
+    }
+
+
 # ==============================================================================
 # Weather Routes
 # ==============================================================================

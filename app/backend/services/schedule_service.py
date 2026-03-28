@@ -37,21 +37,28 @@ def _parse_datetime(val) -> datetime:
 
 def _dict_to_scheduled_flight(data: dict) -> ScheduledFlight:
     """Convert schedule dictionary to ScheduledFlight model."""
+    # Validate status — fall back to "scheduled" for unknown values
+    try:
+        status = FlightStatus(data["status"])
+    except (ValueError, KeyError):
+        logger.warning(f"Unknown flight status '{data.get('status')}', defaulting to scheduled")
+        status = FlightStatus.SCHEDULED
+
     return ScheduledFlight(
         flight_number=data["flight_number"],
-        airline=data["airline"],
-        airline_code=data["airline_code"],
-        origin=data["origin"],
-        destination=data["destination"],
+        airline=data.get("airline", data.get("airline_code", "Unknown")),
+        airline_code=data.get("airline_code", "???"),
+        origin=data.get("origin", "???"),
+        destination=data.get("destination", "???"),
         scheduled_time=_parse_datetime(data["scheduled_time"]),
         estimated_time=_parse_datetime(data["estimated_time"]) if data.get("estimated_time") else None,
         actual_time=_parse_datetime(data["actual_time"]) if data.get("actual_time") else None,
         gate=data.get("gate"),
-        status=FlightStatus(data["status"]),
+        status=status,
         delay_minutes=data.get("delay_minutes", 0),
         delay_reason=data.get("delay_reason"),
         aircraft_type=data.get("aircraft_type"),
-        flight_type=FlightType(data["flight_type"]),
+        flight_type=FlightType(data.get("flight_type", "arrival")),
     )
 
 
@@ -162,6 +169,8 @@ class ScheduleService:
             logger.debug(f"FIDS {flight_type}s: {len(live_flights)} live flights from map")
 
         # 2. Get background schedule data (Lakebase or generator)
+        #    Reserve space for live flights in the limit
+        bg_limit = max(10, limit - len(live_flights))
         background_flights: list[dict] = []
         lakebase = get_lakebase_service()
         if lakebase.is_available:
@@ -169,7 +178,7 @@ class ScheduleService:
                 flight_type=flight_type,
                 hours_behind=hours_behind,
                 hours_ahead=hours_ahead,
-                limit=limit,
+                limit=bg_limit,
                 airport_icao=self._airport_icao,
             )
             if lb_data:
@@ -183,23 +192,47 @@ class ScheduleService:
                 airport=self._airport,
                 after=cutoff,
                 flight_type=flight_type,
-                limit=limit,
+                limit=bg_limit,
             )
             if background_flights:
                 logger.debug(
                     f"FIDS {flight_type}s: {len(background_flights)} from generator"
                 )
 
-        # 3. Merge: live flights win over background by flight_number
+        # 3. Merge: live flights always included, background fills the rest
         seen_numbers = {f["flight_number"] for f in live_flights}
-        merged = list(live_flights)
+        background_deduped = []
         for f in background_flights:
             if f["flight_number"] not in seen_numbers:
                 seen_numbers.add(f["flight_number"])
-                merged.append(f)
+                background_deduped.append(f)
 
-        # 4. Sort by scheduled_time
-        merged.sort(key=lambda x: x["scheduled_time"])
+        # 4. Sort each group, then interleave: live flights always appear
+        def _sort_key(f: dict) -> str:
+            t = f["scheduled_time"]
+            return t if isinstance(t, str) else t.isoformat()
+
+        live_flights.sort(key=_sort_key)
+        background_deduped.sort(key=_sort_key)
+
+        # Merge sorted lists, keeping all live flights
+        merged = []
+        li, bi = 0, 0
+        while li < len(live_flights) or bi < len(background_deduped):
+            if li < len(live_flights) and bi < len(background_deduped):
+                if _sort_key(live_flights[li]) <= _sort_key(background_deduped[bi]):
+                    merged.append(live_flights[li])
+                    li += 1
+                else:
+                    merged.append(background_deduped[bi])
+                    bi += 1
+            elif li < len(live_flights):
+                merged.append(live_flights[li])
+                li += 1
+            else:
+                merged.append(background_deduped[bi])
+                bi += 1
+
         return merged[:limit]
 
     def get_flight_by_number(self, flight_number: str) -> Optional[ScheduledFlight]:
