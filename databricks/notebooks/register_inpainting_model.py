@@ -114,7 +114,7 @@ else:
 
 # Verify the weights load correctly
 print("Verifying LaMa weights...")
-state_dict = torch.load(LAMA_WEIGHTS_FILE, map_location="cpu")
+state_dict = torch.load(LAMA_WEIGHTS_FILE, map_location="cpu", weights_only=False)
 if isinstance(state_dict, dict):
     if 'state_dict' in state_dict:
         n_params = len(state_dict['state_dict'])
@@ -213,7 +213,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 # Fallback: load LaMa directly
                 self._use_iopaint = False
                 if self._lama_weights and os.path.exists(self._lama_weights):
-                    self._lama_state = torch.load(self._lama_weights, map_location=self._device)
+                    self._lama_state = torch.load(self._lama_weights, map_location=self._device, weights_only=False)
                 else:
                     self._lama_state = None
 
