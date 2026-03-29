@@ -4,8 +4,11 @@ import {
   UseSimulationReplayResult,
   PlaybackSpeed,
   SimulationFile,
+  SimulationMetadata,
   ScenarioEvent,
 } from '../../hooks/useSimulationReplay';
+import { TimeWindowPicker } from './TimeWindowPicker';
+import { SceneCapture } from '../SceneCapture/SceneCapture';
 
 const SPEED_OPTIONS: PlaybackSpeed[] = [0.25, 0.5, 1, 2, 4, 10, 30, 60];
 
@@ -49,18 +52,22 @@ function formatFileSize(sizeBytes: number | undefined, sizeKb: number): string {
   return `${(bytes / 1024).toFixed(0)} KB`;
 }
 
+const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100 MB — suggest time window
+
 /** File picker dialog for loading job-generated simulation files. */
 function FilePicker({
   files,
   isLoading,
   isFetchingFiles,
   onLoad,
+  onSelectForWindow,
   onClose,
 }: {
   files: SimulationFile[];
   isLoading: boolean;
   isFetchingFiles: boolean;
   onLoad: (filename: string) => void;
+  onSelectForWindow: (filename: string) => void;
   onClose: () => void;
 }) {
   return (
@@ -81,18 +88,26 @@ function FilePicker({
           ) : (
             <div className="space-y-2">
               {files.map((f) => {
-                const tooLarge = (f.size_bytes ?? f.size_kb * 1024) > MAX_LOADABLE_BYTES;
+                const sizeBytes = f.size_bytes ?? f.size_kb * 1024;
+                const tooLarge = sizeBytes > MAX_LOADABLE_BYTES;
+                const isLarge = sizeBytes > LARGE_FILE_THRESHOLD;
                 return (
                   <button
                     key={f.filename}
-                    onClick={() => !tooLarge && onLoad(f.filename)}
-                    disabled={isLoading || tooLarge}
+                    onClick={() => {
+                      if (tooLarge || isLarge) {
+                        onSelectForWindow(f.filename);
+                      } else {
+                        onLoad(f.filename);
+                      }
+                    }}
+                    disabled={isLoading}
                     className={`w-full text-left px-4 py-3 rounded-lg border transition-colors ${
                       tooLarge
-                        ? 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 opacity-60 cursor-not-allowed'
+                        ? 'border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 hover:border-amber-400 disabled:opacity-50'
                         : 'border-slate-200 dark:border-slate-600 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50'
                     }`}
-                    title={tooLarge ? 'Too large for browser playback (>1 GB)' : f.filename}
+                    title={tooLarge ? 'Large file — select a time window to load' : f.filename}
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-slate-800 dark:text-slate-200">
@@ -102,14 +117,19 @@ function FilePicker({
                           <>{f.airport} &mdash; {f.total_flights} flights</>
                         )}
                       </span>
-                      <span className={`text-xs ${tooLarge ? 'text-red-400 font-medium' : 'text-slate-400'}`}>
-                        {formatFileSize(f.size_bytes, f.size_kb)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-blue-500 dark:text-blue-400">
+                          {f.duration_hours}h
+                        </span>
+                        <span className={`text-xs ${tooLarge ? 'text-amber-500 font-medium' : isLarge ? 'text-amber-400' : 'text-slate-400'}`}>
+                          {formatFileSize(f.size_bytes, f.size_kb)}
+                        </span>
+                      </div>
                     </div>
                     <div className="text-xs text-slate-500 mt-1">
-                      {f.total_flights} flights &middot; {f.arrivals} arr / {f.departures} dep &middot; {f.duration_hours}h
-                      {tooLarge && (
-                        <span className="ml-1 text-red-400">&middot; Too large for browser playback</span>
+                      {f.total_flights} flights &middot; {f.arrivals} arr / {f.departures} dep
+                      {isLarge && (
+                        <span className="ml-1 text-amber-500">&middot; Select time window</span>
                       )}
                     </div>
                   </button>
@@ -292,9 +312,57 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
           ))}
         </div>
 
+        {/* Window navigation — shown when a time window is active */}
+        {sim.currentWindow && sim.metadata && (
+          <div className="hidden md:flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => {
+                if (!sim.currentWindow || !sim.loadedFile) return;
+                const start = new Date(sim.currentWindow.startTime);
+                const end = new Date(sim.currentWindow.endTime);
+                const windowMs = end.getTime() - start.getTime();
+                const newStart = new Date(start.getTime() - windowMs);
+                const newEnd = new Date(end.getTime() - windowMs);
+                sim.loadWindow(sim.loadedFile, newStart.toISOString(), newEnd.toISOString());
+              }}
+              className="px-2 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
+              title="Load previous time window"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <span className="text-[10px] text-slate-400 px-1">
+              {formatSimTime(sim.currentWindow.startTime)}-{formatSimTime(sim.currentWindow.endTime)}
+            </span>
+            <button
+              onClick={() => {
+                if (!sim.currentWindow || !sim.loadedFile) return;
+                const start = new Date(sim.currentWindow.startTime);
+                const end = new Date(sim.currentWindow.endTime);
+                const windowMs = end.getTime() - start.getTime();
+                const newStart = new Date(start.getTime() + windowMs);
+                const newEnd = new Date(end.getTime() + windowMs);
+                sim.loadWindow(sim.loadedFile, newStart.toISOString(), newEnd.toISOString());
+              }}
+              className="px-2 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
+              title="Load next time window"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        )}
+
         {/* Flight count — hidden on mobile */}
         <div className="hidden md:block flex-shrink-0 text-sm text-slate-400">
           <span className="font-mono font-medium text-white">{sim.flights.length}</span> flights
+        </div>
+
+        {/* Scene capture button — hidden on mobile */}
+        <div className="hidden md:block flex-shrink-0">
+          <SceneCapture airport={sim.airport} simTime={sim.currentSimTime} />
         </div>
 
         {/* Stop button — hidden on mobile */}
@@ -375,6 +443,9 @@ export function SimulationControls({
 }) {
   const sim = useSimulationReplay();
   const [showPicker, setShowPicker] = useState(false);
+  const [showWindowPicker, setShowWindowPicker] = useState(false);
+  const [windowPickerFile, setWindowPickerFile] = useState<string | null>(null);
+  const [windowPickerMetadata, setWindowPickerMetadata] = useState<SimulationMetadata | null>(null);
   const [pendingAirport, setPendingAirport] = useState<string | null>(null);
   const [demoAutoStarted, setDemoAutoStarted] = useState(false);
 
@@ -452,6 +523,29 @@ export function SimulationControls({
   const handleLoad = (filename: string) => {
     setShowPicker(false);
     sim.loadFile(filename, 0, 24);
+  };
+
+  const handleSelectForWindow = async (filename: string) => {
+    setShowPicker(false);
+    setWindowPickerFile(filename);
+    setShowWindowPicker(true);
+    // Fetch metadata for the time window picker
+    const meta = await sim.fetchMetadata(filename);
+    setWindowPickerMetadata(meta);
+  };
+
+  const handleWindowLoad = (filename: string, startTime: string, endTime: string) => {
+    setShowWindowPicker(false);
+    setWindowPickerFile(null);
+    setWindowPickerMetadata(null);
+    sim.loadWindow(filename, startTime, endTime);
+  };
+
+  const handleWindowBack = () => {
+    setShowWindowPicker(false);
+    setWindowPickerFile(null);
+    setWindowPickerMetadata(null);
+    setShowPicker(true);
   };
 
   const handleDemoRestart = () => {
@@ -543,8 +637,35 @@ export function SimulationControls({
           isLoading={sim.isLoading}
           isFetchingFiles={sim.isFetchingFiles}
           onLoad={handleLoad}
+          onSelectForWindow={handleSelectForWindow}
           onClose={() => setShowPicker(false)}
         />
+      )}
+
+      {/* Time window picker modal */}
+      {showWindowPicker && windowPickerFile && (
+        windowPickerMetadata ? (
+          <TimeWindowPicker
+            metadata={windowPickerMetadata}
+            filename={windowPickerFile}
+            isLoading={sim.isLoading}
+            onLoad={handleWindowLoad}
+            onBack={handleWindowBack}
+          />
+        ) : (
+          <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-[400px] p-8 text-center">
+              <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-slate-500 text-sm">Loading simulation metadata...</p>
+              <button
+                onClick={handleWindowBack}
+                className="mt-4 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )
       )}
 
       {/* Playback bar — active demo/sim */}

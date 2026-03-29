@@ -15,6 +15,23 @@ export interface SimulationFile {
   scenario_name?: string | null;
 }
 
+export interface SimulationMetadata {
+  config: Record<string, unknown>;
+  summary: Record<string, unknown>;
+  sim_start: string | null;
+  sim_end: string | null;
+  duration_hours: number;
+  total_frames: number;
+  estimated_frames_per_hour: number;
+  days: string[];
+  total_snapshots: number;
+}
+
+export interface TimeWindow {
+  startTime: string;
+  endTime: string;
+}
+
 interface PositionSnapshot {
   time: string;
   icao24: string;
@@ -104,6 +121,7 @@ export interface UseSimulationReplayResult {
   isPlaying: boolean;
   isLoading: boolean;
   isFetchingFiles: boolean;
+  isFetchingMetadata: boolean;
   switchPaused: boolean;
   speed: PlaybackSpeed;
   currentFrameIndex: number;
@@ -118,10 +136,14 @@ export interface UseSimulationReplayResult {
   airport: string | null;
   simStartTime: string | null;
   simEndTime: string | null;
+  metadata: SimulationMetadata | null;
+  currentWindow: TimeWindow | null;
 
   // Actions
   loadFile: (filename: string, startHour?: number, endHour?: number) => Promise<void>;
+  loadWindow: (filename: string, startTime: string, endTime: string) => Promise<void>;
   loadDemo: (airportIcao: string) => Promise<void>;
+  fetchMetadata: (filename: string) => Promise<SimulationMetadata | null>;
   play: () => void;
   pause: () => void;
   togglePlayPause: () => void;
@@ -156,11 +178,14 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const [loadedFile, setLoadedFile] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingFiles, setIsFetchingFiles] = useState(false);
+  const [isFetchingMetadata, setIsFetchingMetadata] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
   const [flights, setFlights] = useState<Flight[]>([]);
   const [switchPaused, setSwitchPaused] = useState(false);
+  const [metadata, setMetadata] = useState<SimulationMetadata | null>(null);
+  const [currentWindow, setCurrentWindow] = useState<TimeWindow | null>(null);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -188,7 +213,23 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     }
   }, []);
 
-  // Load a simulation file
+  // Fetch metadata for a simulation file (lightweight, no frame data)
+  const fetchMetadata = useCallback(async (filename: string): Promise<SimulationMetadata | null> => {
+    setIsFetchingMetadata(true);
+    try {
+      const res = await fetch(`/api/simulation/metadata/${encodeURIComponent(filename)}`);
+      if (!res.ok) return null;
+      const meta: SimulationMetadata = await res.json();
+      setMetadata(meta);
+      return meta;
+    } catch {
+      return null;
+    } finally {
+      setIsFetchingMetadata(false);
+    }
+  }, []);
+
+  // Load a simulation file with hour-based window (original API)
   const loadFile = useCallback(async (filename: string, startHour = 0, endHour = 24) => {
     setIsLoading(true);
     setIsPlaying(false);
@@ -201,6 +242,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       setSimData(data);
       setLoadedFile(filename);
       setCurrentFrameIndex(0);
+      setCurrentWindow(null);
 
       // Set initial frame
       if (data.frame_timestamps.length > 0) {
@@ -210,6 +252,37 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       }
     } catch (err) {
       console.error('Failed to load simulation file:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Load a simulation file with absolute time window
+  const loadWindow = useCallback(async (filename: string, startTime: string, endTime: string) => {
+    setIsLoading(true);
+    setIsPlaying(false);
+    try {
+      const params = new URLSearchParams({
+        start_time: startTime,
+        end_time: endTime,
+      });
+      const res = await fetch(
+        `/api/simulation/data/${encodeURIComponent(filename)}?${params}`
+      );
+      if (!res.ok) throw new Error(`Failed to load window: ${res.statusText}`);
+      const data: SimulationData = await res.json();
+      setSimData(data);
+      setLoadedFile(filename);
+      setCurrentFrameIndex(0);
+      setCurrentWindow({ startTime, endTime });
+
+      if (data.frame_timestamps.length > 0) {
+        const firstTimestamp = data.frame_timestamps[0];
+        const snapshots = data.frames[firstTimestamp] || [];
+        setFlights(snapshots.map(snapshotToFlight));
+      }
+    } catch (err) {
+      console.error('Failed to load simulation window:', err);
     } finally {
       setIsLoading(false);
     }
@@ -349,6 +422,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setCurrentFrameIndex(0);
     setFlights([]);
     setSwitchPaused(false);
+    setMetadata(null);
+    setCurrentWindow(null);
   }, []);
 
   // Phase groups for trajectory segmentation.
@@ -449,6 +524,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     isPlaying,
     isLoading,
     isFetchingFiles,
+    isFetchingMetadata,
     switchPaused,
     speed,
     currentFrameIndex,
@@ -463,9 +539,13 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     airport: (simData?.config as Record<string, unknown>)?.airport as string | null ?? null,
     simStartTime,
     simEndTime,
+    metadata,
+    currentWindow,
 
     loadFile,
+    loadWindow,
     loadDemo,
+    fetchMetadata,
     play,
     pause,
     togglePlayPause,

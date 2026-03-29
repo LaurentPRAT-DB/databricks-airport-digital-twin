@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -284,6 +285,163 @@ def _get_file_size_bytes(filename: str, files_cache: list[dict] | None) -> int |
     return None
 
 
+def _extract_metadata(data: dict) -> dict:
+    """Extract lightweight metadata from a simulation file without building frames.
+
+    Returns config, summary, time range, day list, and frame estimates.
+    """
+    config = data.get("config", {})
+    summary = data.get("summary", {})
+    snapshots = data.get("position_snapshots", [])
+
+    # Determine sim start/end from config or snapshots
+    start_time_iso = config.get("start_time")
+    if not start_time_iso and snapshots:
+        start_time_iso = snapshots[0].get("time")
+
+    end_time_iso = None
+    if snapshots:
+        end_time_iso = snapshots[-1].get("time")
+    elif start_time_iso:
+        duration_h = config.get("duration_hours", 24)
+        sim_start = datetime.fromisoformat(str(start_time_iso).replace("Z", "+00:00"))
+        end_time_iso = (sim_start + timedelta(hours=duration_h)).isoformat()
+
+    # Count unique timestamps to get actual frame count
+    unique_times = {s.get("time") for s in snapshots if s.get("time")}
+    total_frames = len(unique_times)
+    duration_hours = config.get("duration_hours", 24)
+    estimated_frames_per_hour = round(total_frames / duration_hours, 1) if duration_hours > 0 else 0
+
+    # Compute day list
+    days: list[str] = []
+    if start_time_iso:
+        sim_start = datetime.fromisoformat(str(start_time_iso).replace("Z", "+00:00"))
+        if end_time_iso:
+            sim_end = datetime.fromisoformat(str(end_time_iso).replace("Z", "+00:00"))
+        else:
+            sim_end = sim_start + timedelta(hours=duration_hours)
+        current = sim_start.date()
+        end_date = sim_end.date()
+        while current <= end_date:
+            days.append(current.isoformat())
+            current += timedelta(days=1)
+
+    return {
+        "config": config,
+        "summary": summary,
+        "sim_start": start_time_iso,
+        "sim_end": end_time_iso,
+        "duration_hours": duration_hours,
+        "total_frames": total_frames,
+        "estimated_frames_per_hour": estimated_frames_per_hour,
+        "days": days,
+        "total_snapshots": len(snapshots),
+    }
+
+
+def _load_metadata_local(filename: str) -> dict | None:
+    """Load only config/summary from a local simulation file.
+
+    For very large files, reads the full JSON but avoids frame grouping.
+    """
+    if "/" in filename or "\\" in filename or ".." in filename:
+        return None
+    filepath = PROJECT_ROOT / filename
+    if not filepath.exists():
+        filepath = PROJECT_ROOT / "simulation_output" / filename
+    if not filepath.exists() or not filepath.name.startswith("simulation"):
+        return None
+    try:
+        with open(filepath) as f:
+            data = json.load(f)
+        return _extract_metadata(data)
+    except Exception as e:
+        logger.warning(f"Failed to read metadata from {filename}: {e}")
+        return None
+
+
+def _load_metadata_from_volume(
+    filename: str,
+    user_token: str | None = None,
+    size_bytes: int | None = None,
+) -> dict | None:
+    """Read simulation metadata from UC Volume."""
+    try:
+        from databricks.sdk import WorkspaceClient  # noqa: F401
+    except ImportError:
+        return None
+
+    # Scale timeout same as full load
+    if size_bytes and size_bytes > 0:
+        timeout = min(600, max(60, int(size_bytes / (100 * 1024 * 1024) * 60)))
+    else:
+        timeout = 60
+
+    import threading
+
+    volume_path = f"/Volumes/{_UC_CATALOG}/{_UC_SCHEMA}/{_UC_VOLUME}/{filename}"
+    logger.info(f"Loading metadata from UC Volume: {volume_path}")
+
+    tokens_to_try = [None]
+    if user_token:
+        tokens_to_try.append(user_token)
+
+    for token in tokens_to_try:
+        auth_label = "OBO" if token else "SP"
+        result: list = []
+        error: list = []
+
+        def _try_load(tkn=token):
+            try:
+                w = _make_workspace_client(tkn)
+                if w is None:
+                    error.append("Could not create WorkspaceClient")
+                    return
+                resp = w.files.download(volume_path)
+                data = json.loads(resp.contents.read())
+                result.append(_extract_metadata(data))
+            except Exception as e:
+                error.append(e)
+
+        thread = threading.Thread(target=_try_load, daemon=True)
+        thread.start()
+        thread.join(timeout=timeout)
+
+        if result:
+            logger.info(f"Loaded metadata for {filename} via {auth_label}")
+            return result[0]
+        if error:
+            logger.warning(f"Failed to read metadata via {auth_label}: {error[0]}")
+
+        if token is None and user_token:
+            logger.info("SP auth failed for metadata, trying OBO fallback...")
+
+    return None
+
+
+@simulation_router.get("/metadata/{filename}")
+async def get_simulation_metadata(request: Request, filename: str) -> dict:
+    """Get simulation metadata without loading all frames.
+
+    Returns config, summary, time range, day list, and frame estimates
+    for the time window picker UI.
+    """
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    user_token = _extract_user_token(request)
+
+    # Try UC Volume first, fall back to local
+    metadata = _load_metadata_from_volume(filename, user_token=user_token)
+    if metadata is None:
+        metadata = _load_metadata_local(filename)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail=f"Simulation file not found: {filename}")
+
+    return metadata
+
+
 @simulation_router.get("/demo/{airport_icao}")
 async def get_demo_simulation(request: Request, airport_icao: str) -> dict:
     """Load the demo simulation for an airport.
@@ -355,16 +513,20 @@ async def list_simulation_files(request: Request) -> dict:
 async def get_simulation_data(
     request: Request,
     filename: str,
-    start_hour: float = Query(default=0.0, ge=0, description="Start hour to slice from"),
-    end_hour: float = Query(default=24.0, ge=0, description="End hour to slice to"),
+    start_hour: float = Query(default=0.0, ge=0, description="Start hour offset from sim start"),
+    end_hour: float = Query(default=24.0, ge=0, description="End hour offset from sim start"),
+    start_time: str | None = Query(default=None, description="Absolute start time (ISO 8601). Overrides start_hour."),
+    end_time: str | None = Query(default=None, description="Absolute end time (ISO 8601). Overrides end_hour."),
 ) -> dict:
     """
     Load simulation data, optionally sliced to a time window.
 
-    Returns position snapshots and metadata for the frontend replay engine.
-    Position snapshots are grouped by timestamp for efficient frame-based playback.
+    Supports two windowing modes:
+    - **Relative**: start_hour/end_hour offsets from simulation start (default)
+    - **Absolute**: start_time/end_time ISO strings (takes precedence when provided)
+
+    Returns position snapshots grouped by timestamp for frame-based playback.
     """
-    # Validate filename to prevent path traversal
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
@@ -390,36 +552,53 @@ async def get_simulation_data(
     scenario_events = data.get("scenario_events", [])
 
     # Determine simulation start time from config or first snapshot
-    start_time_iso = config.get("start_time")
-    if not start_time_iso and snapshots:
-        start_time_iso = snapshots[0].get("time")
+    sim_start_iso = config.get("start_time")
+    if not sim_start_iso and snapshots:
+        sim_start_iso = snapshots[0].get("time")
 
-    # Filter snapshots to the requested time window
-    if start_time_iso:
-        from datetime import datetime, timedelta, timezone
-        if isinstance(start_time_iso, str):
-            sim_start = datetime.fromisoformat(start_time_iso.replace("Z", "+00:00"))
+    # Compute window bounds — absolute params override relative
+    window_start_iso: str | None = None
+    window_end_iso: str | None = None
+
+    if start_time or end_time:
+        # Absolute mode
+        if start_time:
+            try:
+                window_start_iso = datetime.fromisoformat(
+                    start_time.replace("Z", "+00:00")
+                ).isoformat()
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid start_time: {start_time}")
+        if end_time:
+            try:
+                window_end_iso = datetime.fromisoformat(
+                    end_time.replace("Z", "+00:00")
+                ).isoformat()
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid end_time: {end_time}")
+    elif sim_start_iso:
+        # Relative mode (original behavior)
+        if isinstance(sim_start_iso, str):
+            sim_start = datetime.fromisoformat(sim_start_iso.replace("Z", "+00:00"))
         else:
-            sim_start = start_time_iso
+            sim_start = sim_start_iso
+        window_start_iso = (sim_start + timedelta(hours=start_hour)).isoformat()
+        window_end_iso = (sim_start + timedelta(hours=end_hour)).isoformat()
 
-        window_start = sim_start + timedelta(hours=start_hour)
-        window_end = sim_start + timedelta(hours=end_hour)
+    # Filter to window
+    if window_start_iso or window_end_iso:
+        def _in_window(t: str) -> bool:
+            if not t:
+                return False
+            if window_start_iso and t < window_start_iso:
+                return False
+            if window_end_iso and t > window_end_iso:
+                return False
+            return True
 
-        window_start_iso = window_start.isoformat()
-        window_end_iso = window_end.isoformat()
-
-        snapshots = [
-            s for s in snapshots
-            if window_start_iso <= s.get("time", "") <= window_end_iso
-        ]
-        phase_transitions = [
-            p for p in phase_transitions
-            if window_start_iso <= p.get("time", "") <= window_end_iso
-        ]
-        gate_events = [
-            g for g in gate_events
-            if window_start_iso <= g.get("time", "") <= window_end_iso
-        ]
+        snapshots = [s for s in snapshots if _in_window(s.get("time", ""))]
+        phase_transitions = [p for p in phase_transitions if _in_window(p.get("time", ""))]
+        gate_events = [g for g in gate_events if _in_window(g.get("time", ""))]
 
     # Group snapshots by timestamp for frame-based playback
     frames: dict[str, list] = {}
@@ -429,7 +608,6 @@ async def get_simulation_data(
             frames[t] = []
         frames[t].append(snap)
 
-    # Sort frame timestamps
     sorted_timestamps = sorted(frames.keys())
 
     return {
@@ -443,7 +621,9 @@ async def get_simulation_data(
         "gate_events": gate_events,
         "scenario_events": scenario_events,
         "time_window": {
-            "start_hour": start_hour,
-            "end_hour": end_hour,
+            "start_time": start_time or (window_start_iso if start_time is None and end_time is None else None),
+            "end_time": end_time or (window_end_iso if start_time is None and end_time is None else None),
+            "start_hour": start_hour if not start_time else None,
+            "end_hour": end_hour if not end_time else None,
         },
     }

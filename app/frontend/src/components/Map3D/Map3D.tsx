@@ -302,7 +302,7 @@ export function Map3D({
     <div className={`relative ${className || ''}`} style={{ width: '100%', height: '100%' }}>
       <Canvas
         shadows={{ type: THREE.PCFShadowMap }}
-        gl={{ antialias: true }}
+        gl={{ antialias: true, preserveDrawingBuffer: true }}
       >
         {/* Camera auto-positioned to frame the airport infrastructure */}
         <PerspectiveCamera
