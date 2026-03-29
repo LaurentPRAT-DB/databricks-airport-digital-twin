@@ -1,0 +1,110 @@
+[
+  {
+    "airport": "KATL",
+    "iata": "ATL",
+    "name": "",
+    "tile": "17/34796/52516",
+    "status": "ok",
+    "latency_ms": 1569,
+    "cache": "DIRECT",
+    "aircraft_count": 4,
+    "processing_ms": "1569",
+    "size_bytes": 115788
+  },
+  {
+    "airport": "RJAA",
+    "iata": "NRT",
+    "name": "",
+    "tile": "17/116651/51572",
+    "status": "ok",
+    "latency_ms": 2041,
+    "cache": "DIRECT",
+    "aircraft_count": 1,
+    "processing_ms": "2041",
+    "size_bytes": 101072
+  },
+  {
+    "airport": "EDDF",
+    "iata": "FRA",
+    "name": "",
+    "tile": "17/68656/44424",
+    "status": "ok",
+    "latency_ms": 2433,
+    "cache": "DIRECT",
+    "aircraft_count": 5,
+    "processing_ms": "2433",
+    "size_bytes": 124457
+  },
+  {
+    "airport": "KSFO",
+    "iata": "SFO",
+    "name": "",
+    "tile": "17/20977/50733",
+    "status": "ok",
+    "latency_ms": 2874,
+    "cache": "DIRECT",
+    "aircraft_count": 8,
+    "processing_ms": "2874",
+    "size_bytes": 121087
+  },
+  {
+    "airport": "KLAX",
+    "iata": "LAX",
+    "name": "",
+    "tile": "17/22424/52384",
+    "status": "ok",
+    "latency_ms": 3286,
+    "cache": "DIRECT",
+    "aircraft_count": 3,
+    "processing_ms": "3286",
+    "size_bytes": 116066
+  },
+  {
+    "airport": "KJFK",
+    "iata": "JFK",
+    "name": "",
+    "tile": "17/38674/49314",
+    "status": "ok",
+    "latency_ms": 2117,
+    "cache": "DIRECT",
+    "aircraft_count": 7,
+    "processing_ms": "2117",
+    "size_bytes": 124606
+  },
+  {
+    "airport": "EGLL",
+    "iata": "LHR",
+    "name": "",
+    "tile": "17/65368/43606",
+    "status": "ok",
+    "latency_ms": 2080,
+    "cache": "DIRECT",
+    "aircraft_count": 1,
+    "processing_ms": "2080",
+    "size_bytes": 155932
+  },
+  {
+    "airport": "KORD",
+    "iata": "ORD",
+    "name": "",
+    "tile": "17/33529/48668",
+    "status": "ok",
+    "latency_ms": 2118,
+    "cache": "DIRECT",
+    "aircraft_count": 2,
+    "processing_ms": "2118",
+    "size_bytes": 112000
+  },
+  {
+    "airport": "VHHH",
+    "iata": "HKG",
+    "name": "",
+    "tile": "17/107011/57199",
+    "status": "ok",
+    "latency_ms": 2098,
+    "cache": "DIRECT",
+    "aircraft_count": 3,
+    "processing_ms": "2098",
+    "size_bytes": 95772
+  }
+]
