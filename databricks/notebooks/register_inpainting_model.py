@@ -36,7 +36,7 @@ VOLUME = "model_weights"
 MODEL_NAME = f"{CATALOG}.{SCHEMA}.aircraft_inpainting_model"
 
 VOLUME_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}"
-YOLO_WEIGHTS_VOLUME = f"{VOLUME_PATH}/yolov8n.pt"
+YOLO_WEIGHTS_VOLUME = f"{VOLUME_PATH}/yolov8s-obb.pt"
 LAMA_WEIGHTS_DIR = f"{VOLUME_PATH}/lama"
 LAMA_WEIGHTS_FILE = f"{LAMA_WEIGHTS_DIR}/big-lama.pt"
 
@@ -62,31 +62,22 @@ print(f"Volume ready: {VOLUME_PATH}")
 
 from ultralytics import YOLO
 
+YOLO_OBB_URL = "https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8s-obb.pt"
+
 if not os.path.exists(YOLO_WEIGHTS_VOLUME):
-    print("Downloading YOLOv8n weights...")
-    model = YOLO("yolov8n.pt")  # auto-downloads
-    # Find where ultralytics saved it
-    local_path = Path(model.ckpt_path) if hasattr(model, 'ckpt_path') else None
-    if local_path is None or not local_path.exists():
-        # Search common locations
-        for candidate in [
-            Path.home() / ".ultralytics" / "yolov8n.pt",
-            Path("yolov8n.pt"),
-            Path("/tmp/yolov8n.pt"),
-        ]:
-            if candidate.exists():
-                local_path = candidate
-                break
-    if local_path and local_path.exists():
-        shutil.copy2(str(local_path), YOLO_WEIGHTS_VOLUME)
-        print(f"Cached YOLO weights at {YOLO_WEIGHTS_VOLUME} ({local_path.stat().st_size / 1e6:.1f} MB)")
-    else:
-        # ultralytics caches internally; just save the model directly
-        torch.save(model.model.state_dict(), YOLO_WEIGHTS_VOLUME)
-        print(f"Saved YOLO state_dict to {YOLO_WEIGHTS_VOLUME}")
+    print("Downloading YOLOv8s-OBB weights (DOTA satellite aircraft detection)...")
+    local_path = Path("/tmp/yolov8s-obb.pt")
+    urllib.request.urlretrieve(YOLO_OBB_URL, str(local_path))
+    shutil.copy2(str(local_path), YOLO_WEIGHTS_VOLUME)
+    print(f"Cached YOLO OBB weights at {YOLO_WEIGHTS_VOLUME} ({local_path.stat().st_size / 1e6:.1f} MB)")
+
+    # Verify it loads
+    model = YOLO(YOLO_WEIGHTS_VOLUME)
+    print(f"YOLO OBB model loaded: {len(model.names)} classes, task={model.task}")
+    print(f"Classes: {model.names}")
 else:
     size_mb = os.path.getsize(YOLO_WEIGHTS_VOLUME) / 1e6
-    print(f"YOLO weights already cached at {YOLO_WEIGHTS_VOLUME} ({size_mb:.1f} MB)")
+    print(f"YOLO OBB weights already cached at {YOLO_WEIGHTS_VOLUME} ({size_mb:.1f} MB)")
 
 # COMMAND ----------
 
@@ -142,8 +133,8 @@ with tempfile.TemporaryDirectory() as tmp:
         "yolo_weights": YOLO_WEIGHTS_VOLUME,
         "lama_weights_dir": LAMA_WEIGHTS_DIR,
         "lama_weights_file": LAMA_WEIGHTS_FILE,
-        "confidence_threshold": 0.5,
-        "mask_dilation_px": 10,
+        "confidence_threshold": 0.15,
+        "mask_dilation_px": 15,
     }
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
@@ -255,32 +246,62 @@ with tempfile.TemporaryDirectory() as tmp:
 
                 detections = []
                 mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
+                import cv2
                 for r in yolo_results:
-                    if r.boxes is None:
-                        continue
-                    for i in range(len(r.boxes)):
-                        cls_id = int(r.boxes.cls[i].item())
-                        cls_name = r.names.get(cls_id, "")
-                        is_aircraft = (
-                            cls_id == 4  # COCO airplane
-                            or "aircraft" in cls_name.lower()
-                            or "airplane" in cls_name.lower()
-                            or "plane" in cls_name.lower()
-                        )
-                        if not is_aircraft:
-                            continue
-                        conf = float(r.boxes.conf[i].item())
-                        x1, y1, x2, y2 = r.boxes.xyxy[i].cpu().numpy().astype(int)
-                        d = self._dilation
-                        mx1, my1 = max(0, int(x1)-d), max(0, int(y1)-d)
-                        mx2, my2 = min(image_np.shape[1], int(x2)+d), min(image_np.shape[0], int(y2)+d)
-                        mask[my1:my2, mx1:mx2] = 255
-                        detections.append({
-                            "x1": int(x1), "y1": int(y1),
-                            "x2": int(x2), "y2": int(y2),
-                            "confidence": round(conf, 3),
-                            "class_name": cls_name or "airplane",
-                        })
+                    # OBB model: use r.obb (oriented bounding boxes)
+                    # Fallback to r.boxes for non-OBB models
+                    obb = getattr(r, 'obb', None)
+                    if obb is not None and len(obb) > 0:
+                        for i in range(len(obb)):
+                            cls_id = int(obb.cls[i].item())
+                            cls_name = r.names.get(cls_id, "")
+                            is_aircraft = (
+                                cls_id == 0  # DOTA "plane" class
+                                or "plane" in cls_name.lower()
+                                or "aircraft" in cls_name.lower()
+                            )
+                            if not is_aircraft:
+                                continue
+                            conf = float(obb.conf[i].item())
+                            # OBB: 4 corner points as [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
+                            corners = obb.xyxyxyxy[i].cpu().numpy().astype(np.int32)
+                            # Expand mask outward by dilation factor
+                            center = corners.mean(axis=0)
+                            scale = 1 + self._dilation / 40.0
+                            expanded = (center + (corners - center) * scale).astype(np.int32)
+                            cv2.fillPoly(mask, [expanded], 255)
+                            x1, y1 = corners.min(axis=0)
+                            x2, y2 = corners.max(axis=0)
+                            detections.append({
+                                "x1": int(x1), "y1": int(y1),
+                                "x2": int(x2), "y2": int(y2),
+                                "confidence": round(conf, 3),
+                                "class_name": cls_name or "plane",
+                            })
+                    elif r.boxes is not None and len(r.boxes) > 0:
+                        # Fallback for axis-aligned box models
+                        for i in range(len(r.boxes)):
+                            cls_id = int(r.boxes.cls[i].item())
+                            cls_name = r.names.get(cls_id, "")
+                            is_aircraft = (
+                                cls_id == 4  # COCO airplane
+                                or "plane" in cls_name.lower()
+                                or "aircraft" in cls_name.lower()
+                            )
+                            if not is_aircraft:
+                                continue
+                            conf = float(r.boxes.conf[i].item())
+                            x1, y1, x2, y2 = r.boxes.xyxy[i].cpu().numpy().astype(int)
+                            d = self._dilation
+                            mx1, my1 = max(0, int(x1)-d), max(0, int(y1)-d)
+                            mx2, my2 = min(image_np.shape[1], int(x2)+d), min(image_np.shape[0], int(y2)+d)
+                            mask[my1:my2, mx1:mx2] = 255
+                            detections.append({
+                                "x1": int(x1), "y1": int(y1),
+                                "x2": int(x2), "y2": int(y2),
+                                "confidence": round(conf, 3),
+                                "class_name": cls_name or "plane",
+                            })
 
                 # Inpaint if aircraft found
                 if mask.max() > 0:
