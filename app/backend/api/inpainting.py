@@ -46,11 +46,25 @@ def _get_serving_url() -> str:
 
 
 def _get_auth_token(request: Request) -> Optional[str]:
-    """Extract OAuth token from request for on-behalf-of auth."""
+    """Get an auth token for calling the serving endpoint.
+
+    Priority:
+    1. Bearer token from incoming request (on-behalf-of / external caller)
+    2. DATABRICKS_TOKEN env var
+    3. WorkspaceClient M2M OAuth (Databricks Apps ambient credentials)
+    """
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth[7:]
-    return os.getenv("DATABRICKS_TOKEN")
+    if tok := os.getenv("DATABRICKS_TOKEN"):
+        return tok
+    try:
+        from databricks.sdk import WorkspaceClient
+        w = WorkspaceClient()
+        return w.config.authenticate()["Authorization"].removeprefix("Bearer ")
+    except Exception as e:
+        logger.warning("WorkspaceClient auth failed: %s", e)
+    return None
 
 
 def _parse_tile_coords(url: str) -> tuple[int, int, int] | None:
@@ -63,7 +77,7 @@ def _parse_tile_coords(url: str) -> tuple[int, int, int] | None:
 
 
 @inpainting_router.get("/status")
-async def inpainting_status():
+async def inpainting_status(request: Request):
     """Health check for the inpainting serving endpoint + cache stats."""
     lakebase = get_lakebase_service()
     cache_stats = lakebase.get_tile_cache_stats()
@@ -74,7 +88,7 @@ async def inpainting_status():
             if not host.startswith("http"):
                 host = f"https://{host}"
             url = f"{host}/api/2.0/serving-endpoints/{_SERVING_ENDPOINT_NAME}"
-            token = os.getenv("DATABRICKS_TOKEN", "")
+            token = _get_auth_token(request) or ""
             resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
             if resp.status_code == 200:
                 data = resp.json()
