@@ -580,20 +580,9 @@ export function SimulationControls({
 
   // Header button states
   const renderHeaderButton = () => {
-    // Demo active & playing
+    // Demo active & playing — PlaybackBar at the bottom already shows time/speed
     if (sim.isActive && !sim.switchPaused) {
-      return (
-        <div className="flex items-center gap-2 bg-indigo-600/80 px-3 py-1 rounded-full text-sm">
-          <span className="w-2 h-2 rounded-full bg-indigo-300 animate-pulse" />
-          <span>SIM: {formatSimTime(sim.currentSimTime)} {formatSimDate(sim.currentSimTime)}</span>
-          <span className="text-indigo-200">{sim.speed}x</span>
-          {sim.scenarioName && (
-            <span className="text-amber-200 text-xs truncate max-w-[120px]" title={sim.scenarioName}>
-              {sim.scenarioName}
-            </span>
-          )}
-        </div>
-      );
+      return null;
     }
 
     // Simulation paused (airport switched)

@@ -54,10 +54,10 @@ export interface AirlineConfig {
  */
 export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   // Boeing narrow body (wingspan ~35.8m)
-  // boeing-737.glb has internal node scales [1,17,1.91] — effective size ~34.9m, not raw 12.1m
-  'B737': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'B738': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'B739': { url: '/models/aircraft/boeing-737.glb', scale: 1.08 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
+  // boeing-737.glb has internal node scales [1,17,1.91] + quaternion rotation — effective forward is +X, needs -π/2 to align to +Z
+  'B737': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: -Math.PI / 2, z: 0 } },
+  'B738': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: -Math.PI / 2, z: 0 } },
+  'B739': { url: '/models/aircraft/boeing-737.glb', scale: 1.08 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: -Math.PI / 2, z: 0 } },
 
   // Airbus narrow body (wingspan ~34-36m)
   // airbus_a320.glb native wingspan 34.2 units (1:1 meters)
@@ -78,22 +78,23 @@ export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   'B777': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
   'B787': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
 
-  // Fighter jets (from fighter jet collection GLB — units are ~10x real meters)
+  // Fighter jets (from fighter jet collection GLB — units are ~10x real meters, face +Z natively)
   // F-14 Tomcat: real wingspan 19.5m, model Y span ~196 units → scale 19.5/196 ≈ 0.0995
-  'F14': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-14' },
+  'F14': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 }, nodePrefix: 'F-14' },
   // F-15 Eagle: real wingspan 13.1m, model Y span ~131 → scale 13.1/131 ≈ 0.1
-  'F15': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-15' },
+  'F15': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 }, nodePrefix: 'F-15' },
   // F-16 Falcon: real wingspan 9.4m, model Y span ~94 → scale 9.4/94 ≈ 0.1
-  'F16': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-16' },
+  'F16': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 }, nodePrefix: 'F-16' },
   // F/A-18 Hornet: real wingspan 11.4m, model Y span ~130 → scale 11.4/130 ≈ 0.088
-  'F18': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.088 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-18' },
+  'F18': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.088 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 }, nodePrefix: 'F-18' },
   // F-22 Raptor: real wingspan 13.6m, model Y span ~136 → scale 13.6/136 ≈ 0.1
-  'F22': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-22' },
+  'F22': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 }, nodePrefix: 'F-22' },
   // F-35 Lightning: real wingspan 10.7m, model Y span ~132 → scale 10.7/132 ≈ 0.081
-  'F35': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.081 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 }, nodePrefix: 'F-35' },
+  'F35': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.081 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 }, nodePrefix: 'F-35' },
 
   // Generic fallback - generic-jet.glb native 2.0 units, target 35m wingspan
-  'DEFAULT': { url: '/models/aircraft/generic-jet.glb', scale: 17.5 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI, z: 0 } },
+  // Native forward is -X, needs π/2 to align to +Z
+  'DEFAULT': { url: '/models/aircraft/generic-jet.glb', scale: 17.5 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 } },
 };
 
 /**
