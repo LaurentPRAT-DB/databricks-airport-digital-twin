@@ -58,6 +58,8 @@ def _find_simulation_files_local() -> list[dict]:
     sim_output_dir = PROJECT_ROOT / "simulation_output"
     if sim_output_dir.is_dir():
         candidates.extend(sorted(sim_output_dir.glob("simulation_*.json")))
+        # Also scan subdirectories (e.g., simulation_output/calibrated/)
+        candidates.extend(sorted(sim_output_dir.glob("*/simulation_*.json")))
     for p in candidates:
         try:
             with open(p) as f:
@@ -65,8 +67,14 @@ def _find_simulation_files_local() -> list[dict]:
             summary = data.get("summary", {})
             config = data.get("config", {})
             size_bytes = p.stat().st_size
+            # For files in subdirectories, include relative path from simulation_output/
+            if sim_output_dir.is_dir() and p.is_relative_to(sim_output_dir):
+                rel = p.relative_to(sim_output_dir)
+                fname = str(rel) if len(rel.parts) > 1 else p.name
+            else:
+                fname = p.name
             files.append({
-                "filename": p.name,
+                "filename": fname,
                 "airport": config.get("airport", "?"),
                 "total_flights": summary.get("total_flights", 0),
                 "arrivals": summary.get("arrivals", 0),
@@ -259,13 +267,16 @@ def _load_simulation_from_volume(
 
 def _load_simulation_local(filename: str) -> dict | None:
     """Read simulation JSON from local filesystem."""
-    if "/" in filename or "\\" in filename or ".." in filename:
+    if "\\" in filename or ".." in filename:
         return None
 
     filepath = PROJECT_ROOT / filename
     if not filepath.exists():
         filepath = PROJECT_ROOT / "simulation_output" / filename
     if not filepath.exists() or not filepath.name.startswith("simulation"):
+        return None
+    # Ensure resolved path stays within project root (prevent traversal)
+    if not filepath.resolve().is_relative_to(PROJECT_ROOT.resolve()):
         return None
 
     try:
@@ -345,12 +356,14 @@ def _load_metadata_local(filename: str) -> dict | None:
 
     For very large files, reads the full JSON but avoids frame grouping.
     """
-    if "/" in filename or "\\" in filename or ".." in filename:
+    if "\\" in filename or ".." in filename:
         return None
     filepath = PROJECT_ROOT / filename
     if not filepath.exists():
         filepath = PROJECT_ROOT / "simulation_output" / filename
     if not filepath.exists() or not filepath.name.startswith("simulation"):
+        return None
+    if not filepath.resolve().is_relative_to(PROJECT_ROOT.resolve()):
         return None
     try:
         with open(filepath) as f:
@@ -420,14 +433,14 @@ def _load_metadata_from_volume(
     return None
 
 
-@simulation_router.get("/metadata/{filename}")
+@simulation_router.get("/metadata/{filename:path}")
 async def get_simulation_metadata(request: Request, filename: str) -> dict:
     """Get simulation metadata without loading all frames.
 
     Returns config, summary, time range, day list, and frame estimates
     for the time window picker UI.
     """
-    if "/" in filename or "\\" in filename or ".." in filename:
+    if "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
     user_token = _extract_user_token(request)
@@ -509,7 +522,7 @@ async def list_simulation_files(request: Request) -> dict:
     return {"files": files, "count": len(files)}
 
 
-@simulation_router.get("/data/{filename}")
+@simulation_router.get("/data/{filename:path}")
 async def get_simulation_data(
     request: Request,
     filename: str,
@@ -527,7 +540,7 @@ async def get_simulation_data(
 
     Returns position snapshots grouped by timestamp for frame-based playback.
     """
-    if "/" in filename or "\\" in filename or ".." in filename:
+    if "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
     user_token = _extract_user_token(request)

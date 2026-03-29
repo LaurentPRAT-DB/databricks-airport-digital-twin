@@ -9,6 +9,7 @@ import {
 } from '../../hooks/useSimulationReplay';
 import { TimeWindowPicker } from './TimeWindowPicker';
 import { SceneCapture } from '../SceneCapture/SceneCapture';
+import { SimulationReport } from './SimulationReport';
 
 const SPEED_OPTIONS: PlaybackSpeed[] = [0.25, 0.5, 1, 2, 4, 10, 30, 60];
 
@@ -143,20 +144,26 @@ function FilePicker({
   );
 }
 
-const EVENT_COLORS: Record<string, string> = {
+export const EVENT_COLORS: Record<string, string> = {
   weather: 'bg-amber-400',
   runway: 'bg-red-500',
   ground: 'bg-orange-400',
   traffic: 'bg-blue-400',
   capacity: 'bg-purple-400',
+  cancellation: 'bg-rose-400',
+  go_around: 'bg-yellow-400',
+  diversion: 'bg-cyan-400',
 };
 
-const EVENT_LABELS: Record<string, string> = {
+export const EVENT_LABELS: Record<string, string> = {
   weather: 'Weather',
   runway: 'Runway',
   ground: 'Ground Ops',
   traffic: 'Traffic',
   capacity: 'Capacity',
+  cancellation: 'Cancellations',
+  go_around: 'Go-Arounds',
+  diversion: 'Diversions',
 };
 
 function getEventPosition(event: ScenarioEvent, startTime: string | null, endTime: string | null): number | null {
@@ -172,6 +179,7 @@ function getEventPosition(event: ScenarioEvent, startTime: string | null, endTim
 
 /** Playback control bar shown at the bottom of the screen during simulation replay. */
 function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
+  const [showReport, setShowReport] = useState(false);
   const progressPct = sim.totalFrames > 0
     ? (sim.currentFrameIndex / (sim.totalFrames - 1)) * 100
     : 0;
@@ -365,6 +373,18 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
           <SceneCapture airport={sim.airport} simTime={sim.currentSimTime} />
         </div>
 
+        {/* Report generator button — hidden on mobile */}
+        <button
+          onClick={() => setShowReport(true)}
+          className="hidden md:flex flex-shrink-0 px-2 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors items-center gap-1"
+          title="Generate simulation report"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Report
+        </button>
+
         {/* Stop button — hidden on mobile */}
         <button
           onClick={sim.stop}
@@ -374,6 +394,9 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
           Exit
         </button>
       </div>
+
+      {/* Report modal */}
+      {showReport && <SimulationReport sim={sim} onClose={() => setShowReport(false)} />}
     </div>
   );
 }
