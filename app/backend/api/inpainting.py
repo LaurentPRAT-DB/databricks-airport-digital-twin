@@ -3,18 +3,26 @@
 Accepts satellite tile images (by URL or direct upload), sends them
 through the YOLO + LaMa inpainting serving endpoint, and returns
 clean tiles with aircraft removed.
+
+Tile results are cached in Lakebase (PostgreSQL) so subsequent requests
+for the same tile are served from cache.  Source ETag/Last-Modified headers
+are stored alongside the cached tile — when the satellite provider updates
+imagery, the cache is automatically invalidated and re-inpainted.
 """
 
 import base64
-import io
+import json
 import logging
 import os
-from functools import lru_cache
+import re
+import time
 from typing import Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request, UploadFile, File
 from fastapi.responses import Response
+
+from app.backend.services.lakebase_service import get_lakebase_service
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +33,8 @@ _SERVING_ENDPOINT_NAME = os.getenv(
     "INPAINTING_ENDPOINT_NAME", "airport-dt-aircraft-inpainting-dev"
 )
 
-# Simple in-memory cache for cleaned tiles (tile_url -> clean_image_bytes)
-_tile_cache: dict[str, bytes] = {}
-_CACHE_MAX_SIZE = 500
+# Esri tile URL pattern: .../tile/{z}/{y}/{x}
+_TILE_COORD_RE = re.compile(r"/tile/(\d+)/(\d+)/(\d+)")
 
 
 def _get_serving_url() -> str:
@@ -43,13 +50,24 @@ def _get_auth_token(request: Request) -> Optional[str]:
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth[7:]
-    # Databricks Apps: token may be injected by the platform
     return os.getenv("DATABRICKS_TOKEN")
+
+
+def _parse_tile_coords(url: str) -> tuple[int, int, int] | None:
+    """Extract (zoom, x, y) from an Esri tile URL."""
+    m = _TILE_COORD_RE.search(url)
+    if m:
+        z, y, x = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        return (z, x, y)
+    return None
 
 
 @inpainting_router.get("/status")
 async def inpainting_status():
-    """Health check for the inpainting serving endpoint."""
+    """Health check for the inpainting serving endpoint + cache stats."""
+    lakebase = get_lakebase_service()
+    cache_stats = lakebase.get_tile_cache_stats()
+
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             host = _DATABRICKS_HOST.rstrip("/")
@@ -61,47 +79,107 @@ async def inpainting_status():
             if resp.status_code == 200:
                 data = resp.json()
                 state = data.get("state", {}).get("ready", "UNKNOWN")
-                return {"status": "ok", "endpoint": _SERVING_ENDPOINT_NAME, "ready": state}
-            return {"status": "error", "endpoint": _SERVING_ENDPOINT_NAME, "http_status": resp.status_code}
+                return {
+                    "status": "ok",
+                    "endpoint": _SERVING_ENDPOINT_NAME,
+                    "ready": state,
+                    "cache": cache_stats,
+                }
+            return {
+                "status": "error",
+                "endpoint": _SERVING_ENDPOINT_NAME,
+                "http_status": resp.status_code,
+                "cache": cache_stats,
+            }
     except Exception as e:
-        return {"status": "error", "endpoint": _SERVING_ENDPOINT_NAME, "error": str(e)}
+        return {
+            "status": "error",
+            "endpoint": _SERVING_ENDPOINT_NAME,
+            "error": str(e),
+            "cache": cache_stats,
+        }
+
+
+@inpainting_router.get("/cache-stats")
+async def cache_stats():
+    """Return tile cache statistics from Lakebase."""
+    lakebase = get_lakebase_service()
+    stats = lakebase.get_tile_cache_stats()
+    if stats:
+        return stats
+    return {"error": "Lakebase tile cache not available"}
 
 
 @inpainting_router.post("/clean-tile")
 async def clean_tile(
     request: Request,
     url: Optional[str] = Query(None, description="Satellite tile URL to fetch and clean"),
+    airport_icao: Optional[str] = Query(None, description="Airport ICAO code for cache tagging"),
     file: Optional[UploadFile] = File(None, description="Direct image upload"),
 ):
     """Remove aircraft from a satellite tile image.
 
     Either provide a tile URL (fetched server-side) or upload an image directly.
     Returns the cleaned PNG image.
-    """
-    # Get the input image
-    if url:
-        # Check cache
-        if url in _tile_cache:
-            logger.debug("Cache hit for tile: %s", url[:80])
-            return Response(content=_tile_cache[url], media_type="image/png")
 
-        # Fetch the tile
+    Cache flow:
+    1. Parse tile coords from URL
+    2. Fetch source tile headers (ETag/Last-Modified) for freshness check
+    3. Check Lakebase cache — if hit with matching ETag, return cached
+    4. On miss: fetch full tile, call serving endpoint, cache result
+    """
+    lakebase = get_lakebase_service()
+    tile_coords = _parse_tile_coords(url) if url else None
+
+    if url:
+        # --- Step 1: Check Lakebase cache first ---
+        if tile_coords:
+            z, tx, ty = tile_coords
+
+            # HEAD request to get source ETag without downloading the full tile
+            source_etag = None
+            source_last_modified = None
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    head_resp = await client.head(url)
+                    source_etag = head_resp.headers.get("ETag")
+                    source_last_modified = head_resp.headers.get("Last-Modified")
+            except httpx.HTTPError:
+                pass  # Proceed without freshness check
+
+            cached = lakebase.get_cached_tile(z, tx, ty, source_etag=source_etag)
+            if cached:
+                logger.debug("Lakebase cache hit for tile %d/%d/%d", z, tx, ty)
+                return Response(
+                    content=cached["image_bytes"],
+                    media_type="image/png",
+                    headers={
+                        "X-Cache": "HIT",
+                        "X-Aircraft-Count": str(cached["aircraft_count"]),
+                    },
+                )
+
+        # --- Step 2: Fetch the full tile ---
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
                 image_bytes = resp.content
+                if not source_etag:
+                    source_etag = resp.headers.get("ETag")
+                if not source_last_modified:
+                    source_last_modified = resp.headers.get("Last-Modified")
         except httpx.HTTPError as e:
             raise HTTPException(status_code=502, detail=f"Failed to fetch tile: {e}")
+
     elif file:
         image_bytes = await file.read()
     else:
         raise HTTPException(status_code=400, detail="Provide either 'url' query param or upload a file")
 
-    # Encode for serving endpoint
+    # --- Step 3: Call the serving endpoint ---
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
-    # Call the serving endpoint
     token = _get_auth_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="No auth token available")
@@ -114,6 +192,7 @@ async def clean_tile(
         }
     }
 
+    t0 = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
@@ -129,6 +208,8 @@ async def clean_tile(
         logger.error("Serving endpoint error: %s", e)
         raise HTTPException(status_code=502, detail=f"Inpainting endpoint error: {e}")
 
+    processing_ms = int((time.monotonic() - t0) * 1000)
+
     # Parse response
     result = resp.json()
     try:
@@ -136,18 +217,43 @@ async def clean_tile(
         if isinstance(predictions, dict):
             data = predictions.get("data", [[]])[0]
             clean_b64 = data[0] if data else ""
+            aircraft_count = data[1] if len(data) > 1 else 0
+            detections_json = data[2] if len(data) > 2 else "[]"
         elif isinstance(predictions, list):
-            clean_b64 = predictions[0].get("clean_image_b64", "")
+            pred = predictions[0]
+            clean_b64 = pred.get("clean_image_b64", "")
+            aircraft_count = pred.get("aircraft_count", 0)
+            detections_json = pred.get("detections", "[]")
         else:
             clean_b64 = ""
-    except (KeyError, IndexError) as e:
+            aircraft_count = 0
+            detections_json = "[]"
+    except (KeyError, IndexError):
         logger.error("Unexpected serving response: %s", result)
         raise HTTPException(status_code=502, detail="Unexpected response from inpainting endpoint")
 
     clean_bytes = base64.b64decode(clean_b64)
 
-    # Cache the result
-    if url and len(_tile_cache) < _CACHE_MAX_SIZE:
-        _tile_cache[url] = clean_bytes
+    # --- Step 4: Cache the result in Lakebase ---
+    if tile_coords:
+        z, tx, ty = tile_coords
+        lakebase.store_cached_tile(
+            zoom=z, tile_x=tx, tile_y=ty,
+            image_bytes=clean_bytes,
+            aircraft_count=int(aircraft_count),
+            detections_json=detections_json if isinstance(detections_json, str) else json.dumps(detections_json),
+            source_etag=source_etag,
+            source_last_modified=source_last_modified,
+            airport_icao=airport_icao,
+            processing_time_ms=processing_ms,
+        )
 
-    return Response(content=clean_bytes, media_type="image/png")
+    return Response(
+        content=clean_bytes,
+        media_type="image/png",
+        headers={
+            "X-Cache": "MISS",
+            "X-Aircraft-Count": str(aircraft_count),
+            "X-Processing-Ms": str(processing_ms),
+        },
+    )

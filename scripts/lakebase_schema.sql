@@ -267,3 +267,41 @@ ALTER TABLE gse_fleet ADD PRIMARY KEY (airport_icao, unit_id);
 ALTER TABLE gse_turnaround ADD COLUMN IF NOT EXISTS airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO';
 ALTER TABLE gse_turnaround DROP CONSTRAINT IF EXISTS gse_turnaround_pkey;
 ALTER TABLE gse_turnaround ADD PRIMARY KEY (airport_icao, icao24);
+
+
+-- ============================================================================
+-- Satellite Tile Cache (inpainted tiles with aircraft removed)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS satellite_tile_cache (
+    tile_key VARCHAR(100) PRIMARY KEY,
+    zoom INTEGER NOT NULL,
+    tile_x INTEGER NOT NULL,
+    tile_y INTEGER NOT NULL,
+    airport_icao VARCHAR(4),
+    original_etag VARCHAR(200),
+    original_last_modified VARCHAR(100),
+    inpainted_image BYTEA NOT NULL,
+    aircraft_count INTEGER NOT NULL DEFAULT 0,
+    detections_json JSONB,
+    processing_time_ms INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_stc_airport
+ON satellite_tile_cache (airport_icao, zoom);
+
+CREATE INDEX IF NOT EXISTS idx_stc_coords
+ON satellite_tile_cache (zoom, tile_x, tile_y);
+
+DROP TRIGGER IF EXISTS update_satellite_tile_cache_updated_at ON satellite_tile_cache;
+CREATE TRIGGER update_satellite_tile_cache_updated_at
+    BEFORE UPDATE ON satellite_tile_cache
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE satellite_tile_cache IS 'Cached inpainted satellite tiles with aircraft removed';
+COMMENT ON COLUMN satellite_tile_cache.tile_key IS 'zoom/x/y key for tile lookup';
+COMMENT ON COLUMN satellite_tile_cache.original_etag IS 'ETag from source imagery for cache invalidation';
+COMMENT ON COLUMN satellite_tile_cache.inpainted_image IS 'Inpainted PNG tile bytes';

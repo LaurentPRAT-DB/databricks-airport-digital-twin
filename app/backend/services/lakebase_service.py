@@ -1643,6 +1643,186 @@ class LakebaseService:
             return 0
 
 
+    # =========================================================================
+    # Satellite Tile Cache (inpainted tiles)
+    # =========================================================================
+
+    _tile_cache_ensured = False
+    _tile_cache_retries = 0
+
+    def _ensure_tile_cache_table(self) -> None:
+        """Create satellite_tile_cache table if it doesn't exist."""
+        if self._tile_cache_ensured or not self.is_available:
+            return
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS satellite_tile_cache (
+                            tile_key VARCHAR(100) PRIMARY KEY,
+                            zoom INTEGER NOT NULL,
+                            tile_x INTEGER NOT NULL,
+                            tile_y INTEGER NOT NULL,
+                            airport_icao VARCHAR(4),
+                            original_etag VARCHAR(200),
+                            original_last_modified VARCHAR(100),
+                            inpainted_image BYTEA NOT NULL,
+                            aircraft_count INTEGER NOT NULL DEFAULT 0,
+                            detections_json JSONB,
+                            processing_time_ms INTEGER,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        )
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_stc_airport
+                        ON satellite_tile_cache (airport_icao, zoom)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_stc_coords
+                        ON satellite_tile_cache (zoom, tile_x, tile_y)
+                    """)
+                    conn.commit()
+            self._tile_cache_ensured = True
+            logger.debug("Ensured satellite_tile_cache table exists")
+        except Exception as e:
+            self._tile_cache_retries += 1
+            if self._tile_cache_retries >= self._MAX_MIGRATION_RETRIES:
+                self._tile_cache_ensured = True
+                logger.error(f"Tile cache table creation failed after {self._MAX_MIGRATION_RETRIES} retries: {e}")
+            else:
+                logger.warning(f"Tile cache table creation failed (attempt {self._tile_cache_retries}): {e}")
+
+    def get_cached_tile(
+        self, zoom: int, tile_x: int, tile_y: int, source_etag: str | None = None
+    ) -> dict | None:
+        """Look up a cached inpainted tile.
+
+        If source_etag is provided, only returns the cached version if it
+        matches (i.e., the source satellite imagery hasn't changed).
+
+        Returns:
+            Dict with 'image_bytes', 'aircraft_count', 'etag', or None if miss.
+        """
+        self._ensure_tile_cache_table()
+        if not self.is_available:
+            return None
+
+        tile_key = f"{zoom}/{tile_x}/{tile_y}"
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """SELECT inpainted_image, aircraft_count, original_etag,
+                                  original_last_modified, detections_json
+                           FROM satellite_tile_cache
+                           WHERE tile_key = %s""",
+                        (tile_key,),
+                    )
+                    row = cur.fetchone()
+                    if row is None:
+                        return None
+
+                    # Check freshness: if caller provides source ETag and it
+                    # differs from what we cached, the source imagery changed
+                    if source_etag and row["original_etag"] and source_etag != row["original_etag"]:
+                        logger.info("Tile cache stale for %s (ETag mismatch)", tile_key)
+                        return None
+
+                    return {
+                        "image_bytes": bytes(row["inpainted_image"]),
+                        "aircraft_count": row["aircraft_count"],
+                        "etag": row["original_etag"],
+                        "last_modified": row["original_last_modified"],
+                        "detections": row["detections_json"],
+                    }
+        except Exception as e:
+            logger.warning(f"Tile cache lookup failed for {tile_key}: {e}")
+            self._invalidate_credentials_if_auth_error(e)
+            return None
+
+    def store_cached_tile(
+        self,
+        zoom: int,
+        tile_x: int,
+        tile_y: int,
+        image_bytes: bytes,
+        aircraft_count: int,
+        detections_json: str | None = None,
+        source_etag: str | None = None,
+        source_last_modified: str | None = None,
+        airport_icao: str | None = None,
+        processing_time_ms: int | None = None,
+    ) -> bool:
+        """Store an inpainted tile in the cache (upsert).
+
+        Returns True on success.
+        """
+        self._ensure_tile_cache_table()
+        if not self.is_available:
+            return False
+
+        tile_key = f"{zoom}/{tile_x}/{tile_y}"
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """INSERT INTO satellite_tile_cache
+                           (tile_key, zoom, tile_x, tile_y, airport_icao,
+                            original_etag, original_last_modified,
+                            inpainted_image, aircraft_count, detections_json,
+                            processing_time_ms, updated_at)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, NOW())
+                           ON CONFLICT (tile_key) DO UPDATE SET
+                            inpainted_image = EXCLUDED.inpainted_image,
+                            aircraft_count = EXCLUDED.aircraft_count,
+                            detections_json = EXCLUDED.detections_json,
+                            original_etag = EXCLUDED.original_etag,
+                            original_last_modified = EXCLUDED.original_last_modified,
+                            processing_time_ms = EXCLUDED.processing_time_ms,
+                            updated_at = NOW()""",
+                        (
+                            tile_key, zoom, tile_x, tile_y, airport_icao,
+                            source_etag, source_last_modified,
+                            image_bytes, aircraft_count, detections_json,
+                            processing_time_ms,
+                        ),
+                    )
+                    conn.commit()
+            logger.debug("Cached inpainted tile %s (%d aircraft)", tile_key, aircraft_count)
+            return True
+        except Exception as e:
+            logger.warning(f"Tile cache store failed for {tile_key}: {e}")
+            self._invalidate_credentials_if_auth_error(e)
+            return False
+
+    def get_tile_cache_stats(self) -> dict | None:
+        """Return stats about the tile cache."""
+        self._ensure_tile_cache_table()
+        if not self.is_available:
+            return None
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT
+                            COUNT(*) as total_tiles,
+                            SUM(aircraft_count) as total_aircraft_removed,
+                            COUNT(DISTINCT airport_icao) as airports_covered,
+                            AVG(processing_time_ms)::int as avg_processing_ms,
+                            MIN(created_at) as oldest_tile,
+                            MAX(updated_at) as newest_tile,
+                            pg_size_pretty(SUM(LENGTH(inpainted_image)::bigint)) as cache_size
+                        FROM satellite_tile_cache
+                    """)
+                    return dict(cur.fetchone())
+        except Exception as e:
+            logger.warning(f"Tile cache stats query failed: {e}")
+            return None
+
+
 # Singleton instance
 _lakebase_service: Optional[LakebaseService] = None
 
