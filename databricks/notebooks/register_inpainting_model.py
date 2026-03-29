@@ -40,8 +40,8 @@ YOLO_WEIGHTS_VOLUME = f"{VOLUME_PATH}/yolov8n.pt"
 LAMA_WEIGHTS_DIR = f"{VOLUME_PATH}/lama"
 LAMA_WEIGHTS_FILE = f"{LAMA_WEIGHTS_DIR}/big-lama.pt"
 
-# Official LaMa checkpoint URL (from the saic-mdal/lama repository)
-LAMA_CHECKPOINT_URL = "https://huggingface.co/smartywu/big-lama/resolve/main/big-lama.pt"
+# Official LaMa checkpoint URL (Sanster/IOPaint's release of big-lama)
+LAMA_CHECKPOINT_URL = "https://github.com/Sanster/models/releases/download/add_big_lama/big-lama.pt"
 
 # COMMAND ----------
 
