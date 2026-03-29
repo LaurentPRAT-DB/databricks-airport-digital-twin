@@ -297,12 +297,24 @@ with tempfile.TemporaryDirectory() as tmp:
 
             return pd.DataFrame(results_list)
 
+    from mlflow.models.signature import ModelSignature
+    from mlflow.types.schema import ColSpec, Schema
+
+    input_schema = Schema([ColSpec("string", "image_b64")])
+    output_schema = Schema([
+        ColSpec("string", "clean_image_b64"),
+        ColSpec("long", "aircraft_count"),
+        ColSpec("string", "detections"),
+    ])
+    signature = ModelSignature(inputs=input_schema, outputs=output_schema)
+
     with mlflow.start_run(run_name="aircraft_inpainting_registration"):
         model_info = mlflow.pyfunc.log_model(
             artifact_path="model",
             python_model=AircraftInpaintingModel(),
             artifacts=artifacts,
             conda_env=conda_env,
+            signature=signature,
             registered_model_name=MODEL_NAME,
         )
         print(f"Model logged: {model_info.model_uri}")
