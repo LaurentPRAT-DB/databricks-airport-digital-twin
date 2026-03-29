@@ -138,7 +138,7 @@ mlflow.set_registry_uri("databricks-uc")
 with tempfile.TemporaryDirectory() as tmp:
     config_path = os.path.join(tmp, "config.json")
     config = {
-        "device": "cuda",
+        "device": "auto",
         "yolo_weights": YOLO_WEIGHTS_VOLUME,
         "lama_weights_dir": LAMA_WEIGHTS_DIR,
         "lama_weights_file": LAMA_WEIGHTS_FILE,
@@ -194,7 +194,12 @@ with tempfile.TemporaryDirectory() as tmp:
             except Exception:
                 pass
 
-            self._device = config.get("device", "cuda")
+            # Auto-detect device: use GPU if available, else CPU
+            if torch.cuda.is_available():
+                self._device = "cuda"
+            else:
+                self._device = "cpu"
+
             self._yolo_weights = config.get("yolo_weights", "yolov8n.pt")
             self._lama_weights = config.get("lama_weights_file")
             self._confidence = config.get("confidence_threshold", 0.5)
