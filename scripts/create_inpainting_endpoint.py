@@ -37,7 +37,7 @@ def check_model_exists() -> bool:
     """Check if the model is registered in UC."""
     result = run_cli([
         "api", "get",
-        f"/api/2.0/unity-catalog/models/{MODEL_NAME}",
+        f"/api/2.1/unity-catalog/models/{MODEL_NAME}",
     ])
     if isinstance(result, dict) and "error" not in result:
         print(f"Model found: {MODEL_NAME}")
