@@ -15,6 +15,24 @@ logger = logging.getLogger(__name__)
 # Earth radius in meters
 _EARTH_RADIUS_M = 6_371_000
 
+# Penalty multiplier for edges whose midpoint falls inside a terminal building.
+# Makes Dijkstra strongly prefer routes that go around buildings.
+_BUILDING_PENALTY = 10.0
+
+
+def _point_in_polygon(lat: float, lon: float, polygon: list[tuple[float, float]]) -> bool:
+    """Ray-casting point-in-polygon test. polygon is list of (lat, lon)."""
+    n = len(polygon)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        yi, xi = polygon[i]
+        yj, xj = polygon[j]
+        if ((yi > lon) != (yj > lon)) and (lat < (xj - xi) * (lon - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+    return inside
+
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Haversine distance in meters between two (lat, lon) points."""
@@ -135,11 +153,63 @@ class TaxiwayGraph:
             if nearest is not None:
                 self._add_edge(gate_id, nearest)
 
+        # 5. Penalize edges that pass through terminal buildings
+        building_polygons = self._extract_building_polygons(config)
+        if building_polygons:
+            penalized = self._penalize_building_edges(building_polygons)
+            if penalized:
+                logger.info("Penalized %d edges crossing terminal buildings", penalized)
+
         logger.info(
             "TaxiwayGraph built: %d nodes, %d edges",
             len(self.nodes),
             sum(len(v) for v in self.edges.values()) // 2,
         )
+
+    # ------------------------------------------------------------------
+    # Building avoidance
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_building_polygons(config: dict) -> list[list[tuple[float, float]]]:
+        """Extract terminal building polygons from config as [(lat, lon), ...]."""
+        polygons = []
+        for terminal in config.get("terminals", []):
+            geo_poly = terminal.get("geoPolygon", [])
+            if len(geo_poly) < 3:
+                continue
+            pts = []
+            for pt in geo_poly:
+                lat = pt.get("latitude")
+                lon = pt.get("longitude")
+                if lat is not None and lon is not None:
+                    pts.append((float(lat), float(lon)))
+            if len(pts) >= 3:
+                polygons.append(pts)
+        return polygons
+
+    def _penalize_building_edges(self, polygons: list[list[tuple[float, float]]]) -> int:
+        """Multiply weight of edges whose midpoint is inside a building polygon.
+
+        Returns count of penalized edges.
+        """
+        penalized = 0
+        for node_id, neighbors in self.edges.items():
+            lat_a, lon_a = self.nodes[node_id]
+            new_neighbors = []
+            for neighbor_id, weight in neighbors:
+                lat_b, lon_b = self.nodes[neighbor_id]
+                mid_lat = (lat_a + lat_b) / 2
+                mid_lon = (lon_a + lon_b) / 2
+                for poly in polygons:
+                    if _point_in_polygon(mid_lat, mid_lon, poly):
+                        weight *= _BUILDING_PENALTY
+                        penalized += 1
+                        break
+                new_neighbors.append((neighbor_id, weight))
+            self.edges[node_id] = new_neighbors
+        # Each edge counted twice (bidirectional)
+        return penalized // 2
 
     # ------------------------------------------------------------------
     # Pathfinding

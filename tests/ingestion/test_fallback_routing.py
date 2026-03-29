@@ -250,36 +250,41 @@ class TestDepartureUsesGraph:
 
 
 class TestPushbackHeading:
-    @patch(_SERVICE_PATCH)
+    @patch("src.ingestion.fallback._get_taxi_waypoints_departure")
     @patch("src.ingestion.fallback.get_gates")
-    def test_pushback_direction_from_graph(self, mock_get_gates, mock_get_service):
-        graph = MagicMock()
-        graph.snap_to_nearest_node.return_value = 0
-        graph.nodes = {0: (37.614, -122.389)}  # South of gate
-        mock_get_service.return_value = _make_mock_service(graph=graph)
+    def test_pushback_direction_from_route(self, mock_get_gates, mock_get_dep_route):
+        """Pushback heading derived from first segment of departure route."""
+        # Gate at (37.616, -122.389), route goes south then east
         mock_get_gates.return_value = {"G1": (37.616, -122.389)}
+        mock_get_dep_route.return_value = [
+            (-122.389, 37.616),   # At gate (lon, lat)
+            (-122.389, 37.614),   # South of gate
+            (-122.385, 37.614),   # Then east
+        ]
 
         heading = _get_pushback_heading("G1")
 
-        # Heading from gate (37.616) toward taxiway node (37.614) is roughly south (~180°)
+        # First wp collocated with gate, so uses second wp → heading south (~180°)
         assert 160 < heading < 200
 
-    @patch(_SERVICE_PATCH)
+    @patch("src.ingestion.fallback._get_taxi_waypoints_departure")
     @patch("src.ingestion.fallback.get_gates")
-    def test_pushback_direction_east(self, mock_get_gates, mock_get_service):
-        """Pushback toward a taxiway node east of the gate."""
-        graph = MagicMock()
-        graph.snap_to_nearest_node.return_value = 0
-        graph.nodes = {0: (37.616, -122.385)}  # East of gate (less negative lon)
-        mock_get_service.return_value = _make_mock_service(graph=graph)
+    def test_pushback_direction_east(self, mock_get_gates, mock_get_dep_route):
+        """Pushback toward first waypoint east of the gate."""
         mock_get_gates.return_value = {"G1": (37.616, -122.389)}
+        mock_get_dep_route.return_value = [
+            (-122.385, 37.616),   # East of gate (lon, lat)
+            (-122.380, 37.616),   # Further east
+        ]
 
         heading = _get_pushback_heading("G1")
         # Heading east is ~90°
         assert 70 < heading < 110
 
-    def test_pushback_default_heading(self):
-        """Without graph, heading defaults to 180° (south)."""
+    @patch("src.ingestion.fallback._get_taxi_waypoints_departure")
+    def test_pushback_default_heading(self, mock_get_dep_route):
+        """Without route, heading defaults to 180° (south)."""
+        mock_get_dep_route.return_value = []
         heading = _get_pushback_heading("G1")
         assert heading == 180.0
 

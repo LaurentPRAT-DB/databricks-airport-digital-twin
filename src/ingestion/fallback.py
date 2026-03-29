@@ -1819,24 +1819,25 @@ def _get_taxi_waypoints_departure(gate_ref: str) -> List[tuple]:
 
 
 def _get_pushback_heading(gate_ref: str) -> float:
-    """Determine pushback heading from departure route.
+    """Determine pushback heading from departure taxi route.
 
-    Uses first segment of departure route to compute direction away from gate.
+    Uses the first segment of the computed departure route (which respects
+    building avoidance) rather than a straight line to the nearest node.
     Falls back to 180° (south) if no route available.
     """
     try:
-        from app.backend.services.airport_config_service import get_airport_config_service
-        service = get_airport_config_service()
-        graph = service.taxiway_graph
-        if graph:
+        route = _get_taxi_waypoints_departure(gate_ref)
+        if route and len(route) >= 2:
             gate_pos = get_gates().get(gate_ref)
             if gate_pos:
-                nearest_id = graph.snap_to_nearest_node(gate_pos[0], gate_pos[1])
-                if nearest_id is not None:
-                    nearest_pos = graph.nodes[nearest_id]
-                    # Heading from gate toward nearest taxiway node
-                    return _calculate_heading(gate_pos, nearest_pos)
-    except (ImportError, Exception):
+                # Route is (lon, lat) — first waypoint after gate
+                first_wp = (route[0][1], route[0][0])
+                second_wp = (route[1][1], route[1][0])
+                # Use whichever waypoint is farther from the gate (skip gate-collocated wp)
+                dist_to_first = _distance_between(gate_pos, first_wp)
+                target_wp = second_wp if dist_to_first < 0.0003 else first_wp
+                return _calculate_heading(gate_pos, target_wp)
+    except Exception:
         pass
     return 180.0  # Default: south
 
@@ -2412,10 +2413,16 @@ def _taxi_speed_factor(state: FlightState) -> float:
                     head_on_hold = True
 
         if dist < slow_zone:
-            # Consider aircraft AHEAD of us (same direction or approaching)
             dlat = other.latitude - state.latitude
             dlon = other.longitude - state.longitude
             dot = dlon * fwd_x + dlat * fwd_y
+
+            # Overlap prevention: if nearly on top of each other (<20m),
+            # stop the aircraft with higher icao24 regardless of heading.
+            if dist < 0.0002 and state.icao24 > other.icao24:
+                return -1.0 if head_on_hold else 0.0
+
+            # Consider aircraft AHEAD of us (same direction or approaching)
             if dot > 0:
                 if dist < sep_threshold:
                     return -1.0 if head_on_hold else 0.0
@@ -3768,13 +3775,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude += jitter
                 state.longitude += jitter
             else:
-                # Slow creep (2kt) to avoid frozen-marker appearance on the map.
-                # Real aircraft don't perfectly hold position — they inch forward.
-                creep_speed = 2.0
-                speed_deg = creep_speed * _KTS_TO_DEG_PER_SEC * dt
-                new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
-                state.latitude, state.longitude = new_pos
-                state.velocity = creep_speed
+                # Factor 0 = traffic ahead within separation threshold.
+                # Full stop — no creep — to maintain queue spacing.
+                state.velocity = 0
+                speed_deg = 0
 
             # Smooth heading toward waypoint (max 5°/s for taxi turns)
             target_hdg = _calculate_heading((state.latitude, state.longitude), target)
@@ -4003,12 +4007,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.longitude += jitter
                 speed_deg = 0
             else:
-                # Slow creep (2kt) to avoid frozen-marker appearance on the map.
-                creep_speed = 2.0
-                speed_deg = creep_speed * _KTS_TO_DEG_PER_SEC * dt
-                new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
-                state.latitude, state.longitude = new_pos
-                state.velocity = creep_speed
+                # Factor 0 = traffic ahead within separation threshold.
+                # Full stop — no creep — to maintain queue spacing.
+                state.velocity = 0
+                speed_deg = 0
 
             # Smooth heading toward waypoint (max 5°/s for taxi turns)
             target_hdg = _calculate_heading((state.latitude, state.longitude), target)
