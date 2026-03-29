@@ -114,6 +114,75 @@ async def inpainting_status(request: Request):
         }
 
 
+# Minimal 1x1 white PNG for wake-up ping (68 bytes)
+_WAKE_PING_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAB"
+    "Nl7BcQAAAABJRU5ErkJggg=="
+)
+
+
+@inpainting_router.post("/wake")
+async def wake_endpoint(request: Request):
+    """Trigger scale-up of the inpainting serving endpoint.
+
+    Scale-to-zero endpoints wake on any invocation request.
+    We send a tiny 1x1 PNG to trigger the wake without blocking —
+    the request will queue while the endpoint scales up.
+    """
+    # First check if already ready
+    token = _get_auth_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="No auth token available")
+
+    host = _DATABRICKS_HOST.rstrip("/")
+    if not host.startswith("http"):
+        host = f"https://{host}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            status_url = f"{host}/api/2.0/serving-endpoints/{_SERVING_ENDPOINT_NAME}"
+            resp = await client.get(
+                status_url, headers={"Authorization": f"Bearer {token}"}
+            )
+            if resp.status_code == 200:
+                state = resp.json().get("state", {}).get("ready", "UNKNOWN")
+                if state == "READY":
+                    return {"status": "ready", "message": "Endpoint is already running"}
+    except httpx.HTTPError:
+        pass  # Proceed to wake attempt anyway
+
+    # Send a fire-and-forget invocation to trigger scale-up
+    serving_url = _get_serving_url()
+    payload = {
+        "dataframe_split": {
+            "columns": ["image_b64"],
+            "data": [[_WAKE_PING_B64]],
+        }
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            # Don't wait for the full response — just send the request
+            # The endpoint will start scaling up even if we time out
+            await client.post(
+                serving_url,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+            )
+    except httpx.TimeoutException:
+        pass  # Expected — endpoint is cold, request queued
+    except httpx.HTTPError:
+        pass  # Endpoint will still wake from the attempt
+
+    return {
+        "status": "waking",
+        "message": "Wake-up request sent. Endpoint is scaling up (may take 2-5 minutes).",
+    }
+
+
 @inpainting_router.get("/cache-stats")
 async def cache_stats():
     """Return tile cache statistics from Lakebase."""

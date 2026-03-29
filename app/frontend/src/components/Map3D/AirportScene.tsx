@@ -32,6 +32,10 @@ interface AirportSceneProps {
   osmRunways?: OSMRunway[];
   /** Whether to show satellite imagery as ground plane */
   satellite?: boolean;
+  /** Route satellite tiles through the inpainting proxy */
+  inpainting?: boolean;
+  /** Airport ICAO code for inpainting cache tagging */
+  airportIcao?: string;
 }
 
 /**
@@ -57,6 +61,8 @@ export function AirportScene({
   osmAprons = [],
   osmRunways = [],
   satellite = false,
+  inpainting = false,
+  airportIcao,
 }: AirportSceneProps) {
   const { runways, taxiways, buildings, ground } = AIRPORT_3D_CONFIG;
 
@@ -73,6 +79,8 @@ export function AirportScene({
           centerLat={airportCenter.lat}
           centerLon={airportCenter.lon}
           scale={DEFAULT_COORDINATE_SCALE}
+          inpainting={inpainting}
+          airportIcao={airportIcao}
         />
       ) : (
         <Ground size={ground.size} color={ground.color} />

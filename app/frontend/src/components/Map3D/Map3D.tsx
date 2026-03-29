@@ -21,6 +21,10 @@ interface Map3DProps {
   onViewportChange?: (vp: SharedViewport) => void;
   airportCenter?: { lat: number; lon: number };
   satellite?: boolean;
+  /** Route satellite tiles through the inpainting proxy */
+  inpainting?: boolean;
+  /** Airport ICAO code for inpainting cache tagging */
+  airportIcao?: string;
 }
 
 // ============================================================================
@@ -120,6 +124,8 @@ export function Map3D({
   onViewportChange,
   airportCenter: airportCenterProp,
   satellite = false,
+  inpainting = false,
+  airportIcao,
 }: Map3DProps) {
   const { lighting } = AIRPORT_3D_CONFIG;
   const { isLoading, switchProgress, getTerminals, getAirportCenter, getTaxiways: getOSMTaxiwaysHook, getAprons, getOSMRunways } = useAirportConfigContext();
@@ -355,6 +361,8 @@ export function Map3D({
           osmAprons={osmAprons}
           osmRunways={osmRunways}
           satellite={satellite}
+          inpainting={inpainting}
+          airportIcao={airportIcao}
         />
 
         {/* Orbit controls for user interaction */}

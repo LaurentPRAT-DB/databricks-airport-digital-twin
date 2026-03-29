@@ -36,6 +36,10 @@ interface SatelliteGroundProps {
   centerLon: number;
   /** Coordinate scale used by latLonTo3D (default 10000) */
   scale?: number;
+  /** Route tiles through the inpainting proxy to remove real aircraft */
+  inpainting?: boolean;
+  /** Airport ICAO code for cache tagging when inpainting is enabled */
+  airportIcao?: string;
 }
 
 export function SatelliteGround({
@@ -43,6 +47,8 @@ export function SatelliteGround({
   centerLat,
   centerLon,
   scale = 10000,
+  inpainting = false,
+  airportIcao,
 }: SatelliteGroundProps) {
   const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -85,6 +91,56 @@ export function SatelliteGround({
     return { zoom, minTX, maxTX, minTY, maxTY, cols, rows, gridNW, gridSE, deltaLat, deltaLon };
   }, [size, scale, centerLat, centerLon]);
 
+  /** Load a tile image — via inpainting proxy or direct Esri URL. */
+  const loadTileImage = (
+    esriUrl: string,
+    useInpainting: boolean,
+    icao: string | undefined,
+  ): Promise<HTMLImageElement> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      const loadDirect = () => {
+        const directImg = new Image();
+        directImg.crossOrigin = 'anonymous';
+        directImg.onload = () => resolve(directImg);
+        directImg.onerror = () => resolve(directImg); // still resolve — caller handles missing tiles
+        directImg.src = esriUrl;
+      };
+
+      if (useInpainting) {
+        const params = new URLSearchParams({ url: esriUrl });
+        if (icao) params.set('airport_icao', icao);
+
+        fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST' })
+          .then((resp) => {
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            return resp.blob();
+          })
+          .then((blob) => {
+            const objectUrl = URL.createObjectURL(blob);
+            img.onload = () => {
+              URL.revokeObjectURL(objectUrl);
+              resolve(img);
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(objectUrl);
+              loadDirect(); // Fallback to raw Esri tile
+            };
+            img.src = objectUrl;
+          })
+          .catch(() => {
+            loadDirect(); // Fallback to raw Esri tile
+          });
+      } else {
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(img);
+        img.src = esriUrl;
+      }
+    });
+  };
+
   // Fetch tiles and composite onto canvas
   useEffect(() => {
     const { zoom, minTX, maxTX, minTY, maxTY, cols, rows, gridNW, gridSE, deltaLat, deltaLon } = tileConfig;
@@ -104,90 +160,69 @@ export function SatelliteGround({
     ctx.fillStyle = '#333333';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
+    let cancelled = false;
     let loadedCount = 0;
     const totalTiles = cols * rows;
 
+    const finalize = () => {
+      if (cancelled) return;
+      // All tiles loaded — crop to the exact ground plane extent
+      const groundNWLat = centerLat + deltaLat / 2;
+      const groundNWLon = centerLon - deltaLon / 2;
+      const groundSELat = centerLat - deltaLat / 2;
+      const groundSELon = centerLon + deltaLon / 2;
+
+      const gridLatSpan = gridNW.lat - gridSE.lat;
+      const gridLonSpan = gridSE.lon - gridNW.lon;
+
+      const cropX = ((groundNWLon - gridNW.lon) / gridLonSpan) * canvasWidth;
+      const cropY = ((gridNW.lat - groundNWLat) / gridLatSpan) * canvasHeight;
+      const cropW = ((groundSELon - groundNWLon) / gridLonSpan) * canvasWidth;
+      const cropH = ((groundNWLat - groundSELat) / gridLatSpan) * canvasHeight;
+
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = 2048;
+      croppedCanvas.height = 2048;
+      const cropCtx = croppedCanvas.getContext('2d');
+      if (cropCtx) {
+        cropCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, 2048, 2048);
+        cropCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        cropCtx.fillRect(0, 0, 2048, 2048);
+        const tex = new THREE.CanvasTexture(croppedCanvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.anisotropy = 4;
+        setTexture(tex);
+      }
+    };
+
     for (let ty = minTY; ty <= maxTY; ty++) {
       for (let tx = minTX; tx <= maxTX; tx++) {
-        const url = SAT_URL.replace('{z}', String(zoom))
+        const esriUrl = SAT_URL.replace('{z}', String(zoom))
           .replace('{y}', String(ty))
           .replace('{x}', String(tx));
-
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
 
         const px = (tx - minTX) * TILE_SIZE;
         const py = (ty - minTY) * TILE_SIZE;
 
-        img.onload = () => {
+        loadTileImage(esriUrl, inpainting, airportIcao).then((img) => {
+          if (cancelled) return;
           ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE);
           loadedCount++;
-
-          if (loadedCount === totalTiles) {
-            // All tiles loaded — now crop to the exact ground plane extent
-            // The tile grid may be slightly larger than the ground plane.
-            // Map the ground plane's lat/lon bounds onto pixel coords in the canvas.
-            const groundNWLat = centerLat + deltaLat / 2;
-            const groundNWLon = centerLon - deltaLon / 2;
-            const groundSELat = centerLat - deltaLat / 2;
-            const groundSELon = centerLon + deltaLon / 2;
-
-            // Pixel coordinates of the ground plane corners within the tile grid
-            const gridLatSpan = gridNW.lat - gridSE.lat;
-            const gridLonSpan = gridSE.lon - gridNW.lon;
-
-            const cropX = ((groundNWLon - gridNW.lon) / gridLonSpan) * canvasWidth;
-            const cropY = ((gridNW.lat - groundNWLat) / gridLatSpan) * canvasHeight;
-            const cropW = ((groundSELon - groundNWLon) / gridLonSpan) * canvasWidth;
-            const cropH = ((groundNWLat - groundSELat) / gridLatSpan) * canvasHeight;
-
-            // Create a cropped canvas for the exact ground plane
-            const croppedCanvas = document.createElement('canvas');
-            // Power-of-two for GPU efficiency
-            croppedCanvas.width = 2048;
-            croppedCanvas.height = 2048;
-            const cropCtx = croppedCanvas.getContext('2d');
-            if (cropCtx) {
-              cropCtx.drawImage(
-                canvas,
-                cropX, cropY, cropW, cropH,
-                0, 0, 2048, 2048,
-              );
-              // Darken imagery so 3D buildings stand out better
-              cropCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-              cropCtx.fillRect(0, 0, 2048, 2048);
-              const tex = new THREE.CanvasTexture(croppedCanvas);
-              tex.colorSpace = THREE.SRGBColorSpace;
-              tex.minFilter = THREE.LinearMipmapLinearFilter;
-              tex.magFilter = THREE.LinearFilter;
-              tex.anisotropy = 4;
-              setTexture(tex);
-            }
-          }
-        };
-
-        img.onerror = () => {
-          // Fill failed tile with gray
-          loadedCount++;
-          if (loadedCount === totalTiles) {
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.colorSpace = THREE.SRGBColorSpace;
-            setTexture(tex);
-          }
-        };
-
-        img.src = url;
+          if (loadedCount === totalTiles) finalize();
+        });
       }
     }
 
     return () => {
-      // Cleanup
+      cancelled = true;
       setTexture((prev) => {
         prev?.dispose();
         return null;
       });
     };
-  }, [tileConfig, centerLat, centerLon]);
+  }, [tileConfig, centerLat, centerLon, inpainting, airportIcao]);
 
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]} receiveShadow>
