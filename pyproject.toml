@@ -19,6 +19,7 @@ dependencies = [
     "websockets>=12.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.26.0",
+    "python-multipart>=0.0.6",
     # Data serving layer
     "databricks-sql-connector>=3.0.0",
     "psycopg2-binary>=2.9.9",
@@ -48,6 +49,15 @@ formats = [
 ]
 
 video = ["playwright>=1.40"]
+
+# Aircraft removal from satellite imagery (YOLO detection + LaMa inpainting)
+# NOTE: iopaint pins fastapi==0.108.0 — install in a separate venv
+# or only in the Databricks serving endpoint container.
+# inpainting = [
+#     "iopaint>=1.4",
+#     "ultralytics>=8.0",
+#     "opencv-python-headless>=4.8",
+# ]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

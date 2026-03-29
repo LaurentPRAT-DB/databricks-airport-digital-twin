@@ -1,0 +1,15 @@
+resources:
+  serving_endpoints:
+    aircraft_inpainting:
+      name: "airport-dt-aircraft-inpainting-${bundle.target}"
+      config:
+        served_entities:
+          - entity_name: "${var.catalog}.${var.schema}.aircraft_inpainting_model"
+            entity_version: "1"
+            workload_size: Small
+            workload_type: GPU_MEDIUM
+            scale_to_zero_enabled: true
+      tags:
+        project: airport-digital-twin
+        component: inpainting
+        target: ${bundle.target}
