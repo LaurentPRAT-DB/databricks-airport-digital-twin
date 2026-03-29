@@ -1,0 +1,33 @@
+resources:
+  jobs:
+    inpainting_model_registration:
+      name: "[${bundle.target}] Airport DT - Inpainting Model Registration"
+      description: "Downloads YOLO+LaMa weights to UC Volume, registers MLflow pyfunc model for aircraft inpainting"
+
+      environments:
+        - environment_key: inpainting_env
+          spec:
+            client: "1"
+            dependencies:
+              - iopaint>=1.4
+              - ultralytics>=8.0
+              - opencv-python-headless>=4.8
+              - torch>=2.0
+              - torchvision
+              - pillow
+              - mlflow
+              - pydantic>=2.5
+              - pyyaml
+
+      tasks:
+        - task_key: register_inpainting_model
+          notebook_task:
+            notebook_path: ../databricks/notebooks/register_inpainting_model.py
+          environment_key: inpainting_env
+
+      tags:
+        project: airport-digital-twin
+        component: inpainting
+        target: ${bundle.target}
+
+      timeout_seconds: 7200
