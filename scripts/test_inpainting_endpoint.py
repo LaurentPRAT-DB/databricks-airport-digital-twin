@@ -39,28 +39,23 @@ def lat_lon_to_tile(lat: float, lon: float, zoom: int) -> tuple[int, int]:
 
 
 def get_airport_center_tiles(profiles_dir: Path, zoom: int = 16, max_airports: int | None = None):
-    """Read airport profiles and compute the center tile for each."""
+    """Get airport coordinates from the airport_table and compute center tiles."""
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from src.ingestion.airport_table import AIRPORTS
+
     airports = []
-    for f in sorted(profiles_dir.glob("*.json")):
-        try:
-            data = json.loads(f.read_text())
-            lat = data.get("latitude") or data.get("lat")
-            lon = data.get("longitude") or data.get("lon")
-            icao = data.get("icao_code") or data.get("icao") or f.stem
-            if lat and lon:
-                tx, ty = lat_lon_to_tile(float(lat), float(lon), zoom)
-                airports.append({
-                    "icao": icao,
-                    "iata": data.get("iata_code") or data.get("iata") or f.stem,
-                    "name": data.get("name", ""),
-                    "lat": float(lat),
-                    "lon": float(lon),
-                    "tile_x": tx,
-                    "tile_y": ty,
-                    "zoom": zoom,
-                })
-        except (json.JSONDecodeError, ValueError):
-            continue
+    for iata, (lat, lon, icao, cc) in sorted(AIRPORTS.items()):
+        tx, ty = lat_lon_to_tile(lat, lon, zoom)
+        airports.append({
+            "icao": icao,
+            "iata": iata,
+            "name": "",
+            "lat": lat,
+            "lon": lon,
+            "tile_x": tx,
+            "tile_y": ty,
+            "zoom": zoom,
+        })
 
     if max_airports:
         airports = airports[:max_airports]
