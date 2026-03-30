@@ -1819,26 +1819,21 @@ def _get_taxi_waypoints_departure(gate_ref: str) -> List[tuple]:
 
 
 def _get_pushback_heading(gate_ref: str) -> float:
-    """Determine pushback heading from departure taxi route.
+    """Determine pushback direction: move straight away from the terminal.
 
-    Uses the first segment of the computed departure route (which respects
-    building avoidance) rather than a straight line to the nearest node.
-    Falls back to 180° (south) if no route available.
+    The parked heading points the nose toward the terminal wall.
+    Pushback simply reverses that direction so the aircraft backs away
+    from the building.  This is more reliable than using the departure
+    taxi route's first segment, which can point along or even into
+    adjacent building walls for gates on concourse fingers.
+
+    Falls back to 180° (south) if no gate or terminal data.
     """
-    try:
-        route = _get_taxi_waypoints_departure(gate_ref)
-        if route and len(route) >= 2:
-            gate_pos = get_gates().get(gate_ref)
-            if gate_pos:
-                # Route is (lon, lat) — first waypoint after gate
-                first_wp = (route[0][1], route[0][0])
-                second_wp = (route[1][1], route[1][0])
-                # Use whichever waypoint is farther from the gate (skip gate-collocated wp)
-                dist_to_first = _distance_between(gate_pos, first_wp)
-                target_wp = second_wp if dist_to_first < 0.0003 else first_wp
-                return _calculate_heading(gate_pos, target_wp)
-    except Exception:
-        pass
+    gate_pos = get_gates().get(gate_ref)
+    if gate_pos:
+        parked_hdg = _get_parked_heading(gate_pos[0], gate_pos[1])
+        # Pushback direction = opposite of nose heading (back away from terminal)
+        return (parked_hdg + 180) % 360
     return 180.0  # Default: south
 
 
@@ -3949,15 +3944,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
     elif state.phase == FlightPhase.PUSHBACK:
         # Slow pushback from gate WITH separation check
-        # Real pushback: disconnect jetbridge, engine start, tug pushback, tug disconnect (~3-5 min)
-        # Determine pushback heading from taxiway graph or fallback to south
+        # Real pushback: tug pushes aircraft ~50-80m back from the gate onto the apron/taxiway.
+        # Total phase is ~60s of movement (at 3kts ≈ 90m).
         pb_heading = _get_pushback_heading(state.assigned_gate) if state.assigned_gate else 180.0
-        # Always advance pushback timer — aircraft is at its own gate, not blocking taxiways.
-        # Only check separation for physical movement to prevent overlapping on the apron.
-        state.phase_progress += dt / 240.0  # ~4 min (240s) for full pushback
+        state.phase_progress += dt / 60.0  # ~60s for pushback movement
         if _check_taxi_separation(state):
             state.velocity = TAXI_SPEED_PUSHBACK_KTS
-            # Move in pushback direction (away from terminal toward taxiway)
             pb_rad = math.radians(pb_heading)
             pb_speed_deg = TAXI_SPEED_PUSHBACK_KTS * _KTS_TO_DEG_PER_SEC * dt
             state.latitude += pb_speed_deg * math.cos(pb_rad)
