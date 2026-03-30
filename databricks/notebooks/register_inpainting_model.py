@@ -11,7 +11,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install ultralytics>=8.0 opencv-python-headless>=4.8 torch torchvision pillow mlflow pydantic>=2.5 pyyaml
+# MAGIC %pip install ultralytics>=8.0 opencv-python-headless>=4.8 torch torchvision pillow mlflow pydantic>=2.5 pyyaml simple-lama-inpainting
 
 # COMMAND ----------
 
@@ -134,7 +134,7 @@ with tempfile.TemporaryDirectory() as tmp:
         "lama_weights_dir": LAMA_WEIGHTS_DIR,
         "lama_weights_file": LAMA_WEIGHTS_FILE,
         "confidence_threshold": 0.15,
-        "mask_dilation_px": 15,
+        "mask_dilation_px": 10,
     }
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
@@ -150,7 +150,7 @@ with tempfile.TemporaryDirectory() as tmp:
             "pip",
             {
                 "pip": [
-                    "iopaint>=1.4",
+                    "simple-lama-inpainting",
                     "ultralytics>=8.0",
                     "opencv-python-headless>=4.8",
                     "torch>=2.0",
@@ -200,29 +200,47 @@ with tempfile.TemporaryDirectory() as tmp:
             from ultralytics import YOLO
             self._yolo = YOLO(self._yolo_weights)
 
-            # Load LaMa via IOPaint if available, else direct
+            # Load LaMa inpainting model — try simple-lama-inpainting first,
+            # then IOPaint, then OpenCV TELEA as last resort
+            self._inpaint_backend = None
+
+            # Option 1: simple-lama-inpainting (lightweight, just torch)
             try:
-                from iopaint.model_manager import ModelManager
-                self._inpainter = ModelManager(name="lama", device=torch.device(self._device))
-                self._use_iopaint = True
-            except Exception:
-                # Fallback: load LaMa directly
-                self._use_iopaint = False
-                if self._lama_weights and os.path.exists(self._lama_weights):
-                    self._lama_state = torch.load(self._lama_weights, map_location=self._device, weights_only=False)
-                else:
-                    self._lama_state = None
+                from simple_lama_inpainting import SimpleLama
+                self._simple_lama = SimpleLama(device=torch.device(self._device))
+                self._inpaint_backend = "simple_lama"
+                print(f"simple-lama-inpainting loaded (device={self._device})")
+            except Exception as e:
+                print(f"simple-lama-inpainting unavailable: {e}")
+
+            # Option 2: IOPaint ModelManager
+            if self._inpaint_backend is None:
+                try:
+                    from iopaint.model_manager import ModelManager
+                    self._iopaint = ModelManager(name="lama", device=torch.device(self._device))
+                    self._inpaint_backend = "iopaint"
+                    print(f"IOPaint LaMa loaded (device={self._device})")
+                except Exception as e:
+                    print(f"IOPaint unavailable: {e}")
+
+            # Option 3: OpenCV TELEA fallback
+            if self._inpaint_backend is None:
+                self._inpaint_backend = "cv2"
+                print("Using OpenCV TELEA inpainting as fallback")
 
         def _inpaint(self, image, mask):
             import numpy as np
-            if self._use_iopaint:
-                return self._inpainter(image, mask)
-            elif self._lama_state is not None:
-                # Simple OpenCV inpainting fallback if LaMa can't load via IOPaint
+            if self._inpaint_backend == "simple_lama":
+                from PIL import Image as PILImage
+                img_pil = PILImage.fromarray(image)
+                mask_pil = PILImage.fromarray(mask)
+                result_pil = self._simple_lama(img_pil, mask_pil)
+                return np.array(result_pil)
+            elif self._inpaint_backend == "iopaint":
+                return self._iopaint(image, mask)
+            else:
                 import cv2
                 return cv2.inpaint(image, mask, 10, cv2.INPAINT_TELEA)
-            else:
-                return image
 
         def predict(self, context, model_input):
             import base64
@@ -267,7 +285,7 @@ with tempfile.TemporaryDirectory() as tmp:
                             corners = obb.xyxyxyxy[i].cpu().numpy().astype(np.int32)
                             # Expand mask outward by dilation factor
                             center = corners.mean(axis=0)
-                            scale = 1 + self._dilation / 40.0
+                            scale = 1 + self._dilation / 60.0
                             expanded = (center + (corners - center) * scale).astype(np.int32)
                             cv2.fillPoly(mask, [expanded], 255)
                             x1, y1 = corners.min(axis=0)
@@ -302,6 +320,19 @@ with tempfile.TemporaryDirectory() as tmp:
                                 "confidence": round(conf, 3),
                                 "class_name": cls_name or "plane",
                             })
+
+                # Cap mask at 40% of tile area — if too much is masked,
+                # regenerate with tighter dilation to avoid over-inpainting
+                total_pixels = mask.shape[0] * mask.shape[1]
+                mask_ratio = np.count_nonzero(mask) / total_pixels
+                if mask_ratio > 0.40:
+                    # Re-generate mask with no dilation
+                    mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
+                    for det in detections:
+                        x1, y1 = det["x1"], det["y1"]
+                        x2, y2 = det["x2"], det["y2"]
+                        mask[max(0,y1):min(mask.shape[0],y2),
+                             max(0,x1):min(mask.shape[1],x2)] = 255
 
                 # Inpaint if aircraft found
                 if mask.max() > 0:

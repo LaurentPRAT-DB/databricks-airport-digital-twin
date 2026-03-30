@@ -1,51 +1,15 @@
 [
   {
-    "airport": "KATL",
-    "iata": "ATL",
-    "name": "",
-    "tile": "17/34796/52516",
-    "status": "ok",
-    "latency_ms": 1569,
-    "cache": "DIRECT",
-    "aircraft_count": 4,
-    "processing_ms": "1569",
-    "size_bytes": 115788
-  },
-  {
     "airport": "RJAA",
     "iata": "NRT",
     "name": "",
     "tile": "17/116651/51572",
     "status": "ok",
-    "latency_ms": 2041,
+    "latency_ms": 163251,
     "cache": "DIRECT",
     "aircraft_count": 1,
-    "processing_ms": "2041",
-    "size_bytes": 101072
-  },
-  {
-    "airport": "EDDF",
-    "iata": "FRA",
-    "name": "",
-    "tile": "17/68656/44424",
-    "status": "ok",
-    "latency_ms": 2433,
-    "cache": "DIRECT",
-    "aircraft_count": 5,
-    "processing_ms": "2433",
-    "size_bytes": 124457
-  },
-  {
-    "airport": "KSFO",
-    "iata": "SFO",
-    "name": "",
-    "tile": "17/20977/50733",
-    "status": "ok",
-    "latency_ms": 2874,
-    "cache": "DIRECT",
-    "aircraft_count": 8,
-    "processing_ms": "2874",
-    "size_bytes": 121087
+    "processing_ms": "163251",
+    "size_bytes": 100050
   },
   {
     "airport": "KLAX",
@@ -53,11 +17,47 @@
     "name": "",
     "tile": "17/22424/52384",
     "status": "ok",
-    "latency_ms": 3286,
+    "latency_ms": 164718,
     "cache": "DIRECT",
     "aircraft_count": 3,
-    "processing_ms": "3286",
-    "size_bytes": 116066
+    "processing_ms": "164718",
+    "size_bytes": 115989
+  },
+  {
+    "airport": "KSFO",
+    "iata": "SFO",
+    "name": "",
+    "tile": "17/20977/50733",
+    "status": "ok",
+    "latency_ms": 165755,
+    "cache": "DIRECT",
+    "aircraft_count": 8,
+    "processing_ms": "165755",
+    "size_bytes": 119390
+  },
+  {
+    "airport": "KATL",
+    "iata": "ATL",
+    "name": "",
+    "tile": "17/34796/52516",
+    "status": "ok",
+    "latency_ms": 166851,
+    "cache": "DIRECT",
+    "aircraft_count": 4,
+    "processing_ms": "166851",
+    "size_bytes": 114488
+  },
+  {
+    "airport": "EDDF",
+    "iata": "FRA",
+    "name": "",
+    "tile": "17/68656/44424",
+    "status": "ok",
+    "latency_ms": 167834,
+    "cache": "DIRECT",
+    "aircraft_count": 5,
+    "processing_ms": "167834",
+    "size_bytes": 120832
   },
   {
     "airport": "KJFK",
@@ -65,11 +65,11 @@
     "name": "",
     "tile": "17/38674/49314",
     "status": "ok",
-    "latency_ms": 2117,
+    "latency_ms": 5401,
     "cache": "DIRECT",
     "aircraft_count": 7,
-    "processing_ms": "2117",
-    "size_bytes": 124606
+    "processing_ms": "5401",
+    "size_bytes": 124353
   },
   {
     "airport": "EGLL",
@@ -77,11 +77,11 @@
     "name": "",
     "tile": "17/65368/43606",
     "status": "ok",
-    "latency_ms": 2080,
+    "latency_ms": 5078,
     "cache": "DIRECT",
     "aircraft_count": 1,
-    "processing_ms": "2080",
-    "size_bytes": 155932
+    "processing_ms": "5078",
+    "size_bytes": 155585
   },
   {
     "airport": "KORD",
@@ -89,11 +89,11 @@
     "name": "",
     "tile": "17/33529/48668",
     "status": "ok",
-    "latency_ms": 2118,
+    "latency_ms": 5111,
     "cache": "DIRECT",
     "aircraft_count": 2,
-    "processing_ms": "2118",
-    "size_bytes": 112000
+    "processing_ms": "5111",
+    "size_bytes": 110957
   },
   {
     "airport": "VHHH",
@@ -101,10 +101,10 @@
     "name": "",
     "tile": "17/107011/57199",
     "status": "ok",
-    "latency_ms": 2098,
+    "latency_ms": 5047,
     "cache": "DIRECT",
     "aircraft_count": 3,
-    "processing_ms": "2098",
-    "size_bytes": 95772
+    "processing_ms": "5047",
+    "size_bytes": 94356
   }
 ]

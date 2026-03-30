@@ -33,11 +33,27 @@ class LaMaInpainter:
         self._backend = None  # "iopaint" or "cv2"
 
     def _load_model(self):
-        """Lazy-load the inpainting model. Tries IOPaint LaMa first, then cv2."""
+        """Lazy-load the inpainting model.
+
+        Priority: simple-lama-inpainting > IOPaint LaMa > OpenCV TELEA.
+        """
         if self._model is not None:
             return
 
-        # Try IOPaint with LaMa
+        # Option 1: simple-lama-inpainting (lightweight, just torch)
+        try:
+            import torch
+            from simple_lama_inpainting import SimpleLama
+
+            logger.info("Loading simple-lama-inpainting (device=%s)", self.device)
+            self._model = SimpleLama(device=torch.device(self.device))
+            self._backend = "simple_lama"
+            logger.info("simple-lama-inpainting loaded successfully")
+            return
+        except Exception as e:
+            logger.warning("simple-lama-inpainting unavailable (%s)", e)
+
+        # Option 2: IOPaint with LaMa
         try:
             import torch
             from iopaint.model_manager import ModelManager
@@ -51,9 +67,9 @@ class LaMaInpainter:
             logger.info("IOPaint LaMa loaded successfully")
             return
         except Exception as e:
-            logger.warning("IOPaint LaMa unavailable (%s), falling back to OpenCV", e)
+            logger.warning("IOPaint LaMa unavailable (%s)", e)
 
-        # Fallback: OpenCV inpainting (always available)
+        # Option 3: OpenCV inpainting (always available)
         self._backend = "cv2"
         self._model = "cv2"
         logger.info("Using OpenCV TELEA inpainting as fallback")
@@ -74,7 +90,13 @@ class LaMaInpainter:
 
         self._load_model()
 
-        if self._backend == "iopaint":
+        if self._backend == "simple_lama":
+            from PIL import Image as PILImage
+            img_pil = PILImage.fromarray(image)
+            mask_pil = PILImage.fromarray(mask)
+            result_pil = self._model(img_pil, mask_pil)
+            result = np.array(result_pil)
+        elif self._backend == "iopaint":
             result = self._model(image, mask)
         else:
             import cv2
