@@ -3538,7 +3538,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     descent_fps = max(25.0, min(30.0, abs(prof_vr) / 60.0)) if prof_vr else 25.0
                     effective_target = min(prof_alt, target_alt)
                     prev_alt = state.altitude
-                    state.altitude = max(0.0, _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
+                    state.altitude = max(float(DECISION_HEIGHT_FT), _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
                     # Set vertical_rate to match actual altitude direction (O05 fix):
                     # after go-around, waypoint target may be higher than current alt,
                     # causing a climb. Report positive vrate so snapshots are consistent.
@@ -3634,7 +3634,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
             new_pos = _move_toward((state.latitude, state.longitude), runway_touchdown, speed_deg)
             state.latitude, state.longitude = new_pos
-            state.altitude = max(0, state.altitude - 500 * dt)
+            # Realistic 3-degree glideslope descent (~750 fpm at Vref)
+            # instead of flat 500 ft/s which teleports aircraft to ground
+            descent_fpm = 750
+            state.altitude = max(0, state.altitude - (descent_fpm / 60.0) * dt)
             state.heading = _calculate_heading(new_pos, runway_touchdown)
             if state.altitude <= 0:
                 state.altitude = 0
