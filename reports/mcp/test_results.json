@@ -1,0 +1,4477 @@
+{
+  "metadata": {
+    "date": "2026-03-30T09:35:10.874533+00:00",
+    "app_url": "https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.com",
+    "mcp_endpoint": "/api/mcp",
+    "protocol_version": "2024-11-05",
+    "build_number": "2026-03-26-001",
+    "git_commit": "dc04ea9",
+    "app_uptime_seconds": 772,
+    "app_ready": true,
+    "total_tools": 13,
+    "tests_run": 13,
+    "tests_passed": 13,
+    "tests_failed": 0
+  },
+  "latency_summary": {
+    "client_min_ms": 507,
+    "client_max_ms": 1631,
+    "client_avg_ms": 620,
+    "server_min_ms": 0,
+    "server_max_ms": 1034,
+    "server_avg_ms": 90
+  },
+  "results": [
+    {
+      "index": 1,
+      "question": "What flights are currently at the airport?",
+      "tool": "get_flights",
+      "arguments": {
+        "count": 5
+      },
+      "status": "OK",
+      "client_latency_ms": 510,
+      "server_latency_ms": 3,
+      "error": null,
+      "response": {
+        "flights": [
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.59128809886575,
+            "longitude": -122.33264807851978,
+            "altitude": 2566.4338749999997,
+            "velocity": 249.99999999999997,
+            "heading": 359.78804034784764,
+            "on_ground": false,
+            "vertical_rate": 2088.5784999999996,
+            "last_seen": 1774863303,
+            "data_source": "synthetic",
+            "flight_phase": "departing",
+            "aircraft_type": "B738",
+            "assigned_gate": null,
+            "origin_airport": "SFO",
+            "destination_airport": "RDM"
+          },
+          {
+            "icao24": "sim00068",
+            "callsign": "UAL1557",
+            "latitude": 37.590805069556986,
+            "longitude": -122.33326858261398,
+            "altitude": 2566.4338749999997,
+            "velocity": 249.99999999999997,
+            "heading": 15.986815700902127,
+            "on_ground": false,
+            "vertical_rate": 2088.5784999999996,
+            "last_seen": 1774863303,
+            "data_source": "synthetic",
+            "flight_phase": "departing",
+            "aircraft_type": "B738",
+            "assigned_gate": null,
+            "origin_airport": "SFO",
+            "destination_airport": "EUG"
+          },
+          {
+            "icao24": "sim00079",
+            "callsign": "ASA2940",
+            "latitude": 37.57403750329582,
+            "longitude": -122.37094273282055,
+            "altitude": 3519.682999999999,
+            "velocity": 249.99999999999997,
+            "heading": 205.64362749640514,
+            "on_ground": false,
+            "vertical_rate": 1748.028,
+            "last_seen": 1774863303,
+            "data_source": "synthetic",
+            "flight_phase": "departing",
+            "aircraft_type": "B739",
+            "assigned_gate": null,
+            "origin_airport": "SFO",
+            "destination_airport": "SBA"
+          },
+          {
+            "icao24": "sim00083",
+            "callsign": "UAL943",
+            "latitude": 37.58326849876252,
+            "longitude": -122.3343480518392,
+            "altitude": 2566.4338749999997,
+            "velocity": 249.99999999999997,
+            "heading": 294.13300793872025,
+            "on_ground": false,
+            "vertical_rate": 2088.5784999999996,
+            "last_seen": 1774863303,
+            "data_source": "synthetic",
+            "flight_phase": "departing",
+            "aircraft_type": "B738",
+            "assigned_gate": null,
+            "origin_airport": "SFO",
+            "destination_airport": "EUG"
+          },
+          {
+            "icao24": "sim00108",
+            "callsign": "UAL618",
+            "latitude": 37.56535185461983,
+            "longitude": -122.40014490806385,
+            "altitude": 3519.682999999999,
+            "velocity": 249.99999999999997,
+            "heading": 98.04373191196146,
+            "on_ground": false,
+            "vertical_rate": 1748.028,
+            "last_seen": 1774863303,
+            "data_source": "synthetic",
+            "flight_phase": "departing",
+            "aircraft_type": "B739",
+            "assigned_gate": null,
+            "origin_airport": "SFO",
+            "destination_airport": "MFR"
+          }
+        ],
+        "count": 5,
+        "timestamp": "2026-03-30 09:35:03.287639+00:00"
+      }
+    },
+    {
+      "index": 2,
+      "question": "Show me the arrivals board",
+      "tool": "get_arrivals",
+      "arguments": {
+        "limit": 5
+      },
+      "status": "OK",
+      "client_latency_ms": 515,
+      "server_latency_ms": 10,
+      "error": null,
+      "response": {
+        "flights": [
+          {
+            "flight_number": "UAL3479",
+            "airline": "United Airlines",
+            "airline_code": "UAL",
+            "origin": "ATL",
+            "destination": "SFO",
+            "scheduled_time": "2026-03-30T07:48:03.793195Z",
+            "estimated_time": null,
+            "actual_time": "2026-03-30T09:35:03.793195Z",
+            "gate": "B2",
+            "status": "arrived",
+            "delay_minutes": 0,
+            "delay_reason": null,
+            "aircraft_type": "B739",
+            "flight_type": "arrival",
+            "icao24": null
+          },
+          {
+            "flight_number": "UAL2827",
+            "airline": "United Airlines",
+            "airline_code": "UAL",
+            "origin": "PHX",
+            "destination": "SFO",
+            "scheduled_time": "2026-03-30T07:58:03.793195Z",
+            "estimated_time": "2026-03-30T08:11:03.793195Z",
+            "actual_time": "2026-03-30T09:35:03.793195Z",
+            "gate": "A1",
+            "status": "arrived",
+            "delay_minutes": 13,
+            "delay_reason": "Late arrival",
+            "aircraft_type": "B738",
+            "flight_type": "arrival",
+            "icao24": null
+          },
+          {
+            "flight_number": "UAL1387",
+            "airline": "United Airlines",
+            "airline_code": "UAL",
+            "origin": "PHX",
+            "destination": "SFO",
+            "scheduled_time": "2026-03-30T07:59:03.793195Z",
+            "estimated_time": null,
+            "actual_time": "2026-03-30T09:35:03.793195Z",
+            "gate": "E10",
+            "status": "arrived",
+            "delay_minutes": 0,
+            "delay_reason": null,
+            "aircraft_type": "B738",
+            "flight_type": "arrival",
+            "icao24": null
+          },
+          {
+            "flight_number": "UAL2017",
+            "airline": "United Airlines",
+            "airline_code": "UAL",
+            "origin": "PSP",
+            "destination": "SFO",
+            "scheduled_time": "2026-03-30T08:20:03.793195Z",
+            "estimated_time": "2026-03-30T08:53:03.793195Z",
+            "actual_time": "2026-03-30T09:35:03.793195Z",
+            "gate": "F11",
+            "status": "arrived",
+            "delay_minutes": 33,
+            "delay_reason": "Late arrival",
+            "aircraft_type": "B738",
+            "flight_type": "arrival",
+            "icao24": null
+          },
+          {
+            "flight_number": "AAL2561",
+            "airline": "American Airlines",
+            "airline_code": "AAL",
+            "origin": "JFK",
+            "destination": "SFO",
+            "scheduled_time": "2026-03-30T08:35:03.793195Z",
+            "estimated_time": "2026-03-30T09:13:03.793195Z",
+            "actual_time": "2026-03-30T09:35:03.793195Z",
+            "gate": "E2",
+            "status": "arrived",
+            "delay_minutes": 38,
+            "delay_reason": "Late arrival",
+            "aircraft_type": "A321",
+            "flight_type": "arrival",
+            "icao24": null
+          }
+        ],
+        "count": 5,
+        "timestamp": "2026-03-30T09:35:03.803246Z",
+        "airport": "SFO",
+        "flight_type": "arrival"
+      }
+    },
+    {
+      "index": 3,
+      "question": "What flights are departing?",
+      "tool": "get_departures",
+      "arguments": {
+        "limit": 5
+      },
+      "status": "OK",
+      "client_latency_ms": 538,
+      "server_latency_ms": 8,
+      "error": null,
+      "response": {
+        "flights": [
+          {
+            "flight_number": "SCX2681",
+            "airline": "Sun Country Airlines",
+            "airline_code": "SCX",
+            "origin": "SFO",
+            "destination": "MSP",
+            "scheduled_time": "2026-03-30T08:36:00Z",
+            "estimated_time": null,
+            "actual_time": null,
+            "gate": "D3",
+            "status": "on_time",
+            "delay_minutes": 0,
+            "delay_reason": null,
+            "aircraft_type": "B737",
+            "flight_type": "departure",
+            "icao24": null
+          },
+          {
+            "flight_number": "UAL1348",
+            "airline": "United Airlines",
+            "airline_code": "UAL",
+            "origin": "SFO",
+            "destination": "SYR",
+            "scheduled_time": "2026-03-30T08:36:00Z",
+            "estimated_time": null,
+            "actual_time": null,
+            "gate": "B19",
+            "status": "on_time",
+            "delay_minutes": 0,
+            "delay_reason": null,
+            "aircraft_type": "B737",
+            "flight_type": "departure",
+            "icao24": null
+          },
+          {
+            "flight_number": "UAL1719",
+            "airline": "United Airlines",
+            "airline_code": "UAL",
+            "origin": "SFO",
+            "destination": "MKE",
+            "scheduled_time": "2026-03-30T08:36:00Z",
+            "estimated_time": null,
+            "actual_time": null,
+            "gate": "C2",
+            "status": "on_time",
+            "delay_minutes": 0,
+            "delay_reason": null,
+            "aircraft_type": "A319",
+            "flight_type": "departure",
+            "icao24": null
+          },
+          {
+            "flight_number": "DAL525",
+            "airline": "Delta Air Lines",
+            "airline_code": "DAL",
+            "origin": "SFO",
+            "destination": "SAT",
+            "scheduled_time": "2026-03-30T08:36:00Z",
+            "estimated_time": null,
+            "actual_time": null,
+            "gate": "F19",
+            "status": "on_time",
+            "delay_minutes": 0,
+            "delay_reason": null,
+            "aircraft_type": "A321",
+            "flight_type": "departure",
+            "icao24": null
+          },
+          {
+            "flight_number": "UAL2057",
+            "airline": "United Airlines",
+            "airline_code": "UAL",
+            "origin": "SFO",
+            "destination": "STL",
+            "scheduled_time": "2026-03-30T08:36:00Z",
+            "estimated_time": null,
+            "actual_time": null,
+            "gate": "D4",
+            "status": "on_time",
+            "delay_minutes": 0,
+            "delay_reason": null,
+            "aircraft_type": "A321",
+            "flight_type": "departure",
+            "icao24": null
+          }
+        ],
+        "count": 5,
+        "timestamp": "2026-03-30T09:35:04.320761Z",
+        "airport": "SFO",
+        "flight_type": "departure"
+      }
+    },
+    {
+      "index": 4,
+      "question": "What's the current weather at the airport?",
+      "tool": "get_weather",
+      "arguments": {},
+      "status": "OK",
+      "client_latency_ms": 508,
+      "server_latency_ms": 7,
+      "error": null,
+      "response": {
+        "metar": {
+          "station": "KSFO",
+          "observation_time": "2026-03-30T09:32:23.141817Z",
+          "wind_direction": 278,
+          "wind_speed_kts": 6,
+          "wind_gust_kts": null,
+          "wind_variable_from": null,
+          "wind_variable_to": null,
+          "visibility_sm": 10.0,
+          "clouds": [],
+          "temperature_c": 15,
+          "dewpoint_c": 12,
+          "altimeter_inhg": 29.68,
+          "weather": [],
+          "flight_category": "VFR",
+          "raw_metar": "KSFO 300932Z 27806KT 10SM SKC 15/12 A2968"
+        },
+        "taf": {
+          "station": "KSFO",
+          "issue_time": "2026-03-30T09:32:23.141817Z",
+          "valid_from": "2026-03-30T09:32:23.141913Z",
+          "valid_to": "2026-03-31T09:32:23.141913Z",
+          "forecast_text": "29612KT P6SM SCT040"
+        },
+        "timestamp": "2026-03-30T09:35:04.850434Z",
+        "station": "KSFO"
+      }
+    },
+    {
+      "index": 5,
+      "question": "Are there any delayed flights?",
+      "tool": "get_delay_predictions",
+      "arguments": {},
+      "status": "OK",
+      "client_latency_ms": 658,
+      "server_latency_ms": 86,
+      "error": null,
+      "response": {
+        "delays": [
+          {
+            "icao24": "sim00058",
+            "delay_minutes": 134.8,
+            "confidence": 0.51,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00068",
+            "delay_minutes": 159.6,
+            "confidence": 0.56,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00079",
+            "delay_minutes": 145.3,
+            "confidence": 0.51,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00083",
+            "delay_minutes": 136.6,
+            "confidence": 0.65,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00108",
+            "delay_minutes": 130.0,
+            "confidence": 0.67,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00168",
+            "delay_minutes": 124.5,
+            "confidence": 0.48,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00160",
+            "delay_minutes": 144.5,
+            "confidence": 0.69,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00170",
+            "delay_minutes": 181.2,
+            "confidence": 0.63,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00171",
+            "delay_minutes": 164.3,
+            "confidence": 0.7,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00180",
+            "delay_minutes": 158.6,
+            "confidence": 0.76,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00181",
+            "delay_minutes": 191.5,
+            "confidence": 0.66,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00183",
+            "delay_minutes": 158.1,
+            "confidence": 0.72,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00184",
+            "delay_minutes": 142.4,
+            "confidence": 0.78,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00186",
+            "delay_minutes": 175.2,
+            "confidence": 0.77,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00188",
+            "delay_minutes": 176.0,
+            "confidence": 0.68,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00189",
+            "delay_minutes": 176.9,
+            "confidence": 0.61,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00194",
+            "delay_minutes": 177.8,
+            "confidence": 0.74,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00196",
+            "delay_minutes": 140.7,
+            "confidence": 0.53,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00197",
+            "delay_minutes": 125.8,
+            "confidence": 0.66,
+            "category": "severe"
+          },
+          {
+            "icao24": "sim00198",
+            "delay_minutes": 152.6,
+            "confidence": 0.52,
+            "category": "severe"
+          },
+          {
+            "icao24": "1d5b53",
+            "delay_minutes": 133.7,
+            "confidence": 0.53,
+            "category": "severe"
+          },
+          {
+            "icao24": "697590",
+            "delay_minutes": 75.8,
+            "confidence": 0.45,
+            "category": "severe"
+          },
+          {
+            "icao24": "ce5fce",
+            "delay_minutes": 134.3,
+            "confidence": 0.54,
+            "category": "severe"
+          },
+          {
+            "icao24": "37dc63",
+            "delay_minutes": 151.1,
+            "confidence": 0.61,
+            "category": "severe"
+          },
+          {
+            "icao24": "95a804",
+            "delay_minutes": 135.5,
+            "confidence": 0.46,
+            "category": "severe"
+          },
+          {
+            "icao24": "ced7e9",
+            "delay_minutes": 138.1,
+            "confidence": 0.48,
+            "category": "severe"
+          },
+          {
+            "icao24": "f49a7a",
+            "delay_minutes": 126.8,
+            "confidence": 0.49,
+            "category": "severe"
+          },
+          {
+            "icao24": "4abf12",
+            "delay_minutes": 144.3,
+            "confidence": 0.6,
+            "category": "severe"
+          },
+          {
+            "icao24": "ceac37",
+            "delay_minutes": 172.3,
+            "confidence": 0.74,
+            "category": "severe"
+          },
+          {
+            "icao24": "171f34",
+            "delay_minutes": 121.9,
+            "confidence": 0.51,
+            "category": "severe"
+          },
+          {
+            "icao24": "ecb527",
+            "delay_minutes": 111.1,
+            "confidence": 0.59,
+            "category": "severe"
+          },
+          {
+            "icao24": "01e09f",
+            "delay_minutes": 104.7,
+            "confidence": 0.44,
+            "category": "severe"
+          },
+          {
+            "icao24": "f4dd3f",
+            "delay_minutes": 144.0,
+            "confidence": 0.78,
+            "category": "severe"
+          },
+          {
+            "icao24": "de95df",
+            "delay_minutes": 184.9,
+            "confidence": 0.62,
+            "category": "severe"
+          },
+          {
+            "icao24": "71fcf8",
+            "delay_minutes": 134.6,
+            "confidence": 0.48,
+            "category": "severe"
+          },
+          {
+            "icao24": "5a8718",
+            "delay_minutes": 128.8,
+            "confidence": 0.56,
+            "category": "severe"
+          },
+          {
+            "icao24": "e28149",
+            "delay_minutes": 128.5,
+            "confidence": 0.58,
+            "category": "severe"
+          },
+          {
+            "icao24": "bca2f6",
+            "delay_minutes": 183.2,
+            "confidence": 0.73,
+            "category": "severe"
+          },
+          {
+            "icao24": "bb89d3",
+            "delay_minutes": 117.6,
+            "confidence": 0.42,
+            "category": "severe"
+          },
+          {
+            "icao24": "bcd05d",
+            "delay_minutes": 118.5,
+            "confidence": 0.46,
+            "category": "severe"
+          },
+          {
+            "icao24": "2d7f4c",
+            "delay_minutes": 147.2,
+            "confidence": 0.57,
+            "category": "severe"
+          },
+          {
+            "icao24": "ddfc3b",
+            "delay_minutes": 163.7,
+            "confidence": 0.8,
+            "category": "severe"
+          },
+          {
+            "icao24": "045623",
+            "delay_minutes": 149.2,
+            "confidence": 0.52,
+            "category": "severe"
+          },
+          {
+            "icao24": "475dbb",
+            "delay_minutes": 131.9,
+            "confidence": 0.59,
+            "category": "severe"
+          },
+          {
+            "icao24": "76a8b8",
+            "delay_minutes": 140.0,
+            "confidence": 0.59,
+            "category": "severe"
+          },
+          {
+            "icao24": "7082f8",
+            "delay_minutes": 146.1,
+            "confidence": 0.49,
+            "category": "severe"
+          },
+          {
+            "icao24": "72260e",
+            "delay_minutes": 124.3,
+            "confidence": 0.48,
+            "category": "severe"
+          },
+          {
+            "icao24": "f501aa",
+            "delay_minutes": 109.2,
+            "confidence": 0.41,
+            "category": "severe"
+          },
+          {
+            "icao24": "72ba88",
+            "delay_minutes": 120.2,
+            "confidence": 0.57,
+            "category": "severe"
+          },
+          {
+            "icao24": "fc1774",
+            "delay_minutes": 167.0,
+            "confidence": 0.64,
+            "category": "severe"
+          },
+          {
+            "icao24": "ed349d",
+            "delay_minutes": 151.5,
+            "confidence": 0.57,
+            "category": "severe"
+          },
+          {
+            "icao24": "5e99dc",
+            "delay_minutes": 148.3,
+            "confidence": 0.5,
+            "category": "severe"
+          },
+          {
+            "icao24": "29bae8",
+            "delay_minutes": 131.5,
+            "confidence": 0.44,
+            "category": "severe"
+          },
+          {
+            "icao24": "c4ac1c",
+            "delay_minutes": 141.9,
+            "confidence": 0.53,
+            "category": "severe"
+          },
+          {
+            "icao24": "c5dae2",
+            "delay_minutes": 97.6,
+            "confidence": 0.44,
+            "category": "severe"
+          },
+          {
+            "icao24": "daef7d",
+            "delay_minutes": 131.5,
+            "confidence": 0.44,
+            "category": "severe"
+          },
+          {
+            "icao24": "33a367",
+            "delay_minutes": 129.4,
+            "confidence": 0.55,
+            "category": "severe"
+          },
+          {
+            "icao24": "a682f6",
+            "delay_minutes": 153.3,
+            "confidence": 0.47,
+            "category": "severe"
+          },
+          {
+            "icao24": "120fb2",
+            "delay_minutes": 145.8,
+            "confidence": 0.57,
+            "category": "severe"
+          },
+          {
+            "icao24": "4eb8df",
+            "delay_minutes": 162.5,
+            "confidence": 0.42,
+            "category": "severe"
+          },
+          {
+            "icao24": "ae4eb1",
+            "delay_minutes": 103.8,
+            "confidence": 0.46,
+            "category": "severe"
+          },
+          {
+            "icao24": "7433e3",
+            "delay_minutes": 129.8,
+            "confidence": 0.45,
+            "category": "severe"
+          },
+          {
+            "icao24": "30f3f9",
+            "delay_minutes": 140.2,
+            "confidence": 0.47,
+            "category": "severe"
+          },
+          {
+            "icao24": "adedfa",
+            "delay_minutes": 137.8,
+            "confidence": 0.55,
+            "category": "severe"
+          },
+          {
+            "icao24": "871490",
+            "delay_minutes": 140.1,
+            "confidence": 0.55,
+            "category": "severe"
+          },
+          {
+            "icao24": "37f244",
+            "delay_minutes": 127.7,
+            "confidence": 0.47,
+            "category": "severe"
+          },
+          {
+            "icao24": "72245d",
+            "delay_minutes": 102.8,
+            "confidence": 0.49,
+            "category": "severe"
+          },
+          {
+            "icao24": "b73df5",
+            "delay_minutes": 129.0,
+            "confidence": 0.4,
+            "category": "severe"
+          },
+          {
+            "icao24": "c81670",
+            "delay_minutes": 120.3,
+            "confidence": 0.52,
+            "category": "severe"
+          },
+          {
+            "icao24": "deef73",
+            "delay_minutes": 126.5,
+            "confidence": 0.44,
+            "category": "severe"
+          },
+          {
+            "icao24": "20effd",
+            "delay_minutes": 107.7,
+            "confidence": 0.59,
+            "category": "severe"
+          },
+          {
+            "icao24": "01cc0e",
+            "delay_minutes": 140.5,
+            "confidence": 0.47,
+            "category": "severe"
+          },
+          {
+            "icao24": "1af4ae",
+            "delay_minutes": 140.9,
+            "confidence": 0.5,
+            "category": "severe"
+          },
+          {
+            "icao24": "4c201a",
+            "delay_minutes": 149.7,
+            "confidence": 0.44,
+            "category": "severe"
+          },
+          {
+            "icao24": "ad2e54",
+            "delay_minutes": 134.0,
+            "confidence": 0.56,
+            "category": "severe"
+          },
+          {
+            "icao24": "60e419",
+            "delay_minutes": 124.9,
+            "confidence": 0.54,
+            "category": "severe"
+          },
+          {
+            "icao24": "6e862d",
+            "delay_minutes": 144.9,
+            "confidence": 0.54,
+            "category": "severe"
+          },
+          {
+            "icao24": "cd61fb",
+            "delay_minutes": 105.5,
+            "confidence": 0.54,
+            "category": "severe"
+          },
+          {
+            "icao24": "d6ab45",
+            "delay_minutes": 133.4,
+            "confidence": 0.45,
+            "category": "severe"
+          },
+          {
+            "icao24": "e00ffd",
+            "delay_minutes": 132.0,
+            "confidence": 0.47,
+            "category": "severe"
+          },
+          {
+            "icao24": "b31c54",
+            "delay_minutes": 120.7,
+            "confidence": 0.43,
+            "category": "severe"
+          },
+          {
+            "icao24": "ccc92b",
+            "delay_minutes": 141.9,
+            "confidence": 0.58,
+            "category": "severe"
+          },
+          {
+            "icao24": "8c4564",
+            "delay_minutes": 96.5,
+            "confidence": 0.56,
+            "category": "severe"
+          },
+          {
+            "icao24": "3ee303",
+            "delay_minutes": 116.2,
+            "confidence": 0.5,
+            "category": "severe"
+          },
+          {
+            "icao24": "eadc04",
+            "delay_minutes": 130.0,
+            "confidence": 0.57,
+            "category": "severe"
+          },
+          {
+            "icao24": "38361f",
+            "delay_minutes": 142.5,
+            "confidence": 0.55,
+            "category": "severe"
+          },
+          {
+            "icao24": "dabafc",
+            "delay_minutes": 144.1,
+            "confidence": 0.53,
+            "category": "severe"
+          },
+          {
+            "icao24": "e50c2b",
+            "delay_minutes": 116.3,
+            "confidence": 0.56,
+            "category": "severe"
+          },
+          {
+            "icao24": "bc4bdd",
+            "delay_minutes": 145.0,
+            "confidence": 0.53,
+            "category": "severe"
+          },
+          {
+            "icao24": "98d9ef",
+            "delay_minutes": 142.3,
+            "confidence": 0.52,
+            "category": "severe"
+          },
+          {
+            "icao24": "7096b8",
+            "delay_minutes": 121.1,
+            "confidence": 0.45,
+            "category": "severe"
+          },
+          {
+            "icao24": "ad9ed5",
+            "delay_minutes": 128.8,
+            "confidence": 0.6,
+            "category": "severe"
+          },
+          {
+            "icao24": "fab653",
+            "delay_minutes": 135.0,
+            "confidence": 0.46,
+            "category": "severe"
+          },
+          {
+            "icao24": "6dc39b",
+            "delay_minutes": 118.6,
+            "confidence": 0.6,
+            "category": "severe"
+          },
+          {
+            "icao24": "1d88b5",
+            "delay_minutes": 145.0,
+            "confidence": 0.54,
+            "category": "severe"
+          },
+          {
+            "icao24": "76ddcd",
+            "delay_minutes": 146.0,
+            "confidence": 0.56,
+            "category": "severe"
+          },
+          {
+            "icao24": "0e227f",
+            "delay_minutes": 119.8,
+            "confidence": 0.59,
+            "category": "severe"
+          },
+          {
+            "icao24": "381827",
+            "delay_minutes": 106.6,
+            "confidence": 0.46,
+            "category": "severe"
+          },
+          {
+            "icao24": "cb119b",
+            "delay_minutes": 151.1,
+            "confidence": 0.53,
+            "category": "severe"
+          },
+          {
+            "icao24": "07a55b",
+            "delay_minutes": 120.8,
+            "confidence": 0.44,
+            "category": "severe"
+          }
+        ],
+        "count": 100
+      }
+    },
+    {
+      "index": 6,
+      "question": "What's the airport congestion like?",
+      "tool": "get_congestion",
+      "arguments": {},
+      "status": "OK",
+      "client_latency_ms": 578,
+      "server_latency_ms": 6,
+      "error": null,
+      "response": {
+        "areas": [
+          {
+            "area_id": "runway_10L_28R",
+            "area_type": "runway",
+            "level": "low",
+            "flight_count": 0,
+            "capacity": 1,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "runway_10R_28L",
+            "area_type": "runway",
+            "level": "low",
+            "flight_count": 0,
+            "capacity": 1,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "runway_01R_19L",
+            "area_type": "runway",
+            "level": "low",
+            "flight_count": 0,
+            "capacity": 1,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "runway_01L_19R",
+            "area_type": "runway",
+            "level": "low",
+            "flight_count": 0,
+            "capacity": 1,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "taxiway_main",
+            "area_type": "taxiway",
+            "level": "low",
+            "flight_count": 2,
+            "capacity": 16,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "apron_main",
+            "area_type": "apron",
+            "level": "low",
+            "flight_count": 15,
+            "capacity": 192,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "terminal_a",
+            "area_type": "terminal",
+            "level": "low",
+            "flight_count": 2,
+            "capacity": 15,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "terminal_b",
+            "area_type": "terminal",
+            "level": "low",
+            "flight_count": 3,
+            "capacity": 27,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "terminal_c",
+            "area_type": "terminal",
+            "level": "low",
+            "flight_count": 0,
+            "capacity": 11,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "terminal_d",
+            "area_type": "terminal",
+            "level": "low",
+            "flight_count": 0,
+            "capacity": 14,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "terminal_e",
+            "area_type": "terminal",
+            "level": "low",
+            "flight_count": 2,
+            "capacity": 12,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "terminal_f",
+            "area_type": "terminal",
+            "level": "low",
+            "flight_count": 3,
+            "capacity": 18,
+            "wait_minutes": 0
+          },
+          {
+            "area_id": "terminal_g",
+            "area_type": "terminal",
+            "level": "low",
+            "flight_count": 4,
+            "capacity": 23,
+            "wait_minutes": 0
+          }
+        ],
+        "bottlenecks": [],
+        "areas_count": 13,
+        "bottlenecks_count": 0
+      }
+    },
+    {
+      "index": 7,
+      "question": "Tell me about this airport \u2014 runways, gates, terminals",
+      "tool": "get_airport_info",
+      "arguments": {},
+      "status": "OK",
+      "client_latency_ms": 507,
+      "server_latency_ms": 0,
+      "error": null,
+      "response": {
+        "icaoCode": "KSFO",
+        "iataCode": "SFO",
+        "name": null,
+        "source": "LAKEHOUSE",
+        "runways_count": 8,
+        "gates_count": 120,
+        "terminals_count": 8,
+        "taxiways_count": 244,
+        "aprons_count": 17,
+        "runways": [
+          {
+            "id": "10L/28R",
+            "ref": "10L/28R",
+            "width": 61.0
+          },
+          {
+            "id": "10R/28L",
+            "ref": "10R/28L",
+            "width": 61.0
+          },
+          {
+            "id": "10L/28R",
+            "ref": "10L/28R",
+            "width": 61.0
+          },
+          {
+            "id": "01R/19L",
+            "ref": "01R/19L",
+            "width": 61.0
+          },
+          {
+            "id": "01R/19L",
+            "ref": "01R/19L",
+            "width": 61.0
+          },
+          {
+            "id": "01L/19R",
+            "ref": "01L/19R",
+            "width": 61.0
+          },
+          {
+            "id": "01L/19R",
+            "ref": "01L/19R",
+            "width": 61.0
+          },
+          {
+            "id": "10R/28L",
+            "ref": "10R/28L",
+            "width": 61.0
+          }
+        ],
+        "gates": [
+          {
+            "id": "A7",
+            "ref": "A7",
+            "name": null
+          },
+          {
+            "id": "A15",
+            "ref": "A15",
+            "name": null
+          },
+          {
+            "id": "A14",
+            "ref": "A14",
+            "name": null
+          },
+          {
+            "id": "A8",
+            "ref": "A8",
+            "name": null
+          },
+          {
+            "id": "A11",
+            "ref": "A11",
+            "name": null
+          },
+          {
+            "id": "A12",
+            "ref": "A12",
+            "name": null
+          },
+          {
+            "id": "A9",
+            "ref": "A9",
+            "name": null
+          },
+          {
+            "id": "A10",
+            "ref": "A10",
+            "name": null
+          },
+          {
+            "id": "A4",
+            "ref": "A4",
+            "name": null
+          },
+          {
+            "id": "A2",
+            "ref": "A2",
+            "name": null
+          },
+          {
+            "id": "A1",
+            "ref": "A1",
+            "name": null
+          },
+          {
+            "id": "A3",
+            "ref": "A3",
+            "name": null
+          },
+          {
+            "id": "B1",
+            "ref": "B1",
+            "name": null
+          },
+          {
+            "id": "C4",
+            "ref": "C4",
+            "name": null
+          },
+          {
+            "id": "C6",
+            "ref": "C6",
+            "name": null
+          },
+          {
+            "id": "C8",
+            "ref": "C8",
+            "name": null
+          },
+          {
+            "id": "C10",
+            "ref": "C10",
+            "name": null
+          },
+          {
+            "id": "C11",
+            "ref": "C11",
+            "name": null
+          },
+          {
+            "id": "C9",
+            "ref": "C9",
+            "name": null
+          },
+          {
+            "id": "C5",
+            "ref": "C5",
+            "name": null
+          },
+          {
+            "id": "C3",
+            "ref": "C3",
+            "name": null
+          },
+          {
+            "id": "E8",
+            "ref": "E8",
+            "name": null
+          },
+          {
+            "id": "E6",
+            "ref": "E6",
+            "name": null
+          },
+          {
+            "id": "E3",
+            "ref": "E3",
+            "name": null
+          },
+          {
+            "id": "E2",
+            "ref": "E2",
+            "name": null
+          },
+          {
+            "id": "F12",
+            "ref": "F12",
+            "name": null
+          },
+          {
+            "id": "F14",
+            "ref": "F14",
+            "name": null
+          },
+          {
+            "id": "F16",
+            "ref": "F16",
+            "name": null
+          },
+          {
+            "id": "F18",
+            "ref": "F18",
+            "name": null
+          },
+          {
+            "id": "F19",
+            "ref": "F19",
+            "name": null
+          },
+          {
+            "id": "F20",
+            "ref": "F20",
+            "name": null
+          },
+          {
+            "id": "F21",
+            "ref": "F21",
+            "name": null
+          },
+          {
+            "id": "F22",
+            "ref": "F22",
+            "name": null
+          },
+          {
+            "id": "F15",
+            "ref": "F15",
+            "name": null
+          },
+          {
+            "id": "F13",
+            "ref": "F13",
+            "name": null
+          },
+          {
+            "id": "F11",
+            "ref": "F11",
+            "name": null
+          },
+          {
+            "id": "F9",
+            "ref": "F9",
+            "name": null
+          },
+          {
+            "id": "F10",
+            "ref": "F10",
+            "name": null
+          },
+          {
+            "id": "F7",
+            "ref": "F7",
+            "name": null
+          },
+          {
+            "id": "F5",
+            "ref": "F5",
+            "name": null
+          },
+          {
+            "id": "F17",
+            "ref": "F17",
+            "name": null
+          },
+          {
+            "id": "F6",
+            "ref": "F6",
+            "name": null
+          },
+          {
+            "id": "G10",
+            "ref": "G10",
+            "name": null
+          },
+          {
+            "id": "G9",
+            "ref": "G9",
+            "name": null
+          },
+          {
+            "id": "G6",
+            "ref": "G6",
+            "name": null
+          },
+          {
+            "id": "G5",
+            "ref": "G5",
+            "name": null
+          },
+          {
+            "id": "G2",
+            "ref": "G2",
+            "name": null
+          },
+          {
+            "id": "G1",
+            "ref": "G1",
+            "name": null
+          },
+          {
+            "id": "G3",
+            "ref": "G3",
+            "name": null
+          },
+          {
+            "id": "G4",
+            "ref": "G4",
+            "name": null
+          },
+          {
+            "id": "G7",
+            "ref": "G7",
+            "name": null
+          },
+          {
+            "id": "G8",
+            "ref": "G8",
+            "name": null
+          },
+          {
+            "id": "G11-G12",
+            "ref": "G11-G12",
+            "name": null
+          },
+          {
+            "id": "G13-G14",
+            "ref": "G13-G14",
+            "name": null
+          },
+          {
+            "id": "D9",
+            "ref": "D9",
+            "name": null
+          },
+          {
+            "id": "D6",
+            "ref": "D6",
+            "name": null
+          },
+          {
+            "id": "D4",
+            "ref": "D4",
+            "name": null
+          },
+          {
+            "id": "D7",
+            "ref": "D7",
+            "name": null
+          },
+          {
+            "id": "D3",
+            "ref": "D3",
+            "name": null
+          },
+          {
+            "id": "D8",
+            "ref": "D8",
+            "name": null
+          },
+          {
+            "id": "D11",
+            "ref": "D11",
+            "name": null
+          },
+          {
+            "id": "D10",
+            "ref": "D10",
+            "name": null
+          },
+          {
+            "id": "D12",
+            "ref": "D12",
+            "name": null
+          },
+          {
+            "id": "D15",
+            "ref": "D15",
+            "name": null
+          },
+          {
+            "id": "D14",
+            "ref": "D14",
+            "name": null
+          },
+          {
+            "id": "E4",
+            "ref": "E4",
+            "name": null
+          },
+          {
+            "id": "E5",
+            "ref": "E5",
+            "name": null
+          },
+          {
+            "id": "E12",
+            "ref": "E12",
+            "name": null
+          },
+          {
+            "id": "E11",
+            "ref": "E11",
+            "name": null
+          },
+          {
+            "id": "E10",
+            "ref": "E10",
+            "name": null
+          },
+          {
+            "id": "E13",
+            "ref": "E13",
+            "name": null
+          },
+          {
+            "id": "E9",
+            "ref": "E9",
+            "name": null
+          },
+          {
+            "id": "E7",
+            "ref": "E7",
+            "name": null
+          },
+          {
+            "id": "F8",
+            "ref": "F8",
+            "name": null
+          },
+          {
+            "id": "B9",
+            "ref": "B9",
+            "name": null
+          },
+          {
+            "id": "B13",
+            "ref": "B13",
+            "name": null
+          },
+          {
+            "id": "B12",
+            "ref": "B12",
+            "name": null
+          },
+          {
+            "id": "B6",
+            "ref": "B6",
+            "name": null
+          },
+          {
+            "id": "B7",
+            "ref": "B7",
+            "name": null
+          },
+          {
+            "id": "B8",
+            "ref": "B8",
+            "name": null
+          },
+          {
+            "id": "B14",
+            "ref": "B14",
+            "name": null
+          },
+          {
+            "id": "B17",
+            "ref": "B17",
+            "name": null
+          },
+          {
+            "id": "B18",
+            "ref": "B18",
+            "name": null
+          },
+          {
+            "id": "B21",
+            "ref": "B21",
+            "name": null
+          },
+          {
+            "id": "A5",
+            "ref": "A5",
+            "name": null
+          },
+          {
+            "id": "A13",
+            "ref": "A13",
+            "name": null
+          },
+          {
+            "id": "A6",
+            "ref": "A6",
+            "name": null
+          },
+          {
+            "id": "C7",
+            "ref": "C7",
+            "name": null
+          },
+          {
+            "id": "D1",
+            "ref": "D1",
+            "name": null
+          },
+          {
+            "id": "D5",
+            "ref": "D5",
+            "name": null
+          },
+          {
+            "id": "D16",
+            "ref": "D16",
+            "name": null
+          },
+          {
+            "id": "B22",
+            "ref": "B22",
+            "name": null
+          },
+          {
+            "id": "B23",
+            "ref": "B23",
+            "name": null
+          },
+          {
+            "id": "B24",
+            "ref": "B24",
+            "name": null
+          },
+          {
+            "id": "B25",
+            "ref": "B25",
+            "name": null
+          },
+          {
+            "id": "B26",
+            "ref": "B26",
+            "name": null
+          },
+          {
+            "id": "B27",
+            "ref": "B27",
+            "name": null
+          },
+          {
+            "id": "B19",
+            "ref": "B19",
+            "name": null
+          },
+          {
+            "id": "B20",
+            "ref": "B20",
+            "name": null
+          },
+          {
+            "id": "B2",
+            "ref": "B2",
+            "name": null
+          },
+          {
+            "id": "B4",
+            "ref": "B4",
+            "name": null
+          },
+          {
+            "id": "B16",
+            "ref": "B16",
+            "name": null
+          },
+          {
+            "id": "B15",
+            "ref": "B15",
+            "name": null
+          },
+          {
+            "id": "B11",
+            "ref": "B11",
+            "name": null
+          },
+          {
+            "id": "B10",
+            "ref": "B10",
+            "name": null
+          },
+          {
+            "id": "B5",
+            "ref": "B5",
+            "name": null
+          },
+          {
+            "id": "G869",
+            "ref": "G869",
+            "name": null
+          },
+          {
+            "id": "G1",
+            "ref": "G1",
+            "name": null
+          },
+          {
+            "id": "G2",
+            "ref": "G2",
+            "name": null
+          },
+          {
+            "id": "G5",
+            "ref": "G5",
+            "name": null
+          },
+          {
+            "id": "G6",
+            "ref": "G6",
+            "name": null
+          },
+          {
+            "id": "G9",
+            "ref": "G9",
+            "name": null
+          },
+          {
+            "id": "G10",
+            "ref": "G10",
+            "name": null
+          },
+          {
+            "id": "G8",
+            "ref": "G8",
+            "name": null
+          },
+          {
+            "id": "G7",
+            "ref": "G7",
+            "name": null
+          },
+          {
+            "id": "G4",
+            "ref": "G4",
+            "name": null
+          },
+          {
+            "id": "G3",
+            "ref": "G3",
+            "name": null
+          },
+          {
+            "id": "C2",
+            "ref": "C2",
+            "name": null
+          },
+          {
+            "id": "B3",
+            "ref": "B3",
+            "name": null
+          },
+          {
+            "id": "C1",
+            "ref": "C1",
+            "name": null
+          }
+        ],
+        "terminals": [
+          {
+            "id": "KSFO_23654700",
+            "name": "Terminal 3"
+          },
+          {
+            "id": "KSFO_25373322",
+            "name": "International Boarding Area G"
+          },
+          {
+            "id": "KSFO_25373323",
+            "name": "International Boarding Area A"
+          },
+          {
+            "id": "KSFO_60500080",
+            "name": "Terminal 2"
+          },
+          {
+            "id": "KSFO_550704742",
+            "name": "Terminal 550704742"
+          },
+          {
+            "id": "KSFO_550704743",
+            "name": "Terminal 550704743"
+          },
+          {
+            "id": "KSFO_586739549",
+            "name": "Executive Terminal"
+          },
+          {
+            "id": "KSFO_941702166",
+            "name": "Boarding Area C"
+          }
+        ]
+      }
+    },
+    {
+      "index": 8,
+      "question": "How is baggage handling performing?",
+      "tool": "get_baggage_stats",
+      "arguments": {},
+      "status": "OK",
+      "client_latency_ms": 530,
+      "server_latency_ms": 0,
+      "error": null,
+      "response": {
+        "total_bags_today": 7500,
+        "bags_in_system": 3448,
+        "loaded_departures": 3375,
+        "delivered_arrivals": 3375,
+        "connecting_bags": 713,
+        "misconnects": 14,
+        "misconnect_rate_pct": 1.96,
+        "avg_processing_time_min": 24,
+        "timestamp": "2026-03-30T09:35:07.122281Z"
+      }
+    },
+    {
+      "index": 9,
+      "question": "What's the ground support equipment status?",
+      "tool": "get_gse_status",
+      "arguments": {},
+      "status": "OK",
+      "client_latency_ms": 528,
+      "server_latency_ms": 10,
+      "error": null,
+      "response": {
+        "total_units": 137,
+        "available": 64,
+        "in_service": 46,
+        "maintenance": 27,
+        "units": [
+          {
+            "unit_id": "BEL-001",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-002",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-003",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-004",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-005",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-006",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-007",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-008",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-009",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-010",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-011",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-012",
+            "gse_type": "belt_loader",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-013",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-014",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-015",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-016",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-017",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-018",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-019",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-020",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-021",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-022",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-023",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-024",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-025",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-026",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-027",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-028",
+            "gse_type": "belt_loader",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-029",
+            "gse_type": "belt_loader",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-030",
+            "gse_type": "belt_loader",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-031",
+            "gse_type": "belt_loader",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-032",
+            "gse_type": "belt_loader",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-033",
+            "gse_type": "belt_loader",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "BEL-034",
+            "gse_type": "belt_loader",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-001",
+            "gse_type": "catering_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-002",
+            "gse_type": "catering_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-003",
+            "gse_type": "catering_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-004",
+            "gse_type": "catering_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-005",
+            "gse_type": "catering_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-006",
+            "gse_type": "catering_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-007",
+            "gse_type": "catering_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-008",
+            "gse_type": "catering_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-009",
+            "gse_type": "catering_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-010",
+            "gse_type": "catering_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-011",
+            "gse_type": "catering_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-012",
+            "gse_type": "catering_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-013",
+            "gse_type": "catering_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-014",
+            "gse_type": "catering_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-015",
+            "gse_type": "catering_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-016",
+            "gse_type": "catering_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-017",
+            "gse_type": "catering_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-018",
+            "gse_type": "catering_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-019",
+            "gse_type": "catering_truck",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-020",
+            "gse_type": "catering_truck",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-021",
+            "gse_type": "catering_truck",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-022",
+            "gse_type": "catering_truck",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "CAT-023",
+            "gse_type": "catering_truck",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-001",
+            "gse_type": "fuel_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-002",
+            "gse_type": "fuel_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-003",
+            "gse_type": "fuel_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-004",
+            "gse_type": "fuel_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-005",
+            "gse_type": "fuel_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-006",
+            "gse_type": "fuel_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-007",
+            "gse_type": "fuel_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-008",
+            "gse_type": "fuel_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-009",
+            "gse_type": "fuel_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-010",
+            "gse_type": "fuel_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-011",
+            "gse_type": "fuel_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-012",
+            "gse_type": "fuel_truck",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-013",
+            "gse_type": "fuel_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "FUE-014",
+            "gse_type": "fuel_truck",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-001",
+            "gse_type": "ground_power",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-002",
+            "gse_type": "ground_power",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-003",
+            "gse_type": "ground_power",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-004",
+            "gse_type": "ground_power",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-005",
+            "gse_type": "ground_power",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-006",
+            "gse_type": "ground_power",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-007",
+            "gse_type": "ground_power",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-008",
+            "gse_type": "ground_power",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-009",
+            "gse_type": "ground_power",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-010",
+            "gse_type": "ground_power",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-011",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-012",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-013",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-014",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-015",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-016",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-017",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-018",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-019",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-020",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-021",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-022",
+            "gse_type": "ground_power",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-023",
+            "gse_type": "ground_power",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-024",
+            "gse_type": "ground_power",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-025",
+            "gse_type": "ground_power",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-026",
+            "gse_type": "ground_power",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-027",
+            "gse_type": "ground_power",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-028",
+            "gse_type": "ground_power",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "GRO-029",
+            "gse_type": "ground_power",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-001",
+            "gse_type": "lavatory_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-002",
+            "gse_type": "lavatory_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-003",
+            "gse_type": "lavatory_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-004",
+            "gse_type": "lavatory_truck",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-005",
+            "gse_type": "lavatory_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-006",
+            "gse_type": "lavatory_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-007",
+            "gse_type": "lavatory_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-008",
+            "gse_type": "lavatory_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-009",
+            "gse_type": "lavatory_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-010",
+            "gse_type": "lavatory_truck",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "LAV-011",
+            "gse_type": "lavatory_truck",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PAS-001",
+            "gse_type": "passenger_stairs",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PAS-002",
+            "gse_type": "passenger_stairs",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PAS-003",
+            "gse_type": "passenger_stairs",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PAS-004",
+            "gse_type": "passenger_stairs",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PAS-005",
+            "gse_type": "passenger_stairs",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PAS-006",
+            "gse_type": "passenger_stairs",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PAS-007",
+            "gse_type": "passenger_stairs",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PAS-008",
+            "gse_type": "passenger_stairs",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PAS-009",
+            "gse_type": "passenger_stairs",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-001",
+            "gse_type": "pushback_tug",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-002",
+            "gse_type": "pushback_tug",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-003",
+            "gse_type": "pushback_tug",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-004",
+            "gse_type": "pushback_tug",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-005",
+            "gse_type": "pushback_tug",
+            "status": "servicing",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-006",
+            "gse_type": "pushback_tug",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-007",
+            "gse_type": "pushback_tug",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-008",
+            "gse_type": "pushback_tug",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-009",
+            "gse_type": "pushback_tug",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-010",
+            "gse_type": "pushback_tug",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-011",
+            "gse_type": "pushback_tug",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-012",
+            "gse_type": "pushback_tug",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-013",
+            "gse_type": "pushback_tug",
+            "status": "available",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-014",
+            "gse_type": "pushback_tug",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-015",
+            "gse_type": "pushback_tug",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-016",
+            "gse_type": "pushback_tug",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          },
+          {
+            "unit_id": "PUS-017",
+            "gse_type": "pushback_tug",
+            "status": "maintenance",
+            "assigned_flight": null,
+            "assigned_gate": null,
+            "position_x": 0.0,
+            "position_y": 0.0
+          }
+        ],
+        "timestamp": "2026-03-30T09:35:07.651906Z"
+      }
+    },
+    {
+      "index": 10,
+      "question": "Which airports are supported?",
+      "tool": "list_airports",
+      "arguments": {},
+      "status": "OK",
+      "client_latency_ms": 1631,
+      "server_latency_ms": 1034,
+      "error": null,
+      "response": {
+        "airports": [
+          {
+            "icao_code": "KSFO",
+            "iata_code": "SFO",
+            "name": "San Francisco International",
+            "city": "San Francisco, CA",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "KJFK",
+            "iata_code": "JFK",
+            "name": "John F. Kennedy International",
+            "city": "New York, NY",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "KLAX",
+            "iata_code": "LAX",
+            "name": "Los Angeles International",
+            "city": "Los Angeles, CA",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "KORD",
+            "iata_code": "ORD",
+            "name": "O'Hare International",
+            "city": "Chicago, IL",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "KATL",
+            "iata_code": "ATL",
+            "name": "Hartsfield-Jackson Atlanta",
+            "city": "Atlanta, GA",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "KDFW",
+            "iata_code": "DFW",
+            "name": "Dallas/Fort Worth International",
+            "city": "Dallas, TX",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "KDEN",
+            "iata_code": "DEN",
+            "name": "Denver International",
+            "city": "Denver, CO",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "KMIA",
+            "iata_code": "MIA",
+            "name": "Miami International",
+            "city": "Miami, FL",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "KSEA",
+            "iata_code": "SEA",
+            "name": "Seattle-Tacoma International",
+            "city": "Seattle, WA",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "SBGR",
+            "iata_code": "GRU",
+            "name": "Guarulhos International",
+            "city": "Sao Paulo, BR",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "MMMX",
+            "iata_code": "MEX",
+            "name": "Mexico City International",
+            "city": "Mexico City, MX",
+            "region": "Americas",
+            "cached": true
+          },
+          {
+            "icao_code": "EGLL",
+            "iata_code": "LHR",
+            "name": "London Heathrow",
+            "city": "London, UK",
+            "region": "Europe",
+            "cached": true
+          },
+          {
+            "icao_code": "LFPG",
+            "iata_code": "CDG",
+            "name": "Charles de Gaulle",
+            "city": "Paris, FR",
+            "region": "Europe",
+            "cached": true
+          },
+          {
+            "icao_code": "EHAM",
+            "iata_code": "AMS",
+            "name": "Amsterdam Schiphol",
+            "city": "Amsterdam, NL",
+            "region": "Europe",
+            "cached": true
+          },
+          {
+            "icao_code": "EDDF",
+            "iata_code": "FRA",
+            "name": "Frankfurt Airport",
+            "city": "Frankfurt, DE",
+            "region": "Europe",
+            "cached": true
+          },
+          {
+            "icao_code": "LEMD",
+            "iata_code": "MAD",
+            "name": "Adolfo Suarez Madrid-Barajas",
+            "city": "Madrid, ES",
+            "region": "Europe",
+            "cached": true
+          },
+          {
+            "icao_code": "LIRF",
+            "iata_code": "FCO",
+            "name": "Leonardo da Vinci (Fiumicino)",
+            "city": "Rome, IT",
+            "region": "Europe",
+            "cached": true
+          },
+          {
+            "icao_code": "LSGG",
+            "iata_code": "GVA",
+            "name": "Geneva Cointrin",
+            "city": "Geneva, CH",
+            "region": "Europe",
+            "cached": true
+          },
+          {
+            "icao_code": "LGAV",
+            "iata_code": "ATH",
+            "name": "Eleftherios Venizelos",
+            "city": "Athens, GR",
+            "region": "Europe",
+            "cached": true
+          },
+          {
+            "icao_code": "OMAA",
+            "iata_code": "AUH",
+            "name": "Abu Dhabi International",
+            "city": "Abu Dhabi, AE",
+            "region": "Middle East",
+            "cached": true
+          },
+          {
+            "icao_code": "OMDB",
+            "iata_code": "DXB",
+            "name": "Dubai International",
+            "city": "Dubai, AE",
+            "region": "Middle East",
+            "cached": true
+          },
+          {
+            "icao_code": "RJTT",
+            "iata_code": "HND",
+            "name": "Tokyo Haneda",
+            "city": "Tokyo, JP",
+            "region": "Asia-Pacific",
+            "cached": true
+          },
+          {
+            "icao_code": "VHHH",
+            "iata_code": "HKG",
+            "name": "Hong Kong International",
+            "city": "Hong Kong",
+            "region": "Asia-Pacific",
+            "cached": true
+          },
+          {
+            "icao_code": "WSSS",
+            "iata_code": "SIN",
+            "name": "Singapore Changi",
+            "city": "Singapore",
+            "region": "Asia-Pacific",
+            "cached": true
+          },
+          {
+            "icao_code": "ZBAA",
+            "iata_code": "PEK",
+            "name": "Beijing Capital International",
+            "city": "Beijing, CN",
+            "region": "Asia-Pacific",
+            "cached": true
+          },
+          {
+            "icao_code": "RKSI",
+            "iata_code": "ICN",
+            "name": "Incheon International",
+            "city": "Seoul, KR",
+            "region": "Asia-Pacific",
+            "cached": true
+          },
+          {
+            "icao_code": "VTBS",
+            "iata_code": "BKK",
+            "name": "Suvarnabhumi Airport",
+            "city": "Bangkok, TH",
+            "region": "Asia-Pacific",
+            "cached": true
+          },
+          {
+            "icao_code": "FAOR",
+            "iata_code": "JNB",
+            "name": "O.R. Tambo International",
+            "city": "Johannesburg, ZA",
+            "region": "Africa",
+            "cached": true
+          },
+          {
+            "icao_code": "GMMN",
+            "iata_code": "CMN",
+            "name": "Mohammed V International",
+            "city": "Casablanca, MA",
+            "region": "Africa",
+            "cached": true
+          }
+        ],
+        "count": 29
+      }
+    },
+    {
+      "index": 11,
+      "question": "Tell me about flight UAL1582 (sim00058)",
+      "tool": "get_flight_details",
+      "arguments": {
+        "icao24": "sim00058"
+      },
+      "status": "OK",
+      "client_latency_ms": 510,
+      "server_latency_ms": 0,
+      "error": null,
+      "response": {
+        "icao24": "sim00058",
+        "callsign": "UAL1582",
+        "latitude": 37.589281405137996,
+        "longitude": -122.33351160798766,
+        "altitude": 2566.4338749999997,
+        "velocity": 249.99999999999997,
+        "heading": 351.4058510740134,
+        "on_ground": false,
+        "vertical_rate": 2088.5784999999996,
+        "last_seen": 1774863306,
+        "data_source": "synthetic",
+        "flight_phase": "departing",
+        "aircraft_type": "B738",
+        "assigned_gate": null,
+        "origin_airport": "SFO",
+        "destination_airport": "RDM"
+      }
+    },
+    {
+      "index": 12,
+      "question": "Show me the trajectory for flight UAL1582",
+      "tool": "get_flight_trajectory",
+      "arguments": {
+        "icao24": "sim00058",
+        "minutes": 30
+      },
+      "status": "OK",
+      "client_latency_ms": 514,
+      "server_latency_ms": 2,
+      "error": null,
+      "response": {
+        "icao24": "sim00058",
+        "callsign": "UAL1582",
+        "points": [
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.6287384,
+            "longitude": -122.3933957,
+            "altitude": 0.0,
+            "velocity": 196.32784,
+            "heading": 117.90888432115304,
+            "vertical_rate": 0.0,
+            "on_ground": true,
+            "flight_phase": "takeoff",
+            "timestamp": 1774861532
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.62794841376218,
+            "longitude": -122.39151249779974,
+            "altitude": 16.877637130801688,
+            "velocity": 201.5360189029536,
+            "heading": 117.90888432115304,
+            "vertical_rate": 0.0,
+            "on_ground": true,
+            "flight_phase": "takeoff",
+            "timestamp": 1774861555
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.62715842752435,
+            "longitude": -122.38962929559946,
+            "altitude": 33.755274261603375,
+            "velocity": 206.7441978059072,
+            "heading": 117.90888432115304,
+            "vertical_rate": 0.0,
+            "on_ground": true,
+            "flight_phase": "takeoff",
+            "timestamp": 1774861577
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.626368441286516,
+            "longitude": -122.3877460933992,
+            "altitude": 50.63291139240506,
+            "velocity": 211.95237670886078,
+            "heading": 117.90888432115304,
+            "vertical_rate": 0.0,
+            "on_ground": false,
+            "flight_phase": "takeoff",
+            "timestamp": 1774861600
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.62557845504869,
+            "longitude": -122.38586289119893,
+            "altitude": 67.51054852320675,
+            "velocity": 217.16055561181435,
+            "heading": 117.90888432115304,
+            "vertical_rate": 2368.4709599156117,
+            "on_ground": false,
+            "flight_phase": "takeoff",
+            "timestamp": 1774861622
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.62478846881086,
+            "longitude": -122.38397968899866,
+            "altitude": 84.38818565400845,
+            "velocity": 222.36873451476794,
+            "heading": 117.90888432115304,
+            "vertical_rate": 2193.3658248945144,
+            "on_ground": false,
+            "flight_phase": "takeoff",
+            "timestamp": 1774861645
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.623998482573036,
+            "longitude": -122.38209648679839,
+            "altitude": 101.26582278481013,
+            "velocity": 227.57691341772153,
+            "heading": 117.90888432115304,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "climbing",
+            "timestamp": 1774861667
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.62320849633521,
+            "longitude": -122.38021328459813,
+            "altitude": 118.14345991561181,
+            "velocity": 232.78509232067512,
+            "heading": 117.90888432115304,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "climbing",
+            "timestamp": 1774861690
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.62241851009738,
+            "longitude": -122.37833008239785,
+            "altitude": 135.0210970464135,
+            "velocity": 237.9932712236287,
+            "heading": 117.90888432115304,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "climbing",
+            "timestamp": 1774861712
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.62162852385955,
+            "longitude": -122.37644688019759,
+            "altitude": 151.8987341772152,
+            "velocity": 243.2014501265823,
+            "heading": 117.90888432115304,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "climbing",
+            "timestamp": 1774861735
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.62083853762172,
+            "longitude": -122.37456367799732,
+            "altitude": 168.7763713080169,
+            "velocity": 248.4096290295359,
+            "heading": 117.90888432115304,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "climbing",
+            "timestamp": 1774861757
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.620048551383896,
+            "longitude": -122.37268047579705,
+            "altitude": 185.65400843881855,
+            "velocity": 253.61780793248946,
+            "heading": 117.90888432115304,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "climbing",
+            "timestamp": 1774861780
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.6190723541043,
+            "longitude": -122.3703533759353,
+            "altitude": 217.35985533453896,
+            "velocity": 250.0,
+            "heading": 117.90473252105193,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774861802
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.61704096092131,
+            "longitude": -122.36551085599174,
+            "altitude": 333.0922242314647,
+            "velocity": 250.0,
+            "heading": 117.9044088405571,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774861825
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.615009567738326,
+            "longitude": -122.3606683360482,
+            "altitude": 448.8245931283907,
+            "velocity": 250.0,
+            "heading": 117.90408517440738,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774861847
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.612978174555344,
+            "longitude": -122.35582581610466,
+            "altitude": 564.5569620253167,
+            "velocity": 250.0,
+            "heading": 117.90376152271557,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774861870
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.61842559670734,
+            "longitude": -122.35000573337481,
+            "altitude": 680.2893309222424,
+            "velocity": 250.0,
+            "heading": 50.40376152271557,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774861892
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.627174477881084,
+            "longitude": -122.3437541139195,
+            "altitude": 796.0216998191684,
+            "velocity": 250.0,
+            "heading": 29.50442116951143,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774861915
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.63592335905483,
+            "longitude": -122.33750249446418,
+            "altitude": 911.754068716094,
+            "velocity": 250.0,
+            "heading": 29.502975322998907,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774861937
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.646109339181066,
+            "longitude": -122.33365871210441,
+            "altitude": 1054.97287522604,
+            "velocity": 250.0,
+            "heading": 348.25711823005616,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774861960
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.66090916331266,
+            "longitude": -122.33754535410401,
+            "altitude": 1286.437613019892,
+            "velocity": 250.0,
+            "heading": 348.25825672578156,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774861982
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.67570898744425,
+            "longitude": -122.34143199610362,
+            "altitude": 1517.902350813743,
+            "velocity": 250.0,
+            "heading": 348.2593954213568,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862005
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.69050881157585,
+            "longitude": -122.34531863810322,
+            "altitude": 1749.3670886075952,
+            "velocity": 250.0,
+            "heading": 348.2605343166935,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862027
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.700976518244325,
+            "longitude": -122.36378872620365,
+            "altitude": 1958.2278481012659,
+            "velocity": 250.0,
+            "heading": 297.41645777792826,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862050
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.71023123202312,
+            "longitude": -122.38634217921232,
+            "altitude": 2160.7594936708865,
+            "velocity": 250.0,
+            "heading": 297.41792045241743,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862072
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.71948594580192,
+            "longitude": -122.40889563222099,
+            "altitude": 2363.2911392405067,
+            "velocity": 250.0,
+            "heading": 297.4193834236522,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862095
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.728925100916115,
+            "longitude": -122.4251303665943,
+            "altitude": 2594.0325497287517,
+            "velocity": 250.0,
+            "heading": 345.9381783041264,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862117
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.738747326496124,
+            "longitude": -122.42824160841727,
+            "altitude": 2883.3634719710667,
+            "velocity": 250.0,
+            "heading": 345.93907439766826,
+            "vertical_rate": 2088.5784999999996,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862140
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.748569552076134,
+            "longitude": -122.43135285024024,
+            "altitude": 3172.694394213382,
+            "velocity": 250.0,
+            "heading": 345.93997059747403,
+            "vertical_rate": 2065.806194303797,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862162
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.75839177765614,
+            "longitude": -122.43446409206321,
+            "altitude": 3462.025316455697,
+            "velocity": 250.0,
+            "heading": 345.94086690338804,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862185
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.76821400323615,
+            "longitude": -122.43757533388617,
+            "altitude": 3877.034358047018,
+            "velocity": 250.0,
+            "heading": 345.9448623583978,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862207
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.77803622881616,
+            "longitude": -122.44068657570915,
+            "altitude": 4311.030741410488,
+            "velocity": 250.0,
+            "heading": 345.94575924393985,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862230
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.78785845439617,
+            "longitude": -122.44379781753211,
+            "altitude": 4745.027124773962,
+            "velocity": 250.0,
+            "heading": 345.9466562356595,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862252
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.79825948969786,
+            "longitude": -122.44709240039107,
+            "altitude": 5179.023508137431,
+            "velocity": 250.0,
+            "heading": 345.9511508010106,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862275
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.809484890360736,
+            "longitude": -122.45064810533161,
+            "altitude": 5613.019891500907,
+            "velocity": 250.0,
+            "heading": 345.9521766722256,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862297
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.8207102910236,
+            "longitude": -122.45420381027215,
+            "altitude": 6047.016274864377,
+            "velocity": 250.0,
+            "heading": 345.95320268210196,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862320
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.83193569168647,
+            "longitude": -122.45775951521269,
+            "altitude": 6481.012658227848,
+            "velocity": 250.0,
+            "heading": 345.9542288304659,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862342
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.84316109234934,
+            "longitude": -122.46131522015322,
+            "altitude": 6915.009041591322,
+            "velocity": 250.0,
+            "heading": 345.9588032905134,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862365
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.85438649301221,
+            "longitude": -122.46487092509376,
+            "altitude": 7349.005424954792,
+            "velocity": 250.0,
+            "heading": 345.9598301954579,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862387
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.86561189367508,
+            "longitude": -122.4684266300343,
+            "altitude": 7783.001808318267,
+            "velocity": 250.0,
+            "heading": 345.9608572390039,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862410
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.8728963742067,
+            "longitude": -122.471344840728,
+            "altitude": 8129.7371701137645,
+            "velocity": 250.0,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862432
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.876239934607064,
+            "longitude": -122.47362555717483,
+            "altitude": 8405.61913784919,
+            "velocity": 250.0,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862455
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.879583495007424,
+            "longitude": -122.47590627362167,
+            "altitude": 8703.377942261814,
+            "velocity": 250.0,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862477
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.88292705540779,
+            "longitude": -122.47818699006851,
+            "altitude": 9023.01358335164,
+            "velocity": 250.0,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862500
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.88627061580816,
+            "longitude": -122.48046770651536,
+            "altitude": 9364.526061118664,
+            "velocity": 250.0,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862522
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.889614176208525,
+            "longitude": -122.48274842296219,
+            "altitude": 9727.915375562889,
+            "velocity": 250.0,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862545
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.892957736608885,
+            "longitude": -122.48502913940904,
+            "altitude": 10113.181526684308,
+            "velocity": 396.8936588954064,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862567
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.89630129700925,
+            "longitude": -122.48730985585587,
+            "altitude": 10520.324514482927,
+            "velocity": 399.4970787721302,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862590
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.89964485740962,
+            "longitude": -122.48959057230272,
+            "altitude": 10949.34433895875,
+            "velocity": 402.12058192266636,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862612
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.902988417809986,
+            "longitude": -122.49187128874955,
+            "altitude": 11400.241000111768,
+            "velocity": 404.7645240934432,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862635
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.906331978210346,
+            "longitude": -122.4941520051964,
+            "altitude": 11873.01449794199,
+            "velocity": 407.4322962617588,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862657
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.90967553861071,
+            "longitude": -122.49643272164323,
+            "altitude": 12367.664832449405,
+            "velocity": 410.1205672919177,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862680
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.91301909901108,
+            "longitude": -122.49871343809008,
+            "altitude": 12884.19200363402,
+            "velocity": 412.8294614274967,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862702
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.91636265941145,
+            "longitude": -122.50099415453691,
+            "altitude": 13422.59601149584,
+            "velocity": 415.56125383083656,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862725
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.91970621981181,
+            "longitude": -122.50327487098376,
+            "altitude": 13982.87685603485,
+            "velocity": 418.31559237074146,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862747
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.923049780212175,
+            "longitude": -122.50555558743059,
+            "altitude": 14565.034537251067,
+            "velocity": 421.09095949025226,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862770
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.92639334061254,
+            "longitude": -122.50783630387744,
+            "altitude": 15169.069055144477,
+            "velocity": 423.8877501205312,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862792
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.92973690101291,
+            "longitude": -122.51011702032427,
+            "altitude": 15794.980409715086,
+            "velocity": 426.7094284846783,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862815
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.93308046141327,
+            "longitude": -122.51239773677112,
+            "altitude": 16442.768600962903,
+            "velocity": 429.55253093217146,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862837
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.936424021813636,
+            "longitude": -122.51467845321795,
+            "altitude": 17112.43362888791,
+            "velocity": 432.4171747500391,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862860
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.939767582214,
+            "longitude": -122.5169591696648,
+            "altitude": 17803.97549349012,
+            "velocity": 435.3057558073528,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862882
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.94311114261437,
+            "longitude": -122.51923988611163,
+            "altitude": 18517.394194769528,
+            "velocity": 438.2178204097638,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862905
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.94645470301473,
+            "longitude": -122.52152060255848,
+            "altitude": 19252.689732726132,
+            "velocity": 441.1518057976116,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862927
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.9497982634151,
+            "longitude": -122.52380131900532,
+            "altitude": 20009.862107359946,
+            "velocity": 444.10814500292236,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862950
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.953141823815464,
+            "longitude": -122.52608203545216,
+            "altitude": 20788.91131867095,
+            "velocity": 447.09035646166586,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862972
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.95648538421583,
+            "longitude": -122.528362751899,
+            "altitude": 21589.837366659158,
+            "velocity": 450.0948532754962,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774862995
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.95982894461619,
+            "longitude": -122.53064346834584,
+            "altitude": 22412.640251324556,
+            "velocity": 453.12174238238225,
+            "heading": 331.69922072923305,
+            "vertical_rate": 2015.744,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863017
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.96317250501656,
+            "longitude": -122.53292418479268,
+            "altitude": 23241.90123375737,
+            "velocity": 453.987500638297,
+            "heading": 331.69922072923305,
+            "vertical_rate": 1220.47,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863040
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.966516065416926,
+            "longitude": -122.53520490123952,
+            "altitude": 23984.90399634798,
+            "velocity": 453.473276536546,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863062
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.96985962581729,
+            "longitude": -122.53748561768636,
+            "altitude": 24741.152499895485,
+            "velocity": 452.95849756019317,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863085
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.97320318621765,
+            "longitude": -122.5397663341332,
+            "altitude": 25510.646744399888,
+            "velocity": 452.44315297365137,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863107
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.97654674661802,
+            "longitude": -122.54204705058004,
+            "altitude": 26293.386729861195,
+            "velocity": 451.92715707642384,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863130
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.97989030701839,
+            "longitude": -122.54432776702689,
+            "altitude": 27089.372456279394,
+            "velocity": 451.4106005128762,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863152
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.983233867418754,
+            "longitude": -122.54660848347372,
+            "altitude": 27898.603923654493,
+            "velocity": 450.89348151222754,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863175
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.98657742781912,
+            "longitude": -122.54888919992057,
+            "altitude": 28721.081131986488,
+            "velocity": 450.3757372157911,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863197
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.98992098821948,
+            "longitude": -122.5511699163674,
+            "altitude": 29556.80408127538,
+            "velocity": 449.85738453745154,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863220
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.99326454861985,
+            "longitude": -122.55345063281425,
+            "altitude": 30405.77277152118,
+            "velocity": 449.33846349761205,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863242
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.996608109020215,
+            "longitude": -122.55573134926108,
+            "altitude": 31267.987202723867,
+            "velocity": 448.8189621484493,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863265
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 37.99995166942058,
+            "longitude": -122.55801206570793,
+            "altitude": 32143.447374883457,
+            "velocity": 448.29879450390007,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863287
+          },
+          {
+            "icao24": "sim00058",
+            "callsign": "UAL1582",
+            "latitude": 38.00329522982094,
+            "longitude": -122.56029278215476,
+            "altitude": 33032.15328799994,
+            "velocity": 447.7780524687662,
+            "heading": 331.69922072923305,
+            "vertical_rate": 366.141,
+            "on_ground": false,
+            "flight_phase": "departing",
+            "timestamp": 1774863310
+          }
+        ],
+        "count": 80,
+        "start_time": 1774861532,
+        "end_time": 1774863310
+      }
+    },
+    {
+      "index": 13,
+      "question": "Which gate should flight UAL1582 use?",
+      "tool": "get_gate_recommendations",
+      "arguments": {
+        "icao24": "sim00058",
+        "top_k": 3
+      },
+      "status": "OK",
+      "client_latency_ms": 527,
+      "server_latency_ms": 1,
+      "error": null,
+      "response": {
+        "recommendations": [
+          {
+            "gate_id": "D12",
+            "score": 0.9419498515104453,
+            "reasons": [
+              "Gate is currently available",
+              "Optimal size for B738",
+              "Optimal gate assignment"
+            ],
+            "taxi_time": 3
+          },
+          {
+            "gate_id": "D11",
+            "score": 0.9418438597989194,
+            "reasons": [
+              "Gate is currently available",
+              "Optimal size for B738",
+              "Optimal gate assignment"
+            ],
+            "taxi_time": 3
+          },
+          {
+            "gate_id": "D14",
+            "score": 0.9413811503891596,
+            "reasons": [
+              "Gate is currently available",
+              "Optimal size for B738",
+              "Optimal gate assignment"
+            ],
+            "taxi_time": 3
+          }
+        ],
+        "count": 3
+      }
+    }
+  ]
+}

@@ -1,0 +1,186 @@
+{
+  "metadata": {
+    "date": "2026-03-30T10:08:55.058352+00:00",
+    "app_url": "https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.com",
+    "build_number": "2026-03-26-001",
+    "git_commit": "dc04ea9",
+    "app_uptime_seconds": 2789,
+    "protocol_version": "2024-11-05",
+    "tools_tested": 13,
+    "total_checks": 27,
+    "passed": 27,
+    "failed": 0,
+    "accuracy_pct": 100.0
+  },
+  "notes": [
+    "lat/lon may differ slightly between REST and MCP calls because synthetic flights update positions in real-time (~500ms between calls)",
+    "REST /api/airport/config wraps data in {config: {...}}, MCP reads service directly \u2014 both return same underlying data",
+    "REST /api/airports returns persisted airports only; MCP list_airports returns all 29 well-known airports with cached flag \u2014 intentional enrichment",
+    "REST /api/predictions/gates returns bare list; MCP wraps in {recommendations: [...], count: N} \u2014 intentional for consistency"
+  ],
+  "issues": [],
+  "checks": [
+    {
+      "tool": "get_flights",
+      "check": "count_match",
+      "passed": true,
+      "detail": "REST=20, MCP=20"
+    },
+    {
+      "tool": "get_flights",
+      "check": "same_ids",
+      "passed": true,
+      "detail": "all IDs match"
+    },
+    {
+      "tool": "get_flights",
+      "check": "has_timestamp",
+      "passed": true,
+      "detail": "present"
+    },
+    {
+      "tool": "get_flight_details",
+      "check": "icao24_match",
+      "passed": true,
+      "detail": "sim00058"
+    },
+    {
+      "tool": "get_flight_details",
+      "check": "callsign_match",
+      "passed": true,
+      "detail": "UAL1582"
+    },
+    {
+      "tool": "get_flight_trajectory",
+      "check": "count_match",
+      "passed": true,
+      "detail": "REST=80, MCP=80"
+    },
+    {
+      "tool": "get_arrivals",
+      "check": "count_match",
+      "passed": true,
+      "detail": "REST=10, MCP=10"
+    },
+    {
+      "tool": "get_arrivals",
+      "check": "type_correct",
+      "passed": true,
+      "detail": "arrival"
+    },
+    {
+      "tool": "get_arrivals",
+      "check": "airport_match",
+      "passed": true,
+      "detail": "SFO"
+    },
+    {
+      "tool": "get_departures",
+      "check": "count_match",
+      "passed": true,
+      "detail": "REST=10, MCP=10"
+    },
+    {
+      "tool": "get_departures",
+      "check": "type_correct",
+      "passed": true,
+      "detail": "departure"
+    },
+    {
+      "tool": "get_weather",
+      "check": "station_match",
+      "passed": true,
+      "detail": "KSFO"
+    },
+    {
+      "tool": "get_weather",
+      "check": "temp_match",
+      "passed": true,
+      "detail": "17"
+    },
+    {
+      "tool": "get_weather",
+      "check": "category_match",
+      "passed": true,
+      "detail": "VFR"
+    },
+    {
+      "tool": "get_weather",
+      "check": "raw_metar_match",
+      "passed": true,
+      "detail": "match"
+    },
+    {
+      "tool": "get_delay_predictions",
+      "check": "count_match",
+      "passed": true,
+      "detail": "REST=100, MCP=100"
+    },
+    {
+      "tool": "get_congestion",
+      "check": "areas_count_match",
+      "passed": true,
+      "detail": "13"
+    },
+    {
+      "tool": "get_congestion",
+      "check": "bottlenecks_count_match",
+      "passed": true,
+      "detail": "0"
+    },
+    {
+      "tool": "get_airport_info",
+      "check": "icaoCode_match",
+      "passed": true,
+      "detail": "KSFO"
+    },
+    {
+      "tool": "get_airport_info",
+      "check": "gates_count_match",
+      "passed": true,
+      "detail": "120"
+    },
+    {
+      "tool": "get_airport_info",
+      "check": "runways_count_match",
+      "passed": true,
+      "detail": "8"
+    },
+    {
+      "tool": "get_baggage_stats",
+      "check": "same_keys",
+      "passed": true,
+      "detail": "match"
+    },
+    {
+      "tool": "get_gse_status",
+      "check": "same_keys",
+      "passed": true,
+      "detail": "match"
+    },
+    {
+      "tool": "get_gate_recommendations",
+      "check": "count_match",
+      "passed": true,
+      "detail": "REST=3, MCP=3"
+    },
+    {
+      "tool": "get_gate_recommendations",
+      "check": "ids_match",
+      "passed": true,
+      "detail": "['D12', 'D11', 'D14']"
+    },
+    {
+      "tool": "list_airports",
+      "check": "has_data",
+      "passed": true,
+      "detail": "count=29"
+    },
+    {
+      "tool": "list_airports",
+      "check": "has_KSFO",
+      "passed": true,
+      "detail": "present"
+    }
+  ]
+}
