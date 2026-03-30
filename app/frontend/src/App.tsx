@@ -604,7 +604,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
       <GenieChat />
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List */}
-        <div className="w-80 flex-shrink-0 overflow-hidden">
+        <div className="w-64 flex-shrink-0 overflow-hidden">
           <FlightList />
         </div>
 

@@ -105,7 +105,7 @@ export function NavigationControls3D({ controlsRef }: NavigationControls3DProps)
 
   return (
     <div
-      className="absolute bottom-14 right-3 z-10 flex flex-col rounded-lg shadow-lg overflow-hidden border border-gray-200"
+      className="absolute bottom-28 right-3 z-10 flex flex-col rounded-lg shadow-lg overflow-hidden border border-gray-200"
       style={{ pointerEvents: 'auto' }}
     >
       {/* Home */}
