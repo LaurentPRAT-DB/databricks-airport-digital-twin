@@ -4803,8 +4803,13 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         current_heading = 284  # Runway 28L heading
         current_phase = "descending"
 
+    # Parked aircraft don't need a synthetic trajectory trail — they're
+    # stationary at a gate.  Showing a fabricated arrival path is misleading.
+    if current_phase == "parked":
+        return []
+
     # Determine if aircraft is on ground
-    ground_phases = ["ground", "parked", "taxi_to_gate", "taxi_to_runway", "pushback"]
+    ground_phases = ["ground", "taxi_to_gate", "taxi_to_runway", "pushback"]
     is_on_ground = current_phase in ground_phases or end_alt < 100
 
     # =========================================================================
