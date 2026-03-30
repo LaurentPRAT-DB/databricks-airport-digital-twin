@@ -3697,25 +3697,16 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.assigned_gate = None
                     state.taxi_route = None  # Use default arrival waypoints
 
-            # Snap position to nearest taxi waypoint to avoid trajectory jump.
-            # The aircraft just finished rolling on the runway; placing it at
-            # the closest waypoint on the taxi route makes the trajectory line
-            # connect smoothly from rollout to taxi without a visible teleport.
+            # Prepend current position to taxi route so the aircraft taxis
+            # smoothly from the runway rollout end to the first taxiway
+            # waypoint, instead of teleporting to it.
             taxi_wps = state.taxi_route or TAXI_WAYPOINTS_ARRIVAL
-            if taxi_wps and len(taxi_wps) >= 2:
-                best_idx = 0
-                best_dist = float("inf")
-                for _wi, wp in enumerate(taxi_wps):
-                    wp_lat, wp_lon = wp[1], wp[0]  # (lon, lat) → (lat, lon)
-                    d = _distance_between((state.latitude, state.longitude), (wp_lat, wp_lon))
-                    if d < best_dist:
-                        best_dist = d
-                        best_idx = _wi
-                state.latitude, state.longitude = taxi_wps[best_idx][1], taxi_wps[best_idx][0]
-                # Start from the next waypoint (we're already AT best_idx)
-                state.waypoint_index = best_idx + 1
+            current_pos = (state.longitude, state.latitude)  # (lon, lat) format
+            if taxi_wps:
+                state.taxi_route = [current_pos] + list(taxi_wps)
             else:
-                state.waypoint_index = 0
+                state.taxi_route = [current_pos]
+            state.waypoint_index = 1  # Already at wp 0 (current pos)
 
     elif state.phase == FlightPhase.TAXI_TO_GATE:
         # Taxi along waypoints to assigned gate WITH SEPARATION
