@@ -26,12 +26,12 @@ export default function Header({ onShowFIDS, simulationControls }: HeaderProps) 
 
   return (
     <header className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between shadow-lg z-[1002] relative">
-      {/* Airport switch progress overlay — full-screen to ensure visibility */}
-      {(isLoadingAirport || switchProgress) && (
+      {/* Airport switch progress overlay — only show when phased progress arrives from backend */}
+      {switchProgress && (!switchProgress.done || switchProgress.error) && (
         <div className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center">
           <AirportSwitchProgress
-            progress={switchProgress && (!switchProgress.done || switchProgress.error) ? switchProgress : { step: 0, total: 7, message: 'Loading airport data, please wait...', done: false }}
-            error={switchProgress?.error ? (airportError || switchProgress.message) : undefined}
+            progress={switchProgress}
+            error={switchProgress.error ? (airportError || switchProgress.message) : undefined}
           />
         </div>
       )}

@@ -17,7 +17,7 @@ _EARTH_RADIUS_M = 6_371_000
 
 # Penalty multiplier for edges whose midpoint falls inside a terminal building.
 # Makes Dijkstra strongly prefer routes that go around buildings.
-_BUILDING_PENALTY = 10.0
+_BUILDING_PENALTY = 1000.0
 
 
 def _point_in_polygon(lat: float, lon: float, polygon: list[tuple[float, float]]) -> bool:
@@ -189,23 +189,31 @@ class TaxiwayGraph:
         return polygons
 
     def _penalize_building_edges(self, polygons: list[list[tuple[float, float]]]) -> int:
-        """Multiply weight of edges whose midpoint is inside a building polygon.
+        """Multiply weight of edges that pass through a terminal building.
 
-        Returns count of penalized edges.
+        Samples 5 points along each edge (not just midpoint) to catch edges
+        that clip building corners.  Returns count of penalized edges.
         """
         penalized = 0
+        samples = [0.2, 0.35, 0.5, 0.65, 0.8]
         for node_id, neighbors in self.edges.items():
             lat_a, lon_a = self.nodes[node_id]
             new_neighbors = []
             for neighbor_id, weight in neighbors:
                 lat_b, lon_b = self.nodes[neighbor_id]
-                mid_lat = (lat_a + lat_b) / 2
-                mid_lon = (lon_a + lon_b) / 2
-                for poly in polygons:
-                    if _point_in_polygon(mid_lat, mid_lon, poly):
-                        weight *= _BUILDING_PENALTY
-                        penalized += 1
+                hits_building = False
+                for t in samples:
+                    s_lat = lat_a + t * (lat_b - lat_a)
+                    s_lon = lon_a + t * (lon_b - lon_a)
+                    for poly in polygons:
+                        if _point_in_polygon(s_lat, s_lon, poly):
+                            hits_building = True
+                            break
+                    if hits_building:
                         break
+                if hits_building:
+                    weight *= _BUILDING_PENALTY
+                    penalized += 1
                 new_neighbors.append((neighbor_id, weight))
             self.edges[node_id] = new_neighbors
         # Each edge counted twice (bidirectional)

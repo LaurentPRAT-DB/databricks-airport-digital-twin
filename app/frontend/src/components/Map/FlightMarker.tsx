@@ -3,16 +3,11 @@ import { Marker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { Flight } from '../../types/flight';
 import { useFlightContext } from '../../context/FlightContext';
-import { PHASE_COLORS, isGroundPhase } from '../../utils/phaseUtils';
+import { isGroundPhase } from '../../utils/phaseUtils';
 
 interface FlightMarkerProps {
   flight: Flight;
   zoom?: number;
-}
-
-// Get color based on flight phase
-function getPhaseColor(phase: Flight['flight_phase']): string {
-  return PHASE_COLORS[phase] ?? '#9ca3af';
 }
 
 // Selection color (green)
@@ -78,7 +73,6 @@ function getIconSize(zoom: number, aircraftType?: string, latitude?: number): nu
 // Create airplane SVG icon with rotation, ARIA label, aircraft-type silhouette, and optional gate label
 function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'], isSelected: boolean, size: number, callsign?: string | null, icao24?: string, gateName?: string | null, aircraftType?: string): L.DivIcon {
   const rotation = heading ?? 0;
-  const color = isSelected ? SELECTION_COLOR : getPhaseColor(phase);
   const label = callsign || icao24 || 'Unknown';
   const category = getAircraftCategory(aircraftType);
   const path = SILHOUETTE_PATHS[category];
@@ -89,9 +83,18 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
 
   const half = size / 2;
 
+  // Use realistic white fuselage color for satellite view, with a thin dark outline for visibility.
+  // Selected aircraft use green. Phase color is shown via the drop-shadow glow instead of fill.
+  const fill = isSelected ? SELECTION_COLOR : '#f0f0f0';
+  const stroke = isSelected ? '#166534' : '#4a4a4a';
+  const strokeWidth = isSelected ? 3 : 1.5;
+  const shadow = isSelected
+    ? 'drop-shadow(0 0 4px rgba(34,197,94,0.8))'
+    : 'drop-shadow(1px 1px 2px rgba(0,0,0,0.6))';
+
   const svgIcon = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="${color}" width="${size}" height="${size}" style="transform: rotate(${rotation}deg); transform-origin: center; filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.4));" role="img" aria-label="Flight ${label}">
-      <path d="${path}"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}" style="transform: rotate(${rotation}deg); transform-origin: center; filter: ${shadow};" role="img" aria-label="Flight ${label}">
+      <path d="${path}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
     </svg>
     ${gateLabel}
   `;
