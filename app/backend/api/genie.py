@@ -82,7 +82,7 @@ async def _genie_api(
     json_body: dict | None = None,
 ) -> dict:
     """Make a request to the Databricks Genie REST API."""
-    url = f"{host}/api/2.0/genie/spaces/{GENIE_SPACE_ID}{path}"
+    url = f"{host}/api/2.0/genie/rooms/{GENIE_SPACE_ID}{path}"
     headers = {"Authorization": f"Bearer {token}"}
 
     async with httpx.AsyncClient(timeout=30.0) as client:
