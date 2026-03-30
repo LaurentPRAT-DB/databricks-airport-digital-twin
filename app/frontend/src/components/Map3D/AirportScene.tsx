@@ -8,7 +8,7 @@ import { Trajectory3D } from './Trajectory3D';
 import { Building3D } from './Building3D';
 import { TerminalGroup } from './Terminal3D';
 import { latLonTo3D, METERS_TO_SCENE_UNITS, DEFAULT_COORDINATE_SCALE } from '../../utils/map3d-calculations';
-import { SatelliteGround } from './SatelliteGround';
+import { SatelliteGround, TileLoadingProgress } from './SatelliteGround';
 
 const SCENE_COLORS = {
   runway: 0x555555,   // Dark asphalt
@@ -36,6 +36,8 @@ interface AirportSceneProps {
   inpainting?: boolean;
   /** Airport ICAO code for inpainting cache tagging */
   airportIcao?: string;
+  /** Satellite tile loading progress callback */
+  onTileLoadingProgress?: (progress: TileLoadingProgress | null) => void;
 }
 
 /**
@@ -63,6 +65,7 @@ export function AirportScene({
   satellite = false,
   inpainting = false,
   airportIcao,
+  onTileLoadingProgress,
 }: AirportSceneProps) {
   const { runways, taxiways, buildings, ground } = AIRPORT_3D_CONFIG;
 
@@ -81,6 +84,7 @@ export function AirportScene({
           scale={DEFAULT_COORDINATE_SCALE}
           inpainting={inpainting}
           airportIcao={airportIcao}
+          onLoadingProgress={onTileLoadingProgress}
         />
       ) : (
         <Ground size={ground.size} color={ground.color} />

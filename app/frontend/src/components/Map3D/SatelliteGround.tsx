@@ -30,6 +30,12 @@ function tileToLatLon(x: number, y: number, zoom: number): { lat: number; lon: n
   return { lat, lon };
 }
 
+export interface TileLoadingProgress {
+  loaded: number;
+  total: number;
+  inpainting: boolean;
+}
+
 interface SatelliteGroundProps {
   size: number;
   centerLat: number;
@@ -40,6 +46,8 @@ interface SatelliteGroundProps {
   inpainting?: boolean;
   /** Airport ICAO code for cache tagging when inpainting is enabled */
   airportIcao?: string;
+  /** Called with loading progress when tiles are being fetched */
+  onLoadingProgress?: (progress: TileLoadingProgress | null) => void;
 }
 
 export function SatelliteGround({
@@ -49,6 +57,7 @@ export function SatelliteGround({
   scale = 10000,
   inpainting = false,
   airportIcao,
+  onLoadingProgress,
 }: SatelliteGroundProps) {
   const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -164,6 +173,9 @@ export function SatelliteGround({
     let loadedCount = 0;
     const totalTiles = cols * rows;
 
+    // Signal loading start
+    onLoadingProgress?.({ loaded: 0, total: totalTiles, inpainting });
+
     const finalize = () => {
       if (cancelled) return;
       // All tiles loaded — crop to the exact ground plane extent
@@ -210,19 +222,24 @@ export function SatelliteGround({
           if (cancelled) return;
           ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE);
           loadedCount++;
-          if (loadedCount === totalTiles) finalize();
+          onLoadingProgress?.({ loaded: loadedCount, total: totalTiles, inpainting });
+          if (loadedCount === totalTiles) {
+            onLoadingProgress?.(null); // done
+            finalize();
+          }
         });
       }
     }
 
     return () => {
       cancelled = true;
+      onLoadingProgress?.(null);
       setTexture((prev) => {
         prev?.dispose();
         return null;
       });
     };
-  }, [tileConfig, centerLat, centerLon, inpainting, airportIcao]);
+  }, [tileConfig, centerLat, centerLon, inpainting, airportIcao]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]} receiveShadow>

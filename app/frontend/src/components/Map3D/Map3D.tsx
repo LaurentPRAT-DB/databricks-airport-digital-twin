@@ -4,6 +4,7 @@ import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { AirportScene } from './AirportScene';
+import { TileLoadingProgress } from './SatelliteGround';
 import { NavigationControls3D } from './NavigationControls3D';
 import { AIRPORT_3D_CONFIG } from '../../constants/airport3D';
 import { Flight } from '../../types/flight';
@@ -282,6 +283,13 @@ export function Map3D({
   // Ref to OrbitControls for programmatic camera manipulation
   const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
 
+  // Satellite tile loading progress (for inpainting overlay)
+  const [tileProgress, setTileProgress] = useState<TileLoadingProgress | null>(null);
+
+  const handleTileLoadingProgress = useCallback((progress: TileLoadingProgress | null) => {
+    setTileProgress(progress);
+  }, []);
+
   // Navigation controls hint — auto-hides after 5s, reappears on hover
   const [hintVisible, setHintVisible] = useState(true);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -363,6 +371,7 @@ export function Map3D({
           satellite={satellite}
           inpainting={inpainting}
           airportIcao={airportIcao}
+          onTileLoadingProgress={handleTileLoadingProgress}
         />
 
         {/* Orbit controls for user interaction */}
@@ -405,6 +414,31 @@ export function Map3D({
                 />
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Inpainting tile loading overlay */}
+      {tileProgress && tileProgress.inpainting && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-10">
+          <div className="flex items-center gap-3 bg-slate-800/90 backdrop-blur-sm rounded-xl px-5 py-3 shadow-2xl border border-emerald-500/30">
+            <div className="relative w-6 h-6">
+              <svg className="w-6 h-6 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" className="text-slate-600" />
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-emerald-400" />
+              </svg>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-white text-sm font-medium">
+                Removing aircraft... {tileProgress.loaded}/{tileProgress.total} tiles
+              </span>
+              <div className="w-40 h-1.5 bg-slate-600 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-400 rounded-full transition-all duration-300"
+                  style={{ width: `${(tileProgress.loaded / tileProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

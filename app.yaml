@@ -61,6 +61,10 @@ env:
   - name: DATABRICKS_APP_URL
     value: "https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.com"
 
+  # Inpainting serving endpoint (aircraft removal from satellite tiles)
+  - name: INPAINTING_ENDPOINT_NAME
+    value: "airport-dt-aircraft-inpainting-dev"
+
   # Genie Space for Airport Operations Assistant
   - name: GENIE_SPACE_ID
     value: "01f12612fa6314ae943d0526f5ae3a00"

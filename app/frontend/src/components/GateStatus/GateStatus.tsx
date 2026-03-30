@@ -190,19 +190,23 @@ function getTerminalCongestion(
 }
 
 // Congestion indicator component
+// Short labels to keep the badge compact in the terminal row
+const LEVEL_SHORT: Record<string, string> = { low: 'Low', moderate: 'Med', high: 'High', critical: 'Crit' };
+
 function CongestionIndicator({ congestion, onClick }: { congestion?: CongestionArea; onClick?: (area: CongestionArea) => void }) {
   if (!congestion) return null;
   const colors = congestionColors[congestion.level] || congestionColors.low;
-  const levelLabel = congestion.level.charAt(0).toUpperCase() + congestion.level.slice(1);
+  const shortLabel = LEVEL_SHORT[congestion.level] || congestion.level;
+  const fullLabel = congestion.level.charAt(0).toUpperCase() + congestion.level.slice(1);
   const Tag = onClick ? 'button' : 'span';
   return (
     <Tag
-      className={`ml-2 px-1.5 py-0.5 rounded text-[10px] border ${colors.bg} ${colors.text} ${colors.border} ${onClick ? 'cursor-pointer hover:ring-1 hover:ring-blue-400' : ''}`}
+      className={`ml-1.5 px-1 py-0.5 rounded text-[10px] leading-tight border whitespace-nowrap ${colors.bg} ${colors.text} ${colors.border} ${onClick ? 'cursor-pointer hover:ring-1 hover:ring-blue-400' : ''}`}
       onClick={onClick ? (e) => { e.stopPropagation(); onClick(congestion); } : undefined}
-      title={onClick ? 'Click to see congestion details' : undefined}
+      title={`${fullLabel}${congestion.wait_minutes > 0 ? ` — ${congestion.wait_minutes}min avg wait` : ''}\nClick for details`}
     >
-      {levelLabel}
-      {congestion.wait_minutes > 0 && <span className="ml-1">({congestion.wait_minutes}m)</span>}
+      {shortLabel}
+      {congestion.wait_minutes > 0 && <span className="ml-0.5 opacity-75">{congestion.wait_minutes}m</span>}
     </Tag>
   );
 }
@@ -464,13 +468,13 @@ export default function GateStatus() {
                   }`}
                 onClick={() => setSelectedTerminal(name)}
               >
-                <div className="flex items-center">
-                  <span className={`text-xs font-medium ${matchesFilter ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'}`}>{name}</span>
+                <div className="flex items-center min-w-0">
+                  <span className={`text-xs font-medium shrink-0 ${matchesFilter ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'}`}>{name}</span>
                   {!isCongestionLoading && (
                     <CongestionIndicator congestion={termCong} onClick={termCong ? (a) => setSelectedArea(selectedArea?.area_id === a.area_id ? null : a) : undefined} />
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-[11px]">
+                <div className="flex items-center gap-2 text-[11px] shrink-0">
                   <span className="text-green-600">{avail} free</span>
                   <span className="text-slate-300">|</span>
                   <span className="text-red-500">{occ} used</span>
