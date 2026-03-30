@@ -53,6 +53,14 @@ env:
   - name: LAKEBASE_USE_OAUTH
     value: "true"
 
+  # LLM endpoint for unified assistant (function-calling router)
+  - name: ASSISTANT_MODEL_ENDPOINT
+    value: "databricks-claude-sonnet-4-5"
+
+  # App URL for MCP connection auto-registration
+  - name: DATABRICKS_APP_URL
+    value: "https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.com"
+
   # Genie Space for Airport Operations Assistant
   - name: GENIE_SPACE_ID
     value: "01f12612fa6314ae943d0526f5ae3a00"

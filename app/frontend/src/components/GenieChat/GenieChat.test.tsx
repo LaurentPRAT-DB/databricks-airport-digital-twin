@@ -3,6 +3,29 @@ import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '../../test/test-utils'
 import GenieChat from './GenieChat'
 
+/** Helper: build a mock AssistantApiResponse */
+function mockAssistantResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    conversation_id: 'conv-1',
+    answer: 'Test answer',
+    sources: [],
+    sql: null,
+    columns: null,
+    data: null,
+    row_count: 0,
+    tool_calls: null,
+    error: null,
+    ...overrides,
+  }
+}
+
+function mockFetchOk(response: Record<string, unknown>) {
+  vi.spyOn(global, 'fetch').mockResolvedValue({
+    json: () => Promise.resolve(response),
+    ok: true,
+  } as Response)
+}
+
 describe('GenieChat', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -66,7 +89,7 @@ describe('GenieChat', () => {
       render(<GenieChat />)
 
       await user.click(screen.getByTestId('genie-fab'))
-      expect(screen.getByText(/ask me anything about airport operations/i)).toBeInTheDocument()
+      expect(screen.getByText(/ask about live operations or historical data/i)).toBeInTheDocument()
     })
   })
 
@@ -109,22 +132,14 @@ describe('GenieChat', () => {
 
   describe('Sending messages', () => {
     it('displays user message after send', async () => {
-      const mockResponse = {
-        conversation_id: 'conv-1',
-        message_id: 'msg-1',
-        status: 'COMPLETED',
+      mockFetchOk(mockAssistantResponse({
+        answer: 'There are 42 flights.',
         sql: 'SELECT COUNT(*) FROM flights',
         columns: ['count'],
         data: [[42]],
         row_count: 1,
-        text_response: 'There are 42 flights.',
-        error: null,
-      }
-
-      vi.spyOn(global, 'fetch').mockResolvedValue({
-        json: () => Promise.resolve(mockResponse),
-        ok: true,
-      } as Response)
+        sources: ['genie'],
+      }))
 
       const user = userEvent.setup()
       render(<GenieChat />)
@@ -137,22 +152,10 @@ describe('GenieChat', () => {
     })
 
     it('displays assistant response', async () => {
-      const mockResponse = {
-        conversation_id: 'conv-1',
-        message_id: 'msg-1',
-        status: 'COMPLETED',
-        sql: 'SELECT COUNT(*) FROM flights',
-        columns: ['count'],
-        data: [[42]],
-        row_count: 1,
-        text_response: 'There are 42 flights.',
-        error: null,
-      }
-
-      vi.spyOn(global, 'fetch').mockResolvedValue({
-        json: () => Promise.resolve(mockResponse),
-        ok: true,
-      } as Response)
+      mockFetchOk(mockAssistantResponse({
+        answer: 'There are 42 flights.',
+        sources: ['genie'],
+      }))
 
       const user = userEvent.setup()
       render(<GenieChat />)
@@ -167,29 +170,20 @@ describe('GenieChat', () => {
     })
 
     it('sends to followup endpoint on second message', async () => {
-      const genieCalls: string[] = []
+      const assistantCalls: string[] = []
       const originalFetch = global.fetch
       const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((input, init?) => {
         const url = typeof input === 'string' ? input : (input as Request).url
-        if (url.startsWith('/api/genie/')) {
-          genieCalls.push(url)
-          const responseNum = genieCalls.length
+        if (url.startsWith('/api/assistant/')) {
+          assistantCalls.push(url)
+          const responseNum = assistantCalls.length
           return Promise.resolve({
-            json: () => Promise.resolve({
-              conversation_id: 'conv-1',
-              message_id: `msg-${responseNum}`,
-              status: 'COMPLETED',
-              sql: null,
-              columns: null,
-              data: null,
-              row_count: 0,
-              text_response: `Answer ${responseNum}`,
-              error: null,
-            }),
+            json: () => Promise.resolve(mockAssistantResponse({
+              answer: `Answer ${responseNum}`,
+            })),
             ok: true,
           } as Response)
         }
-        // Let other fetches (providers, etc.) pass through or return empty
         return originalFetch(input, init)
       })
 
@@ -206,7 +200,7 @@ describe('GenieChat', () => {
         expect(screen.getByText('Answer 1')).toBeInTheDocument()
       })
 
-      expect(genieCalls[0]).toBe('/api/genie/ask')
+      expect(assistantCalls[0]).toBe('/api/assistant/ask')
 
       // Second message — should use followup since conversation_id is set
       await user.type(screen.getByTestId('genie-input'), 'Follow up')
@@ -216,8 +210,8 @@ describe('GenieChat', () => {
         expect(screen.getByText('Answer 2')).toBeInTheDocument()
       })
 
-      expect(genieCalls).toHaveLength(2)
-      expect(genieCalls[1]).toBe('/api/genie/followup')
+      expect(assistantCalls).toHaveLength(2)
+      expect(assistantCalls[1]).toBe('/api/assistant/followup')
 
       fetchSpy.mockRestore()
     })
@@ -228,7 +222,7 @@ describe('GenieChat', () => {
       const originalFetch = global.fetch
       vi.spyOn(global, 'fetch').mockImplementation((input, init?) => {
         const url = typeof input === 'string' ? input : (input as Request).url
-        if (url.startsWith('/api/genie/')) {
+        if (url.startsWith('/api/assistant/')) {
           return Promise.reject(new Error('Network error'))
         }
         return originalFetch(input, init)
@@ -249,20 +243,7 @@ describe('GenieChat', () => {
 
   describe('Sample questions', () => {
     it('sends message when sample question is clicked', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue({
-        json: () => Promise.resolve({
-          conversation_id: 'conv-1',
-          message_id: 'msg-1',
-          status: 'COMPLETED',
-          sql: null,
-          columns: null,
-          data: null,
-          row_count: 0,
-          text_response: 'Answer',
-          error: null,
-        }),
-        ok: true,
-      } as Response)
+      mockFetchOk(mockAssistantResponse({ answer: 'Weather is clear.' }))
 
       const user = userEvent.setup()
       render(<GenieChat />)
@@ -271,8 +252,8 @@ describe('GenieChat', () => {
       const questions = screen.getAllByTestId('sample-question')
       await user.click(questions[0])
 
-      // User message should appear
-      expect(screen.getByText(/how many flights are approaching/i)).toBeInTheDocument()
+      // First sample question is "What's the current weather at the airport?"
+      expect(screen.getByText(/current weather/i)).toBeInTheDocument()
     })
   })
 
@@ -286,22 +267,16 @@ describe('GenieChat', () => {
     })
   })
 
-  describe('Response hardening', () => {
-    it('shows result count when COMPLETED with data but no text_response', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue({
-        json: () => Promise.resolve({
-          conversation_id: 'conv-1',
-          message_id: 'msg-1',
-          status: 'COMPLETED',
-          sql: 'SELECT * FROM flights',
-          columns: ['flight', 'gate'],
-          data: [['UAL100', 'A1'], ['DAL200', 'B2'], ['AAL300', 'C3']],
-          row_count: 3,
-          text_response: null,
-          error: null,
-        }),
-        ok: true,
-      } as Response)
+  describe('Response display', () => {
+    it('shows SQL and data table when provided', async () => {
+      mockFetchOk(mockAssistantResponse({
+        answer: 'Found 3 flights:',
+        sql: 'SELECT * FROM flights',
+        columns: ['flight', 'gate'],
+        data: [['UAL100', 'A1'], ['DAL200', 'B2'], ['AAL300', 'C3']],
+        row_count: 3,
+        sources: ['genie'],
+      }))
 
       const user = userEvent.setup()
       render(<GenieChat />)
@@ -310,52 +285,15 @@ describe('GenieChat', () => {
       await user.click(screen.getByTestId('genie-send'))
 
       await waitFor(() => {
-        expect(screen.getByText('Found 3 results:')).toBeInTheDocument()
+        expect(screen.getByText('Found 3 flights:')).toBeInTheDocument()
       })
     })
 
-    it('shows no-results message when COMPLETED with SQL but 0 rows', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue({
-        json: () => Promise.resolve({
-          conversation_id: 'conv-1',
-          message_id: 'msg-1',
-          status: 'COMPLETED',
-          sql: 'SELECT * FROM flights WHERE 1=0',
-          columns: null,
-          data: null,
-          row_count: 0,
-          text_response: null,
-          error: null,
-        }),
-        ok: true,
-      } as Response)
-
-      const user = userEvent.setup()
-      render(<GenieChat />)
-      await user.click(screen.getByTestId('genie-fab'))
-      await user.type(screen.getByTestId('genie-input'), 'test')
-      await user.click(screen.getByTestId('genie-send'))
-
-      await waitFor(() => {
-        expect(screen.getByText(/returned no results/i)).toBeInTheDocument()
-      })
-    })
-
-    it('shows error message when FAILED with error field', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue({
-        json: () => Promise.resolve({
-          conversation_id: 'conv-1',
-          message_id: 'msg-1',
-          status: 'FAILED',
-          sql: null,
-          columns: null,
-          data: null,
-          row_count: 0,
-          text_response: null,
-          error: 'Column not found: foobar',
-        }),
-        ok: true,
-      } as Response)
+    it('shows error content when error field is set', async () => {
+      mockFetchOk(mockAssistantResponse({
+        answer: 'Column not found: foobar',
+        error: 'Column not found: foobar',
+      }))
 
       const user = userEvent.setup()
       render(<GenieChat />)
@@ -365,60 +303,6 @@ describe('GenieChat', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Column not found: foobar')).toBeInTheDocument()
-      })
-    })
-
-    it('shows fallback when FAILED with no error and no text', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue({
-        json: () => Promise.resolve({
-          conversation_id: 'conv-1',
-          message_id: 'msg-1',
-          status: 'FAILED',
-          sql: null,
-          columns: null,
-          data: null,
-          row_count: 0,
-          text_response: null,
-          error: null,
-        }),
-        ok: true,
-      } as Response)
-
-      const user = userEvent.setup()
-      render(<GenieChat />)
-      await user.click(screen.getByTestId('genie-fab'))
-      await user.type(screen.getByTestId('genie-input'), 'test')
-      await user.click(screen.getByTestId('genie-send'))
-
-      await waitFor(() => {
-        expect(screen.getByText(/couldn't answer that question/i)).toBeInTheDocument()
-      })
-    })
-
-    it('shows timeout message for TIMEOUT status', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue({
-        json: () => Promise.resolve({
-          conversation_id: 'conv-1',
-          message_id: 'msg-1',
-          status: 'TIMEOUT',
-          sql: null,
-          columns: null,
-          data: null,
-          row_count: 0,
-          text_response: null,
-          error: null,
-        }),
-        ok: true,
-      } as Response)
-
-      const user = userEvent.setup()
-      render(<GenieChat />)
-      await user.click(screen.getByTestId('genie-fab'))
-      await user.type(screen.getByTestId('genie-input'), 'test')
-      await user.click(screen.getByTestId('genie-send'))
-
-      await waitFor(() => {
-        expect(screen.getByText(/took too long/i)).toBeInTheDocument()
       })
     })
 
@@ -457,6 +341,40 @@ describe('GenieChat', () => {
         expect(screen.getByText(/not available/i)).toBeInTheDocument()
       })
     })
+
+    it('shows source badge for live data', async () => {
+      mockFetchOk(mockAssistantResponse({
+        answer: 'Clear skies, 18C.',
+        sources: ['mcp:get_weather'],
+      }))
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'weather')
+      await user.click(screen.getByTestId('genie-send'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Live Data')).toBeInTheDocument()
+      })
+    })
+
+    it('shows source badge for historical SQL', async () => {
+      mockFetchOk(mockAssistantResponse({
+        answer: 'Average delay was 12 minutes.',
+        sources: ['genie'],
+      }))
+
+      const user = userEvent.setup()
+      render(<GenieChat />)
+      await user.click(screen.getByTestId('genie-fab'))
+      await user.type(screen.getByTestId('genie-input'), 'average delay')
+      await user.click(screen.getByTestId('genie-send'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Historical SQL')).toBeInTheDocument()
+      })
+    })
   })
 
   describe('Retry', () => {
@@ -465,23 +383,15 @@ describe('GenieChat', () => {
       const originalFetch = global.fetch
       const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((input, init?) => {
         const url = typeof input === 'string' ? input : (input as Request).url
-        if (url.startsWith('/api/genie/')) {
+        if (url.startsWith('/api/assistant/')) {
           callCount++
           if (callCount === 1) {
             return Promise.reject(new Error('Network error'))
           }
           return Promise.resolve({
-            json: () => Promise.resolve({
-              conversation_id: 'conv-1',
-              message_id: 'msg-1',
-              status: 'COMPLETED',
-              sql: null,
-              columns: null,
-              data: null,
-              row_count: 0,
-              text_response: 'Success on retry!',
-              error: null,
-            }),
+            json: () => Promise.resolve(mockAssistantResponse({
+              answer: 'Success on retry!',
+            })),
             ok: true,
           } as Response)
         }
@@ -525,20 +435,7 @@ describe('GenieChat', () => {
 
   describe('Timestamps', () => {
     it('shows relative timestamps on messages', async () => {
-      vi.spyOn(global, 'fetch').mockResolvedValue({
-        json: () => Promise.resolve({
-          conversation_id: 'conv-1',
-          message_id: 'msg-1',
-          status: 'COMPLETED',
-          sql: null,
-          columns: null,
-          data: null,
-          row_count: 0,
-          text_response: 'Answer',
-          error: null,
-        }),
-        ok: true,
-      } as Response)
+      mockFetchOk(mockAssistantResponse({ answer: 'Answer' }))
 
       const user = userEvent.setup()
       render(<GenieChat />)

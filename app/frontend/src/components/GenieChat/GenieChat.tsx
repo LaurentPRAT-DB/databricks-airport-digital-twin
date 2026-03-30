@@ -10,43 +10,31 @@ interface GenieMessage {
   rowCount?: number;
   status?: string;
   error?: string;
+  sources?: string[];
   timestamp: number;
 }
 
-interface GenieApiResponse {
+interface AssistantApiResponse {
   conversation_id: string | null;
-  message_id: string | null;
-  status: string;
+  answer: string;
+  sources: string[];
   sql: string | null;
   columns: string[] | null;
   data: (string | number | null)[][] | null;
   row_count: number;
-  text_response: string | null;
+  tool_calls: { name: string; arguments: Record<string, unknown> }[] | null;
   error: string | null;
 }
 
-/** Derive user-friendly content from a Genie API response. */
-function getAssistantContent(data: GenieApiResponse): string {
-  // 1. If Genie provided text, use it
-  if (data.text_response) return data.text_response;
-
-  // 2. Status-specific fallbacks
-  switch (data.status) {
-    case 'COMPLETED':
-      if (data.data && data.data.length > 0)
-        return `Found ${data.row_count} result${data.row_count !== 1 ? 's' : ''}:`;
-      if (data.sql)
-        return 'The query ran successfully but returned no results. Try broadening your question.';
-      return 'Query completed.';
-    case 'FAILED':
-      return data.error || "I couldn't answer that question. Try rephrasing or ask something else.";
-    case 'TIMEOUT':
-      return 'The query took too long to complete. Try a simpler question or try again later.';
-    case 'CANCELLED':
-      return 'The query was cancelled.';
-    default:
-      return data.error || 'Something unexpected happened. Please try again.';
-  }
+/** Derive source label from assistant response sources. */
+function getSourceLabel(sources: string[]): string | null {
+  if (!sources || sources.length === 0) return null;
+  const hasGenie = sources.includes('genie');
+  const hasMcp = sources.some(s => s.startsWith('mcp:'));
+  if (hasGenie && hasMcp) return 'Historical + Live';
+  if (hasGenie) return 'Historical SQL';
+  if (hasMcp) return 'Live Data';
+  return null;
 }
 
 /** Derive user-friendly content from an HTTP error response. */
@@ -68,10 +56,10 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 const SAMPLE_QUESTIONS = [
-  'How many flights are approaching KJFK right now?',
-  'Which gates are most used in the last 6 hours?',
-  'Show me all flights at KSFO by phase',
-  'Average turnaround time by aircraft type today',
+  "What's the current weather at the airport?",
+  'How many flights are active right now?',
+  'Is there any congestion or bottlenecks?',
+  'Show me scheduled arrivals for the next 2 hours',
 ];
 
 const WORKSPACE_URL = 'https://fevm-serverless-stable-3n0ihb.cloud.databricks.com';
@@ -146,7 +134,7 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
     setIsLoading(true);
 
     try {
-      const endpoint = conversationId ? '/api/genie/followup' : '/api/genie/ask';
+      const endpoint = conversationId ? '/api/assistant/followup' : '/api/assistant/ask';
       const body = conversationId
         ? { conversation_id: conversationId, question: question.trim() }
         : { question: question.trim() };
@@ -158,7 +146,6 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
       });
 
       if (!res.ok) {
-        // Try to parse error detail from backend
         const errorData = await res.json().catch(() => null);
         const detail = errorData?.detail || null;
         const content = getHttpErrorContent(res.status, detail);
@@ -173,7 +160,7 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
         return;
       }
 
-      const data: GenieApiResponse = await res.json();
+      const data: AssistantApiResponse = await res.json();
 
       if (data.conversation_id && !conversationId) {
         setConversationId(data.conversation_id);
@@ -182,13 +169,14 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
       const assistantMsg: GenieMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: getAssistantContent(data),
+        content: data.answer || data.error || 'Something unexpected happened. Please try again.',
         sql: data.sql || undefined,
         columns: data.columns || undefined,
         data: data.data || undefined,
         rowCount: data.row_count,
-        status: data.status,
+        status: data.error ? 'FAILED' : 'COMPLETED',
         error: data.error || undefined,
+        sources: data.sources,
         timestamp: Date.now(),
       };
       setMessages(prev => [...prev, assistantMsg]);
@@ -256,7 +244,7 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </span>
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Airport Ops Assistant</h3>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Airport Operations Assistant</h3>
             </div>
             <div className="flex items-center gap-1">
               {messages.length > 0 && (
@@ -300,7 +288,7 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
               <div className="text-center py-8">
                 <div className="text-3xl mb-3">&#x2708;&#xFE0F;</div>
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                  Ask me anything about airport operations
+                  Ask about live operations or historical data
                 </p>
                 <div className="space-y-2">
                   {SAMPLE_QUESTIONS.map((q) => (
@@ -355,9 +343,20 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
                       </button>
                     )}
                   </div>
-                  {/* Timestamp */}
-                  <div className={`text-[10px] mt-0.5 text-slate-400 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
-                    {formatRelativeTime(msg.timestamp)}
+                  {/* Timestamp + source badge */}
+                  <div className={`flex items-center gap-1.5 mt-0.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {msg.sources && getSourceLabel(msg.sources) && (
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                        msg.sources.includes('genie')
+                          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                          : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                      }`}>
+                        {getSourceLabel(msg.sources)}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-slate-400">
+                      {formatRelativeTime(msg.timestamp)}
+                    </span>
                   </div>
                 </div>
               </div>

@@ -20,6 +20,8 @@ from app.backend.api.data_ops import router as data_ops_router
 from app.backend.api.simulation import simulation_router
 from app.backend.api.genie import genie_router
 from app.backend.api.inpainting import inpainting_router
+from app.backend.api.mcp import mcp_router
+from app.backend.api.assistant import assistant_router
 from app.backend.demo_config import (
     DEMO_MODE, DEFAULT_AIRPORT_ICAO, DEFAULT_AIRPORT_IATA, DEFAULT_FLIGHT_COUNT,
 )
@@ -319,6 +321,15 @@ async def _background_init(app: FastAPI):
         # block startup. Airports already in Lakebase are skipped (Tier 1 hit).
         asyncio.create_task(_prewarm_airports_background())
 
+        # ── Phase 6: Ensure MCP UC HTTP Connection ──────────────────────
+        try:
+            from app.backend.services.mcp_connection_service import ensure_mcp_connection
+            conn = await asyncio.to_thread(ensure_mcp_connection)
+            if conn:
+                app.state.init_timings["phase6_mcp_connection"] = conn
+        except Exception as e:
+            logger.warning(f"INIT | MCP connection setup skipped: {e}")
+
     except Exception as e:
         total_ms = (time.monotonic() - t_start) * 1000
         logger.error(f"INIT | Initialization FAILED after {total_ms:.0f}ms: {e}", exc_info=DEBUG_MODE)
@@ -387,6 +398,8 @@ app.include_router(data_ops_router)
 app.include_router(simulation_router)
 app.include_router(genie_router)
 app.include_router(inpainting_router)
+app.include_router(mcp_router)
+app.include_router(assistant_router)
 
 
 @app.get("/health")
