@@ -3628,35 +3628,29 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             runway_far_end = (RUNWAY_28L_WEST[1], RUNWAY_28L_WEST[0])
             rwy_hdg = 284.0
 
+        # Aircraft always moves along the runway toward the far end during
+        # landing — it crossed the threshold during approach and now flies over /
+        # rolls along the runway centerline.
+        speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+        new_pos = _move_toward((state.latitude, state.longitude), runway_far_end, speed_deg)
+        state.latitude, state.longitude = new_pos
+        state.heading = rwy_hdg
+
         if state.altitude > 0:
-            # Airborne: descend to touchdown — maintain approach speed (Vref)
-            # Real aircraft hold Vref until flare; no deceleration here.
-            speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
-            new_pos = _move_toward((state.latitude, state.longitude), runway_touchdown, speed_deg)
-            state.latitude, state.longitude = new_pos
-            # Realistic 3-degree glideslope descent (~750 fpm at Vref)
-            # instead of flat 500 ft/s which teleports aircraft to ground
+            # Airborne: descend to touchdown on the glideslope (~750 fpm)
             descent_fpm = 750
             state.altitude = max(0, state.altitude - (descent_fpm / 60.0) * dt)
-            state.heading = _calculate_heading(new_pos, runway_touchdown)
             if state.altitude <= 0:
                 state.altitude = 0
                 state.on_ground = True
                 state.vertical_rate = 0
         else:
-            # On-ground rollout: decelerate from touchdown speed (~135kts) to taxi speed
-            # Aircraft rolls ALONG the runway (toward far end), not back toward threshold.
-            # Typical rollout: 1500-2500m from touchdown to taxi turnoff.
-            # Deceleration ~2 kts/s (reverse thrust + brakes + spoilers).
+            # On-ground rollout: decelerate from touchdown speed to taxi speed
+            # Typical rollout: 1500-2500m, decel ~2 kts/s (reverse thrust + brakes)
             state.altitude = 0
             state.on_ground = True
             state.vertical_rate = 0
             state.velocity = max(25, state.velocity - 2.0 * dt)
-            # Roll along runway centerline toward far end
-            speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
-            new_pos = _move_toward((state.latitude, state.longitude), runway_far_end, speed_deg)
-            state.latitude, state.longitude = new_pos
-            state.heading = rwy_hdg  # Maintain runway heading during rollout
 
         if state.on_ground and state.velocity <= 30:
             # Rollout complete — exit runway to taxiway
