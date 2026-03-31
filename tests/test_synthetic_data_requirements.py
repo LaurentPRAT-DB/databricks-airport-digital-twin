@@ -1011,10 +1011,10 @@ class TestGSERequirements:
 class TestTurnaroundTiming:
     """Validate turnaround durations match doc tables."""
 
-    def test_narrow_body_45_minutes(self):
-        """Doc: Narrow body total = 45 minutes."""
+    def test_narrow_body_55_minutes(self):
+        """Narrow body critical-path total = 55 minutes."""
         timing = get_turnaround_timing("A320")
-        assert timing["total_minutes"] == 45
+        assert timing["total_minutes"] == 55
 
     def test_wide_body_90_minutes(self):
         """Doc: Wide body total = 90 minutes."""
@@ -1022,20 +1022,20 @@ class TestTurnaroundTiming:
         assert timing["total_minutes"] == 90
 
     def test_narrow_body_phase_durations(self):
-        """Validate individual phase durations from doc table."""
+        """Validate individual phase durations (critical-path model)."""
         phases = TURNAROUND_TIMING["narrow_body"]["phases"]
         assert phases["arrival_taxi"] == 5
         assert phases["chocks_on"] == 2
         assert phases["deboarding"] == 8
-        assert phases["unloading"] == 10
-        assert phases["cleaning"] == 12
-        assert phases["catering"] == 15
-        assert phases["refueling"] == 18
-        assert phases["loading"] == 12
+        assert phases["unloading"] == 8        # parallel with deboarding
+        assert phases["cleaning"] == 18        # max(cleaning, catering, refueling)
+        assert phases["catering"] == 18        # parallel with cleaning/refueling
+        assert phases["refueling"] == 18       # parallel with cleaning/catering
+        assert phases["loading"] == 15         # parallel with boarding
         assert phases["boarding"] == 15
         assert phases["chocks_off"] == 2
         assert phases["pushback"] == 5
-        assert phases["departure_taxi"] == 8
+        assert phases["departure_taxi"] == 5
 
     def test_aircraft_category_classification(self):
         assert get_aircraft_category("A320") == "narrow_body"
@@ -1102,18 +1102,18 @@ class TestTurnaroundStatus:
         assert 15 <= status["total_progress_pct"] <= 70
 
     def test_complete_turnaround(self):
-        # Phase durations sum to 112 min (serial); total_minutes=45 (parallel).
-        # At 120 min elapsed, all serial phases are complete.
-        arrival = datetime.now(timezone.utc) - timedelta(minutes=120)
+        # Critical path sums to 55 min for narrow body.
+        # At 60 min elapsed, all phases are complete.
+        arrival = datetime.now(timezone.utc) - timedelta(minutes=60)
         status = calculate_turnaround_status(arrival, "A320")
         assert status["current_phase"] == "complete"
         assert status["total_progress_pct"] == 100
 
     def test_estimated_departure(self):
-        # Estimated departure = arrival + total_minutes (45 min for A320)
+        # Estimated departure = arrival + total_minutes (55 min for A320)
         arrival = datetime.now(timezone.utc)
         status = calculate_turnaround_status(arrival, "A320")
-        expected = arrival + timedelta(minutes=45)
+        expected = arrival + timedelta(minutes=55)
         diff = abs((status["estimated_departure"] - expected).total_seconds())
         assert diff < 1
 

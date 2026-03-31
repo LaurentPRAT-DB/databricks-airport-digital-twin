@@ -108,38 +108,51 @@ GSE_REQUIREMENTS = {
 
 # Turnaround timing by aircraft category (in minutes)
 TURNAROUND_TIMING = {
+    # Phase durations model the CRITICAL PATH (sequential bottleneck).
+    # Parallel ops (cleaning/catering/refueling, unloading/loading) are
+    # collapsed: the longest of each parallel group defines the phase
+    # duration. total_minutes = sum of all phase durations below.
+    #
+    # Narrow-body (A320/B737): ~55 min gate-to-gate
+    #   arrival_taxi(5) → chocks_on(2) → deboarding(8) →
+    #   cleaning‖catering‖refueling(18) → boarding(15) →
+    #   chocks_off(2) → pushback(5)
     "narrow_body": {
-        "total_minutes": 45,
+        "total_minutes": 55,
         "phases": {
             "arrival_taxi": 5,
             "chocks_on": 2,
             "deboarding": 8,
-            "unloading": 10,
-            "cleaning": 12,
-            "catering": 15,
-            "refueling": 18,
-            "loading": 12,
+            "unloading": 8,       # parallel with deboarding
+            "cleaning": 18,       # max(cleaning 12, catering 15, refueling 18)
+            "catering": 18,       # parallel with cleaning/refueling
+            "refueling": 18,      # parallel with cleaning/catering
+            "loading": 15,        # parallel with boarding
             "boarding": 15,
             "chocks_off": 2,
             "pushback": 5,
-            "departure_taxi": 8,
+            "departure_taxi": 5,
         }
     },
+    # Wide-body (A330/B777/A380): ~90 min gate-to-gate
+    #   arrival_taxi(8) → chocks_on(2) → deboarding(20) →
+    #   cleaning‖catering‖refueling(35) → boarding(18) →
+    #   chocks_off(2) → pushback(5)
     "wide_body": {
         "total_minutes": 90,
         "phases": {
             "arrival_taxi": 8,
             "chocks_on": 2,
             "deboarding": 20,
-            "unloading": 25,
-            "cleaning": 20,
-            "catering": 30,
-            "refueling": 35,
-            "loading": 25,
-            "boarding": 30,
+            "unloading": 20,      # parallel with deboarding
+            "cleaning": 35,       # max(cleaning 20, catering 30, refueling 35)
+            "catering": 35,       # parallel with cleaning/refueling
+            "refueling": 35,      # parallel with cleaning/catering
+            "loading": 18,        # parallel with boarding
+            "boarding": 18,
             "chocks_off": 2,
-            "pushback": 8,
-            "departure_taxi": 12,
+            "pushback": 5,
+            "departure_taxi": 8,
         }
     },
 }
@@ -209,6 +222,10 @@ def calculate_turnaround_status(
     """
     Calculate current turnaround status based on arrival time.
 
+    Uses the critical-path phase order (parallel ops collapsed) so that
+    elapsed time maps correctly to total_minutes. The 7 sequential phases
+    match the frontend's PHASE_ORDER for the timeline dots.
+
     Args:
         arrival_time: When aircraft arrived at gate
         aircraft_type: Aircraft type code
@@ -226,19 +243,23 @@ def calculate_turnaround_status(
     # Calculate elapsed time since arrival
     elapsed_minutes = (current_time - arrival_time).total_seconds() / 60
 
+    # Critical-path phase order — parallel ops collapsed into their
+    # bottleneck.  cleaning = max(cleaning, catering, refueling);
+    # boarding includes parallel loading.  Sum must equal total_minutes.
+    critical_path = [
+        "arrival_taxi", "chocks_on", "deboarding",
+        "cleaning",   # represents cleaning ‖ catering ‖ refueling
+        "boarding",   # represents boarding ‖ loading
+        "chocks_off", "pushback",
+    ]
+
     # Find current phase
     cumulative = 0
     current_phase = "complete"
     phase_progress = 100
     total_progress = 100
 
-    phase_order = [
-        "arrival_taxi", "chocks_on", "deboarding", "unloading",
-        "cleaning", "catering", "refueling", "loading",
-        "boarding", "chocks_off", "pushback", "departure_taxi"
-    ]
-
-    for phase in phase_order:
+    for phase in critical_path:
         phase_duration = phases.get(phase, 5)
         if elapsed_minutes < cumulative + phase_duration:
             current_phase = phase
