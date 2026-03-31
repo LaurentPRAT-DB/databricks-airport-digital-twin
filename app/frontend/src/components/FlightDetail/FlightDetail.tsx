@@ -269,45 +269,68 @@ export default function FlightDetail() {
       {needsGateAssignment && (
         <div className="mb-4">
           <div className="text-xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">
-            Gate Recommendations
+            {assigned_gate ? 'Gate Assignment' : 'Gate Recommendations'}
           </div>
-          {isGateLoading ? (
-            <div className="text-sm text-slate-400">Loading recommendations...</div>
-          ) : recommendations.length > 0 ? (
-            <div className="space-y-2">
-              {recommendations.map((rec, index) => (
-                <div
-                  key={rec.gate_id}
-                  className={`p-2 rounded border ${
-                    index === 0
-                      ? 'border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/30'
-                      : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
-                      {rec.gate_id}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      Score: {(rec.score * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-500 mb-1">
-                    Taxi time: {rec.taxi_time} min
-                  </div>
-                  {rec.reasons.length > 0 && (
-                    <ul className="text-xs text-slate-500 list-disc list-inside">
-                      {rec.reasons.slice(0, 2).map((reason, i) => (
-                        <li key={i}>{reason}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
+
+          {/* Show assigned gate first when it exists */}
+          {assigned_gate && (
+            <div className="p-2 rounded border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/30 mb-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                  {assigned_gate}
+                </span>
+                <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                  Assigned
+                </span>
+              </div>
             </div>
-          ) : (
-            <div className="text-sm text-slate-400">No recommendations available</div>
           )}
+
+          {/* Alternative recommendations */}
+          {isGateLoading ? (
+            <div className="text-sm text-slate-400">Loading alternatives...</div>
+          ) : recommendations.length > 0 ? (
+            <>
+              {assigned_gate && (
+                <div className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-1.5 mt-2">
+                  Alternatives
+                </div>
+              )}
+              <div className="space-y-2">
+                {recommendations.filter(r => r.gate_id !== assigned_gate).map((rec, index) => (
+                  <div
+                    key={rec.gate_id}
+                    className={`p-2 rounded border ${
+                      !assigned_gate && index === 0
+                        ? 'border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/30'
+                        : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                        {rec.gate_id}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        Score: {(rec.score * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 mb-1">
+                      Taxi time: {rec.taxi_time} min
+                    </div>
+                    {rec.reasons.length > 0 && (
+                      <ul className="text-xs text-slate-500 list-disc list-inside">
+                        {rec.reasons.slice(0, 2).map((reason, i) => (
+                          <li key={i}>{reason}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : !assigned_gate ? (
+            <div className="text-sm text-slate-400">No recommendations available</div>
+          ) : null}
         </div>
       )}
 
@@ -333,18 +356,6 @@ export default function FlightDetail() {
         </div>
       )}
 
-      {/* Metadata Section */}
-      <div>
-        <div className="text-xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">
-          Metadata
-        </div>
-        <DetailRow label="Data Source" value={data_source} />
-        <DetailRow label="Last Seen" value={
-          typeof last_seen === 'number'
-            ? new Date(last_seen * 1000).toLocaleTimeString()
-            : new Date(last_seen).toLocaleTimeString()
-        } />
-      </div>
     </div>
   );
 }

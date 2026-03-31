@@ -121,18 +121,15 @@ describe('FlightDetail', () => {
       expect(screen.getByText(/vertical rate/i)).toBeInTheDocument()
     })
 
-    it('shows metadata section', async () => {
+    it('shows flight info sections', async () => {
       renderWithFlightSelection(0)
 
       await waitFor(
         () => {
-          expect(screen.getByText(/metadata/i)).toBeInTheDocument()
+          expect(screen.getByText(/flight details/i)).toBeInTheDocument()
         },
         { timeout: 5000 }
       )
-
-      expect(screen.getByText(/data source/i)).toBeInTheDocument()
-      expect(screen.getByText(/last seen/i)).toBeInTheDocument()
     })
 
     it('shows close button', async () => {
@@ -197,19 +194,23 @@ describe('FlightDetail', () => {
   })
 
   describe('Gate Recommendations', () => {
-    it('shows gate recommendations for arriving flights', async () => {
-      // Flight at index 0 is approaching, so should show gate recommendations
+    it('shows gate assignment for arriving flights with assigned gate', async () => {
+      // Flight at index 0 is approaching with assigned_gate A3
       renderWithFlightSelection(0)
 
       await waitFor(
         () => {
-          expect(screen.getByText(/gate recommendations/i)).toBeInTheDocument()
+          expect(screen.getByText(/gate assignment/i)).toBeInTheDocument()
         },
         { timeout: 5000 }
       )
+
+      // Should show the assigned gate
+      expect(screen.getByText('A3')).toBeInTheDocument()
+      expect(screen.getByText('Assigned')).toBeInTheDocument()
     })
 
-    it('does not show gate recommendations for cruising flights', async () => {
+    it('does not show gate section for cruising flights', async () => {
       // Flight at index 1 is enroute
       renderWithFlightSelection(1)
 
@@ -220,7 +221,8 @@ describe('FlightDetail', () => {
         { timeout: 5000 }
       )
 
-      // Gate recommendations should not appear for enroute flight
+      // Gate section should not appear for enroute flight
+      expect(screen.queryByText(/gate assignment/i)).not.toBeInTheDocument()
       expect(screen.queryByText(/gate recommendations/i)).not.toBeInTheDocument()
     })
   })
