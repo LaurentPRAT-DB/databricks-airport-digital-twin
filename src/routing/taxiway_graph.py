@@ -139,7 +139,8 @@ class TaxiwayGraph:
                     if dist < 300:
                         self._add_edge(apron_node_id, nearest)
 
-        # 4. Gate nodes → nearest taxiway node
+        # 4. Gate nodes → multiple nearby taxiway nodes
+        # Connect to several neighbors so Dijkstra can route around buildings.
         for gate in config.get("gates", []):
             geo = gate.get("geo", {})
             lat = geo.get("latitude")
@@ -147,11 +148,10 @@ class TaxiwayGraph:
             if lat is None or lon is None:
                 continue
             gate_id = self._get_or_create_node(float(lat), float(lon))
-            nearest = self._find_nearest_node(
-                float(lat), float(lon), exclude={gate_id}
-            )
-            if nearest is not None:
-                self._add_edge(gate_id, nearest)
+            for nid in self._find_nearest_nodes(
+                float(lat), float(lon), k=5, max_dist_m=500, exclude={gate_id}
+            ):
+                self._add_edge(gate_id, nid)
 
         # 5. Penalize edges that pass through terminal buildings
         building_polygons = self._extract_building_polygons(config)
@@ -319,7 +319,7 @@ class TaxiwayGraph:
     def _find_nearest_node(
         self, lat: float, lon: float, exclude: set[int] | None = None
     ) -> Optional[int]:
-        """Find nearest node, optionally excluding a set of node ids."""
+        """Find closest graph node, optionally excluding a set of ids."""
         exclude = exclude or set()
         best_id = None
         best_dist = float("inf")
@@ -331,3 +331,19 @@ class TaxiwayGraph:
                 best_dist = d
                 best_id = nid
         return best_id
+
+    def _find_nearest_nodes(
+        self, lat: float, lon: float, k: int = 5,
+        max_dist_m: float = 500, exclude: set[int] | None = None,
+    ) -> list[int]:
+        """Return up to *k* nearest nodes within *max_dist_m* meters."""
+        exclude = exclude or set()
+        candidates: list[tuple[float, int]] = []
+        for nid, (nlat, nlon) in self.nodes.items():
+            if nid in exclude:
+                continue
+            d = _haversine_m(lat, lon, nlat, nlon)
+            if d <= max_dist_m:
+                candidates.append((d, nid))
+        candidates.sort()
+        return [nid for _, nid in candidates[:k]]
