@@ -250,42 +250,35 @@ class TestDepartureUsesGraph:
 
 
 class TestPushbackHeading:
-    @patch("src.ingestion.fallback._get_taxi_waypoints_departure")
+    """Pushback heading = reverse of parked heading (nose away from terminal)."""
+
+    @patch("src.ingestion.fallback._get_parked_heading", return_value=0.0)
     @patch("src.ingestion.fallback.get_gates")
-    def test_pushback_direction_from_route(self, mock_get_gates, mock_get_dep_route):
-        """Pushback heading derived from first segment of departure route."""
-        # Gate at (37.616, -122.389), route goes south then east
+    def test_pushback_reverses_north_parked(self, mock_get_gates, mock_parked):
+        """Aircraft parked facing north → pushback heads south (~180°)."""
         mock_get_gates.return_value = {"G1": (37.616, -122.389)}
-        mock_get_dep_route.return_value = [
-            (-122.389, 37.616),   # At gate (lon, lat)
-            (-122.389, 37.614),   # South of gate
-            (-122.385, 37.614),   # Then east
-        ]
-
         heading = _get_pushback_heading("G1")
+        assert heading == 180.0
 
-        # First wp collocated with gate, so uses second wp → heading south (~180°)
-        assert 160 < heading < 200
-
-    @patch("src.ingestion.fallback._get_taxi_waypoints_departure")
+    @patch("src.ingestion.fallback._get_parked_heading", return_value=90.0)
     @patch("src.ingestion.fallback.get_gates")
-    def test_pushback_direction_east(self, mock_get_gates, mock_get_dep_route):
-        """Pushback toward first waypoint east of the gate."""
+    def test_pushback_reverses_east_parked(self, mock_get_gates, mock_parked):
+        """Aircraft parked facing east → pushback heads west (~270°)."""
         mock_get_gates.return_value = {"G1": (37.616, -122.389)}
-        mock_get_dep_route.return_value = [
-            (-122.385, 37.616),   # East of gate (lon, lat)
-            (-122.380, 37.616),   # Further east
-        ]
-
         heading = _get_pushback_heading("G1")
-        # Heading east is ~90°
-        assert 70 < heading < 110
+        assert heading == 270.0
 
-    @patch("src.ingestion.fallback._get_taxi_waypoints_departure")
-    def test_pushback_default_heading(self, mock_get_dep_route):
-        """Without route, heading defaults to 180° (south)."""
-        mock_get_dep_route.return_value = []
+    @patch("src.ingestion.fallback._get_parked_heading", return_value=220.0)
+    @patch("src.ingestion.fallback.get_gates")
+    def test_pushback_reverses_southwest_parked(self, mock_get_gates, mock_parked):
+        """Aircraft parked facing SW (220°) → pushback heads NE (40°)."""
+        mock_get_gates.return_value = {"G1": (37.616, -122.389)}
         heading = _get_pushback_heading("G1")
+        assert heading == 40.0
+
+    def test_pushback_default_heading_no_gate(self):
+        """Unknown gate falls back to 180° (south)."""
+        heading = _get_pushback_heading("UNKNOWN_GATE")
         assert heading == 180.0
 
 
