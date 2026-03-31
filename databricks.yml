@@ -24,6 +24,8 @@ sync:
     - .git/**
     - .planning/**
     - .databricks/**
+    - screenshots/**
+    - simulation_output*.json
     - simulation_output/*.json
     - simulation_output/calibrated/**
     - configs/calibration_batch/**
