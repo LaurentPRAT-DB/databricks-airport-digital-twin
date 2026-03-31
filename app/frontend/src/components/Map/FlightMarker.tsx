@@ -81,7 +81,9 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
     ? `<div class="gate-label">${gateName}</div>`
     : '';
 
-  const half = size / 2;
+  // Selected aircraft are rendered 1.6x larger for easy tracking at wide zoom
+  const displaySize = isSelected ? Math.round(size * 1.6) : size;
+  const half = displaySize / 2;
 
   // Use realistic white fuselage color for satellite view, with a thin dark outline for visibility.
   // Selected aircraft use green. Phase color is shown via the drop-shadow glow instead of fill.
@@ -89,11 +91,17 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
   const stroke = isSelected ? '#166534' : '#4a4a4a';
   const strokeWidth = isSelected ? 3 : 1.5;
   const shadow = isSelected
-    ? 'drop-shadow(0 0 4px rgba(34,197,94,0.8))'
+    ? 'drop-shadow(0 0 6px rgba(34,197,94,0.9))'
     : 'drop-shadow(1px 1px 2px rgba(0,0,0,0.6))';
 
+  // Pulsing radar ring around selected aircraft for visual tracking
+  const pulseRing = isSelected
+    ? `<div class="selected-pulse-ring" style="width:${displaySize + 20}px;height:${displaySize + 20}px;top:${-10}px;left:${-10}px;"></div>`
+    : '';
+
   const svgIcon = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}" style="transform: rotate(${rotation}deg); transform-origin: center; filter: ${shadow};" role="img" aria-label="Flight ${label}">
+    ${pulseRing}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${displaySize}" height="${displaySize}" style="transform: rotate(${rotation}deg); transform-origin: center; filter: ${shadow};" role="img" aria-label="Flight ${label}">
       <path d="${path}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
     </svg>
     ${gateLabel}
@@ -101,8 +109,8 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
 
   return L.divIcon({
     html: svgIcon,
-    className: 'flight-marker',
-    iconSize: [size, size],
+    className: `flight-marker${isSelected ? ' flight-marker-selected' : ''}`,
+    iconSize: [displaySize, displaySize],
     iconAnchor: [half, half],
     popupAnchor: [0, -half],
   });
@@ -142,6 +150,7 @@ export default function FlightMarker({ flight, zoom = 14 }: FlightMarkerProps) {
       ref={markerRef}
       position={[flight.latitude, flight.longitude]}
       icon={icon}
+      zIndexOffset={isSelected ? 1000 : 0}
       eventHandlers={{
         click: () => setSelectedFlight(flight),
       }}
