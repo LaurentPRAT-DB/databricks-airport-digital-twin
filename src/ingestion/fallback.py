@@ -3628,12 +3628,14 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             runway_far_end = (RUNWAY_28L_WEST[1], RUNWAY_28L_WEST[0])
             rwy_hdg = 284.0
 
-        # Aircraft always moves along the runway toward the far end during
-        # landing — it crossed the threshold during approach and now flies over /
-        # rolls along the runway centerline.
+        # Aircraft moves along the runway heading during landing.
+        # Use heading-based movement (not _move_toward) so the aircraft
+        # continues rolling past the runway far-end marker instead of
+        # clamping — real aircraft roll out well past the midpoint.
         speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
-        new_pos = _move_toward((state.latitude, state.longitude), runway_far_end, speed_deg)
-        state.latitude, state.longitude = new_pos
+        rwy_hdg_rad = math.radians(rwy_hdg)
+        state.latitude += speed_deg * math.cos(rwy_hdg_rad)
+        state.longitude += speed_deg * math.sin(rwy_hdg_rad) / math.cos(math.radians(state.latitude))
         state.heading = rwy_hdg
 
         if state.altitude > 0:

@@ -887,6 +887,10 @@ class SimulationEngine:
                         state.latitude, state.longitude, state.altitude,
                         state.aircraft_type, state.assigned_gate,
                     )
+                    # Flag that a landing-related transition happened so
+                    # _capture_positions records all flights this tick.
+                    if FlightPhase.LANDING in (old_phase, new_phase):
+                        self._landing_transition_this_tick = True
 
                     # Track flights that reach PARKED (for baggage + passenger flow)
                     if new_phase == FlightPhase.PARKED:
@@ -1073,17 +1077,25 @@ class SimulationEngine:
 
         elif state.phase == FlightPhase.LANDING:
             # Force taxi
-            from src.ingestion.fallback import _release_runway, _get_arrival_runway_name
+            from src.ingestion.fallback import (
+                _release_runway, _get_arrival_runway_name,
+                _get_taxi_waypoints_arrival, TAXI_WAYPOINTS_ARRIVAL,
+            )
             state.altitude = 0
             state.on_ground = True
             state.phase = FlightPhase.TAXI_TO_GATE
-            state.waypoint_index = 0
             _release_runway(icao24, _get_arrival_runway_name())
             if not state.assigned_gate:
                 gate = _find_available_gate()
                 if gate:
                     state.assigned_gate = gate
                     _occupy_gate(icao24, gate)
+            # Prepend current position to taxi route (match fallback.py logic)
+            taxi_wps = (_get_taxi_waypoints_arrival(state.assigned_gate)
+                        if state.assigned_gate else None) or TAXI_WAYPOINTS_ARRIVAL
+            current_pos = (state.longitude, state.latitude)
+            state.taxi_route = [current_pos] + list(taxi_wps)
+            state.waypoint_index = 1  # Already at wp 0 (current pos)
             self._phase_time[icao24] = ("taxi_to_gate", 0.0)
 
         # Record the phase transition for all force-advances (D06 fix)
@@ -1203,26 +1215,44 @@ class SimulationEngine:
         return None
 
     def _capture_positions(self) -> None:
-        """Record position snapshots at the configured interval."""
+        """Record position snapshots at the configured interval.
+
+        When any flight is in LANDING phase, ALL flights are captured
+        every tick so the short flyover/rollout is visible in replays
+        without creating frame-count jumps.
+        """
         elapsed = (self.sim_time - self._last_snapshot_time).total_seconds()
-        if elapsed >= self._snapshot_interval:
+        bulk_due = elapsed >= self._snapshot_interval
+
+        # High-freq capture when any flight is landing or just transitioned
+        has_landing = (
+            getattr(self, '_landing_transition_this_tick', False) or
+            any(s.phase == FlightPhase.LANDING for s in _flight_states.values())
+        )
+        self._landing_transition_this_tick = False
+
+        if not bulk_due and not has_landing:
+            return
+
+        for icao24, state in _flight_states.items():
+            # D04 fix: compute vertical_rate from altitude delta if state value is 0
+            vr = state.vertical_rate
+            if vr == 0 and icao24 in self._prev_altitudes:
+                prev_alt = self._prev_altitudes[icao24]
+                alt_diff = state.altitude - prev_alt
+                if abs(alt_diff) > 1.0 and elapsed > 0:
+                    vr = alt_diff / (elapsed / 60.0)  # ft/min
+            self._prev_altitudes[icao24] = state.altitude
+            self.recorder.record_position(
+                self.sim_time, icao24, state.callsign,
+                state.latitude, state.longitude, state.altitude,
+                state.velocity, state.heading, state.phase.value,
+                state.on_ground, state.aircraft_type, state.assigned_gate,
+                vr,
+            )
+
+        if bulk_due:
             self._last_snapshot_time = self.sim_time
-            for icao24, state in _flight_states.items():
-                # D04 fix: compute vertical_rate from altitude delta if state value is 0
-                vr = state.vertical_rate
-                if vr == 0 and icao24 in self._prev_altitudes:
-                    prev_alt = self._prev_altitudes[icao24]
-                    alt_diff = state.altitude - prev_alt
-                    if abs(alt_diff) > 1.0 and elapsed > 0:
-                        vr = alt_diff / (elapsed / 60.0)  # ft/min
-                self._prev_altitudes[icao24] = state.altitude
-                self.recorder.record_position(
-                    self.sim_time, icao24, state.callsign,
-                    state.latitude, state.longitude, state.altitude,
-                    state.velocity, state.heading, state.phase.value,
-                    state.on_ground, state.aircraft_type, state.assigned_gate,
-                    vr,
-                )
 
     def _capture_gate_events(self) -> None:
         """Drain gate events from the global buffer and record them."""
