@@ -212,25 +212,23 @@ class GSEService:
                 "flight_number": effective_callsign,
             }
         else:
-            # Fallback: fabricate turnaround data (flight not in sim)
-            if icao24 not in self._active_turnarounds:
-                arrival_offset = random.randint(10, 30)
-                arrival_time = datetime.now(timezone.utc) - timedelta(minutes=arrival_offset)
-                self._active_turnarounds[icao24] = {
-                    "arrival_time": arrival_time,
-                    "gate": gate or f"{random.choice(['A', 'B', 'C'])}{random.randint(1, 20)}",
-                    "aircraft_type": aircraft_type,
-                    "flight_number": flight_number,
-                }
-
-            effective_gate = self._active_turnarounds[icao24]["gate"]
-            effective_aircraft = self._active_turnarounds[icao24].get("aircraft_type", aircraft_type)
-            effective_callsign = self._active_turnarounds[icao24].get("flight_number", flight_number)
-            arrival_time = self._active_turnarounds[icao24]["arrival_time"]
-
-            status = calculate_turnaround_status(
-                arrival_time=arrival_time,
-                aircraft_type=effective_aircraft,
+            # Flight not found in simulation — return "arriving" status
+            # instead of fabricating a fake mid-turnaround state.
+            turnaround = TurnaroundStatus(
+                icao24=icao24,
+                flight_number=flight_number or "",
+                gate=gate or "",
+                arrival_time=datetime.now(timezone.utc),
+                current_phase=TurnaroundPhase.ARRIVAL_TAXI,
+                phase_progress_pct=0,
+                total_progress_pct=0,
+                estimated_departure=datetime.now(timezone.utc) + timedelta(hours=1),
+                assigned_gse=[],
+                aircraft_type=aircraft_type,
+            )
+            return TurnaroundResponse(
+                turnaround=turnaround,
+                message="Flight not found in simulation",
             )
 
         # Generate GSE positions
