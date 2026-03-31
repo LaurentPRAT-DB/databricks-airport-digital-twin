@@ -1090,10 +1090,10 @@ class SimulationEngine:
                 if gate:
                     state.assigned_gate = gate
                     _occupy_gate(icao24, gate)
-            # Prepend current position to taxi route (match fallback.py logic)
-            taxi_wps = (_get_taxi_waypoints_arrival(state.assigned_gate)
-                        if state.assigned_gate else None) or TAXI_WAYPOINTS_ARRIVAL
+            # Route from current rollout position (not threshold) to gate
             current_pos = (state.longitude, state.latitude)
+            taxi_wps = (_get_taxi_waypoints_arrival(state.assigned_gate, start_pos=current_pos)
+                        if state.assigned_gate else None) or TAXI_WAYPOINTS_ARRIVAL
             state.taxi_route = [current_pos] + list(taxi_wps)
             state.waypoint_index = 1  # Already at wp 0 (current pos)
             self._phase_time[icao24] = ("taxi_to_gate", 0.0)

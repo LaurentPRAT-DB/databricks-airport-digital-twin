@@ -1727,11 +1727,18 @@ def _get_apron_aware_fallback(gate_pos: tuple, center: tuple) -> List[tuple]:
         return []
 
 
-def _get_taxi_waypoints_arrival(gate_ref: str) -> List[tuple]:
-    """Get taxi route from landing runway exit to assigned gate.
+def _get_taxi_waypoints_arrival(gate_ref: str, start_pos: tuple = None) -> List[tuple]:
+    """Get taxi route from landing rollout position to assigned gate.
 
     Uses OSM taxiway graph when available, falls back to hardcoded SFO
     waypoints or apron-aware routing for non-SFO airports.
+
+    Args:
+        gate_ref: Gate identifier string.
+        start_pos: Aircraft's current (lon, lat) position at rollout end.
+            When provided, routes from this position (snapped to nearest
+            taxiway node) instead of the runway threshold — avoids
+            backtracking along the runway.
 
     Returns list of (lon, lat) tuples matching existing waypoint format.
     """
@@ -1740,11 +1747,16 @@ def _get_taxi_waypoints_arrival(gate_ref: str) -> List[tuple]:
         service = get_airport_config_service()
         graph = service.taxiway_graph
         if graph:
-            runway_exit = _get_runway_threshold()  # (lon, lat) or None
+            # Use aircraft's rollout position when available, else threshold
+            if start_pos:
+                route_start = (start_pos[1], start_pos[0])  # (lat, lon) for graph
+            else:
+                runway_exit = _get_runway_threshold()  # (lon, lat) or None
+                route_start = (runway_exit[1], runway_exit[0]) if runway_exit else None
             gate_pos = get_gates().get(gate_ref)
-            if runway_exit and gate_pos:
+            if route_start and gate_pos:
                 route = graph.find_route(
-                    (runway_exit[1], runway_exit[0]),  # (lat, lon) for graph
+                    route_start,
                     gate_pos,  # (lat, lon)
                 )
                 if route and len(route) >= 2:
@@ -3669,10 +3681,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # Reuse pre-assigned gate from approach if still held, else find new one
             _init_gate_states()
             pre_gate = state.assigned_gate
+            rollout_pos = (state.longitude, state.latitude)  # (lon, lat) at rollout end
             if pre_gate and pre_gate in _gate_states and _gate_states[pre_gate].occupied_by == state.icao24:
                 # Keep pre-assigned gate
                 emit_gate_event(state.icao24, state.callsign, pre_gate, "assign", state.aircraft_type)
-                state.taxi_route = _get_taxi_waypoints_arrival(pre_gate)
+                state.taxi_route = _get_taxi_waypoints_arrival(pre_gate, start_pos=rollout_pos)
             else:
                 available_gate = _find_available_gate()
                 if available_gate:
@@ -3682,7 +3695,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.assigned_gate = available_gate
                     _occupy_gate(state.icao24, available_gate)
                     emit_gate_event(state.icao24, state.callsign, available_gate, "assign", state.aircraft_type)
-                    state.taxi_route = _get_taxi_waypoints_arrival(available_gate)
+                    state.taxi_route = _get_taxi_waypoints_arrival(available_gate, start_pos=rollout_pos)
                 else:
                     # All gates occupied — defer assignment to taxi phase.
                     # The TAXI_TO_GATE handler retries gate assignment every
@@ -3723,7 +3736,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if available_gate:
                 state.assigned_gate = available_gate
                 _occupy_gate(state.icao24, available_gate)
-                state.taxi_route = _get_taxi_waypoints_arrival(available_gate)
+                state.taxi_route = _get_taxi_waypoints_arrival(
+                    available_gate, start_pos=(state.longitude, state.latitude))
                 state.gate_retry_at = 0.0
             else:
                 # No gates available — retry in 5 seconds (sim time)
