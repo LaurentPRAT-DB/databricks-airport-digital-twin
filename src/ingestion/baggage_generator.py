@@ -278,8 +278,8 @@ def get_flight_baggage_stats(
     # (B1 fix: baggage delivery only possible after aircraft arrives and unloads)
     _NON_BAGGAGE_PHASES = {
         "cruising", "descending", "climbing", "approaching", "enroute",
-        "landing", "taxi_to_gate", "takeoff", "departing", "pushback",
-        "taxi_to_runway",
+        "landing", "taxi_to_gate", "taxi_in", "takeoff", "departing",
+        "pushback", "taxi_to_runway", "taxi_out",
     }
     if flight_phase and flight_phase.lower() in _NON_BAGGAGE_PHASES:
         capacity = _get_aircraft_capacity(aircraft_type)

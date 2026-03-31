@@ -137,7 +137,7 @@ class GSEService:
                 flight_number=effective_callsign or "",
                 gate=effective_gate or "",
                 arrival_time=datetime.now(timezone.utc),
-                current_phase=TurnaroundPhase.ARRIVAL,
+                current_phase=TurnaroundPhase.ARRIVAL_TAXI,
                 phase_progress_pct=0,
                 total_progress_pct=0,
                 estimated_departure=datetime.now(timezone.utc) + timedelta(hours=1),
