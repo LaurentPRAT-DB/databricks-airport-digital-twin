@@ -98,7 +98,7 @@ export default function FlightDetail() {
     );
   }
 
-  const { flight_phase, callsign, icao24, latitude, longitude, altitude, velocity, heading, vertical_rate, last_seen, data_source, aircraft_type, origin_airport, destination_airport, assigned_gate } = selectedFlight;
+  const { flight_phase, callsign, icao24, latitude, longitude, altitude, velocity, heading, vertical_rate, aircraft_type, origin_airport, destination_airport, assigned_gate } = selectedFlight;
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4">
