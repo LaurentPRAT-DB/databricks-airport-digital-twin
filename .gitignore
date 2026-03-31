@@ -139,6 +139,11 @@ simulation_output/*.json
 simulation_output/calibrated/
 simulation_output/screenshots/
 simulation_output_*.json
+simulation_output.json
+sim_*.json
+
+# Debug/test scripts
+scripts/capture_landing_evidence.mjs
 
 # Video output
 video_output/
