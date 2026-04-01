@@ -842,10 +842,11 @@ def get_arrivals(
     airport: str = "SFO",
     hours_ahead: int = 2,
     hours_behind: int = 1,
+    sim_time: Optional[datetime] = None,
 ) -> list[dict]:
     """Get arrivals for the specified time window."""
     schedule = get_cached_schedule(airport=airport)
-    now = datetime.now(timezone.utc)
+    now = sim_time or datetime.now(timezone.utc)
     cutoff_future = now + timedelta(hours=hours_ahead)
     cutoff_past = now - timedelta(hours=hours_behind)
 
@@ -861,10 +862,11 @@ def get_departures(
     airport: str = "SFO",
     hours_ahead: int = 2,
     hours_behind: int = 1,
+    sim_time: Optional[datetime] = None,
 ) -> list[dict]:
     """Get departures for the specified time window."""
     schedule = get_cached_schedule(airport=airport)
-    now = datetime.now(timezone.utc)
+    now = sim_time or datetime.now(timezone.utc)
     cutoff_future = now + timedelta(hours=hours_ahead)
     cutoff_past = now - timedelta(hours=hours_behind)
 
@@ -1005,6 +1007,7 @@ def get_future_schedule(
     after: datetime | None = None,
     flight_type: str | None = None,
     limit: int = 100,
+    sim_time: Optional[datetime] = None,
 ) -> list[dict]:
     """Get scheduled flights after a cutoff time.
 
@@ -1013,12 +1016,13 @@ def get_future_schedule(
         after: Only return flights scheduled after this time (defaults to now)
         flight_type: Filter by "arrival" or "departure" (None for both)
         limit: Maximum number of flights to return
+        sim_time: Override for current time (simulation clock)
 
     Returns:
         List of future flight schedule dicts, sorted by scheduled_time
     """
     if after is None:
-        after = datetime.now(timezone.utc)
+        after = sim_time or datetime.now(timezone.utc)
 
     schedule = get_cached_schedule(airport=airport)
     future = []

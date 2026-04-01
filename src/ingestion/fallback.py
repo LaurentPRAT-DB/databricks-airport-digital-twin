@@ -537,16 +537,23 @@ _AIRLINE_NAMES = {
 }
 
 
-def get_flights_as_schedule() -> List[Dict[str, Any]]:
+def get_flights_as_schedule(
+    sim_time: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
     """Convert current synthetic flight states into FIDS schedule entries.
 
     This ensures the FIDS display shows the same flights that are visible
     on the map, rather than independently generated schedule data.
 
+    Args:
+        sim_time: Simulation clock time. If provided, all time calculations
+                  use this instead of wall clock. This keeps FIDS aligned
+                  with the simulation replay.
+
     Returns:
         List of schedule-format dicts compatible with ScheduleService.
     """
-    now = datetime.now(timezone.utc)
+    now = sim_time or datetime.now(timezone.utc)
     schedule = []
 
     for icao24, state in _flight_states.items():

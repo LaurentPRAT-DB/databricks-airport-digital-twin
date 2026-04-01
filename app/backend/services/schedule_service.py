@@ -81,6 +81,7 @@ class ScheduleService:
         hours_ahead: int = 2,
         hours_behind: int = 1,
         limit: int = 50,
+        sim_time: Optional[datetime] = None,
     ) -> ScheduleResponse:
         """
         Get arrival flights for the specified time window.
@@ -92,11 +93,12 @@ class ScheduleService:
             hours_ahead: Hours into future to include
             hours_behind: Hours into past to include
             limit: Maximum flights to return
+            sim_time: Override for current time (simulation clock)
 
         Returns:
             ScheduleResponse with arrival flights
         """
-        raw_arrivals = self._get_merged_schedule("arrival", hours_ahead, hours_behind, limit)
+        raw_arrivals = self._get_merged_schedule("arrival", hours_ahead, hours_behind, limit, sim_time=sim_time)
         flights = [_dict_to_scheduled_flight(f) for f in raw_arrivals[:limit]]
 
         logger.info(f"Schedule service returning {len(flights)} arrivals")
@@ -113,6 +115,7 @@ class ScheduleService:
         hours_ahead: int = 2,
         hours_behind: int = 1,
         limit: int = 50,
+        sim_time: Optional[datetime] = None,
     ) -> ScheduleResponse:
         """
         Get departure flights for the specified time window.
@@ -124,11 +127,12 @@ class ScheduleService:
             hours_ahead: Hours into future to include
             hours_behind: Hours into past to include
             limit: Maximum flights to return
+            sim_time: Override for current time (simulation clock)
 
         Returns:
             ScheduleResponse with departure flights
         """
-        raw_departures = self._get_merged_schedule("departure", hours_ahead, hours_behind, limit)
+        raw_departures = self._get_merged_schedule("departure", hours_ahead, hours_behind, limit, sim_time=sim_time)
         flights = [_dict_to_scheduled_flight(f) for f in raw_departures[:limit]]
 
         logger.info(f"Schedule service returning {len(flights)} departures")
@@ -146,6 +150,7 @@ class ScheduleService:
         hours_ahead: int,
         hours_behind: int,
         limit: int,
+        sim_time: Optional[datetime] = None,
     ) -> list[dict]:
         """Get schedule merging live sim flights with background schedule data.
 
@@ -158,12 +163,13 @@ class ScheduleService:
             hours_ahead: Hours into future to include
             hours_behind: Hours into past to include
             limit: Maximum total flights to return
+            sim_time: Override for current time (simulation clock)
 
         Returns:
             Merged, deduplicated, sorted list of flight dicts
         """
         # 1. Always get live flights first (same data as map)
-        live_schedule = get_flights_as_schedule()
+        live_schedule = get_flights_as_schedule(sim_time=sim_time)
         live_flights = [f for f in live_schedule if f["flight_type"] == flight_type]
         if live_flights:
             logger.debug(f"FIDS {flight_type}s: {len(live_flights)} live flights from map")
@@ -186,13 +192,14 @@ class ScheduleService:
                 logger.debug(f"FIDS {flight_type}s: {len(lb_data)} from Lakebase")
 
         if not background_flights:
-            now = datetime.now(timezone.utc)
+            now = sim_time or datetime.now(timezone.utc)
             cutoff = now - timedelta(hours=hours_behind)
             background_flights = get_future_schedule(
                 airport=self._airport,
                 after=cutoff,
                 flight_type=flight_type,
                 limit=bg_limit,
+                sim_time=sim_time,
             )
             if background_flights:
                 logger.debug(

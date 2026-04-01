@@ -368,6 +368,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
   const [backendReady, setBackendReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Initializing');
   const [, setSimulationActive] = useState(false);
+  const [simTime, setSimTime] = useState<string | null>(null);
   const [demoReady, setDemoReady] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>('map');
   const [showChat, setShowChat] = useState(false);
@@ -523,6 +524,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
       onActiveChange={setSimulationActive}
       onAirportChange={loadAirport}
       onTrajectoryProviderChange={handleTrajectoryProviderChange}
+      onSimTimeChange={setSimTime}
       backendReady={backendReady}
       currentAirport={currentAirport}
       demoReady={demoReady}
@@ -570,7 +572,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
           onShowFIDS={() => setShowFIDS(true)}
           onOpenChat={() => setShowChat(true)}
         />
-        {showFIDS && <FIDS onClose={() => setShowFIDS(false)} />}
+        {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
         <GenieChat hideFab externalOpen={showChat} onClose={() => setShowChat(false)} />
 
         {/* Tab content */}
@@ -600,7 +602,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       <Header onShowFIDS={() => setShowFIDS(true)} simulationControls={simulationControlsNode} />
-      {showFIDS && <FIDS onClose={() => setShowFIDS(false)} />}
+      {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
       <GenieChat />
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List */}

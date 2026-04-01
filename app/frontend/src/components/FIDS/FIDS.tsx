@@ -61,14 +61,16 @@ function formatTime(isoString: string): string {
 
 interface FIDSProps {
   onClose: () => void;
+  simTime?: string | null;
 }
 
-export default function FIDS({ onClose }: FIDSProps) {
+export default function FIDS({ onClose, simTime }: FIDSProps) {
   const [activeTab, setActiveTab] = useState<'arrivals' | 'departures'>('arrivals');
   const [arrivals, setArrivals] = useState<ScheduledFlight[]>([]);
   const [departures, setDepartures] = useState<ScheduledFlight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   // Get current airport so we re-fetch when it changes
   const { currentAirport } = useAirportConfigContext();
@@ -101,9 +103,10 @@ export default function FIDS({ onClose }: FIDSProps) {
     async function fetchSchedule() {
       try {
         setLoading(true);
+        const params = simTime ? `?sim_time=${encodeURIComponent(simTime)}` : '';
         const [arrivalsRes, departuresRes] = await Promise.all([
-          fetch('/api/schedule/arrivals'),
-          fetch('/api/schedule/departures'),
+          fetch(`/api/schedule/arrivals${params}`),
+          fetch(`/api/schedule/departures${params}`),
         ]);
 
         if (!arrivalsRes.ok || !departuresRes.ok) {
@@ -127,9 +130,20 @@ export default function FIDS({ onClose }: FIDSProps) {
     // Refresh every 15 seconds to stay in sync with live sim flights
     const interval = setInterval(fetchSchedule, 15 * 1000);
     return () => clearInterval(interval);
-  }, [currentAirport]);
+  }, [currentAirport, simTime]);
 
-  const flights = activeTab === 'arrivals' ? arrivals : departures;
+  const allFlights = activeTab === 'arrivals' ? arrivals : departures;
+  const flights = useMemo(() => {
+    if (!search.trim()) return allFlights;
+    const q = search.trim().toLowerCase();
+    return allFlights.filter(f =>
+      f.flight_number.toLowerCase().includes(q) ||
+      f.airline.toLowerCase().includes(q) ||
+      f.origin.toLowerCase().includes(q) ||
+      f.destination.toLowerCase().includes(q) ||
+      (f.gate && f.gate.toLowerCase().includes(q))
+    );
+  }, [allFlights, search]);
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[1003] flex items-center justify-center p-4" onClick={onClose}>
@@ -161,13 +175,22 @@ export default function FIDS({ onClose }: FIDSProps) {
               </button>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white text-2xl font-light"
-            aria-label="Close FIDS"
-          >
-            x
-          </button>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              placeholder="Search flights..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 w-48"
+            />
+            <button
+              onClick={onClose}
+              className="text-slate-400 hover:text-white text-2xl font-light"
+              aria-label="Close FIDS"
+            >
+              x
+            </button>
+          </div>
         </div>
 
         {/* Content */}

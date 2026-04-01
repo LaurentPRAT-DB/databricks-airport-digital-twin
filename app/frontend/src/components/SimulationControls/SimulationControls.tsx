@@ -452,6 +452,7 @@ export function SimulationControls({
   onActiveChange,
   onAirportChange,
   onTrajectoryProviderChange,
+  onSimTimeChange,
   backendReady,
   currentAirport,
   demoReady,
@@ -460,6 +461,7 @@ export function SimulationControls({
   onActiveChange: (active: boolean) => void;
   onAirportChange?: (icaoCode: string) => Promise<void>;
   onTrajectoryProviderChange?: (provider: ((icao24: string) => import('../../hooks/useSimulationReplay').SimTrajectoryPoint[]) | null) => void;
+  onSimTimeChange?: (simTime: string | null) => void;
   backendReady?: boolean;
   currentAirport?: string | null;
   demoReady?: boolean;
@@ -542,6 +544,13 @@ export function SimulationControls({
       onTrajectoryProviderChange(sim.isActive && !sim.switchPaused ? sim.getFlightTrajectory : null);
     }
   }, [sim.isActive, sim.switchPaused, sim.getFlightTrajectory, onTrajectoryProviderChange]);
+
+  // Push simulation time to parent (for FIDS alignment)
+  useEffect(() => {
+    if (onSimTimeChange) {
+      onSimTimeChange(sim.isActive && !sim.switchPaused ? sim.currentSimTime : null);
+    }
+  }, [sim.isActive, sim.switchPaused, sim.currentSimTime, onSimTimeChange]);
 
   const handleLoad = (filename: string) => {
     setShowPicker(false);

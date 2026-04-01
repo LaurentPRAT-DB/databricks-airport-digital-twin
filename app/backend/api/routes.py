@@ -387,6 +387,7 @@ async def get_arrivals(
     hours_ahead: int = Query(default=2, ge=1, le=12, description="Hours into future"),
     hours_behind: int = Query(default=1, ge=0, le=6, description="Hours into past"),
     limit: int = Query(default=100, ge=1, le=200, description="Max flights"),
+    sim_time: Optional[str] = Query(default=None, description="Simulation clock ISO timestamp"),
 ) -> ScheduleResponse:
     """
     Get scheduled arrivals for FIDS display.
@@ -394,11 +395,18 @@ async def get_arrivals(
     Returns arrival flights within the specified time window,
     sorted by scheduled time.
     """
+    parsed_sim_time = None
+    if sim_time:
+        parsed_sim_time = datetime.fromisoformat(sim_time)
+        if parsed_sim_time.tzinfo is None:
+            parsed_sim_time = parsed_sim_time.replace(tzinfo=timezone.utc)
+
     service = get_schedule_service()
     return service.get_arrivals(
         hours_ahead=hours_ahead,
         hours_behind=hours_behind,
         limit=limit,
+        sim_time=parsed_sim_time,
     )
 
 
@@ -407,6 +415,7 @@ async def get_departures(
     hours_ahead: int = Query(default=2, ge=1, le=12, description="Hours into future"),
     hours_behind: int = Query(default=1, ge=0, le=6, description="Hours into past"),
     limit: int = Query(default=100, ge=1, le=200, description="Max flights"),
+    sim_time: Optional[str] = Query(default=None, description="Simulation clock ISO timestamp"),
 ) -> ScheduleResponse:
     """
     Get scheduled departures for FIDS display.
@@ -414,11 +423,18 @@ async def get_departures(
     Returns departure flights within the specified time window,
     sorted by scheduled time.
     """
+    parsed_sim_time = None
+    if sim_time:
+        parsed_sim_time = datetime.fromisoformat(sim_time)
+        if parsed_sim_time.tzinfo is None:
+            parsed_sim_time = parsed_sim_time.replace(tzinfo=timezone.utc)
+
     service = get_schedule_service()
     return service.get_departures(
         hours_ahead=hours_ahead,
         hours_behind=hours_behind,
         limit=limit,
+        sim_time=parsed_sim_time,
     )
 
 
