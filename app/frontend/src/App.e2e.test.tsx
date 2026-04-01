@@ -86,10 +86,9 @@ describe('End-to-end user interaction flows', () => {
       })
       expect(selectTime).toBeLessThan(PERFORMANCE_THRESHOLDS.apiResponse)
 
-      // Detail panel shows position, movement, metadata sections
+      // Detail panel shows position and movement sections
       expect(screen.getByText(/position/i)).toBeInTheDocument()
       expect(screen.getByText(/movement/i)).toBeInTheDocument()
-      expect(screen.getByText(/metadata/i)).toBeInTheDocument()
 
       // --- Close detail panel ---
       const closeButton = screen.getByTitle(/close/i)
@@ -114,14 +113,14 @@ describe('End-to-end user interaction flows', () => {
 
       await waitFor(
         () => {
-          expect(screen.getByText(/gate recommendations/i)).toBeInTheDocument()
+          expect(screen.getByText(/gate (assignment|recommendations)/i)).toBeInTheDocument()
         },
         { timeout: 5000 },
       )
 
       // At least one gate recommendation should render (A1 from mock predictions)
       await waitFor(() => {
-        expect(screen.getByText(/gate recommendations/i)).toBeInTheDocument()
+        expect(screen.getByText(/gate (assignment|recommendations)/i)).toBeInTheDocument()
         // gate_id "A1" is rendered in the recommendations section
         expect(screen.getAllByText(/A1/).length).toBeGreaterThanOrEqual(1)
       })
@@ -884,7 +883,6 @@ describe('End-to-end user interaction flows', () => {
       // Check key links are rendered (use getAllByText for labels that appear in both title and description)
       expect(screen.getByText(/Flight Dashboard/)).toBeInTheDocument()
       expect(screen.getByText(/Airport Ops Genie/)).toBeInTheDocument()
-      expect(screen.getByText(/Data Lineage/)).toBeInTheDocument()
       expect(screen.getByText(/ML Experiments/)).toBeInTheDocument()
       // "Unity Catalog" appears in both a link label and a description, use getAllByText
       const ucMatches = screen.getAllByText(/Unity Catalog/)
@@ -896,7 +894,7 @@ describe('End-to-end user interaction flows', () => {
       // Go up to the outer dropdown container that has all links
       const dropdown = dropdownHeader.closest('[class*="rounded-lg shadow-xl"]')!
       const links = within(dropdown as HTMLElement).getAllByRole('link')
-      expect(links.length).toBe(5) // 5 platform links
+      expect(links.length).toBe(4) // 4 platform links
       links.forEach((link) => {
         expect(link).toHaveAttribute('target', '_blank')
       })

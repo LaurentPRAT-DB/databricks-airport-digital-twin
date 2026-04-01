@@ -955,6 +955,51 @@ def find_scheduled_departure(callsign: str, airport: str = "SFO") -> Optional[di
     return None
 
 
+def find_departure_at_gate(gate: str, airport: str = "SFO") -> Optional[dict]:
+    """Find the next scheduled departure at a specific gate.
+
+    Searches the cached schedule and live sim flights for the soonest
+    departure assigned to the given gate.
+
+    Returns:
+        Flight dict with flight_number, scheduled_time, etc. or None.
+    """
+    if not gate:
+        return None
+
+    now = datetime.now(timezone.utc)
+    cutoff_past = now - timedelta(minutes=15)
+
+    # Gather candidates from cached schedule
+    schedule = get_cached_schedule(airport=airport)
+    candidates = []
+    for f in schedule:
+        if f["flight_type"] != "departure" or f.get("gate") != gate:
+            continue
+        sched_time = datetime.fromisoformat(f["scheduled_time"])
+        if sched_time >= cutoff_past:
+            candidates.append((sched_time, f))
+
+    # Also check live sim flights (they may not be in the cached schedule)
+    try:
+        from src.ingestion.fallback import get_flights_as_schedule
+        for f in get_flights_as_schedule():
+            if f["flight_type"] != "departure" or f.get("gate") != gate:
+                continue
+            sched_time = datetime.fromisoformat(f["scheduled_time"])
+            if sched_time >= cutoff_past:
+                candidates.append((sched_time, f))
+    except Exception:
+        pass
+
+    if not candidates:
+        return None
+
+    # Return soonest departure
+    candidates.sort(key=lambda x: x[0])
+    return candidates[0][1]
+
+
 def get_future_schedule(
     airport: str = "SFO",
     after: datetime | None = None,

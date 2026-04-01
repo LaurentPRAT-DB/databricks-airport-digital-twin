@@ -14,6 +14,7 @@ interface TurnaroundStatus {
   phase_progress_pct: number;
   total_progress_pct: number;
   estimated_departure: string;
+  departing_flight: string | null;
   assigned_gse: GSEUnit[];
   aircraft_type: string;
 }
@@ -181,12 +182,19 @@ export default function TurnaroundTimeline({
       {/* EST departure */}
       <div className="flex items-center justify-between text-sm">
         <span className="text-slate-500 dark:text-slate-400">Est. Departure</span>
-        <span className="font-mono font-medium">
-          {estDeparture.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </span>
+        <div className="text-right">
+          {turnaround.departing_flight && (
+            <span className="text-xs text-blue-500 dark:text-blue-400 mr-2 font-medium">
+              {turnaround.departing_flight}
+            </span>
+          )}
+          <span className="font-mono font-medium">
+            {estDeparture.toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+        </div>
       </div>
 
       {/* Active GSE */}

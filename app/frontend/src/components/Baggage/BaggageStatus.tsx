@@ -82,7 +82,7 @@ export default function BaggageStatus({
         <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-200">Baggage Status</h3>
         {stats.carousel && (
           <span className="px-1.5 py-px bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-[10px] font-mono">
-            C{stats.carousel}
+            Carousel {stats.carousel}
           </span>
         )}
       </div>
@@ -111,7 +111,7 @@ export default function BaggageStatus({
         </div>
         <div className="bg-slate-50 dark:bg-slate-700/50 rounded px-1 py-1.5">
           <div className="text-sm font-bold text-green-600 dark:text-green-400">
-            {isArrival ? (stats.delivered || stats.claimed || stats.on_carousel || 0) : stats.loaded}
+            {isArrival ? stats.delivered : stats.loaded}
           </div>
           <div className="text-[10px] text-slate-500 dark:text-slate-400">
             {isArrival ? 'Delivered' : 'Loaded'}

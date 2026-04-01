@@ -27,7 +27,7 @@ from app.backend.models.gse import (
 )
 from app.backend.services.lakebase_service import get_lakebase_service
 from src.ingestion.fallback import get_flight_turnaround_info
-from src.ingestion.schedule_generator import find_scheduled_departure
+from src.ingestion.schedule_generator import find_departure_at_gate
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +156,8 @@ class GSEService:
             effective_aircraft = sim_info["aircraft_type"] or aircraft_type
             effective_callsign = sim_info["callsign"] or flight_number
 
-            # Look up scheduled departure from FIDS
-            scheduled_dep = find_scheduled_departure(
-                effective_callsign or "",
-            )
+            # Look up next departure at this gate from FIDS
+            scheduled_dep = find_departure_at_gate(effective_gate)
 
             # Check if we have a real turnaround schedule from the simulation
             turnaround_schedule = sim_info.get("turnaround_schedule")
@@ -199,10 +197,12 @@ class GSEService:
                     aircraft_type=effective_aircraft,
                 )
 
-            # If we have a schedule, override estimated departure
+            # If we found a departure at this gate, use its time and flight number
+            departing_flight_number = None
             if scheduled_dep:
                 sched_time_str = scheduled_dep.get("estimated_time") or scheduled_dep["scheduled_time"]
                 status["estimated_departure"] = datetime.fromisoformat(sched_time_str)
+                departing_flight_number = scheduled_dep.get("flight_number")
 
             # Update cache so clear_turnaround works
             self._active_turnarounds[icao24] = {
@@ -248,6 +248,7 @@ class GSEService:
             phase_progress_pct=status["phase_progress_pct"],
             total_progress_pct=status["total_progress_pct"],
             estimated_departure=status["estimated_departure"],
+            departing_flight=departing_flight_number,
             assigned_gse=gse_units,
             aircraft_type=effective_aircraft,
         )

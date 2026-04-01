@@ -100,6 +100,7 @@ class TurnaroundStatus(BaseModel):
     phase_progress_pct: int = Field(0, description="Progress within current phase (0-100)")
     total_progress_pct: int = Field(0, description="Overall turnaround progress (0-100)")
     estimated_departure: Optional[datetime] = Field(None, description="Estimated departure")
+    departing_flight: Optional[str] = Field(None, description="Next departure flight number from this gate")
     assigned_gse: list[GSEUnit] = Field(default_factory=list, description="Assigned GSE units")
     aircraft_type: Optional[str] = Field(None, description="Aircraft type for timing")
 

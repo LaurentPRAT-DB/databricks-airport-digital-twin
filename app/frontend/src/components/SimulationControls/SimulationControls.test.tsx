@@ -91,7 +91,7 @@ describe('SimulationControls', () => {
       expect(screen.getByText('Simulation')).toBeInTheDocument();
     });
 
-    it('shows SIM badge when simulation is active and playing', () => {
+    it('shows playback bar when simulation is active and playing', () => {
       mockSim = createMockSim({
         isActive: true,
         isPlaying: true,
@@ -99,8 +99,8 @@ describe('SimulationControls', () => {
         speed: 4 as const,
       });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
-      expect(screen.getByText(/SIM:/)).toBeInTheDocument();
-      // Speed appears in both header badge and playback bar speed buttons
+      // Playback bar shows Local Time label and speed buttons (header returns null when playing)
+      expect(screen.getByText(/Local Time/)).toBeInTheDocument();
       expect(screen.getAllByText('4x').length).toBeGreaterThanOrEqual(1);
     });
 
@@ -115,7 +115,7 @@ describe('SimulationControls', () => {
       expect(paused.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('shows scenario name when available', () => {
+    it('shows playback bar with time when scenario is active', () => {
       mockSim = createMockSim({
         isActive: true,
         isPlaying: true,
@@ -123,7 +123,8 @@ describe('SimulationControls', () => {
         scenarioName: 'Weather Disruption',
       });
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
-      expect(screen.getByText('Weather Disruption')).toBeInTheDocument();
+      // Playback bar renders with Local Time label (scenario name shown in file picker, not playback bar)
+      expect(screen.getByText(/Local Time/)).toBeInTheDocument();
     });
   });
 
