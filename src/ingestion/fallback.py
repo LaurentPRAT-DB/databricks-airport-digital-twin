@@ -606,12 +606,23 @@ def get_flights_as_schedule() -> List[Dict[str, Any]]:
         # Wide modulo ranges prevent clustering on the FIDS display.
         if is_arrival:
             if phase in (FlightPhase.PARKED,):
-                # Already arrived: scheduled in the past (5-120 min ago)
-                past_offset = 5 + (_h % 115)
-                scheduled_time = (now - timedelta(minutes=past_offset)).isoformat()
+                # Use actual parked_since timestamp so the FIDS entry
+                # reflects when the aircraft really arrived (not a random
+                # hash offset that could push it outside the time window).
+                if state.parked_since > 0:
+                    scheduled_time = datetime.fromtimestamp(
+                        state.parked_since, tz=timezone.utc
+                    ).isoformat()
+                else:
+                    scheduled_time = (now - timedelta(minutes=5 + _h % 55)).isoformat()
             elif phase == FlightPhase.TAXI_TO_GATE:
-                # Just landed, taxiing in: arrived ~2-8 min ago
-                scheduled_time = (now - timedelta(minutes=2 + _h % 6)).isoformat()
+                # Use actual landing timestamp if available
+                if state.landed_at > 0:
+                    scheduled_time = datetime.fromtimestamp(
+                        state.landed_at, tz=timezone.utc
+                    ).isoformat()
+                else:
+                    scheduled_time = (now - timedelta(minutes=2 + _h % 6)).isoformat()
             elif phase == FlightPhase.LANDING:
                 # Actively landing: ETA is now
                 scheduled_time = (now + timedelta(minutes=1 + _h % 3)).isoformat()
@@ -1890,6 +1901,7 @@ class FlightState:
     go_around_count: int = 0                   # Number of go-arounds for this approach
     go_around_target_alt: float = 0.0           # Target altitude for current go-around climb
     gate_retry_at: float = 0.0                 # time.time() when to next retry gate assignment
+    landed_at: float = 0.0                     # time.time() when aircraft touched down (LANDING → TAXI_TO_GATE)
     parked_since: float = 0.0                  # time.time() when aircraft entered PARKED phase
     turnaround_phase: str = ""                 # Current turnaround sub-phase (e.g. "deboarding")
     turnaround_schedule: Optional[Dict] = None # {phase: {"start_offset_s", "duration_s", "done", "started"}}
@@ -3236,6 +3248,7 @@ def _create_new_flight(
             time_at_gate=initial_time_at_gate,
             origin_airport=origin,
             destination_airport=destination,
+            landed_at=time.time() - initial_time_at_gate - 5 * 60,  # ~5 min taxi before parking
             parked_since=time.time() - initial_time_at_gate,
             turnaround_phase=current_phase,
             turnaround_schedule=schedule,
@@ -3675,6 +3688,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.aircraft_type, state.assigned_gate,
             )
             _set_phase(state, FlightPhase.TAXI_TO_GATE)
+            state.landed_at = time.time()
             # Release runway when exiting to taxiway
             arrival_rwy = _get_arrival_runway_name()
             _release_runway(state.icao24, arrival_rwy)
