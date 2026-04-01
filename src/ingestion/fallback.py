@@ -154,11 +154,18 @@ def _get_turnaround_weather_factor() -> float:
     return factor
 
 
+_occupied_gate_count: int = 0
+
+
+def _recount_occupied_gates() -> None:
+    """Recompute _occupied_gate_count from gate states (called after init/reset)."""
+    global _occupied_gate_count
+    _occupied_gate_count = sum(1 for gs in _gate_states.values() if gs.occupied_by is not None)
+
+
 def _get_turnaround_congestion_factor() -> float:
     """More concurrent gate ops = longer turnaround due to crew contention."""
-    _init_gate_states()
-    occupied = sum(1 for gs in _gate_states.values() if gs.occupied_by is not None)
-    return 1.0 + 0.01 * max(0, occupied - 10)
+    return 1.0 + 0.01 * max(0, _occupied_gate_count - 10)
 
 
 def _get_turnaround_day_of_week_factor() -> float:
@@ -2130,10 +2137,13 @@ def _init_gate_states():
                 _gate_states[gate] = old_states[gate]
             else:
                 _gate_states[gate] = GateState()
+        _recount_occupied_gates()
 
 def _reset_gate_states():
     """Reset gate states when gates are reloaded."""
+    global _occupied_gate_count
     _gate_states.clear()
+    _occupied_gate_count = 0
     _init_gate_states()
 
 def _get_wake_category(aircraft_type: str) -> str:
@@ -2372,17 +2382,23 @@ def _find_overflow_gate() -> Optional[str]:
 
 def _occupy_gate(icao24: str, gate: str):
     """Mark gate as occupied."""
+    global _occupied_gate_count
     _init_gate_states()
     if gate in _gate_states:
+        was_empty = _gate_states[gate].occupied_by is None
         _gate_states[gate].occupied_by = icao24
+        if was_empty:
+            _occupied_gate_count += 1
 
 def _release_gate(icao24: str, gate: str):
     """Release gate when aircraft departs, enforcing minimum buffer."""
+    global _occupied_gate_count
     _init_gate_states()
     if gate in _gate_states and _gate_states[gate].occupied_by == icao24:
         _gate_states[gate].occupied_by = None
         _gate_states[gate].last_released = time.time()
         _gate_states[gate].available_at = time.time() + GATE_BUFFER_SECONDS
+        _occupied_gate_count = max(0, _occupied_gate_count - 1)
 
 
 def get_gate_conflict_count() -> int:
@@ -2439,13 +2455,20 @@ def _taxi_speed_factor(state: FlightState) -> float:
     min_factor = 1.0
     head_on_hold = False
 
-    for icao24, other in _flight_states.items():
-        if icao24 == state.icao24:
+    # Use phase index: only check ground-moving aircraft (skip airborne + parked)
+    _ground_move_ids = (
+        _flights_by_phase[FlightPhase.TAXI_TO_GATE]
+        | _flights_by_phase[FlightPhase.TAXI_TO_RUNWAY]
+        | _flights_by_phase[FlightPhase.PUSHBACK]
+        | _flights_by_phase[FlightPhase.LANDING]
+        | _flights_by_phase[FlightPhase.TAKEOFF]
+    )
+    _ground_move_ids.discard(state.icao24)
+
+    for icao24 in _ground_move_ids:
+        other = _flight_states.get(icao24)
+        if other is None or not other.on_ground:
             continue
-        if not other.on_ground:
-            continue
-        if other.phase == FlightPhase.PARKED:
-            continue  # Parked aircraft don't block taxi routes
 
         dist = _distance_between(
             (state.latitude, state.longitude),
@@ -3387,8 +3410,10 @@ def _create_new_flight(
         spawn_pos = (wp[1], wp[0])  # lat, lon
 
         # Check if taxiway start position is clear (no other taxiing aircraft)
-        for other_icao24, other in _flight_states.items():
-            if other.on_ground and other.phase in [FlightPhase.TAXI_TO_GATE, FlightPhase.TAXI_TO_RUNWAY]:
+        _taxi_ids = _flights_by_phase[FlightPhase.TAXI_TO_GATE] | _flights_by_phase[FlightPhase.TAXI_TO_RUNWAY]
+        for other_icao24 in _taxi_ids:
+            other = _flight_states.get(other_icao24)
+            if other is not None:
                 dist = _distance_between(spawn_pos, (other.latitude, other.longitude))
                 if dist < MIN_TAXI_SEPARATION_DEG * 2:  # Buffer for spawn position
                     # Taxiway congested - spawn as approaching instead
@@ -5368,6 +5393,8 @@ def reset_synthetic_state() -> dict:
     _runway_states["28L"] = _runway_28L
     _runway_states["28R"] = _runway_28R
     _gate_states.clear()
+    global _occupied_gate_count
+    _occupied_gate_count = 0
 
     # Clear event buffers
     with _phase_transition_lock:

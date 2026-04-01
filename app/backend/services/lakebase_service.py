@@ -581,20 +581,28 @@ class LakebaseService:
         self._ensure_airport_columns()
 
         try:
-            params = [{**flight, "airport_icao": airport_icao} for flight in flights]
+            _cols = (
+                "airport_icao", "flight_number", "airline", "airline_code", "origin", "destination",
+                "scheduled_time", "estimated_time", "actual_time", "gate", "status",
+                "delay_minutes", "delay_reason", "aircraft_type", "flight_type",
+            )
+            values = [
+                tuple(
+                    {**flight, "airport_icao": airport_icao}.get(c)
+                    for c in _cols
+                )
+                for flight in flights
+            ]
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.executemany(
+                    execute_values(
+                        cur,
                         """
                         INSERT INTO flight_schedule (
                             airport_icao, flight_number, airline, airline_code, origin, destination,
                             scheduled_time, estimated_time, actual_time, gate, status,
                             delay_minutes, delay_reason, aircraft_type, flight_type
-                        ) VALUES (
-                            %(airport_icao)s, %(flight_number)s, %(airline)s, %(airline_code)s, %(origin)s, %(destination)s,
-                            %(scheduled_time)s, %(estimated_time)s, %(actual_time)s, %(gate)s, %(status)s,
-                            %(delay_minutes)s, %(delay_reason)s, %(aircraft_type)s, %(flight_type)s
-                        )
+                        ) VALUES %s
                         ON CONFLICT (airport_icao, flight_number, scheduled_time) DO UPDATE SET
                             airline = EXCLUDED.airline,
                             airline_code = EXCLUDED.airline_code,
@@ -609,10 +617,10 @@ class LakebaseService:
                             aircraft_type = EXCLUDED.aircraft_type,
                             flight_type = EXCLUDED.flight_type
                         """,
-                        params,
+                        values,
                     )
                     conn.commit()
-                    count = len(params)
+                    count = len(values)
                     logger.info(f"Upserted {count} flights to Lakebase schedule for {airport_icao}")
                     return count
 
@@ -798,18 +806,26 @@ class LakebaseService:
         self._ensure_airport_columns()
 
         try:
-            params = [{**stats, "airport_icao": airport_icao} for stats in stats_list]
+            _cols = (
+                "airport_icao", "flight_number", "total_bags", "checked_in", "loaded", "unloaded",
+                "on_carousel", "loading_progress_pct", "connecting_bags", "misconnects", "carousel",
+            )
+            values = [
+                tuple(
+                    {**stats, "airport_icao": airport_icao}.get(c)
+                    for c in _cols
+                )
+                for stats in stats_list
+            ]
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.executemany(
+                    execute_values(
+                        cur,
                         """
                         INSERT INTO baggage_status (
                             airport_icao, flight_number, total_bags, checked_in, loaded, unloaded,
                             on_carousel, loading_progress_pct, connecting_bags, misconnects, carousel
-                        ) VALUES (
-                            %(airport_icao)s, %(flight_number)s, %(total_bags)s, %(checked_in)s, %(loaded)s, %(unloaded)s,
-                            %(on_carousel)s, %(loading_progress_pct)s, %(connecting_bags)s, %(misconnects)s, %(carousel)s
-                        )
+                        ) VALUES %s
                         ON CONFLICT (airport_icao, flight_number) DO UPDATE SET
                             total_bags = EXCLUDED.total_bags,
                             checked_in = EXCLUDED.checked_in,
@@ -821,10 +837,10 @@ class LakebaseService:
                             misconnects = EXCLUDED.misconnects,
                             carousel = EXCLUDED.carousel
                         """,
-                        params,
+                        values,
                     )
                     conn.commit()
-                    return len(params)
+                    return len(values)
 
         except Exception as e:
             logger.warning(f"Lakebase baggage batch upsert failed: {e}")
@@ -889,18 +905,26 @@ class LakebaseService:
         self._ensure_airport_columns()
 
         try:
-            params = [{**unit, "airport_icao": airport_icao} for unit in units]
+            _cols = (
+                "airport_icao", "unit_id", "gse_type", "status", "assigned_flight",
+                "assigned_gate", "position_x", "position_y",
+            )
+            values = [
+                tuple(
+                    {**unit, "airport_icao": airport_icao}.get(c)
+                    for c in _cols
+                )
+                for unit in units
+            ]
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.executemany(
+                    execute_values(
+                        cur,
                         """
                         INSERT INTO gse_fleet (
                             airport_icao, unit_id, gse_type, status, assigned_flight,
                             assigned_gate, position_x, position_y
-                        ) VALUES (
-                            %(airport_icao)s, %(unit_id)s, %(gse_type)s, %(status)s, %(assigned_flight)s,
-                            %(assigned_gate)s, %(position_x)s, %(position_y)s
-                        )
+                        ) VALUES %s
                         ON CONFLICT (airport_icao, unit_id) DO UPDATE SET
                             gse_type = EXCLUDED.gse_type,
                             status = EXCLUDED.status,
@@ -909,10 +933,10 @@ class LakebaseService:
                             position_x = EXCLUDED.position_x,
                             position_y = EXCLUDED.position_y
                         """,
-                        params,
+                        values,
                     )
                     conn.commit()
-                    count = len(params)
+                    count = len(values)
                     return count
 
         except Exception as e:
