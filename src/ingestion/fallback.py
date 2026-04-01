@@ -566,8 +566,23 @@ def get_flights_as_schedule(
         origin = state.origin_airport or "???"
         destination = state.destination_airport or local_iata
 
-        # Determine flight type: arrival if destination is local airport
-        is_arrival = (destination == local_iata)
+        # Determine flight type using phase as a strong signal for in-flight
+        # aircraft, falling back to origin/destination convention for ambiguous phases.
+        phase = state.phase
+        arriving_phases = (FlightPhase.APPROACHING, FlightPhase.LANDING, FlightPhase.TAXI_TO_GATE)
+        departing_phases = (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY, FlightPhase.TAKEOFF, FlightPhase.DEPARTING)
+
+        if phase in arriving_phases:
+            is_arrival = True
+            destination = local_iata
+        elif phase in departing_phases:
+            is_arrival = False
+            if origin != local_iata:
+                origin = local_iata
+        elif phase == FlightPhase.ENROUTE:
+            is_arrival = bool(state.origin_airport and not state.destination_airport) or (destination == local_iata)
+        else:
+            is_arrival = (destination == local_iata)
 
         # Guard against self-referencing: arrival origin must not be local airport
         if is_arrival and origin == local_iata:
@@ -575,7 +590,6 @@ def get_flights_as_schedule(
         flight_type = "arrival" if is_arrival else "departure"
 
         # Map flight phase to FIDS status
-        phase = state.phase
         if phase in (FlightPhase.PARKED,):
             if is_arrival:
                 status = "arrived"
@@ -584,7 +598,7 @@ def get_flights_as_schedule(
             else:
                 status = "scheduled"
         elif phase == FlightPhase.APPROACHING:
-            status = "scheduled"  # approaching = not yet arrived, show as upcoming
+            status = "on_time"  # approaching = inbound, on its way
         elif phase == FlightPhase.LANDING:
             status = "final_call"  # actively landing
         elif phase == FlightPhase.TAXI_TO_GATE:
@@ -604,10 +618,22 @@ def get_flights_as_schedule(
         # Use a large prime multiplier to spread hash values evenly.
         _h = ((hash(icao24) * 2654435761) ^ hash(airline_code)) & 0xFFFFFFFF
 
-        # Delay jitter: ~20% of flights have 5-45 min delay
+        # Compute delay from simulation state for arrivals, hash-based for departures
         delay_minutes = 0
-        if (_h >> 4) % 5 == 0:  # deterministic 20% chance
-            delay_minutes = 5 + ((_h >> 8) % 41)  # 5-45 min
+        if is_arrival:
+            if state.holding_phase_time > 0:
+                delay_minutes = max(1, int(state.holding_phase_time / 60))
+            elif state.go_around_target_alt > 0:
+                delay_minutes = 5
+            elif (_h >> 4) % 10 == 0:
+                delay_minutes = 5 + ((_h >> 8) % 20)
+        else:
+            if (_h >> 4) % 5 == 0:
+                delay_minutes = 5 + ((_h >> 8) % 41)
+
+        # Mark as delayed if delay detected and status is not terminal
+        if delay_minutes > 0 and status in ("scheduled", "on_time"):
+            status = "delayed"
 
         # Compute scheduled times based on actual flight phase and state.
         # Wide modulo ranges prevent clustering on the FIDS display.
