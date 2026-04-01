@@ -261,6 +261,9 @@ class SimulationEngine:
         # Used to detect and resolve stuck flights
         self._phase_time: dict[str, tuple[str, float]] = {}
 
+        # Phase counters for O(1) phase-based queries (avoids per-tick full scans)
+        self._phase_counts: dict[str, int] = {}
+
         # Max time in seconds before forcing phase transitions
         # Use profile-calibrated P95 taxi times when available, else defaults
         profile = self.airport_profile
@@ -273,6 +276,16 @@ class SimulationEngine:
             "approaching": 900.0,     # 15 min max approach
             "landing": 120.0,         # 2 min max landing
         }
+
+    def _phase_count_inc(self, phase_value: str) -> None:
+        self._phase_counts[phase_value] = self._phase_counts.get(phase_value, 0) + 1
+
+    def _phase_count_dec(self, phase_value: str) -> None:
+        self._phase_counts[phase_value] = max(0, self._phase_counts.get(phase_value, 0) - 1)
+
+    def _phase_count_transition(self, old_phase_value: str, new_phase_value: str) -> None:
+        self._phase_count_dec(old_phase_value)
+        self._phase_count_inc(new_phase_value)
 
     @staticmethod
     def _derive_runways_from_scenario(config: SimulationConfig) -> list[str] | None:
@@ -401,16 +414,16 @@ class SimulationEngine:
 
         schedule: list[dict] = []
         local_iata = self.config.airport
+        arrival_count = 0  # running counter — avoids O(n) re-scan per flight
 
         # --- Phase 1: Generate arrivals distributed across hours ---
         for h_idx, weight in enumerate(hour_weights):
             flights_this_hour = max(1, round(self.config.arrivals * weight / total_weight))
             if h_idx == len(hour_weights) - 1:
-                already = sum(1 for f in schedule if f["flight_type"] == "arrival")
-                flights_this_hour = max(0, self.config.arrivals - already)
+                flights_this_hour = max(0, self.config.arrivals - arrival_count)
 
             for _ in range(flights_this_hour):
-                if sum(1 for f in schedule if f["flight_type"] == "arrival") >= self.config.arrivals:
+                if arrival_count >= self.config.arrivals:
                     break
 
                 airline_code, airline_name = _select_airline(profile=profile)
@@ -434,6 +447,7 @@ class SimulationEngine:
                     "delay_code": delay_code,
                     "delay_reason": delay_reason,
                 })
+                arrival_count += 1
 
         arrivals = [f for f in schedule if f["flight_type"] == "arrival"]
 
@@ -798,6 +812,7 @@ class SimulationEngine:
                     # Override aircraft type to match schedule
                     state.aircraft_type = flight["aircraft_type"]
                     _flight_states[icao24] = state
+                    self._phase_count_inc(state.phase.value)
 
                     self._spawned_indices.add(idx)
                     self._spawn_times[idx] = self.sim_time
@@ -881,6 +896,7 @@ class SimulationEngine:
 
                 # Detect phase transitions
                 if new_phase != old_phase:
+                    self._phase_count_transition(old_phase.value, new_phase.value)
                     self.recorder.record_phase_transition(
                         self.sim_time, icao24, state.callsign,
                         old_phase.value, new_phase.value,
@@ -921,6 +937,7 @@ class SimulationEngine:
                         # aircraft flies FORWARD on current heading, climbs, then
                         # re-sequences via the holding pattern logic.
                         # Keep current heading — already correct from approach.
+                        self._phase_count_transition("landing", "enroute")
                         new_state.phase = FlightPhase.ENROUTE
                         new_state.waypoint_index = 0
                         new_state.go_around_target_alt = max(1500.0, new_state.altitude + 300)
@@ -962,6 +979,7 @@ class SimulationEngine:
                 if state.phase == FlightPhase.ENROUTE and state.phase_progress == -1.0:
                     if state.assigned_gate:
                         _release_gate(icao24, state.assigned_gate)
+                    self._phase_count_dec(state.phase.value)
                     del _flight_states[icao24]
                     self._phase_time.pop(icao24, None)
         finally:
@@ -1030,9 +1048,11 @@ class SimulationEngine:
         elif state.phase == FlightPhase.APPROACHING:
             from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway, VREF_SPEEDS, _get_arrival_runway_name
             _arr_rwy = _get_arrival_runway_name()
-            if _is_runway_clear(_arr_rwy):
+            # Priority landing after 2+ go-arounds to prevent infinite loops
+            runway_ok = _is_runway_clear(_arr_rwy) or state.go_around_count >= 2
+            if runway_ok:
                 # Apply go-around check (same as normal transition)
-                if random.random() < self.capacity.go_around_probability():
+                if state.go_around_count < 2 and random.random() < self.capacity.go_around_probability():
                     # Transition to ENROUTE; keep current heading (correct from approach)
                     state.phase = FlightPhase.ENROUTE
                     state.waypoint_index = 0
@@ -1101,6 +1121,7 @@ class SimulationEngine:
         # Record the phase transition for all force-advances (D06 fix)
         new_phase = state.phase
         if new_phase != old_phase:
+            self._phase_count_transition(old_phase.value, new_phase.value)
             self.recorder.record_phase_transition(
                 self.sim_time, icao24, state.callsign,
                 old_phase.value, new_phase.value,
@@ -1112,10 +1133,12 @@ class SimulationEngine:
         """Divert flight to an alternate airport."""
         alternates = ALTERNATE_AIRPORTS.get(self.config.airport, [])
         alt_name = random.choice(alternates) if alternates else "alternate"
+        old_phase_value = state.phase.value
         if state.assigned_gate:
             _release_gate(icao24, state.assigned_gate)
             state.assigned_gate = None
         state.phase = FlightPhase.ENROUTE
+        self._phase_count_transition(old_phase_value, "enroute")
         state.destination_airport = alt_name
         state.origin_airport = None
         state.altitude = max(state.altitude, 3000)
@@ -1177,10 +1200,8 @@ class SimulationEngine:
 
     def _update_departure_queue(self) -> None:
         """Count flights in PUSHBACK or TAXI_TO_RUNWAY and update capacity queue metrics."""
-        queue_size = 0
-        for state in _flight_states.values():
-            if state.phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY):
-                queue_size += 1
+        queue_size = (self._phase_counts.get("pushback", 0)
+                      + self._phase_counts.get("taxi_to_runway", 0))
         self.capacity.update_departure_queue(queue_size)
 
     def _apply_temperature(self) -> None:
@@ -1227,7 +1248,7 @@ class SimulationEngine:
         # High-freq capture when any flight is landing or just transitioned
         has_landing = (
             getattr(self, '_landing_transition_this_tick', False) or
-            any(s.phase == FlightPhase.LANDING for s in _flight_states.values())
+            self._phase_counts.get("landing", 0) > 0
         )
         self._landing_transition_this_tick = False
 
