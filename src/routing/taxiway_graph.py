@@ -61,6 +61,17 @@ class TaxiwayGraph:
         self.edges: dict[int, list[tuple[int, float]]] = {}  # node_id → [(neighbor, dist)]
         self._snap_tolerance = snap_tolerance
         self._next_id = 0
+        # Spatial grid index for O(1) nearest-neighbor lookups.
+        # Grid cell size equals snap tolerance so only 3x3 neighborhood
+        # needs checking for snap queries.
+        self._grid: dict[tuple[int, int], list[int]] = {}
+        self._grid_inv = snap_tolerance  # 1/cell_size precomputed below
+        if snap_tolerance > 0:
+            self._grid_inv = 1.0 / snap_tolerance
+
+    def _grid_key(self, lat: float, lon: float) -> tuple[int, int]:
+        """Map a (lat, lon) to a grid cell."""
+        return (int(lat * self._grid_inv), int(lon * self._grid_inv))
 
     # ------------------------------------------------------------------
     # Graph construction
@@ -79,6 +90,7 @@ class TaxiwayGraph:
         """
         self.nodes.clear()
         self.edges.clear()
+        self._grid.clear()
         self._next_id = 0
 
         # 1. Taxiway segments
@@ -196,6 +208,12 @@ class TaxiwayGraph:
         """
         penalized = 0
         samples = [0.2, 0.35, 0.5, 0.65, 0.8]
+        # Pre-compute bounding boxes for fast rejection
+        poly_bounds = []
+        for poly in polygons:
+            lats = [p[0] for p in poly]
+            lons = [p[1] for p in poly]
+            poly_bounds.append((min(lats), max(lats), min(lons), max(lons)))
         for node_id, neighbors in self.edges.items():
             lat_a, lon_a = self.nodes[node_id]
             new_neighbors = []
@@ -205,7 +223,10 @@ class TaxiwayGraph:
                 for t in samples:
                     s_lat = lat_a + t * (lat_b - lat_a)
                     s_lon = lon_a + t * (lon_b - lon_a)
-                    for poly in polygons:
+                    for idx, poly in enumerate(polygons):
+                        min_lat, max_lat, min_lon, max_lon = poly_bounds[idx]
+                        if s_lat < min_lat or s_lat > max_lat or s_lon < min_lon or s_lon > max_lon:
+                            continue  # fast bbox reject
                         if _point_in_polygon(s_lat, s_lon, poly):
                             hits_building = True
                             break
@@ -284,28 +305,56 @@ class TaxiwayGraph:
     # ------------------------------------------------------------------
 
     def snap_to_nearest_node(self, lat: float, lon: float) -> Optional[int]:
-        """Find closest graph node to a geo position. Returns node id or None."""
+        """Find closest graph node to a geo position. Returns node id or None.
+
+        Searches in expanding grid rings until a candidate is found,
+        then checks one more ring to confirm no closer node exists.
+        Falls back to full scan for very sparse graphs.
+        """
         if not self.nodes:
             return None
+        key = self._grid_key(lat, lon)
         best_id = None
         best_dist = float("inf")
-        for nid, (nlat, nlon) in self.nodes.items():
-            d = (nlat - lat) ** 2 + (nlon - lon) ** 2
-            if d < best_dist:
-                best_dist = d
-                best_id = nid
+        found_radius = -1
+        # Search expanding rings: 0, 1, 2, ...
+        for radius in range(50):
+            for di in range(-radius, radius + 1):
+                for dj in range(-radius, radius + 1):
+                    if radius > 0 and abs(di) != radius and abs(dj) != radius:
+                        continue  # skip interior (already checked)
+                    for nid in self._grid.get((key[0] + di, key[1] + dj), ()):
+                        nlat, nlon = self.nodes[nid]
+                        d = (nlat - lat) ** 2 + (nlon - lon) ** 2
+                        if d < best_dist:
+                            best_dist = d
+                            best_id = nid
+                            found_radius = radius
+            # Once we've checked one full ring beyond the best find, stop
+            if best_id is not None and radius > found_radius:
+                return best_id
         return best_id
 
     def _get_or_create_node(self, lat: float, lon: float) -> int:
-        """Return existing node within snap_tolerance, or create a new one."""
+        """Return existing node within snap_tolerance, or create a new one.
+
+        Uses a grid-based spatial index so lookup is O(1) amortized
+        instead of O(n) linear scan over all nodes.
+        """
         tol = self._snap_tolerance
-        for nid, (nlat, nlon) in self.nodes.items():
-            if abs(nlat - lat) < tol and abs(nlon - lon) < tol:
-                return nid
+        key = self._grid_key(lat, lon)
+        # Check 3x3 grid neighborhood
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                for nid in self._grid.get((key[0] + di, key[1] + dj), ()):
+                    nlat, nlon = self.nodes[nid]
+                    if abs(nlat - lat) < tol and abs(nlon - lon) < tol:
+                        return nid
         nid = self._next_id
         self._next_id += 1
         self.nodes[nid] = (lat, lon)
         self.edges.setdefault(nid, [])
+        self._grid.setdefault(key, []).append(nid)
         return nid
 
     def _add_edge(self, a: int, b: int) -> None:
@@ -319,31 +368,59 @@ class TaxiwayGraph:
     def _find_nearest_node(
         self, lat: float, lon: float, exclude: set[int] | None = None
     ) -> Optional[int]:
-        """Find closest graph node, optionally excluding a set of ids."""
+        """Find closest graph node, optionally excluding a set of ids.
+
+        Uses expanding grid search for efficiency.
+        """
         exclude = exclude or set()
+        key = self._grid_key(lat, lon)
         best_id = None
         best_dist = float("inf")
-        for nid, (nlat, nlon) in self.nodes.items():
-            if nid in exclude:
-                continue
-            d = (nlat - lat) ** 2 + (nlon - lon) ** 2
-            if d < best_dist:
-                best_dist = d
-                best_id = nid
+        found_radius = -1
+        for radius in range(50):
+            for di in range(-radius, radius + 1):
+                for dj in range(-radius, radius + 1):
+                    if radius > 0 and abs(di) != radius and abs(dj) != radius:
+                        continue
+                    for nid in self._grid.get((key[0] + di, key[1] + dj), ()):
+                        if nid in exclude:
+                            continue
+                        nlat, nlon = self.nodes[nid]
+                        d = (nlat - lat) ** 2 + (nlon - lon) ** 2
+                        if d < best_dist:
+                            best_dist = d
+                            best_id = nid
+                            found_radius = radius
+            if best_id is not None and radius > found_radius:
+                return best_id
         return best_id
 
     def _find_nearest_nodes(
         self, lat: float, lon: float, k: int = 5,
         max_dist_m: float = 500, exclude: set[int] | None = None,
     ) -> list[int]:
-        """Return up to *k* nearest nodes within *max_dist_m* meters."""
+        """Return up to *k* nearest nodes within *max_dist_m* meters.
+
+        Pre-filters using degree-distance approximation before computing
+        expensive haversine only on nearby candidates.
+        """
         exclude = exclude or set()
+        # Approximate degree-distance filter (1 degree ≈ 111km)
+        deg_radius = max_dist_m / 111_000.0
+        key = self._grid_key(lat, lon)
+        grid_radius = int(deg_radius * self._grid_inv) + 2
         candidates: list[tuple[float, int]] = []
-        for nid, (nlat, nlon) in self.nodes.items():
-            if nid in exclude:
-                continue
-            d = _haversine_m(lat, lon, nlat, nlon)
-            if d <= max_dist_m:
-                candidates.append((d, nid))
+        for di in range(-grid_radius, grid_radius + 1):
+            for dj in range(-grid_radius, grid_radius + 1):
+                for nid in self._grid.get((key[0] + di, key[1] + dj), ()):
+                    if nid in exclude:
+                        continue
+                    nlat, nlon = self.nodes[nid]
+                    # Fast degree-distance pre-filter
+                    if abs(nlat - lat) > deg_radius or abs(nlon - lon) > deg_radius:
+                        continue
+                    d = _haversine_m(lat, lon, nlat, nlon)
+                    if d <= max_dist_m:
+                        candidates.append((d, nid))
         candidates.sort()
         return [nid for _, nid in candidates[:k]]
