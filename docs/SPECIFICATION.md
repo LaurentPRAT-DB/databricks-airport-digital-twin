@@ -83,7 +83,7 @@ This application serves as a customer demonstration tool for Databricks Field En
 1. Application loads and displays flight data within 5 seconds
 2. All Databricks platform features visually accessible from the UI
 3. Demo runs reliably without external dependencies (synthetic fallback)
-4. Supports switching between 12+ airports worldwide
+4. Supports switching between 43+ known airports worldwide (1183 calibration profiles)
 5. 3D visualization provides "wow factor" for presentations
 
 ---
@@ -100,23 +100,28 @@ This application serves as a customer demonstration tool for Databricks Field En
 | **2D Visualization** | Leaflet map with OSM airport overlay, flight markers, trajectories |
 | **3D Visualization** | Three.js airport scene, GLTF aircraft models, real-time positions |
 | **UI Components** | Flight list, flight detail, FIDS, weather widget, gate status, data ops dashboard |
-| **Multi-Airport** | 12 preset airports + custom ICAO input, dynamic OSM import |
+| **Multi-Airport** | 43 known airport profiles + 1183 calibration profiles + custom ICAO input, dynamic OSM import |
 | **Platform** | Lakeview dashboards, Genie NL queries, data lineage, MLflow tracking |
 | **Baggage** | DLT pipeline (bronze/silver/gold), synthetic generation, API endpoints |
 | **Weather** | Synthetic METAR/TAF, flight category display, diurnal patterns |
 | **GSE** | Turnaround tracking, GSE allocation model, progress visualization |
 
-### 3.2 In Scope (v2 — Partially Implemented)
+### 3.2 In Scope (v2 — Implemented)
 
 | Feature | Status |
 |---------|--------|
 | FIDS (Flight Information Display System) | Implemented (synthetic only) |
 | Weather widget | Implemented (synthetic only) |
 | GSE/Turnaround model | Implemented (backend + partial frontend) |
-| Baggage handling system | Implemented (backend + partial frontend) |
-| Multi-airport OSM support | Implemented |
+| Baggage handling system | Implemented (backend + frontend + DLT pipeline) |
+| Multi-airport OSM support | Implemented (43 known airports, 1183 calibration profiles) |
 | Per-airport ML model registry | Implemented |
 | ML training data persistence | Implemented |
+| MCP Server | Implemented (13 tools via JSON-RPC 2.0) |
+| Unified LLM Assistant | Implemented (routes to Genie or MCP) |
+| Simulation engine | Implemented (calibrated, physics-based, with OpenAP profiles) |
+| Satellite inpainting | Implemented (aircraft removal from tiles) |
+| MSFS BGL import | Implemented (scenery file parsing) |
 
 ### 3.3 Out of Scope
 
@@ -326,10 +331,15 @@ Auth:     OAuth (Databricks Apps) / Direct credentials (local dev)
 app/backend/
 ├── main.py                          # FastAPI app setup, lifespan, CORS, static files
 ├── api/
-│   ├── routes.py                    # REST endpoints (flights, schedule, weather, etc.)
+│   ├── routes.py                    # REST endpoints (flights, schedule, weather, airport, etc.)
 │   ├── websocket.py                 # WebSocket for real-time flight updates
 │   ├── predictions.py               # ML prediction endpoints
-│   └── data_ops.py                  # Data operations monitoring endpoints
+│   ├── data_ops.py                  # Data operations monitoring endpoints
+│   ├── simulation.py                # Simulation file management and demo endpoints
+│   ├── assistant.py                 # Unified LLM assistant (Genie + MCP routing)
+│   ├── genie.py                     # Genie natural language query endpoints
+│   ├── mcp.py                       # MCP JSON-RPC 2.0 server (13 tools)
+│   └── inpainting.py               # Satellite tile inpainting endpoints
 ├── models/
 │   ├── flight.py                    # FlightPosition, FlightListResponse, TrajectoryPoint
 │   ├── airport_config.py            # ImportResponse, AirportConfigResponse
@@ -348,7 +358,9 @@ app/backend/
     ├── weather_service.py           # Weather data (synthetic METAR/TAF)
     ├── gse_service.py               # Ground support equipment status
     ├── baggage_service.py           # Baggage handling statistics
-    └── data_ops_service.py          # Pipeline health monitoring
+    ├── data_ops_service.py          # Pipeline health monitoring
+    ├── demo_simulation_service.py   # Demo simulation orchestration
+    └── mcp_connection_service.py    # MCP UC connection management
 ```
 
 ### 7.2 Application Lifecycle
@@ -426,7 +438,7 @@ app/frontend/src/
 ├── main.tsx                             # Entry point (React root)
 ├── components/
 │   ├── AirportSelector/
-│   │   ├── AirportSelector.tsx          # Dropdown with 12 presets + custom ICAO
+│   │   ├── AirportSelector.tsx          # Dropdown with 43 known airports + custom ICAO
 │   │   └── AirportSwitchProgress.tsx    # Progress overlay during airport switch
 │   ├── Map/
 │   │   ├── AirportMap.tsx               # Leaflet 2D map container
@@ -989,13 +1001,13 @@ databricks apps deploy airport-digital-twin-dev \
 
 | Type | Location | Runner | Count | Purpose |
 |------|----------|--------|-------|---------|
-| **Python Unit** | `tests/` | pytest | ~750+ | Backend logic, services, models, formats |
-| **Frontend Unit** | `app/frontend/src/**/*.test.*` | Vitest | ~240+ | Components, hooks, utilities |
+| **Python Unit** | `tests/` | pytest | ~3089 | Backend logic, services, models, formats (69% code coverage) |
+| **Frontend Unit** | `app/frontend/src/**/*.test.*` | Vitest | ~810 | Components, hooks, utilities (34 test files) |
 | **Integration** | `databricks/notebooks/test_baggage_pipeline.py` | Databricks | On-demand | DLT Spark transformations |
 | **E2E** | `app/frontend/e2e/` | Playwright | 2 specs | Full app interactions, 3D viz |
 | **Security** | `tests/test_security.py` | pytest | 31 | SQL injection, XSS, input validation |
 
-**Total:** ~992+ tests passing
+**Total:** ~3,900 tests (4 known Python failures, 19 skipped)
 
 ### 17.2 Test Categories (Python)
 
@@ -1165,6 +1177,9 @@ END
 | `GET /api/data-sources` | GET | Data source status and health |
 | `GET /health` | GET | Application health check |
 | `GET /api/ready` | GET | Backend readiness (for loading screen) |
+| `GET /api/version` | GET | Application version info |
+| `GET /api/config` | GET | Runtime configuration |
+| `GET /api/logs` | GET | Application logs |
 
 ### 20.2 Prediction Endpoints
 
@@ -1174,6 +1189,7 @@ END
 | `GET /api/predictions/gates/{icao24}` | GET | Gate recommendations for flight |
 | `GET /api/predictions/congestion` | GET | Airport area congestion levels |
 | `GET /api/predictions/bottlenecks` | GET | HIGH/CRITICAL congestion only |
+| `GET /api/predictions/congestion-summary` | GET | Aggregated congestion summary |
 
 ### 20.3 Schedule Endpoints
 
@@ -1181,6 +1197,7 @@ END
 |----------|--------|-------------|
 | `GET /api/schedule/arrivals` | GET | Scheduled arrivals (FIDS) |
 | `GET /api/schedule/departures` | GET | Scheduled departures (FIDS) |
+| `GET /api/schedule/audit` | GET | Schedule accuracy audit |
 
 ### 20.4 Weather Endpoints
 
@@ -1213,27 +1230,83 @@ END
 | `POST /api/airport/import/ifc` | POST | Import IFC building model |
 | `POST /api/airport/import/aidm` | POST | Import AIDM operational data |
 | `POST /api/airport/import/faa` | POST | Import FAA NASR runway data |
+| `POST /api/airport/import/msfs` | POST | Import MSFS BGL scenery data |
 | `GET /api/airports` | GET | List all persisted airports |
 | `GET /api/airports/{icao}` | GET | Get airport (lakehouse → OSM fallback) |
 | `POST /api/airports/{icao}/activate` | POST | Activate airport (full switch) |
+| `POST /api/airports/{icao}/reload` | POST | Reload airport from cache |
 | `POST /api/airports/{icao}/refresh` | POST | Re-fetch from external sources |
 | `DELETE /api/airports/{icao}` | DELETE | Delete persisted airport data |
+| `GET /api/airports/preload/status` | GET | Preload cache status for all airports |
+| `POST /api/airports/preload` | POST | Preload well-known airports into cache |
 
-### 20.8 Monitoring Endpoints
+### 20.8 Simulation Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `GET /api/simulation/files` | GET | List available simulation data files |
+| `GET /api/simulation/data/{filename}` | GET | Retrieve simulation data file |
+| `GET /api/simulation/metadata/{filename}` | GET | Simulation file metadata |
+| `GET /api/simulation/demo/{airport_icao}` | GET | Run demo simulation for airport |
+
+### 20.9 Assistant & Genie Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `POST /api/assistant/ask` | POST | Unified LLM assistant (routes to Genie or MCP) |
+| `POST /api/assistant/followup` | POST | Follow-up question to assistant |
+| `POST /api/genie/ask` | POST | Genie natural language query |
+| `POST /api/genie/followup` | POST | Genie follow-up query |
+| `GET /api/genie/space` | GET | Genie space configuration |
+
+### 20.10 MCP Server Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `POST /api/mcp` | POST | JSON-RPC 2.0 MCP endpoint (13 tools) |
+| `GET /api/mcp/tools` | GET | List available MCP tools |
+| `GET /api/mcp/health` | GET | MCP server health check |
+
+### 20.11 Inpainting Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `GET /api/inpainting/status` | GET | Inpainting service status |
+| `POST /api/inpainting/wake` | POST | Wake up inpainting model endpoint |
+| `GET /api/inpainting/cache-stats` | GET | Tile cache statistics |
+| `POST /api/inpainting/clean-tile` | POST | Clean a satellite tile |
+
+### 20.12 Data Ops Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `GET /api/data-ops/stats` | GET | Pipeline statistics |
+| `GET /api/data-ops/acquisitions` | GET | Data acquisition history |
+| `GET /api/data-ops/syncs` | GET | Sync history |
+| `GET /api/data-ops/sync-status` | GET | Current sync status |
+| `POST /api/data-ops/check-freshness` | POST | Check data freshness |
+| `GET /api/data-ops/dashboard` | GET | Full dashboard data |
+| `POST /api/data-ops/reset-synthetic` | POST | Reset synthetic data generator |
+| `GET /api/data-ops/history-sync-status` | GET | History sync status |
+
+### 20.13 Monitoring Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `POST /api/metrics` | POST | Collect Web Vitals from frontend |
 | `GET /api/metrics/summary` | GET | Aggregated Web Vitals summary |
 | `GET /api/debug/paths` | GET | Debug: file system paths |
-| `GET /api/data-ops/*` | GET | Pipeline health monitoring |
+| `GET /api/debug/logs` | GET | Debug: ring-buffer log endpoint |
+| `POST /api/user/prewarm` | POST | Prewarm airport data on user arrival |
 
-### 20.9 WebSocket Endpoints
+### 20.14 WebSocket Endpoints
 
 | Endpoint | Protocol | Description |
 |----------|----------|-------------|
 | `ws://host/ws/flights` | WebSocket | Real-time flight updates (5s interval) |
 
+**Total API endpoints:** 71
+
 ---
 
-*End of specification. This document was reverse-engineered from the implemented codebase as of 2026-03-10.*
+*End of specification. This document was reverse-engineered from the implemented codebase as of 2026-03-10. Updated 2026-04-01 with current test counts, API endpoints, and airport profile numbers.*

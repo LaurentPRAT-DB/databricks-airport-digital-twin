@@ -32,10 +32,10 @@ Interactive airport digital twin demo on Databricks. APX stack: FastAPI backend 
 ### Local tests (run frequently)
 
 ```bash
-# Python (~1365 tests)
+# Python (~3089 tests, 69% code coverage)
 uv run pytest tests/ -v
 
-# Frontend (~635 tests)
+# Frontend (~810 tests, 34 test files)
 cd app/frontend && npm test -- --run
 ```
 
@@ -53,7 +53,7 @@ databricks bundle run baggage_pipeline_integration_test --target dev  # DLT pipe
 
 ### Known test issues
 
-- 2 known backend failures (separation + altitude ordering) — not yet fixed.
+- 4 known backend failures: approach speed (DEN), taxi-out median vs BTS, origin/destination generation, diversion after go-arounds.
 - 1 flaky frontend timing test (`switch to 3D and back to 2D`, 750ms threshold).
 
 ## Deployment
