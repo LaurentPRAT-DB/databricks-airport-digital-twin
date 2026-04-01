@@ -278,9 +278,9 @@ class TestDepartureSeparation:
         rwy.last_departure_type = "HEAVY"
 
         state = _update_flight_state(state, 0.5)
-        # Should still be TAXI_TO_RUNWAY (holding short)
+        # Should still be TAXI_TO_RUNWAY (holding short, creeping toward threshold)
         assert state.phase == FlightPhase.TAXI_TO_RUNWAY
-        assert state.velocity == 0
+        assert state.velocity <= 2  # slow creep, not accelerating
 
     def test_proceed_when_separation_met(self):
         """Aircraft should enter takeoff when wake separation is met."""
@@ -706,4 +706,4 @@ class TestRunwayOccupiedHoldShort:
         state = _update_flight_state(state, 0.5)
         assert state.phase == FlightPhase.TAXI_TO_RUNWAY, \
             "Should hold short when runway is occupied"
-        assert state.velocity == 0
+        assert state.velocity <= 2  # slow creep toward threshold, not accelerating

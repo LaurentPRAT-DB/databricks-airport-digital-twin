@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useFlightContext } from '../../context/FlightContext';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { Flight } from '../../types/flight';
@@ -99,15 +99,24 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
     }
   };
 
+  // Keep a ref to simTime so the interval always uses the latest value
+  // without re-triggering the effect on every frame.
+  const simTimeRef = useRef(simTime);
+  simTimeRef.current = simTime;
+
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchSchedule() {
       try {
-        setLoading(true);
-        const params = simTime ? `?sim_time=${encodeURIComponent(simTime)}` : '';
+        const st = simTimeRef.current;
+        const params = st ? `?sim_time=${encodeURIComponent(st)}` : '';
         const [arrivalsRes, departuresRes] = await Promise.all([
           fetch(`/api/schedule/arrivals${params}`),
           fetch(`/api/schedule/departures${params}`),
         ]);
+
+        if (cancelled) return;
 
         if (!arrivalsRes.ok || !departuresRes.ok) {
           throw new Error('Failed to fetch schedule');
@@ -116,21 +125,25 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
         const arrivalsData: ScheduleResponse = await arrivalsRes.json();
         const departuresData: ScheduleResponse = await departuresRes.json();
 
-        setArrivals(arrivalsData.flights);
-        setDepartures(departuresData.flights);
-        setError(null);
+        if (!cancelled) {
+          setArrivals(arrivalsData.flights);
+          setDepartures(departuresData.flights);
+          setError(null);
+          setLoading(false);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Unknown error');
+          setLoading(false);
+        }
       }
     }
 
     fetchSchedule();
     // Refresh every 15 seconds to stay in sync with live sim flights
     const interval = setInterval(fetchSchedule, 15 * 1000);
-    return () => clearInterval(interval);
-  }, [currentAirport, simTime]);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [currentAirport]);
 
   const allFlights = activeTab === 'arrivals' ? arrivals : departures;
   const flights = useMemo(() => {
