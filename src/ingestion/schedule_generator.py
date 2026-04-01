@@ -943,27 +943,16 @@ def find_scheduled_departure(callsign: str, airport: str = "SFO") -> Optional[di
 
     airline_prefix = callsign[:3]
 
-    # First try exact match on flight_number
+    # Only use exact match on flight_number.
+    # The previous airline-prefix fallback returned unrelated flights
+    # (e.g., ASA1234's departure time for arriving flight ASA2886).
     for f in schedule:
         if f["flight_type"] != "departure":
             continue
         if f["flight_number"] == callsign:
             return f
 
-    # Fall back to next departure by same airline prefix
-    now = datetime.now(timezone.utc)
-    best = None
-    for f in schedule:
-        if f["flight_type"] != "departure":
-            continue
-        if not f["flight_number"].startswith(airline_prefix):
-            continue
-        sched_time = datetime.fromisoformat(f["scheduled_time"])
-        if sched_time > now:
-            if best is None or sched_time < datetime.fromisoformat(best["scheduled_time"]):
-                best = f
-
-    return best
+    return None
 
 
 def get_future_schedule(
