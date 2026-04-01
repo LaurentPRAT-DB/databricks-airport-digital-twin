@@ -614,7 +614,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
         {mapView}
 
         {/* Right panel: Flight Detail + Gate Status */}
-        <div className="w-80 flex-shrink-0 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 space-y-4">
+        <div className="w-80 flex-shrink-0 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 pb-16 space-y-4">
           <FlightDetail />
           <GateStatus />
         </div>

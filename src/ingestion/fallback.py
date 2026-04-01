@@ -2465,10 +2465,10 @@ def _taxi_speed_factor(state: FlightState) -> float:
 def _count_aircraft_in_phase(phase: FlightPhase) -> int:
     """Count how many aircraft are currently in a specific phase.
 
-    Counts from actual flight state rather than the phase index to avoid
-    desync issues where the index retains stale entries.
+    Uses the _flights_by_phase index for O(1) lookup instead of scanning
+    all flight states. The index is kept in sync by _PhaseTrackedFlightStates.
     """
-    return sum(1 for s in _flight_states.values() if s.phase == phase)
+    return len(_flights_by_phase[phase])
 
 def _get_approach_queue_position(icao24: str) -> int:
     """Get position in approach queue (0 = first/next to land)."""
