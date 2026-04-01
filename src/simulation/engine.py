@@ -233,6 +233,7 @@ class SimulationEngine:
 
         # Track which scheduled flights have been spawned
         self._spawned_indices: set[int] = set()
+        self._spawn_scan_start: int = 0  # low-water mark for schedule scan
 
         # Track completed flights for baggage generation
         self._completed_flights: list[dict] = []
@@ -749,113 +750,121 @@ class SimulationEngine:
 
     def _spawn_scheduled_flights(self) -> None:
         """Spawn flights whose scheduled time has arrived, subject to capacity limits."""
-        for idx, flight in enumerate(self.flight_schedule):
+        for idx in range(self._spawn_scan_start, len(self.flight_schedule)):
+            flight = self.flight_schedule[idx]
             if idx in self._spawned_indices:
                 continue
 
             scheduled = datetime.fromisoformat(flight["scheduled_time"])
             effective_time = scheduled + timedelta(minutes=flight.get("delay_minutes", 0))
 
-            if effective_time <= self.sim_time:
-                icao24 = f"sim{idx:05d}"
-                callsign = flight["flight_number"]
+            if effective_time > self.sim_time:
+                break  # schedule is sorted — all remaining are in the future
 
-                if icao24 in _flight_states:
+            icao24 = f"sim{idx:05d}"
+            callsign = flight["flight_number"]
+
+            if icao24 in _flight_states:
+                continue
+
+            # Capacity check: defer spawn if over rate limit
+            if flight["flight_type"] == "arrival":
+                if not self.capacity.can_accept_arrival(self.sim_time):
+                    if icao24 not in self._holding_flights:
+                        self._holding_flights.add(icao24)
+                        self.recorder.record_scenario_event(
+                            self.sim_time, "capacity",
+                            f"Arrival {callsign} holding — arrival rate at capacity",
+                            {"callsign": callsign, "action": "hold"},
+                        )
+                        diag_log(
+                            "DEPARTURE_HOLD", self.sim_time,
+                            icao24=icao24, reason="arrival_rate_capacity",
+                        )
+                    continue  # will retry next tick
+                self._holding_flights.discard(icao24)
+            else:
+                if not self.capacity.can_release_departure(self.sim_time):
+                    if icao24 not in self._holding_flights:
+                        self._holding_flights.add(icao24)
+                        self.recorder.record_scenario_event(
+                            self.sim_time, "capacity",
+                            f"Departure {callsign} held — departure rate at capacity",
+                            {"callsign": callsign, "action": "hold"},
+                        )
+                        diag_log(
+                            "DEPARTURE_HOLD", self.sim_time,
+                            icao24=icao24, reason="departure_rate_capacity",
+                        )
                     continue
+                self._holding_flights.discard(icao24)
 
-                # Capacity check: defer spawn if over rate limit
+            if flight["flight_type"] == "arrival":
+                phase = FlightPhase.APPROACHING
+                origin = flight["origin"]
+                dest = flight["destination"]
+            else:
+                phase = FlightPhase.PARKED
+                origin = flight["origin"]
+                dest = flight["destination"]
+
+            try:
+                state = _create_new_flight(
+                    icao24, callsign, phase,
+                    origin=origin, destination=dest,
+                )
+                # Override aircraft type to match schedule
+                state.aircraft_type = flight["aircraft_type"]
+                _flight_states[icao24] = state
+                self._phase_count_inc(state.phase.value)
+
+                self._spawned_indices.add(idx)
+                self._spawn_times[idx] = self.sim_time
+
+                # Record capacity tracking
                 if flight["flight_type"] == "arrival":
-                    if not self.capacity.can_accept_arrival(self.sim_time):
-                        if icao24 not in self._holding_flights:
-                            self._holding_flights.add(icao24)
-                            self.recorder.record_scenario_event(
-                                self.sim_time, "capacity",
-                                f"Arrival {callsign} holding — arrival rate at capacity",
-                                {"callsign": callsign, "action": "hold"},
-                            )
-                            diag_log(
-                                "DEPARTURE_HOLD", self.sim_time,
-                                icao24=icao24, reason="arrival_rate_capacity",
-                            )
-                        continue  # will retry next tick
-                    self._holding_flights.discard(icao24)
+                    self.capacity.record_arrival(self.sim_time)
                 else:
-                    if not self.capacity.can_release_departure(self.sim_time):
-                        if icao24 not in self._holding_flights:
-                            self._holding_flights.add(icao24)
-                            self.recorder.record_scenario_event(
-                                self.sim_time, "capacity",
-                                f"Departure {callsign} held — departure rate at capacity",
-                                {"callsign": callsign, "action": "hold"},
-                            )
-                            diag_log(
-                                "DEPARTURE_HOLD", self.sim_time,
-                                icao24=icao24, reason="departure_rate_capacity",
-                            )
-                        continue
-                    self._holding_flights.discard(icao24)
+                    self.capacity.record_departure(self.sim_time)
 
-                if flight["flight_type"] == "arrival":
-                    phase = FlightPhase.APPROACHING
-                    origin = flight["origin"]
-                    dest = flight["destination"]
-                else:
-                    phase = FlightPhase.PARKED
-                    origin = flight["origin"]
-                    dest = flight["destination"]
+                self.recorder.record_phase_transition(
+                    self.sim_time, icao24, callsign,
+                    "scheduled", phase.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
 
-                try:
-                    state = _create_new_flight(
-                        icao24, callsign, phase,
-                        origin=origin, destination=dest,
+                # Process departure passengers through checkpoint
+                if flight["flight_type"] == "departure":
+                    dep_time = datetime.fromisoformat(flight["scheduled_time"])
+                    self._passenger_flow.process_departure(
+                        flight_number=callsign,
+                        aircraft_type=flight["aircraft_type"],
+                        scheduled_departure=dep_time,
                     )
-                    # Override aircraft type to match schedule
-                    state.aircraft_type = flight["aircraft_type"]
-                    _flight_states[icao24] = state
-                    self._phase_count_inc(state.phase.value)
+                    # Generate baggage for departures spawned at gate
+                    # (arrivals generate baggage when they transition to PARKED)
+                    self._completed_flights.append({
+                        "icao24": icao24,
+                        "callsign": callsign,
+                        "schedule": flight,
+                        "parked_time": self.sim_time,
+                    })
 
-                    self._spawned_indices.add(idx)
-                    self._spawn_times[idx] = self.sim_time
-
-                    # Record capacity tracking
-                    if flight["flight_type"] == "arrival":
-                        self.capacity.record_arrival(self.sim_time)
-                    else:
-                        self.capacity.record_departure(self.sim_time)
-
-                    self.recorder.record_phase_transition(
-                        self.sim_time, icao24, callsign,
-                        "scheduled", phase.value,
-                        state.latitude, state.longitude, state.altitude,
-                        state.aircraft_type, state.assigned_gate,
+                if self.config.debug:
+                    logger.debug(
+                        "[%s] Spawned %s (%s) as %s",
+                        self.sim_time.strftime("%H:%M:%S"),
+                        callsign, flight["flight_type"], phase.value,
                     )
+            except Exception as e:
+                logger.warning("Failed to spawn flight %s: %s", callsign, e)
+                self._spawned_indices.add(idx)
 
-                    # Process departure passengers through checkpoint
-                    if flight["flight_type"] == "departure":
-                        dep_time = datetime.fromisoformat(flight["scheduled_time"])
-                        self._passenger_flow.process_departure(
-                            flight_number=callsign,
-                            aircraft_type=flight["aircraft_type"],
-                            scheduled_departure=dep_time,
-                        )
-                        # Generate baggage for departures spawned at gate
-                        # (arrivals generate baggage when they transition to PARKED)
-                        self._completed_flights.append({
-                            "icao24": icao24,
-                            "callsign": callsign,
-                            "schedule": flight,
-                            "parked_time": self.sim_time,
-                        })
-
-                    if self.config.debug:
-                        logger.debug(
-                            "[%s] Spawned %s (%s) as %s",
-                            self.sim_time.strftime("%H:%M:%S"),
-                            callsign, flight["flight_type"], phase.value,
-                        )
-                except Exception as e:
-                    logger.warning("Failed to spawn flight %s: %s", callsign, e)
-                    self._spawned_indices.add(idx)
+        # Advance low-water mark past contiguous spawned flights
+        while (self._spawn_scan_start < len(self.flight_schedule)
+               and self._spawn_scan_start in self._spawned_indices):
+            self._spawn_scan_start += 1
 
     def _update_all_flights(self, dt: float) -> None:
         """Update all active flight states and capture events."""
@@ -1083,6 +1092,12 @@ class SimulationEngine:
                         state.go_around_count += 1
                         state.holding_phase_time = 0.0
                         state.holding_inbound = True
+                        self.recorder.record_scenario_event(
+                            self.sim_time, "go_around",
+                            f"{state.callsign} go-around #{state.go_around_count} (altitude {state.altitude:.0f}ft)",
+                            {"callsign": state.callsign, "icao24": icao24,
+                             "attempt": state.go_around_count, "reason": "high_altitude"},
+                        )
                         self._phase_time[icao24] = ("enroute", 0.0)
                         if state.go_around_count >= 3:
                             self._divert_flight(icao24, state)

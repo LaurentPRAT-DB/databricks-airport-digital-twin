@@ -1953,7 +1953,9 @@ _flights_by_phase: Dict[FlightPhase, Set[str]] = {phase: set() for phase in Flig
 
 
 class _FlightStateDict(dict):
-    """Dict subclass that auto-syncs _flights_by_phase on insert/delete/clear."""
+    """Dict subclass that auto-syncs _flights_by_phase and _callsigns on insert/delete/clear."""
+
+    _callsigns: Set[str] = set()
 
     def __setitem__(self, key: str, value: FlightState):
         old = self.get(key)
@@ -1962,19 +1964,23 @@ class _FlightStateDict(dict):
             # When old IS value (same reference, modified in-place by _update_flight_state),
             # _set_phase already updated the index, so skip to avoid double-counting.
             _flights_by_phase[old.phase].discard(key)
+            self._callsigns.discard(old.callsign)
         super().__setitem__(key, value)
         _flights_by_phase[value.phase].add(key)
+        self._callsigns.add(value.callsign)
 
     def __delitem__(self, key: str):
         old = self.get(key)
         if old is not None:
             _flights_by_phase[old.phase].discard(key)
+            self._callsigns.discard(old.callsign)
         super().__delitem__(key)
 
     def clear(self):
         super().clear()
         for s in _flights_by_phase.values():
             s.clear()
+        self._callsigns.clear()
 
 
 # Global state storage
@@ -4098,10 +4104,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # Smoothly face the runway at the hold line
             _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
             state.heading = _smooth_heading(state.heading, dep_hdg, 5.0, dt)
-            # Compute departure queue hold once when aircraft first reaches hold line
+            # Compute departure queue hold once when aircraft first reaches hold line.
+            # The capacity system (holding points, taxiway congestion) already adds
+            # realistic delays, so the queue hold only fills a residual gap between
+            # the capacity-driven taxi time and the BTS target.
             if not state.departure_queue_set and _calibration_taxi_out_target_s > 0:
-                # Target total taxi-out = waypoint_travel + queue_hold
-                # queue_hold = target - waypoint_estimate, with ±20% jitter
                 queue_base = max(0.0, _calibration_taxi_out_target_s - _calibration_taxi_out_waypoint_s)
                 state.departure_queue_hold_s = queue_base * random.uniform(0.80, 1.20)
                 state.departure_queue_set = True
@@ -4371,7 +4378,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             center,
         )
 
-        if state.origin_airport and not state.destination_airport:
+        _local = get_current_airport_iata()
+        _is_arriving_enroute = (
+            (state.origin_airport and not state.destination_airport)
+            or (state.destination_airport == _local)
+        )
+        if _is_arriving_enroute:
             # ARRIVING enroute: heading toward airport, transition to approach when close
 
             # Go-around climb: if aircraft just executed a missed approach,
@@ -4482,8 +4494,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                         state.holding_phase_time = 0.0
                         state.holding_inbound = True
 
-        elif state.destination_airport:
-            # DEPARTING enroute: heading away from SFO toward destination
+        elif state.destination_airport and state.destination_airport != _local:
+            # DEPARTING enroute: heading away from airport toward destination
             target_heading = _bearing_to_airport(state.destination_airport)
             heading_diff = (target_heading - state.heading + 540) % 360 - 180
             state.heading += max(-3, min(3, heading_diff)) * dt
@@ -4691,7 +4703,7 @@ def generate_synthetic_flights(
             callsign = f"{prefix}{flight_num}"
 
             # Ensure callsign uniqueness — skip duplicates (loop will retry)
-            if any(s.callsign == callsign for s in _flight_states.values()):
+            if callsign in _flight_states._callsigns:
                 continue
 
             # Count current phases to balance distribution
@@ -4756,14 +4768,12 @@ def generate_synthetic_flights(
 
             local_iata = get_current_airport_iata()
             if is_arriving:
-                # Convention: arriving flights have origin set, NO destination
-                # (_update_flight_state checks `origin and not destination` for arrivals)
+                # Arriving flights: origin=remote airport, destination=local airport
                 origin = _pick_random_origin()
-                dest = None
+                dest = local_iata
             elif is_departing:
-                # Convention: departing flights have destination set, NO origin
-                # (_update_flight_state checks `destination` for departures)
-                origin = None
+                # Departing flights: origin=local airport, destination=remote
+                origin = local_iata
                 dest = _pick_random_destination()
             elif selected_phase == FlightPhase.PARKED:
                 # Parked: set both — parked flights don't use the enroute direction logic
