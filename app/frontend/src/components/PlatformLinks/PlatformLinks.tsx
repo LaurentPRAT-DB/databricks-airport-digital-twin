@@ -45,6 +45,13 @@ const platformLinks: PlatformLink[] = [
     url: `${WORKSPACE_URL}/explore/data/${CATALOG}/${SCHEMA}`,
     description: 'Browse tables in Unity Catalog',
   },
+  {
+    id: 'lakebase',
+    label: 'Lakebase',
+    icon: '🐘',
+    url: `${WORKSPACE_URL}/sql/postgres/projects/airport-digital-twin`,
+    description: 'Manage Lakebase PostgreSQL endpoint',
+  },
 ];
 
 export default function PlatformLinks() {

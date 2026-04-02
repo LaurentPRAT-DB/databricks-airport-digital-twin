@@ -42,23 +42,11 @@ describe('Header', () => {
   })
 
   describe('Connection status', () => {
-    it('shows green indicator dot when connected', async () => {
+    it('does not show error toast when connected', async () => {
       render(<Header />)
 
-      await waitFor(() => {
-        const indicator = document.querySelector('.bg-green-500')
-        expect(indicator).toBeInTheDocument()
-      })
-    })
-
-    it('shows connection info in tooltip', async () => {
-      render(<Header />)
-
-      await waitFor(() => {
-        const indicator = document.querySelector('.bg-green-500')
-        expect(indicator).toBeInTheDocument()
-        expect(indicator?.getAttribute('title')).toMatch(/connected/i)
-      })
+      // No error toast should be visible when connection is healthy
+      expect(screen.queryByText(/connection error/i)).not.toBeInTheDocument()
     })
   })
 

@@ -14,7 +14,7 @@ interface HeaderProps {
 }
 
 export default function Header({ onShowFIDS, simulationControls }: HeaderProps) {
-  const { isLoading, error, lastUpdated, setSelectedFlight } = useFlightContext();
+  const { error, setSelectedFlight } = useFlightContext();
   const { currentAirport, isLoading: isLoadingAirport, error: airportError, loadAirport, switchProgress } = useAirportConfigContext();
   const { isDark, toggle: toggleTheme } = useTheme();
 
@@ -90,23 +90,18 @@ export default function Header({ onShowFIDS, simulationControls }: HeaderProps) 
         {/* Phase filter dropdown */}
         <PhaseFilter />
 
-        {/* Connection status — compact dot with tooltip */}
-        <span
-          className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-            error
-              ? 'bg-red-500'
-              : isLoading
-              ? 'bg-yellow-500 animate-pulse'
-              : 'bg-green-500'
-          }`}
-          title={
-            error
-              ? 'Connection error'
-              : isLoading
-              ? 'Updating...'
-              : `Connected${lastUpdated ? ' · ' + new Date(lastUpdated).toLocaleTimeString() : ''}`
-          }
-        />
+        {/* WebSocket error toast — only for real errors */}
+        {error && (
+          <div className="fixed top-16 right-4 z-[2000] bg-red-900/95 border border-red-700 text-white px-4 py-3 rounded-lg shadow-xl max-w-sm animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="text-red-400 font-bold text-lg">!</span>
+              <div>
+                <div className="text-sm font-medium">Connection Error</div>
+                <div className="text-xs text-red-300 mt-0.5">{error instanceof Error ? error.message : String(error)}</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Platform Links */}
         <PlatformLinks />

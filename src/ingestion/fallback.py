@@ -3813,11 +3813,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         if state.assigned_gate is None:
             now = time.time()
             if now < state.gate_retry_at:
-                # Still waiting for retry — micro-move to avoid stuck marker (A03)
-                state.velocity = 1
-                jitter = random.uniform(-0.00002, 0.00002)
-                state.latitude += jitter
-                state.longitude += jitter
+                # Still waiting for retry — hold position
+                state.velocity = 0
                 return state
             available_gate = _find_available_gate()
             if not available_gate:
@@ -3831,10 +3828,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             else:
                 # No gates available — retry in 5 seconds (sim time)
                 state.gate_retry_at = now + 5.0
-                state.velocity = 1
-                jitter = random.uniform(-0.00002, 0.00002)
-                state.latitude += jitter
-                state.longitude += jitter
+                state.velocity = 0
                 return state
 
         # Use cached taxi route (dynamic from OSM graph or fallback)
@@ -3855,22 +3849,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude, state.longitude = new_pos
                 state.velocity = taxi_speed
             elif speed_factor < 0:
-                # Head-on hold: yielding to oncoming traffic — jitter in place,
-                # do NOT creep toward waypoint (would pass through oncoming aircraft)
+                # Head-on hold: yielding to oncoming traffic — stay put
                 state.velocity = 0
                 speed_deg = 0
-                jitter = random.uniform(-0.00002, 0.00002)
-                state.latitude += jitter
-                state.longitude += jitter
             else:
-                # Factor 0 = traffic ahead within separation threshold.
-                # Micro-creep toward waypoint (~0.5 kt) to stay on taxi route
-                # and prevent "stuck marker" detection.
+                # Factor 0 = traffic ahead within separation threshold — hold position
                 state.velocity = 0
-                creep_deg = 0.5 * _KTS_TO_DEG_PER_SEC * dt
-                new_pos = _move_toward((state.latitude, state.longitude), target, creep_deg)
-                state.latitude, state.longitude = new_pos
-                speed_deg = creep_deg
+                speed_deg = 0
 
             # Smooth heading toward waypoint (max 5°/s for taxi turns)
             target_hdg = _calculate_heading((state.latitude, state.longitude), target)
@@ -4089,21 +4074,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.latitude, state.longitude = new_pos
                 state.velocity = taxi_speed
             elif speed_factor < 0:
-                # Head-on hold: yielding to oncoming traffic — jitter in place,
-                # do NOT creep toward waypoint (would pass through oncoming aircraft)
+                # Head-on hold: yielding to oncoming traffic — stay put
                 state.velocity = 0
                 speed_deg = 0
-                jitter = random.uniform(-0.00002, 0.00002)
-                state.latitude += jitter
-                state.longitude += jitter
             else:
-                # Factor 0 = traffic ahead within separation threshold.
-                # Micro-creep toward waypoint (~0.5 kt) to stay on taxi route.
+                # Factor 0 = traffic ahead within separation threshold — hold position
                 state.velocity = 0
-                creep_deg = 0.5 * _KTS_TO_DEG_PER_SEC * dt
-                new_pos = _move_toward((state.latitude, state.longitude), target, creep_deg)
-                state.latitude, state.longitude = new_pos
-                speed_deg = creep_deg
+                speed_deg = 0
 
             # Smooth heading toward waypoint (max 5°/s for taxi turns)
             target_hdg = _calculate_heading((state.latitude, state.longitude), target)
@@ -4115,15 +4092,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # Calibrated departure queue hold — simulates real-world queue time
             # at the runway hold line that the short waypoint path doesn't capture.
             state.departure_queue_hold_s -= dt
-            # Creep forward slowly (1kt) so the marker doesn't freeze on screen
-            thr_start, _, dep_hdg, _ = _get_takeoff_runway_geometry()
-            creep_speed = 1.0
-            speed_deg = creep_speed * _KTS_TO_DEG_PER_SEC * dt
-            # Move toward the runway threshold to form a visible queue
-            if thr_start:
-                new_pos = _move_toward((state.latitude, state.longitude), (thr_start[0], thr_start[1]), speed_deg)
-                state.latitude, state.longitude = new_pos
-            state.velocity = creep_speed
+            # Hold position at queue — aircraft stays stationary while waiting
+            _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
+            state.velocity = 0
             state.heading = _smooth_heading(state.heading, dep_hdg, 5.0, dt)
         else:
             # Smoothly face the runway at the hold line
@@ -4139,11 +4110,6 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.departure_queue_set = True
                 if state.departure_queue_hold_s > 0:
                     state.velocity = 0
-                    # Micro-creep toward runway threshold to stay on route
-                    thr_s, _, d_hdg, _ = _get_takeoff_runway_geometry()
-                    creep_deg = 0.5 * _KTS_TO_DEG_PER_SEC * dt
-                    new_pos = _move_toward((state.latitude, state.longitude), thr_s, creep_deg)
-                    state.latitude, state.longitude = new_pos
                     return state
 
             # At runway hold line - check runway clear AND departure wake separation
@@ -4174,22 +4140,14 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.sid_name = _get_sid_name(state.destination_airport)
                     _occupy_runway(state.icao24, dep_rwy)
                 else:
-                    # Hold short: wake separation not yet met — creep toward threshold
-                    state.velocity = 1
-                    thr_start, _, dep_hdg, _ = _get_takeoff_runway_geometry()
-                    if thr_start:
-                        creep_deg = 1.0 * _KTS_TO_DEG_PER_SEC * dt
-                        new_pos = _move_toward((state.latitude, state.longitude), (thr_start[0], thr_start[1]), creep_deg)
-                        state.latitude, state.longitude = new_pos
+                    # Hold short: wake separation not yet met — stay put
+                    state.velocity = 0
+                    _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
                     state.heading = _smooth_heading(state.heading, dep_hdg, 5.0, dt)
             else:
-                # Hold short of runway — creep toward threshold
-                state.velocity = 1
-                thr_start, _, dep_hdg, _ = _get_takeoff_runway_geometry()
-                if thr_start:
-                    creep_deg = 1.0 * _KTS_TO_DEG_PER_SEC * dt
-                    new_pos = _move_toward((state.latitude, state.longitude), (thr_start[0], thr_start[1]), creep_deg)
-                    state.latitude, state.longitude = new_pos
+                # Hold short of runway — stay put
+                state.velocity = 0
+                _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
                 state.heading = _smooth_heading(state.heading, dep_hdg, 5.0, dt)
 
     elif state.phase == FlightPhase.TAKEOFF:

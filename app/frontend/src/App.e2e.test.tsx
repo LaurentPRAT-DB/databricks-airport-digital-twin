@@ -894,7 +894,7 @@ describe('End-to-end user interaction flows', () => {
       // Go up to the outer dropdown container that has all links
       const dropdown = dropdownHeader.closest('[class*="rounded-lg shadow-xl"]')!
       const links = within(dropdown as HTMLElement).getAllByRole('link')
-      expect(links.length).toBe(4) // 4 platform links
+      expect(links.length).toBe(5) // 5 platform links
       links.forEach((link) => {
         expect(link).toHaveAttribute('target', '_blank')
       })

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -91,32 +91,36 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
 }
 
 /**
- * Saves the current Leaflet viewport to shared state on unmount.
+ * Saves the current Leaflet viewport to shared state on every pan/zoom
+ * so the 3D view can pick it up when the user switches views.
+ * (The 2D map stays mounted but invisible, so unmount-only save doesn't work.)
  */
 function MapViewportSaver({ onViewportChange }: { onViewportChange?: (vp: SharedViewport) => void }) {
   const map = useMap();
 
-  const saveViewport = useCallback(() => {
-    if (!onViewportChange) return;
-    try {
-      const center = map.getCenter();
-      const zoom = map.getZoom();
-      onViewportChange({
-        center: { lat: center.lat, lon: center.lng },
-        zoom,
-        bearing: 0, // 2D map has no rotation
-      });
-    } catch {
-      // Map may be partially destroyed during unmount (e.g. in test environments)
-    }
-  }, [map, onViewportChange]);
-
   useEffect(() => {
-    // Save on unmount
-    return () => {
-      saveViewport();
+    if (!onViewportChange) return;
+
+    const save = () => {
+      try {
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        onViewportChange({
+          center: { lat: center.lat, lon: center.lng },
+          zoom,
+          bearing: 0,
+        });
+      } catch { /* Map may be partially destroyed */ }
     };
-  }, [saveViewport]);
+
+    map.on('moveend', save);
+    save(); // Save current state immediately
+
+    return () => {
+      map.off('moveend', save);
+      save();
+    };
+  }, [map, onViewportChange]);
 
   return null;
 }

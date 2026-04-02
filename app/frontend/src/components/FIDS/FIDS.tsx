@@ -119,10 +119,42 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
   // Derive FIDS schedule entries from map flights only during simulation replay.
   // In live mode, the REST API provides schedule data (with delays, background flights, etc.)
   const isSimReplay = dataSource === 'simulation';
+
+  // Deterministic hash for stable per-flight values (times, origins) across frames
+  const hashStr = (s: string): number => {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  };
+
+  // Common origin airports for realistic FIDS display
+  const ORIGIN_AIRPORTS = [
+    'LAX', 'JFK', 'ORD', 'DFW', 'DEN', 'ATL', 'SEA', 'BOS', 'MIA', 'PHX',
+    'IAH', 'MSP', 'DTW', 'EWR', 'LAS', 'MCO', 'CLT', 'PHL', 'SAN', 'PDX',
+    'SLC', 'IAD', 'BWI', 'TPA', 'AUS', 'BNA', 'RDU', 'HNL', 'OAK', 'SJC',
+  ];
+
+  // Anchor to the start of the current hour so scheduled times are FIXED
+  // (real FIDS show fixed ETAs; only the clock moves, not the schedule)
+  const hourAnchor = useMemo(() => {
+    if (!simTime) return null;
+    const t = new Date(simTime);
+    t.setMinutes(0, 0, 0);
+    return t.getTime();
+  }, [simTime]);
+
+  // Current sim time for the clock display (formatted)
+  const simClockDisplay = useMemo(() => {
+    if (!simTime) return null;
+    return new Date(simTime).toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    });
+  }, [simTime]);
+
   const derivedSchedule = useMemo(() => {
     if (!isSimReplay || trackedFlights.length === 0) return null;
 
-    const now = simTime ? new Date(simTime) : new Date();
+    const anchor = hourAnchor || new Date().setMinutes(0, 0, 0);
     const arrivingPhases = new Set(['approaching', 'landing', 'taxi_in']);
     const departingPhases = new Set(['pushback', 'taxi_out', 'takeoff', 'departing']);
 
@@ -135,18 +167,18 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
       const code = callsign.slice(0, 3).toUpperCase();
       const airline = AIRLINE_NAMES[code] || code;
       const phase = f.flight_phase;
-      // currentAirport is ICAO code like "KSFO"; derive IATA by dropping leading K (US) or using as-is
       const icao = currentAirport || 'KSFO';
       const localIata = icao.startsWith('K') && icao.length === 4 ? icao.slice(1) : icao;
+
+      // Deterministic hash for this flight (stable across frames)
+      const h = hashStr(callsign);
 
       let isArrival: boolean;
       if (arrivingPhases.has(phase)) isArrival = true;
       else if (departingPhases.has(phase)) isArrival = false;
       else if (phase === 'parked') {
-        // Parked: check if it arrived (has origin set and dest is local)
         isArrival = f.destination_airport === localIata || !f.destination_airport;
       } else {
-        // enroute or unknown: use origin/dest convention
         isArrival = (f.destination_airport === localIata) ||
                     (!!f.origin_airport && !f.destination_airport);
       }
@@ -162,38 +194,75 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
       else if (phase === 'enroute') status = isArrival ? 'scheduled' : 'departed';
       else status = 'on_time';
 
-      // Compute scheduled time from flight state
-      let schedTime: Date;
+      // Compute ETA / scheduled time from flight physics.
+      // "scheduled_time" = the original schedule (fixed per flight via hash).
+      // "estimated_time" = current ETA based on real-time state (may differ → delay).
+      const now = simTime ? new Date(simTime).getTime() : Date.now();
+      let schedTime: Date;       // Original schedule (fixed, hash-based)
+      let estimatedTime: Date | null = null;  // Real-time ETA (if different from schedule)
+      let delayMin = 0;
+
       if (phase === 'approaching') {
+        // Real ETA from altitude: descend at ~1500 ft/min + 5 min for approach pattern
         const alt = Number(f.altitude) || 0;
-        const etaMin = Math.max(3, Math.round(alt / 800));
-        schedTime = new Date(now.getTime() + etaMin * 60000);
-      } else if (phase === 'landing' || phase === 'taxi_in') {
-        schedTime = new Date(now.getTime() - 2 * 60000);
+        const vRate = Math.abs(Number(f.vertical_rate) || 1500); // ft/min
+        const etaMin = Math.max(2, Math.round(alt / vRate + 5));
+        // Round ETA to nearest minute for stability
+        const etaMs = Math.round(etaMin) * 60000;
+        estimatedTime = new Date(now + etaMs);
+        // Scheduled time = hash-based original time (what the schedule said)
+        schedTime = new Date(anchor + (45 + (h % 20)) * 60000);
+        // Delay = how much later than scheduled
+        delayMin = Math.max(0, Math.round((estimatedTime.getTime() - schedTime.getTime()) / 60000));
+        if (delayMin > 0) status = 'delayed';
+      } else if (phase === 'landing') {
+        // Landing now — ETA is now
+        estimatedTime = new Date(now);
+        schedTime = new Date(anchor + (40 + (h % 15)) * 60000);
+        status = 'arrived';
+      } else if (phase === 'taxi_in') {
+        // Taxiing to gate — arrived, at gate in ~5 min
+        estimatedTime = new Date(now);
+        schedTime = new Date(anchor + (40 + (h % 15)) * 60000);
       } else if (phase === 'parked' && isArrival) {
-        schedTime = new Date(now.getTime() - 10 * 60000);
+        // Arrived and parked — spread across the past hour
+        schedTime = new Date(anchor + (h % 50) * 60000);
       } else if (phase === 'pushback' || phase === 'taxi_out') {
-        schedTime = new Date(now.getTime() - 2 * 60000);
+        // Departing — scheduled time is hash-based, show "Gate Closed"
+        schedTime = new Date(anchor + (45 + (h % 15)) * 60000);
       } else if (phase === 'takeoff' || phase === 'departing') {
-        schedTime = new Date(now.getTime() - 5 * 60000);
+        schedTime = new Date(anchor + (35 + (h % 20)) * 60000);
+      } else if (phase === 'parked' && !isArrival) {
+        // Departure waiting at gate
+        schedTime = new Date(anchor + (60 + (h % 59)) * 60000);
       } else if (phase === 'enroute' && isArrival) {
-        schedTime = new Date(now.getTime() + 30 * 60000);
+        // Enroute: ETA from speed + rough distance
+        const alt = Number(f.altitude) || 20000;
+        const etaMin = Math.max(10, Math.round(alt / 500 + 10));
+        estimatedTime = new Date(now + etaMin * 60000);
+        schedTime = new Date(anchor + (60 + (h % 59)) * 60000);
+        delayMin = Math.max(0, Math.round((estimatedTime.getTime() - schedTime.getTime()) / 60000));
+        if (delayMin > 0) status = 'delayed';
       } else {
-        schedTime = new Date(now.getTime() + 15 * 60000);
+        schedTime = new Date(anchor + (h % 119) * 60000);
       }
+
+      // Use actual origin/dest if available, otherwise derive from hash
+      const origin = f.origin_airport || (isArrival ? ORIGIN_AIRPORTS[h % ORIGIN_AIRPORTS.length] : localIata);
+      const destination = f.destination_airport || (isArrival ? localIata : ORIGIN_AIRPORTS[(h >> 4) % ORIGIN_AIRPORTS.length]);
 
       const entry: ScheduledFlight = {
         flight_number: callsign,
         airline,
         airline_code: code,
-        origin: isArrival ? (f.origin_airport || '???') : localIata,
-        destination: isArrival ? localIata : (f.destination_airport || '???'),
+        origin,
+        destination,
         scheduled_time: schedTime.toISOString(),
-        estimated_time: null,
-        actual_time: (status === 'arrived' || status === 'departed') ? now.toISOString() : null,
+        estimated_time: estimatedTime ? estimatedTime.toISOString() : null,
+        actual_time: (status === 'arrived' || status === 'departed') ? (estimatedTime || schedTime).toISOString() : null,
         gate: f.assigned_gate || null,
         status,
-        delay_minutes: 0,
+        delay_minutes: delayMin,
         aircraft_type: f.aircraft_type || 'A320',
         flight_type: isArrival ? 'arrival' : 'departure',
       };
@@ -205,7 +274,7 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
     arr.sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time));
     dep.sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time));
     return { arrivals: arr, departures: dep };
-  }, [trackedFlights, simTime, currentAirport, AIRLINE_NAMES]);
+  }, [trackedFlights, hourAnchor, currentAirport, isSimReplay, AIRLINE_NAMES]);
 
   // When in simulation replay mode, use derived schedule from map flights.
   // In live mode, fetch from the REST API.
@@ -359,10 +428,17 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
                     onClick={isTracked ? () => handleFlightClick(flight.flight_number) : undefined}
                   >
                     <td className="px-4 py-3 font-mono">
-                      <div>{formatTime(flight.scheduled_time)}</div>
+                      <div className={flight.delay_minutes > 0 ? 'line-through text-slate-500' : ''}>
+                        {formatTime(flight.scheduled_time)}
+                      </div>
                       {flight.estimated_time && flight.delay_minutes > 0 && (
-                        <div className="text-yellow-400 text-xs">
+                        <div className="text-yellow-400 text-xs font-bold">
                           Est: {formatTime(flight.estimated_time)}
+                        </div>
+                      )}
+                      {flight.estimated_time && flight.delay_minutes === 0 && flight.status !== 'arrived' && flight.status !== 'departed' && (
+                        <div className="text-green-400 text-xs">
+                          ETA {formatTime(flight.estimated_time)}
                         </div>
                       )}
                     </td>
@@ -416,8 +492,12 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t border-slate-700 text-xs text-slate-500 text-center">
-          {flights.length} {activeTab} | Auto-refresh: 15s | Synthetic data for demo
+        <div className="p-3 border-t border-slate-700 text-xs text-slate-500 flex items-center justify-between">
+          <span>{flights.length} {activeTab} | Auto-refresh: 15s</span>
+          {simClockDisplay && (
+            <span className="font-mono text-slate-300 text-sm">{simClockDisplay}</span>
+          )}
+          <span>Synthetic data for demo</span>
         </div>
       </div>
     </div>
