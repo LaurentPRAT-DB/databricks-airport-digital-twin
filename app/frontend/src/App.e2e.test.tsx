@@ -360,18 +360,18 @@ describe('End-to-end user interaction flows', () => {
         expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
       })
 
-      // Wait for arrivals data
+      // Wait for arrivals data — scope to FIDS modal to avoid LiveBar's "Live" label
+      const fidsModal = screen.getByText(/flight information display/i).closest('[class*="bg-slate-900"]')!
       await waitFor(
         () => {
-          // Should see "Live" badges next to tracked flights
-          const liveBadges = screen.getAllByText(/live/i)
+          const liveBadges = within(fidsModal as HTMLElement).getAllByText(/live/i)
           expect(liveBadges.length).toBeGreaterThan(0)
         },
         { timeout: 5000 },
       )
 
       // Click on the first tracked flight row (UAL123 has a "Live" badge)
-      const liveBadges = screen.getAllByText(/live/i)
+      const liveBadges = within(fidsModal as HTMLElement).getAllByText(/live/i)
       const liveRow = liveBadges[0].closest('tr')!
       const selectTime = await timed(async () => {
         await user.click(liveRow)
