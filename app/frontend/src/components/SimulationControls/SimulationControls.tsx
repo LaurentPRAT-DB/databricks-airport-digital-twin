@@ -443,6 +443,25 @@ function LiveBar({ flightCount, lastUpdated }: { flightCount: number; lastUpdate
     ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit' })
     : '--:--';
 
+  const [collectorStatus, setCollectorStatus] = useState<{
+    running: boolean;
+    airport_count: number;
+    total_snapshots: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/collector/status');
+        if (res.ok && active) setCollectorStatus(await res.json());
+      } catch { /* ignore */ }
+    };
+    poll();
+    const id = setInterval(poll, 15000);
+    return () => { active = false; clearInterval(id); };
+  }, []);
+
   return (
     <div className="fixed left-0 right-0 z-[1500] bg-emerald-900/95 backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0">
       <div className="flex items-center gap-4 max-w-screen-xl mx-auto">
@@ -454,6 +473,16 @@ function LiveBar({ flightCount, lastUpdated }: { flightCount: number; lastUpdate
 
         {/* Spacer */}
         <div className="flex-1" />
+
+        {/* Collector status badge */}
+        {collectorStatus && (
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-800/60 text-xs text-amber-300" title={`${collectorStatus.total_snapshots.toLocaleString()} snapshots saved`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${collectorStatus.running ? 'bg-amber-400 animate-pulse' : 'bg-slate-500'}`} />
+            {collectorStatus.running
+              ? `Recording ${collectorStatus.airport_count} airports`
+              : 'Collector off'}
+          </div>
+        )}
 
         {/* Flight count */}
         <div className="text-sm text-slate-300">

@@ -1464,8 +1464,18 @@ class LakebaseService:
                             assigned_gate VARCHAR(10),
                             origin_airport VARCHAR(10),
                             destination_airport VARCHAR(10),
+                            data_source VARCHAR(20) DEFAULT 'simulation',
                             snapshot_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
                         )
+                    """)
+                    # Migration: add data_source column to existing tables
+                    cur.execute("""
+                        ALTER TABLE flight_position_snapshots
+                        ADD COLUMN IF NOT EXISTS data_source VARCHAR(20) DEFAULT 'simulation'
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_fps_data_source
+                        ON flight_position_snapshots (data_source, airport_icao, snapshot_time)
                     """)
                     cur.execute("""
                         CREATE TABLE IF NOT EXISTS flight_phase_transitions (
@@ -1576,6 +1586,7 @@ class LakebaseService:
                             s.get("on_ground"), s.get("flight_phase"),
                             s.get("aircraft_type"), s.get("assigned_gate"),
                             s.get("origin_airport"), s.get("destination_airport"),
+                            s.get("data_source", "simulation"),
                             s.get("snapshot_time"),
                         )
                         for s in snapshots
@@ -1591,6 +1602,7 @@ class LakebaseService:
                             on_ground, flight_phase,
                             aircraft_type, assigned_gate,
                             origin_airport, destination_airport,
+                            data_source,
                             snapshot_time
                         ) VALUES %s""",
                         values,

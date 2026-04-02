@@ -1104,3 +1104,78 @@ class TestLakebaseReadReplica:
                     "taf_valid_from": None, "taf_valid_to": None,
                 })
                 mock_read.assert_not_called()
+
+
+class TestInsertFlightSnapshots:
+    """Tests for insert_flight_snapshots including data_source column."""
+
+    def _make_service(self):
+        env_vars = {
+            "LAKEBASE_CONNECTION_STRING": "postgresql://user:pass@host:5432/db",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+                service._ml_tables_ensured = True  # Skip migration
+                return service
+
+    def test_returns_zero_when_unavailable(self):
+        with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", False):
+            from app.backend.services.lakebase_service import LakebaseService
+            service = LakebaseService()
+            result = service.insert_flight_snapshots([{"icao24": "abc"}], "sess", "KSFO")
+            assert result == 0
+
+    def test_returns_zero_for_empty_snapshots(self):
+        service = self._make_service()
+        result = service.insert_flight_snapshots([], "sess", "KSFO")
+        assert result == 0
+
+    def test_includes_data_source_in_insert(self):
+        service = self._make_service()
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.__enter__ = Mock(return_value=mock_conn)
+        mock_conn.__exit__ = Mock(return_value=False)
+        mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+
+        with patch.object(service, "_get_connection", return_value=mock_conn):
+            with patch("app.backend.services.lakebase_service.execute_values") as mock_exec:
+                result = service.insert_flight_snapshots(
+                    [{"icao24": "abc123", "data_source": "opensky", "snapshot_time": "2026-04-02T10:00:00Z"}],
+                    "sess-1",
+                    "KSFO",
+                )
+
+        assert result == 1
+        # Verify data_source is in the SQL and values
+        sql_arg = mock_exec.call_args[0][1]
+        assert "data_source" in sql_arg
+        values_arg = mock_exec.call_args[0][2]
+        # data_source should be in the tuple
+        assert "opensky" in values_arg[0]
+
+    def test_data_source_defaults_to_simulation(self):
+        service = self._make_service()
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.__enter__ = Mock(return_value=mock_conn)
+        mock_conn.__exit__ = Mock(return_value=False)
+        mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+
+        with patch.object(service, "_get_connection", return_value=mock_conn):
+            with patch("app.backend.services.lakebase_service.execute_values") as mock_exec:
+                service.insert_flight_snapshots(
+                    [{"icao24": "abc123"}],
+                    "sess-1",
+                    "KSFO",
+                )
+
+        values_arg = mock_exec.call_args[0][2]
+        # Without data_source in dict, should default to 'simulation'
+        assert "simulation" in values_arg[0]

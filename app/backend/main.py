@@ -19,6 +19,7 @@ from app.backend.api.predictions import prediction_router
 from app.backend.api.data_ops import router as data_ops_router
 from app.backend.api.simulation import simulation_router
 from app.backend.api.opensky import opensky_router
+from app.backend.api.collector import collector_router
 from app.backend.api.genie import genie_router
 from app.backend.api.inpainting import inpainting_router
 from app.backend.api.mcp import mcp_router
@@ -352,12 +353,22 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_background_init(app))
 
+    # Start the OpenSky ADS-B data collector for ML training
+    from app.backend.services.opensky_collector import get_opensky_collector
+    collector = get_opensky_collector()
+    collector.start()
+
     yield
 
     # Shutdown: Stop periodic refresh tasks
     data_generator = get_data_generator_service()
     logger.info("Shutting down data generation service...")
     await data_generator.stop_periodic_refresh()
+
+    # Stop the OpenSky collector
+    logger.info("Shutting down OpenSky collector...")
+    await collector.stop()
+
     logger.info("Airport Digital Twin API stopped")
 
 
@@ -398,6 +409,7 @@ app.include_router(prediction_router)
 app.include_router(data_ops_router)
 app.include_router(simulation_router)
 app.include_router(opensky_router)
+app.include_router(collector_router)
 app.include_router(genie_router)
 app.include_router(inpainting_router)
 app.include_router(mcp_router)
