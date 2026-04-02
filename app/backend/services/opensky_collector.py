@@ -41,13 +41,20 @@ class AirportStats:
     error_count: int = 0
 
 
+# Backoff constants
+_BACKOFF_BASE_S = 10.0       # Initial backoff after first 429
+_BACKOFF_MAX_S = 300.0       # Cap at 5 minutes
+_BACKOFF_MULTIPLIER = 2.0    # Double each consecutive 429
+_CYCLE_COOLDOWN_S = 30.0     # Pause between full airport cycles
+
+
 class OpenSkyCollector:
     """Background collector that polls OpenSky for multiple airports."""
 
     def __init__(
         self,
         airports: Optional[dict[str, tuple[float, float]]] = None,
-        inter_airport_delay: float = 1.0,
+        inter_airport_delay: float = 2.0,
     ):
         self._airports = airports or COLLECTOR_AIRPORTS
         self._inter_airport_delay = inter_airport_delay
@@ -58,6 +65,8 @@ class OpenSkyCollector:
             icao: AirportStats() for icao in self._airports
         }
         self._started_at: Optional[datetime] = None
+        self._backoff_s: float = 0.0           # Current backoff (0 = no backoff)
+        self._consecutive_429s: int = 0        # Consecutive rate-limit hits
 
     @property
     def running(self) -> bool:
@@ -120,11 +129,13 @@ class OpenSkyCollector:
             "started_at": self._started_at.isoformat() if self._started_at else None,
             "airport_count": len(self._airports),
             "total_snapshots": sum(s.snapshots_saved for s in self._stats.values()),
+            "backoff_seconds": self._backoff_s,
+            "consecutive_429s": self._consecutive_429s,
             "airports": airports,
         }
 
     async def _collect_loop(self) -> None:
-        """Main collection loop — cycles through airports continuously."""
+        """Main collection loop — cycles through airports with backoff."""
         from app.backend.services.opensky_service import get_opensky_service
 
         opensky = get_opensky_service()
@@ -134,27 +145,65 @@ class OpenSkyCollector:
                 if not self._running:
                     return
 
+                # Honor backoff before each request
+                if self._backoff_s > 0:
+                    logger.info("Collector backing off %.0fs (429 x%d)", self._backoff_s, self._consecutive_429s)
+                    await asyncio.sleep(self._backoff_s)
+                    if not self._running:
+                        return
+
                 stats = self._stats[icao]
                 try:
                     flights = await opensky.fetch_flights(lat, lon)
                     stats.last_fetch_time = datetime.now(timezone.utc)
                     stats.last_flight_count = len(flights)
 
-                    if flights:
+                    # Check if the service silently swallowed a 429
+                    svc_error = getattr(opensky, "_last_error", None)
+                    if isinstance(svc_error, str) and "rate limit" in svc_error.lower():
+                        self._consecutive_429s += 1
+                        self._backoff_s = min(
+                            _BACKOFF_BASE_S * (_BACKOFF_MULTIPLIER ** (self._consecutive_429s - 1)),
+                            _BACKOFF_MAX_S,
+                        )
+                        stats.last_error = f"Rate limited (backoff {self._backoff_s:.0f}s)"
+                        logger.warning("OpenSky 429 for %s — backoff %.0fs", icao, self._backoff_s)
+                    elif flights:
                         saved = self._persist_snapshots(icao, flights)
                         stats.snapshots_saved += saved
                         stats.last_error = None
+                        # Successful fetch — reset backoff
+                        self._consecutive_429s = 0
+                        self._backoff_s = 0.0
                     else:
                         stats.last_error = None  # Empty is valid (no traffic)
+                        # Empty but not rate-limited — still healthy
+                        self._consecutive_429s = 0
+                        self._backoff_s = 0.0
 
                 except Exception as e:
-                    stats.last_error = str(e)
+                    err_msg = str(e)
+                    stats.last_error = err_msg
                     stats.error_count += 1
-                    logger.warning("Collector fetch failed for %s: %s", icao, e)
 
-                # Rate limit: ~1s between airports
+                    if "429" in err_msg or "rate limit" in err_msg.lower():
+                        self._consecutive_429s += 1
+                        self._backoff_s = min(
+                            _BACKOFF_BASE_S * (_BACKOFF_MULTIPLIER ** (self._consecutive_429s - 1)),
+                            _BACKOFF_MAX_S,
+                        )
+                        logger.warning("OpenSky 429 for %s — backoff %.0fs", icao, self._backoff_s)
+                    else:
+                        logger.warning("Collector fetch failed for %s: %s", icao, e)
+
+                # Inter-airport delay
                 if self._running:
                     await asyncio.sleep(self._inter_airport_delay)
+
+            # Cooldown between full cycles to avoid hammering the API
+            if self._running:
+                logger.debug("Collector cycle complete, cooldown %.0fs", _CYCLE_COOLDOWN_S)
+                await asyncio.sleep(_CYCLE_COOLDOWN_S)
 
     def _persist_snapshots(self, airport_icao: str, flights: list[dict]) -> int:
         """Write flight snapshots to Lakebase."""

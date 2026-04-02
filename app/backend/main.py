@@ -353,11 +353,6 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_background_init(app))
 
-    # Start the OpenSky ADS-B data collector for ML training
-    from app.backend.services.opensky_collector import get_opensky_collector
-    collector = get_opensky_collector()
-    collector.start()
-
     yield
 
     # Shutdown: Stop periodic refresh tasks
@@ -365,9 +360,12 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down data generation service...")
     await data_generator.stop_periodic_refresh()
 
-    # Stop the OpenSky collector
-    logger.info("Shutting down OpenSky collector...")
-    await collector.stop()
+    # Stop the OpenSky collector if it was started via API
+    from app.backend.services.opensky_collector import get_opensky_collector
+    collector = get_opensky_collector()
+    if collector.running:
+        logger.info("Shutting down OpenSky collector...")
+        await collector.stop()
 
     logger.info("Airport Digital Twin API stopped")
 
