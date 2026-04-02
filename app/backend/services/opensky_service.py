@@ -211,13 +211,37 @@ class OpenSkyService:
 _opensky_service: Optional[OpenSkyService] = None
 
 
+def _resolve_opensky_credentials() -> tuple[Optional[str], Optional[str]]:
+    """Resolve OpenSky credentials: Databricks secrets first, then env vars."""
+    import os
+
+    # Try Databricks secrets (secure, no plaintext in app.yaml)
+    try:
+        from databricks.sdk import WorkspaceClient
+        w = WorkspaceClient()
+        username = w.dbutils.secrets.get(scope="airport-digital-twin", key="opensky-username")
+        password = w.dbutils.secrets.get(scope="airport-digital-twin", key="opensky-password")
+        if username and password:
+            logger.info("OpenSky credentials loaded from Databricks secrets")
+            return username, password
+    except Exception:
+        pass  # Not on Databricks or secrets not available
+
+    # Fall back to env vars (local dev)
+    username = os.getenv("OPENSKY_USERNAME")
+    password = os.getenv("OPENSKY_PASSWORD")
+    if username and password:
+        logger.info("OpenSky credentials loaded from environment variables")
+        return username, password
+
+    logger.warning("No OpenSky credentials found — using anonymous access (lower rate limits)")
+    return None, None
+
+
 def get_opensky_service() -> OpenSkyService:
     """Get or create the OpenSky service singleton."""
     global _opensky_service
     if _opensky_service is None:
-        import os
-        _opensky_service = OpenSkyService(
-            username=os.getenv("OPENSKY_USERNAME"),
-            password=os.getenv("OPENSKY_PASSWORD"),
-        )
+        username, password = _resolve_opensky_credentials()
+        _opensky_service = OpenSkyService(username=username, password=password)
     return _opensky_service

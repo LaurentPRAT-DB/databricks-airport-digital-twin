@@ -69,11 +69,9 @@ env:
   - name: GENIE_SPACE_ID
     value: "01f12612fa6314ae943d0526f5ae3a00"
 
-  # OpenSky Network API (authenticated = higher rate limits)
-  - name: OPENSKY_USERNAME
-    value: ""
-  - name: OPENSKY_PASSWORD
-    value: ""
+  # OpenSky Network API credentials: stored in Databricks secrets
+  # scope: airport-digital-twin, keys: opensky-username, opensky-password
+  # Resolved at runtime via SDK — no plaintext needed here.
 
   # Platform links (for frontend UI)
   - name: DASHBOARD_ID

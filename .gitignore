@@ -150,3 +150,7 @@ video_output/
 catboost_info/
 screenshots/
 
+# Credentials (never commit)
+*credentials*.json
+*secret*
+
