@@ -270,4 +270,119 @@ describe('FlightContext', () => {
       expect(result.current.setShowTrajectory).toBe(firstCallback)
     })
   })
+
+  describe('Data mode', () => {
+    it('defaults to simulation mode', () => {
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      expect(result.current.dataMode).toBe('simulation')
+    })
+
+    it('can switch to live mode', () => {
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      act(() => {
+        result.current.setDataMode('live')
+      })
+
+      expect(result.current.dataMode).toBe('live')
+    })
+
+    it('can switch back to simulation mode', () => {
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      act(() => {
+        result.current.setDataMode('live')
+      })
+      act(() => {
+        result.current.setDataMode('simulation')
+      })
+
+      expect(result.current.dataMode).toBe('simulation')
+    })
+
+    it('reports opensky data source in live mode', async () => {
+      // Mock fetch for /api/opensky/flights
+      const originalFetch = globalThis.fetch
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url === '/api/opensky/flights') {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              flights: [
+                {
+                  icao24: 'live1',
+                  callsign: 'UAL100',
+                  latitude: 37.6,
+                  longitude: -122.4,
+                  altitude: 5000,
+                  velocity: 200,
+                  heading: 90,
+                  on_ground: false,
+                  vertical_rate: 0,
+                  last_seen: 1700000000,
+                  data_source: 'opensky',
+                  flight_phase: 'cruise',
+                },
+              ],
+              count: 1,
+              data_source: 'opensky',
+            }),
+          })
+        }
+        // Default mock for other endpoints
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ flights: [], count: 0, timestamp: new Date().toISOString(), data_source: 'synthetic' }),
+        })
+      })
+
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      act(() => {
+        result.current.setDataMode('live')
+      })
+
+      expect(result.current.dataSource).toBe('opensky')
+
+      globalThis.fetch = originalFetch
+    })
+
+    it('setDataMode is a stable callback', () => {
+      const { result, rerender } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      const firstCallback = result.current.setDataMode
+      rerender()
+      expect(result.current.setDataMode).toBe(firstCallback)
+    })
+
+    it('clears opensky flights when switching back to simulation', async () => {
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      act(() => {
+        result.current.setDataMode('live')
+      })
+
+      // Switch back — should use simulation flights (from useFlights hook)
+      act(() => {
+        result.current.setDataMode('simulation')
+      })
+
+      expect(result.current.dataMode).toBe('simulation')
+      // dataSource should revert to something other than 'opensky'
+      expect(result.current.dataSource).not.toBe('opensky')
+    })
+  })
 })

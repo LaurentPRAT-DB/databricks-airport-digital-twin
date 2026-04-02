@@ -251,9 +251,9 @@ class TestWebsocketFlightsEndpoint:
 
         # Should have connected
         mock_broadcaster.connect.assert_called_once_with(mock_ws)
-        # Should have sent initial data
-        mock_ws.send_json.assert_called_once()
-        initial_data = mock_ws.send_json.call_args[0][0]
+        # Should have sent initial data + mode_change (2 calls)
+        assert mock_ws.send_json.call_count == 2
+        initial_data = mock_ws.send_json.call_args_list[0][0][0]
         assert initial_data["type"] == "initial"
         assert initial_data["data"]["count"] == 1
 
@@ -284,9 +284,9 @@ class TestWebsocketFlightsEndpoint:
             with patch('app.backend.api.websocket.get_flight_service', return_value=mock_service):
                 await websocket_flights(mock_ws)
 
-        # Should have sent initial + refresh response
-        assert mock_ws.send_json.call_count == 2
-        refresh_data = mock_ws.send_json.call_args_list[1][0][0]
+        # Should have sent initial + mode_change + refresh response (3 calls)
+        assert mock_ws.send_json.call_count == 3
+        refresh_data = mock_ws.send_json.call_args_list[2][0][0]
         assert refresh_data["type"] == "flight_update"
 
     @pytest.mark.asyncio
@@ -368,8 +368,8 @@ class TestWebsocketFlightsEndpoint:
             with patch('app.backend.api.websocket.get_flight_service', return_value=mock_service):
                 await websocket_flights(mock_ws)
 
-        # Should only have sent initial data (1 call)
-        assert mock_ws.send_json.call_count == 1
+        # Should only have sent initial data + mode_change (2 calls)
+        assert mock_ws.send_json.call_count == 2
 
 
 class TestComputeDeltas:
@@ -473,6 +473,268 @@ class TestComputeDeltas:
 
         assert len(deltas) == 0
         assert set(removed) == {"a", "b"}
+
+
+class TestBroadcasterModeSwitch:
+    """Tests for FlightBroadcaster mode switching (simulation ↔ live)."""
+
+    def test_default_mode_is_simulation(self):
+        fb = FlightBroadcaster()
+        assert fb.mode == "simulation"
+
+    @pytest.mark.asyncio
+    async def test_set_mode_to_live(self):
+        fb = FlightBroadcaster()
+        mock_ws = AsyncMock(spec=WebSocket)
+        fb._connections.add(mock_ws)
+
+        await fb.set_mode("live")
+
+        assert fb.mode == "live"
+        # Should have broadcast mode_change
+        mock_ws.send_text.assert_called_once()
+        msg = json.loads(mock_ws.send_text.call_args[0][0])
+        assert msg["type"] == "mode_change"
+        assert msg["data"]["mode"] == "live"
+
+    @pytest.mark.asyncio
+    async def test_set_mode_back_to_simulation(self):
+        fb = FlightBroadcaster()
+        mock_ws = AsyncMock(spec=WebSocket)
+        fb._connections.add(mock_ws)
+
+        await fb.set_mode("live")
+        await fb.set_mode("simulation")
+
+        assert fb.mode == "simulation"
+        assert mock_ws.send_text.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_set_mode_noop_for_same_mode(self):
+        fb = FlightBroadcaster()
+        mock_ws = AsyncMock(spec=WebSocket)
+        fb._connections.add(mock_ws)
+
+        await fb.set_mode("simulation")  # already simulation
+
+        assert fb.mode == "simulation"
+        mock_ws.send_text.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_set_mode_rejects_invalid_mode(self):
+        fb = FlightBroadcaster()
+        mock_ws = AsyncMock(spec=WebSocket)
+        fb._connections.add(mock_ws)
+
+        await fb.set_mode("invalid_mode")
+
+        assert fb.mode == "simulation"
+        mock_ws.send_text.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_set_mode_resets_prev_flights(self):
+        fb = FlightBroadcaster()
+        fb._prev_flights = {"abc": {"icao24": "abc", "latitude": 37.0}}
+
+        await fb.set_mode("live")
+
+        assert fb._prev_flights == {}
+
+    @pytest.mark.asyncio
+    async def test_broadcast_loop_live_mode_calls_opensky(self):
+        """In live mode, broadcast loop fetches from OpenSky, not FlightService."""
+        fb = FlightBroadcaster()
+        fb._mode = "live"
+        mock_ws = AsyncMock(spec=WebSocket)
+        fb._connections.add(mock_ws)
+
+        mock_flights = [{"icao24": "abc", "callsign": "UAL1", "latitude": 37.0}]
+        mock_opensky = AsyncMock()
+        mock_opensky.fetch_flights = AsyncMock(return_value=mock_flights)
+
+        mock_config = MagicMock()
+        mock_config.get_config.return_value = {
+            "reference_point": {"latitude": 37.6213, "longitude": -122.379},
+        }
+
+        with patch('app.backend.api.websocket.get_flight_service') as mock_fs, \
+             patch('app.backend.services.opensky_service.get_opensky_service', return_value=mock_opensky), \
+             patch('app.backend.services.airport_config_service.get_airport_config_service', return_value=mock_config):
+            task = asyncio.create_task(fb._broadcast_loop(interval=0.05))
+            await asyncio.sleep(0.08)
+            fb._connections.clear()
+            await task
+
+        # FlightService.get_flights should NOT have been called
+        mock_fs.return_value.get_flights.assert_not_called()
+        # OpenSky should have been called
+        mock_opensky.fetch_flights.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_broadcast_loop_includes_mode_in_delta(self):
+        """Delta messages include the current mode."""
+        fb = FlightBroadcaster()
+        mock_ws = AsyncMock(spec=WebSocket)
+        fb._connections.add(mock_ws)
+
+        mock_flight = MagicMock()
+        mock_flight.model_dump.return_value = {"icao24": "abc123"}
+        mock_response = MagicMock()
+        mock_response.flights = [mock_flight]
+        mock_response.count = 1
+        mock_response.timestamp = datetime.now(timezone.utc)
+
+        mock_service = AsyncMock()
+        mock_service.get_flights.return_value = mock_response
+
+        with patch('app.backend.api.websocket.get_flight_service', return_value=mock_service):
+            task = asyncio.create_task(fb._broadcast_loop(interval=0.05))
+            await asyncio.sleep(0.08)
+            fb._connections.clear()
+            await task
+
+        msg = json.loads(mock_ws.send_text.call_args_list[0][0][0])
+        assert msg["data"]["mode"] == "simulation"
+
+
+class TestWebsocketModeCommand:
+    """Tests for set_mode command via WebSocket."""
+
+    @pytest.mark.asyncio
+    async def test_set_mode_command(self):
+        """Client can switch mode via JSON command."""
+        mock_ws = AsyncMock(spec=WebSocket)
+
+        mock_flight = MagicMock()
+        mock_flight.model_dump.return_value = {"icao24": "abc123"}
+        mock_response = MagicMock()
+        mock_response.flights = [mock_flight]
+        mock_response.count = 1
+        mock_response.timestamp = datetime.now(timezone.utc)
+
+        mock_service = AsyncMock()
+        mock_service.get_flights.return_value = mock_response
+
+        # Send set_mode command then disconnect
+        mock_ws.receive_text.side_effect = [
+            json.dumps({"command": "set_mode", "mode": "live"}),
+            Exception("Disconnect"),
+        ]
+
+        with patch('app.backend.api.websocket.broadcaster') as mock_broadcaster:
+            mock_broadcaster.connect = AsyncMock()
+            mock_broadcaster.disconnect = MagicMock()
+            mock_broadcaster.mode = "simulation"
+            mock_broadcaster.set_mode = AsyncMock()
+
+            with patch('app.backend.api.websocket.get_flight_service', return_value=mock_service):
+                await websocket_flights(mock_ws)
+
+        mock_broadcaster.set_mode.assert_called_once_with("live")
+
+    @pytest.mark.asyncio
+    async def test_invalid_json_ignored(self):
+        """Non-JSON, non-refresh messages are silently ignored."""
+        mock_ws = AsyncMock(spec=WebSocket)
+
+        mock_flight = MagicMock()
+        mock_flight.model_dump.return_value = {"icao24": "abc123"}
+        mock_response = MagicMock()
+        mock_response.flights = [mock_flight]
+        mock_response.count = 1
+        mock_response.timestamp = datetime.now(timezone.utc)
+
+        mock_service = AsyncMock()
+        mock_service.get_flights.return_value = mock_response
+
+        # Send garbage text then disconnect
+        mock_ws.receive_text.side_effect = [
+            "not-json-at-all",
+            Exception("Disconnect"),
+        ]
+
+        with patch('app.backend.api.websocket.broadcaster') as mock_broadcaster:
+            mock_broadcaster.connect = AsyncMock()
+            mock_broadcaster.disconnect = MagicMock()
+            mock_broadcaster.mode = "simulation"
+
+            with patch('app.backend.api.websocket.get_flight_service', return_value=mock_service):
+                # Should not raise
+                await websocket_flights(mock_ws)
+
+    @pytest.mark.asyncio
+    async def test_mode_sent_on_connect(self):
+        """New clients receive the current mode on connect."""
+        mock_ws = AsyncMock(spec=WebSocket)
+
+        mock_flight = MagicMock()
+        mock_flight.model_dump.return_value = {"icao24": "abc123"}
+        mock_response = MagicMock()
+        mock_response.flights = [mock_flight]
+        mock_response.count = 1
+        mock_response.timestamp = datetime.now(timezone.utc)
+
+        mock_service = AsyncMock()
+        mock_service.get_flights.return_value = mock_response
+
+        mock_ws.receive_text.side_effect = Exception("Disconnect")
+
+        with patch('app.backend.api.websocket.broadcaster') as mock_broadcaster:
+            mock_broadcaster.connect = AsyncMock()
+            mock_broadcaster.disconnect = MagicMock()
+            mock_broadcaster.mode = "live"
+
+            with patch('app.backend.api.websocket.get_flight_service', return_value=mock_service):
+                await websocket_flights(mock_ws)
+
+        # Second send_json call should be mode_change
+        calls = mock_ws.send_json.call_args_list
+        assert len(calls) >= 2
+        mode_msg = calls[1][0][0]
+        assert mode_msg["type"] == "mode_change"
+        assert mode_msg["data"]["mode"] == "live"
+
+
+class TestFetchOpenSkyFlights:
+    """Tests for FlightBroadcaster._fetch_opensky_flights."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_uses_airport_center(self):
+        fb = FlightBroadcaster()
+        mock_opensky = AsyncMock()
+        mock_opensky.fetch_flights = AsyncMock(return_value=[])
+
+        mock_config = MagicMock()
+        mock_config.get_config.return_value = {
+            "reference_point": {"latitude": 48.35, "longitude": 11.78},
+        }
+
+        with patch('app.backend.services.opensky_service.get_opensky_service', return_value=mock_opensky), \
+             patch('app.backend.services.airport_config_service.get_airport_config_service', return_value=mock_config):
+            flights, ts = await fb._fetch_opensky_flights()
+
+        mock_opensky.fetch_flights.assert_called_once_with(48.35, 11.78)
+        assert flights == []
+        assert ts  # timestamp should be non-empty
+
+    @pytest.mark.asyncio
+    async def test_fetch_defaults_when_no_reference(self):
+        """Falls back to SFO coordinates when no reference_point in config."""
+        fb = FlightBroadcaster()
+        mock_opensky = AsyncMock()
+        mock_opensky.fetch_flights = AsyncMock(return_value=[])
+
+        mock_config = MagicMock()
+        mock_config.get_config.return_value = {}
+
+        with patch('app.backend.services.opensky_service.get_opensky_service', return_value=mock_opensky), \
+             patch('app.backend.services.airport_config_service.get_airport_config_service', return_value=mock_config):
+            flights, _ = await fb._fetch_opensky_flights()
+
+        # Should use default SFO coords
+        call_args = mock_opensky.fetch_flights.call_args[0]
+        assert abs(call_args[0] - 37.6213) < 0.001
+        assert abs(call_args[1] - (-122.379)) < 0.001
 
 
 class TestBroadcastLoopDeltaFormat:

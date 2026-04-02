@@ -1,10 +1,12 @@
-import { createContext, useContext, useState, useMemo, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useMemo, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { useFlights } from '../hooks/useFlights';
 import { Flight } from '../types/flight';
 import type { SimTrajectoryPoint } from '../hooks/useSimulationReplay';
 
 /** Function that extracts trajectory from simulation frames for a given flight. */
 export type SimTrajectoryProvider = (icao24: string) => SimTrajectoryPoint[];
+
+export type DataMode = 'simulation' | 'live';
 
 interface FlightContextType {
   flights: Flight[];
@@ -19,8 +21,10 @@ interface FlightContextType {
   isLoading: boolean;
   error: Error | null;
   lastUpdated: string | null;
-  dataSource: 'live' | 'cached' | 'synthetic' | 'simulation' | null;
+  dataSource: 'live' | 'cached' | 'synthetic' | 'simulation' | 'opensky' | null;
   simTrajectoryProvider: SimTrajectoryProvider | null;
+  dataMode: DataMode;
+  setDataMode: (mode: DataMode) => void;
 }
 
 const FlightContext = createContext<FlightContextType | null>(null);
@@ -36,9 +40,61 @@ export function FlightProvider({
 }) {
   const { flights: liveFlights, isLoading, error, lastUpdated, dataSource: liveDataSource } = useFlights();
 
-  // Use simulation flights when provided, otherwise live
-  const flights = simulationFlights ?? liveFlights;
-  const dataSource = simulationFlights ? 'simulation' as const : liveDataSource;
+  // Data mode: 'simulation' (default) or 'live' (OpenSky)
+  const [dataMode, setDataModeState] = useState<DataMode>('simulation');
+  const [openSkyFlights, setOpenSkyFlights] = useState<Flight[]>([]);
+  const [openSkyLoading, setOpenSkyLoading] = useState(false);
+  const [openSkyLastUpdated, setOpenSkyLastUpdated] = useState<string | null>(null);
+  const openSkyIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Fetch OpenSky flights
+  const fetchOpenSkyFlights = useCallback(async () => {
+    try {
+      setOpenSkyLoading(true);
+      const res = await fetch('/api/opensky/flights');
+      if (res.ok) {
+        const data = await res.json();
+        const flights: Flight[] = (data.flights || []).map((f: Record<string, unknown>) => ({
+          ...f,
+          data_source: 'opensky',
+          flight_phase: f.flight_phase || 'cruise',
+          last_seen: typeof f.last_seen === 'number' ? new Date(Number(f.last_seen) * 1000).toISOString() : String(f.last_seen || ''),
+        }));
+        setOpenSkyFlights(flights);
+        setOpenSkyLastUpdated(new Date().toISOString());
+      }
+    } catch {
+      // Silently fail — will retry on next interval
+    } finally {
+      setOpenSkyLoading(false);
+    }
+  }, []);
+
+  // Poll OpenSky when in live mode
+  useEffect(() => {
+    if (dataMode === 'live') {
+      fetchOpenSkyFlights();
+      openSkyIntervalRef.current = setInterval(fetchOpenSkyFlights, 10000);
+      return () => {
+        if (openSkyIntervalRef.current) clearInterval(openSkyIntervalRef.current);
+      };
+    } else {
+      setOpenSkyFlights([]);
+      if (openSkyIntervalRef.current) clearInterval(openSkyIntervalRef.current);
+    }
+  }, [dataMode, fetchOpenSkyFlights]);
+
+  const setDataMode = useCallback((mode: DataMode) => {
+    setDataModeState(mode);
+  }, []);
+
+  // Use simulation flights when provided, otherwise live/opensky based on mode
+  const flights = dataMode === 'live'
+    ? openSkyFlights
+    : (simulationFlights ?? liveFlights);
+  const dataSource = dataMode === 'live'
+    ? 'opensky' as const
+    : (simulationFlights ? 'simulation' as const : liveDataSource);
   // Phase filter state
   const [hiddenPhases, setHiddenPhasesState] = useState<Set<string>>(new Set());
 
@@ -96,12 +152,14 @@ export function FlightProvider({
     setSelectedFlight,
     showTrajectory,
     setShowTrajectory,
-    isLoading,
+    isLoading: dataMode === 'live' ? openSkyLoading : isLoading,
     error,
-    lastUpdated,
+    lastUpdated: dataMode === 'live' ? openSkyLastUpdated : lastUpdated,
     dataSource,
     simTrajectoryProvider: simTrajectoryProvider ?? null,
-  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider]);
+    dataMode,
+    setDataMode,
+  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider, dataMode, setDataMode, openSkyLoading, openSkyLastUpdated]);
 
   return (
     <FlightContext.Provider value={contextValue}>

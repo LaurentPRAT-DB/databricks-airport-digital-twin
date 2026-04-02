@@ -46,6 +46,17 @@ vi.mock('../../hooks/useSimulationReplay', () => ({
   useSimulationReplay: () => mockSim,
 }));
 
+let mockFlightContext = {
+  dataMode: 'simulation' as 'simulation' | 'live',
+  setDataMode: vi.fn(),
+  flights: [] as unknown[],
+  lastUpdated: null as string | null,
+};
+
+vi.mock('../../context/FlightContext', () => ({
+  useFlightContext: () => mockFlightContext,
+}));
+
 // ── Default props ───────────────────────────────────────────────────
 
 function defaultProps() {
@@ -64,6 +75,12 @@ function defaultProps() {
 describe('SimulationControls', () => {
   beforeEach(() => {
     mockSim = createMockSim();
+    mockFlightContext = {
+      dataMode: 'simulation',
+      setDataMode: vi.fn(),
+      flights: [],
+      lastUpdated: null,
+    };
     vi.clearAllMocks();
   });
 
@@ -88,7 +105,7 @@ describe('SimulationControls', () => {
       render(
         <SimulationControls {...defaultProps()} demoReady={false} backendReady={false} />
       );
-      expect(screen.getByText('Simulation')).toBeInTheDocument();
+      expect(screen.getByTitle('Load a simulation file')).toBeInTheDocument();
     });
 
     it('shows playback bar when simulation is active and playing', () => {
@@ -381,7 +398,7 @@ describe('SimulationControls', () => {
       mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
-      fireEvent.click(screen.getByText('Simulation'));
+      fireEvent.click(screen.getByTitle('Load a simulation file'));
       expect(screen.getByText('Load Simulation')).toBeInTheDocument();
     });
 
@@ -389,7 +406,7 @@ describe('SimulationControls', () => {
       mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
-      fireEvent.click(screen.getByText('Simulation'));
+      fireEvent.click(screen.getByTitle('Load a simulation file'));
       expect(screen.getByText('Load Simulation')).toBeInTheDocument();
 
       fireEvent.click(screen.getByText('\u00d7'));
@@ -412,7 +429,7 @@ describe('SimulationControls', () => {
       });
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
-      fireEvent.click(screen.getByText('Simulation'));
+      fireEvent.click(screen.getByTitle('Load a simulation file'));
       expect(screen.getByText('Load Simulation')).toBeInTheDocument();
 
       fireEvent.click(screen.getByTitle('sim_sfo.json'));
@@ -465,6 +482,116 @@ describe('SimulationControls', () => {
       render(<SimulationControls {...defaultProps()} demoReady={true} />);
 
       expect(screen.queryByText('Capacity')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('data mode toggle', () => {
+    /** Helper to find the toggle button (in the rounded-md toggle group). */
+    function getToggleButton(label: string): HTMLElement {
+      const buttons = screen.getAllByText(label).filter(
+        el => el.tagName === 'BUTTON' && el.className.includes('rounded-md')
+      );
+      return buttons[0];
+    }
+
+    it('renders the Simulation/Live toggle', () => {
+      render(<SimulationControls {...defaultProps()} />);
+
+      expect(getToggleButton('Simulation')).toBeInTheDocument();
+      expect(getToggleButton('Live')).toBeInTheDocument();
+    });
+
+    it('Simulation button is active by default', () => {
+      render(<SimulationControls {...defaultProps()} />);
+
+      const simButton = getToggleButton('Simulation');
+      expect(simButton.className).toContain('bg-indigo-600');
+    });
+
+    it('clicking Live calls setDataMode with live', () => {
+      render(<SimulationControls {...defaultProps()} />);
+
+      fireEvent.click(getToggleButton('Live'));
+      expect(mockFlightContext.setDataMode).toHaveBeenCalledWith('live');
+    });
+
+    it('clicking Simulation calls setDataMode with simulation', () => {
+      mockFlightContext.dataMode = 'live';
+      render(<SimulationControls {...defaultProps()} />);
+
+      fireEvent.click(getToggleButton('Simulation'));
+      expect(mockFlightContext.setDataMode).toHaveBeenCalledWith('simulation');
+    });
+
+    it('hides simulation file picker button in live mode', () => {
+      mockFlightContext.dataMode = 'live';
+      render(<SimulationControls {...defaultProps()} />);
+
+      expect(screen.queryByTitle('Load a simulation file')).not.toBeInTheDocument();
+    });
+
+    it('hides playback bar in live mode even when sim is active', () => {
+      mockFlightContext.dataMode = 'live';
+      mockSim = createMockSim({
+        isActive: true,
+        isPlaying: true,
+        totalFrames: 100,
+        currentSimTime: '2026-03-22T12:00:00Z',
+      });
+      render(<SimulationControls {...defaultProps()} />);
+
+      // Playback bar has Play/Pause button — should not be present
+      expect(screen.queryByTitle('Pause')).not.toBeInTheDocument();
+    });
+
+    it('shows Live bar with flight count in live mode', () => {
+      mockFlightContext.dataMode = 'live';
+      mockFlightContext.flights = [{ icao24: 'a' }, { icao24: 'b' }, { icao24: 'c' }];
+      mockFlightContext.lastUpdated = '2026-04-02T10:00:00Z';
+      render(<SimulationControls {...defaultProps()} />);
+
+      expect(screen.getByText('3')).toBeInTheDocument();
+      expect(screen.getByText('aircraft')).toBeInTheDocument();
+      expect(screen.getByText('OpenSky ADS-B')).toBeInTheDocument();
+    });
+
+    it('shows Live indicator with pulsing dot', () => {
+      mockFlightContext.dataMode = 'live';
+      render(<SimulationControls {...defaultProps()} />);
+
+      // "Live" label in the bar (uppercase)
+      const liveLabels = screen.getAllByText('Live');
+      // At least one should be in the LiveBar (has LIVE class styling)
+      expect(liveLabels.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('Live toggle button is active in live mode', () => {
+      mockFlightContext.dataMode = 'live';
+      render(<SimulationControls {...defaultProps()} />);
+
+      const liveButtons = screen.getAllByText('Live');
+      // Find the toggle button (in the DataModeToggle)
+      const toggleButton = liveButtons.find(el => el.tagName === 'BUTTON' && el.className.includes('bg-emerald'));
+      expect(toggleButton).toBeTruthy();
+    });
+
+    it('stops active simulation when switching to live', () => {
+      mockSim = createMockSim({ isActive: true, isPlaying: true });
+      render(<SimulationControls {...defaultProps()} />);
+
+      fireEvent.click(getToggleButton('Live'));
+
+      expect(mockSim.stop).toHaveBeenCalled();
+      expect(mockFlightContext.setDataMode).toHaveBeenCalledWith('live');
+    });
+
+    it('does not stop simulation when switching to sim (already sim)', () => {
+      mockSim = createMockSim({ isActive: false });
+      render(<SimulationControls {...defaultProps()} />);
+
+      fireEvent.click(getToggleButton('Simulation'));
+
+      expect(mockSim.stop).not.toHaveBeenCalled();
     });
   });
 });

@@ -68,6 +68,7 @@ class FlightBroadcaster:
         self._connections: Set[WebSocket] = set()
         self._broadcast_task: asyncio.Task | None = None
         self._prev_flights: dict[str, dict] = {}
+        self._mode: str = "simulation"  # "simulation" or "live"
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -117,6 +118,24 @@ class FlightBroadcaster:
             "data": data,
         })
 
+    async def set_mode(self, mode: str) -> None:
+        """Switch between 'simulation' and 'live' data modes."""
+        if mode not in ("simulation", "live"):
+            return
+        if mode == self._mode:
+            return
+        self._mode = mode
+        self._prev_flights = {}  # Reset delta tracking on mode switch
+        await self.broadcast({
+            "type": "mode_change",
+            "data": {"mode": mode},
+        })
+        logger.info("Broadcaster mode switched to: %s", mode)
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
     async def _broadcast_loop(self, interval: float = 2.0) -> None:
         """Push flight updates to all connected clients every `interval` seconds."""
         service = get_flight_service()
@@ -126,9 +145,12 @@ class FlightBroadcaster:
                 return
 
             try:
-                flight_data = await service.get_flights()
-                flights_dicts = [f.model_dump() for f in flight_data.flights]
-                timestamp = flight_data.timestamp.isoformat()
+                if self._mode == "live":
+                    flights_dicts, timestamp = await self._fetch_opensky_flights()
+                else:
+                    flight_data = await service.get_flights()
+                    flights_dicts = [f.model_dump() for f in flight_data.flights]
+                    timestamp = flight_data.timestamp.isoformat()
 
                 # Compute deltas against previous broadcast
                 deltas, removed = _compute_deltas(self._prev_flights, flights_dicts)
@@ -142,14 +164,36 @@ class FlightBroadcaster:
                     "data": {
                         "deltas": deltas,
                         "removed": removed,
-                        "count": flight_data.count,
+                        "count": len(flights_dicts),
                         "timestamp": timestamp,
+                        "mode": self._mode,
                     },
                 })
             except Exception:
                 pass
 
-            await asyncio.sleep(interval)
+            # Live mode polls less frequently (OpenSky rate limits)
+            sleep_time = 10.0 if self._mode == "live" else interval
+            await asyncio.sleep(sleep_time)
+
+    async def _fetch_opensky_flights(self) -> tuple[list[dict], str]:
+        """Fetch flights from OpenSky for the current airport."""
+        from datetime import datetime, timezone
+        from app.backend.services.opensky_service import get_opensky_service
+        from app.backend.services.airport_config_service import get_airport_config_service
+
+        opensky = get_opensky_service()
+        config_service = get_airport_config_service()
+        config = config_service.get_config()
+
+        # Get airport center
+        ref = config.get("reference_point") or config.get("referencePoint") or {}
+        lat = float(ref.get("latitude", 37.6213))
+        lon = float(ref.get("longitude", -122.379))
+
+        flights = await opensky.fetch_flights(lat, lon)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        return flights, timestamp
 
 
 # Global broadcaster instance
@@ -180,8 +224,17 @@ async def websocket_flights(websocket: WebSocket):
     except Exception:
         pass
 
+    # Send current mode to newly connected client
     try:
-        # Keep connection alive — handle client messages (refresh, ping)
+        await websocket.send_json({
+            "type": "mode_change",
+            "data": {"mode": broadcaster.mode},
+        })
+    except Exception:
+        pass
+
+    try:
+        # Keep connection alive — handle client messages (refresh, ping, mode switch)
         while True:
             data = await websocket.receive_text()
             if data == "refresh":
@@ -194,6 +247,14 @@ async def websocket_flights(websocket: WebSocket):
                         "timestamp": flight_data.timestamp.isoformat(),
                     },
                 })
+            else:
+                # Try to parse JSON commands
+                try:
+                    msg = json.loads(data)
+                    if msg.get("command") == "set_mode":
+                        await broadcaster.set_mode(msg.get("mode", "simulation"))
+                except (json.JSONDecodeError, TypeError):
+                    pass
     except WebSocketDisconnect:
         broadcaster.disconnect(websocket)
     except Exception:

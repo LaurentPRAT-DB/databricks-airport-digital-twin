@@ -7,6 +7,8 @@ import {
   SimulationMetadata,
   ScenarioEvent,
 } from '../../hooks/useSimulationReplay';
+import { useFlightContext } from '../../context/FlightContext';
+import type { DataMode } from '../../context/FlightContext';
 import { TimeWindowPicker } from './TimeWindowPicker';
 import { SceneCapture } from '../SceneCapture/SceneCapture';
 import { SimulationReport } from './SimulationReport';
@@ -435,6 +437,74 @@ function PausedBar({
   );
 }
 
+/** Minimal status bar shown in Live (OpenSky) mode. */
+function LiveBar({ flightCount, lastUpdated }: { flightCount: number; lastUpdated: string | null }) {
+  const timeStr = lastUpdated
+    ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit' })
+    : '--:--';
+
+  return (
+    <div className="fixed left-0 right-0 z-[1500] bg-emerald-900/95 backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0">
+      <div className="flex items-center gap-4 max-w-screen-xl mx-auto">
+        {/* Live indicator */}
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+          <span className="text-sm font-semibold uppercase tracking-wider text-emerald-200">Live</span>
+        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Flight count */}
+        <div className="text-sm text-slate-300">
+          <span className="font-mono font-medium text-white">{flightCount}</span> aircraft
+        </div>
+
+        {/* Last updated */}
+        <div className="hidden md:block text-xs text-slate-400">
+          Updated {timeStr}
+        </div>
+
+        {/* Data source badge */}
+        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-800/60 text-xs text-emerald-300">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          OpenSky ADS-B
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Toggle button for switching between Simulation and Live data modes. */
+function DataModeToggle({ mode, onChange }: { mode: DataMode; onChange: (mode: DataMode) => void }) {
+  return (
+    <div className="flex items-center bg-slate-700 rounded-lg p-0.5">
+      <button
+        onClick={() => onChange('simulation')}
+        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+          mode === 'simulation'
+            ? 'bg-indigo-600 text-white shadow-sm'
+            : 'text-slate-300 hover:text-white'
+        }`}
+      >
+        Simulation
+      </button>
+      <button
+        onClick={() => onChange('live')}
+        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+          mode === 'live'
+            ? 'bg-emerald-600 text-white shadow-sm'
+            : 'text-slate-300 hover:text-white'
+        }`}
+      >
+        Live
+      </button>
+    </div>
+  );
+}
+
 /**
  * SimulationControls — manages the full simulation replay lifecycle.
  *
@@ -467,6 +537,7 @@ export function SimulationControls({
   demoReady?: boolean;
 }) {
   const sim = useSimulationReplay();
+  const { dataMode, setDataMode, flights: contextFlights, lastUpdated: contextLastUpdated } = useFlightContext();
   const [showPicker, setShowPicker] = useState(false);
   const [showWindowPicker, setShowWindowPicker] = useState(false);
   const [windowPickerFile, setWindowPickerFile] = useState<string | null>(null);
@@ -632,24 +703,40 @@ export function SimulationControls({
     return null;
   };
 
+  const handleModeChange = (mode: DataMode) => {
+    if (mode === 'live') {
+      // Stop any active simulation when switching to live
+      if (sim.isActive) sim.stop();
+    }
+    setDataMode(mode);
+  };
+
   return (
     <>
-      {renderHeaderButton()}
+      {/* Data mode toggle — always visible */}
+      <DataModeToggle mode={dataMode} onChange={handleModeChange} />
 
-      {/* Load simulation file button — always visible */}
-      <button
-        onClick={() => {
-          sim.fetchFiles();
-          setShowPicker(true);
-        }}
-        className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-500 px-3 py-1.5 rounded-lg text-sm transition-colors"
-        title="Load a simulation file"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-        </svg>
-        Simulation
-      </button>
+      {/* Simulation controls — only in simulation mode */}
+      {dataMode === 'simulation' && (
+        <>
+          {renderHeaderButton()}
+
+          {/* Load simulation file button */}
+          <button
+            onClick={() => {
+              sim.fetchFiles();
+              setShowPicker(true);
+            }}
+            className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-500 px-3 py-1.5 rounded-lg text-sm transition-colors"
+            title="Load a simulation file"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+            Simulation
+          </button>
+        </>
+      )}
 
       {/* File picker modal */}
       {showPicker && (
@@ -689,12 +776,17 @@ export function SimulationControls({
         )
       )}
 
-      {/* Playback bar — active demo/sim */}
-      {sim.isActive && !sim.switchPaused && <PlaybackBar sim={sim} />}
+      {/* Playback bar — active demo/sim in simulation mode */}
+      {dataMode === 'simulation' && sim.isActive && !sim.switchPaused && <PlaybackBar sim={sim} />}
 
       {/* Simulation paused bar */}
-      {sim.switchPaused && (
+      {dataMode === 'simulation' && sim.switchPaused && (
         <PausedBar sim={sim} pendingAirport={pendingAirport} onRestart={handleDemoRestart} />
+      )}
+
+      {/* Live status bar — shown in live mode */}
+      {dataMode === 'live' && (
+        <LiveBar flightCount={contextFlights.length} lastUpdated={contextLastUpdated} />
       )}
     </>
   );
