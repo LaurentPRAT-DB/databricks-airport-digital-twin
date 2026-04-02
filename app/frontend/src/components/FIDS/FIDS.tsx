@@ -75,8 +75,8 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
   // Get current airport so we re-fetch when it changes
   const { currentAirport } = useAirportConfigContext();
 
-  // Get tracked flights for linking
-  const { flights: trackedFlights, setSelectedFlight } = useFlightContext();
+  // Get tracked flights for linking and sim-replay detection
+  const { flights: trackedFlights, setSelectedFlight, dataSource } = useFlightContext();
 
   // Create callsign → tracked flight mapping
   const callsignToFlight = useMemo(() => {
@@ -104,7 +104,124 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
   const simTimeRef = useRef(simTime);
   simTimeRef.current = simTime;
 
+  // Airline name lookup (ICAO 3-letter codes)
+  const AIRLINE_NAMES: Record<string, string> = useMemo(() => ({
+    UAL: 'United Airlines', DAL: 'Delta Air Lines', AAL: 'American Airlines',
+    SWA: 'Southwest Airlines', JBU: 'JetBlue Airways', ASA: 'Alaska Airlines',
+    FFT: 'Frontier Airlines', NKS: 'Spirit Airlines', SKW: 'SkyWest Airlines',
+    RPA: 'Republic Airways', ENY: 'Envoy Air', PDT: 'Piedmont Airlines',
+    UAE: 'Emirates', BAW: 'British Airways', AFR: 'Air France', DLH: 'Lufthansa',
+    ANA: 'All Nippon Airways', JAL: 'Japan Airlines', CPA: 'Cathay Pacific',
+    QFA: 'Qantas', SIA: 'Singapore Airlines', KAL: 'Korean Air',
+    AMX: 'Aeromexico', ACA: 'Air Canada', WJA: 'WestJet',
+  }), []);
+
+  // Derive FIDS schedule entries from map flights only during simulation replay.
+  // In live mode, the REST API provides schedule data (with delays, background flights, etc.)
+  const isSimReplay = dataSource === 'simulation';
+  const derivedSchedule = useMemo(() => {
+    if (!isSimReplay || trackedFlights.length === 0) return null;
+
+    const now = simTime ? new Date(simTime) : new Date();
+    const arrivingPhases = new Set(['approaching', 'landing', 'taxi_in']);
+    const departingPhases = new Set(['pushback', 'taxi_out', 'takeoff', 'departing']);
+
+    const arr: ScheduledFlight[] = [];
+    const dep: ScheduledFlight[] = [];
+
+    for (const f of trackedFlights) {
+      const callsign = f.callsign?.trim() || '';
+      if (!callsign) continue;
+      const code = callsign.slice(0, 3).toUpperCase();
+      const airline = AIRLINE_NAMES[code] || code;
+      const phase = f.flight_phase;
+      // currentAirport is ICAO code like "KSFO"; derive IATA by dropping leading K (US) or using as-is
+      const icao = currentAirport || 'KSFO';
+      const localIata = icao.startsWith('K') && icao.length === 4 ? icao.slice(1) : icao;
+
+      let isArrival: boolean;
+      if (arrivingPhases.has(phase)) isArrival = true;
+      else if (departingPhases.has(phase)) isArrival = false;
+      else if (phase === 'parked') {
+        // Parked: check if it arrived (has origin set and dest is local)
+        isArrival = f.destination_airport === localIata || !f.destination_airport;
+      } else {
+        // enroute or unknown: use origin/dest convention
+        isArrival = (f.destination_airport === localIata) ||
+                    (!!f.origin_airport && !f.destination_airport);
+      }
+
+      // Map phase to FIDS status
+      let status: string;
+      if (phase === 'parked') status = isArrival ? 'arrived' : 'scheduled';
+      else if (phase === 'approaching') status = 'on_time';
+      else if (phase === 'landing') status = 'final_call';
+      else if (phase === 'taxi_in') status = 'arrived';
+      else if (phase === 'pushback' || phase === 'taxi_out') status = 'gate_closed';
+      else if (phase === 'takeoff' || phase === 'departing') status = 'departed';
+      else if (phase === 'enroute') status = isArrival ? 'scheduled' : 'departed';
+      else status = 'on_time';
+
+      // Compute scheduled time from flight state
+      let schedTime: Date;
+      if (phase === 'approaching') {
+        const alt = Number(f.altitude) || 0;
+        const etaMin = Math.max(3, Math.round(alt / 800));
+        schedTime = new Date(now.getTime() + etaMin * 60000);
+      } else if (phase === 'landing' || phase === 'taxi_in') {
+        schedTime = new Date(now.getTime() - 2 * 60000);
+      } else if (phase === 'parked' && isArrival) {
+        schedTime = new Date(now.getTime() - 10 * 60000);
+      } else if (phase === 'pushback' || phase === 'taxi_out') {
+        schedTime = new Date(now.getTime() - 2 * 60000);
+      } else if (phase === 'takeoff' || phase === 'departing') {
+        schedTime = new Date(now.getTime() - 5 * 60000);
+      } else if (phase === 'enroute' && isArrival) {
+        schedTime = new Date(now.getTime() + 30 * 60000);
+      } else {
+        schedTime = new Date(now.getTime() + 15 * 60000);
+      }
+
+      const entry: ScheduledFlight = {
+        flight_number: callsign,
+        airline,
+        airline_code: code,
+        origin: isArrival ? (f.origin_airport || '???') : localIata,
+        destination: isArrival ? localIata : (f.destination_airport || '???'),
+        scheduled_time: schedTime.toISOString(),
+        estimated_time: null,
+        actual_time: (status === 'arrived' || status === 'departed') ? now.toISOString() : null,
+        gate: f.assigned_gate || null,
+        status,
+        delay_minutes: 0,
+        aircraft_type: f.aircraft_type || 'A320',
+        flight_type: isArrival ? 'arrival' : 'departure',
+      };
+
+      if (isArrival) arr.push(entry);
+      else dep.push(entry);
+    }
+
+    arr.sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time));
+    dep.sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time));
+    return { arrivals: arr, departures: dep };
+  }, [trackedFlights, simTime, currentAirport, AIRLINE_NAMES]);
+
+  // When in simulation replay mode, use derived schedule from map flights.
+  // In live mode, fetch from the REST API.
   useEffect(() => {
+    if (derivedSchedule) {
+      setArrivals(derivedSchedule.arrivals);
+      setDepartures(derivedSchedule.departures);
+      setLoading(false);
+      setError(null);
+    }
+  }, [derivedSchedule]);
+
+  useEffect(() => {
+    // Skip API fetch when we have derived schedule from simulation
+    if (derivedSchedule) return;
+
     let cancelled = false;
 
     async function fetchSchedule() {
@@ -143,7 +260,7 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
     // Refresh every 15 seconds to stay in sync with live sim flights
     const interval = setInterval(fetchSchedule, 15 * 1000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [currentAirport]);
+  }, [currentAirport, derivedSchedule]);
 
   const allFlights = activeTab === 'arrivals' ? arrivals : departures;
   const flights = useMemo(() => {

@@ -133,6 +133,7 @@ export interface UseSimulationReplayResult {
   summary: Record<string, unknown> | null;
   scenarioEvents: ScenarioEvent[];
   scenarioName: string | null;
+  schedule: Record<string, unknown>[];
   airport: string | null;
   simStartTime: string | null;
   simEndTime: string | null;
@@ -536,6 +537,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     summary: simData?.summary as Record<string, unknown> | null ?? null,
     scenarioEvents: simData?.scenario_events ?? [],
     scenarioName: (simData?.summary as Record<string, unknown>)?.scenario_name as string | null ?? null,
+    schedule: simData?.schedule ?? [],
     airport: (simData?.config as Record<string, unknown>)?.airport as string | null ?? null,
     simStartTime,
     simEndTime,
