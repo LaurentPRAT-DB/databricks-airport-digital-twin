@@ -876,3 +876,231 @@ class TestSchemaMigrationRetry:
                 service._ensure_ml_tables()
                 assert service._ml_tables_ensured is True
                 assert service._ml_tables_retries == 3
+
+
+class TestLakebaseReadReplica:
+    """Tests for read replica auto-discovery and connection routing."""
+
+    def _make_service(self, **extra_env):
+        """Create a LakebaseService with OAuth config."""
+        env_vars = {
+            "LAKEBASE_HOST": "primary.databricks.com",
+            "LAKEBASE_PORT": "5432",
+            "LAKEBASE_DATABASE": "databricks_postgres",
+            "LAKEBASE_SCHEMA": "public",
+            "LAKEBASE_ENDPOINT_NAME": "projects/test/branches/prod/endpoints/primary",
+            "LAKEBASE_USE_OAUTH": "true",
+            **extra_env,
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                return LakebaseService()
+
+    def test_discover_read_replica_success(self):
+        """Test auto-discovery finds read_only_host from SDK endpoint."""
+        service = self._make_service()
+
+        mock_ep = MagicMock()
+        mock_ep.status.hosts.read_only_host = "replica.databricks.com"
+
+        with patch("app.backend.services.lakebase_service.LakebaseService._discover_read_replica") as mock_discover:
+            mock_discover.return_value = "replica.databricks.com"
+            # Simulate lazy discovery
+            service._read_host_discovered = False
+            service._read_host = None
+
+        # Test the actual method
+        with patch("databricks.sdk.WorkspaceClient") as MockWC:
+            mock_wc = MockWC.return_value
+            mock_wc.postgres.get_endpoint.return_value = mock_ep
+
+            result = service._discover_read_replica()
+            assert result == "replica.databricks.com"
+            mock_wc.postgres.get_endpoint.assert_called_once_with(
+                name="projects/test/branches/prod/endpoints/primary"
+            )
+
+    def test_discover_read_replica_none_when_not_configured(self):
+        """Test discovery returns None when endpoint has no read replica."""
+        service = self._make_service()
+
+        mock_ep = MagicMock()
+        mock_ep.status.hosts.read_only_host = None
+
+        with patch("databricks.sdk.WorkspaceClient") as MockWC:
+            mock_wc = MockWC.return_value
+            mock_wc.postgres.get_endpoint.return_value = mock_ep
+
+            result = service._discover_read_replica()
+            assert result is None
+
+    def test_discover_read_replica_none_without_oauth(self):
+        """Test discovery returns None when OAuth not configured."""
+        env_vars = {
+            "LAKEBASE_HOST": "primary.databricks.com",
+            "LAKEBASE_USER": "user",
+            "LAKEBASE_PASSWORD": "pass",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+                from app.backend.services.lakebase_service import LakebaseService
+                service = LakebaseService()
+                result = service._discover_read_replica()
+                assert result is None
+
+    def test_discover_read_replica_graceful_on_sdk_error(self):
+        """Test discovery returns None and doesn't raise on SDK errors."""
+        service = self._make_service()
+
+        with patch("databricks.sdk.WorkspaceClient") as MockWC:
+            MockWC.side_effect = Exception("SDK unavailable")
+            result = service._discover_read_replica()
+            assert result is None
+
+    def test_read_pool_uses_replica_host(self):
+        """Test read pool is created with replica host, not primary."""
+        service = self._make_service()
+        service._read_host_discovered = True
+        service._read_host = "replica.databricks.com"
+
+        # Mock credentials and pool creation
+        with patch.object(service, "_get_credentials", return_value=("token", "user@db.com")):
+            with patch("app.backend.services.lakebase_service.ThreadedConnectionPool") as MockPool:
+                mock_pool = MagicMock()
+                mock_pool.closed = False
+                MockPool.return_value = mock_pool
+
+                pool = service._get_or_create_read_pool()
+                assert pool is mock_pool
+                # Verify pool was created with replica host
+                call_kwargs = MockPool.call_args
+                assert call_kwargs.kwargs["host"] == "replica.databricks.com"
+
+    def test_read_pool_returns_none_without_replica(self):
+        """Test read pool returns None when no replica discovered."""
+        service = self._make_service()
+        service._read_host_discovered = True
+        service._read_host = None
+
+        pool = service._get_or_create_read_pool()
+        assert pool is None
+
+    def test_get_read_connection_uses_replica_pool(self):
+        """Test _get_read_connection uses the read pool when available."""
+        service = self._make_service()
+
+        mock_read_conn = MagicMock()
+        mock_read_pool = MagicMock()
+        mock_read_pool.closed = False
+        mock_read_pool.getconn.return_value = mock_read_conn
+
+        with patch.object(service, "_get_or_create_read_pool", return_value=mock_read_pool):
+            with service._get_read_connection() as conn:
+                assert conn is mock_read_conn
+            mock_read_pool.getconn.assert_called_once()
+            mock_read_pool.putconn.assert_called_once_with(mock_read_conn)
+
+    def test_get_read_connection_falls_back_to_primary(self):
+        """Test _get_read_connection falls back to primary when no replica."""
+        service = self._make_service()
+
+        mock_primary_conn = MagicMock()
+
+        with patch.object(service, "_get_or_create_read_pool", return_value=None):
+            with patch.object(service, "_get_connection") as mock_get_conn:
+                mock_get_conn.return_value.__enter__ = Mock(return_value=mock_primary_conn)
+                mock_get_conn.return_value.__exit__ = Mock(return_value=False)
+                with service._get_read_connection() as conn:
+                    assert conn is mock_primary_conn
+
+    def test_invalidate_pool_clears_both_pools(self):
+        """Test _invalidate_pool tears down both primary and read pools."""
+        service = self._make_service()
+
+        mock_primary_pool = MagicMock()
+        mock_read_pool = MagicMock()
+        service._pool = mock_primary_pool
+        service._read_pool = mock_read_pool
+
+        service._invalidate_pool()
+
+        mock_primary_pool.closeall.assert_called_once()
+        mock_read_pool.closeall.assert_called_once()
+        assert service._pool is None
+        assert service._read_pool is None
+
+    def test_discovery_called_lazily_once(self):
+        """Test replica discovery is only called on first read pool request."""
+        service = self._make_service()
+        assert service._read_host_discovered is False
+
+        with patch.object(service, "_discover_read_replica", return_value=None) as mock_discover:
+            service._get_or_create_read_pool()
+            assert mock_discover.call_count == 1
+            assert service._read_host_discovered is True
+
+            # Second call should NOT re-discover
+            service._get_or_create_read_pool()
+            assert mock_discover.call_count == 1
+
+    @patch("app.backend.services.lakebase_service.RealDictCursor", create=True)
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_get_flights_uses_read_connection(self, mock_psycopg2, mock_rdc):
+        """Test that get_flights routes through _get_read_connection."""
+        service = self._make_service()
+
+        with patch.object(service, "_get_read_connection") as mock_read:
+            mock_conn = MagicMock()
+            mock_cursor = MagicMock()
+            mock_cursor.fetchall.return_value = []
+            mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
+            mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+            mock_read.return_value.__enter__ = Mock(return_value=mock_conn)
+            mock_read.return_value.__exit__ = Mock(return_value=False)
+
+            service.get_flights(limit=10)
+            mock_read.assert_called_once()
+
+    @patch("app.backend.services.lakebase_service.psycopg2", create=True)
+    def test_upsert_weather_uses_primary_connection(self, mock_psycopg2):
+        """Test that write methods still use primary _get_connection."""
+        service = self._make_service()
+
+        with patch.object(service, "_get_connection") as mock_primary:
+            mock_conn = MagicMock()
+            mock_cursor = MagicMock()
+            mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
+            mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+            mock_primary.return_value.__enter__ = Mock(return_value=mock_conn)
+            mock_primary.return_value.__exit__ = Mock(return_value=False)
+
+            service.upsert_weather({
+                "station": "KSFO", "observation_time": "2026-01-01T00:00:00Z",
+                "wind_direction": 0, "wind_speed_kts": 0, "wind_gust_kts": None,
+                "visibility_sm": 10, "clouds": "[]", "temperature_c": 15,
+                "dewpoint_c": 10, "altimeter_inhg": 30.0, "weather": "[]",
+                "flight_category": "VFR", "raw_metar": "", "taf_text": None,
+                "taf_valid_from": None, "taf_valid_to": None,
+            })
+            mock_primary.assert_called()
+
+        # Verify _get_read_connection was NOT called for write
+        with patch.object(service, "_get_read_connection") as mock_read:
+            with patch.object(service, "_get_connection") as mock_primary2:
+                mock_conn2 = MagicMock()
+                mock_cursor2 = MagicMock()
+                mock_conn2.cursor.return_value.__enter__ = Mock(return_value=mock_cursor2)
+                mock_conn2.cursor.return_value.__exit__ = Mock(return_value=False)
+                mock_primary2.return_value.__enter__ = Mock(return_value=mock_conn2)
+                mock_primary2.return_value.__exit__ = Mock(return_value=False)
+
+                service.upsert_weather({
+                    "station": "KSFO", "observation_time": "2026-01-01T00:00:00Z",
+                    "wind_direction": 0, "wind_speed_kts": 0, "wind_gust_kts": None,
+                    "visibility_sm": 10, "clouds": "[]", "temperature_c": 15,
+                    "dewpoint_c": 10, "altimeter_inhg": 30.0, "weather": "[]",
+                    "flight_category": "VFR", "raw_metar": "", "taf_text": None,
+                    "taf_valid_from": None, "taf_valid_to": None,
+                })
+                mock_read.assert_not_called()

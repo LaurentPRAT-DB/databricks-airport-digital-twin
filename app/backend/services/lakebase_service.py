@@ -132,9 +132,14 @@ class LakebaseService:
         self._airport_columns_retries = 0
         self._ml_tables_ensured = False
         self._ml_tables_retries = 0
-        # Connection pool
+        # Connection pool (primary — read-write)
         self._pool: Optional["ThreadedConnectionPool"] = None
         self._pool_lock = threading.Lock()
+        # Read replica pool (auto-discovered, falls back to primary)
+        self._read_host: Optional[str] = None
+        self._read_host_discovered = False
+        self._read_pool: Optional["ThreadedConnectionPool"] = None
+        self._read_pool_lock = threading.Lock()
 
     @property
     def is_available(self) -> bool:
@@ -244,7 +249,7 @@ class LakebaseService:
                 return None
 
     def _invalidate_pool(self) -> None:
-        """Tear down the connection pool (e.g. on auth failure)."""
+        """Tear down both connection pools (e.g. on auth failure)."""
         with self._pool_lock:
             if self._pool is not None:
                 try:
@@ -252,11 +257,68 @@ class LakebaseService:
                 except Exception:
                     pass
                 self._pool = None
-                logger.info("Lakebase connection pool invalidated")
+        with self._read_pool_lock:
+            if self._read_pool is not None:
+                try:
+                    self._read_pool.closeall()
+                except Exception:
+                    pass
+                self._read_pool = None
+        logger.info("Lakebase connection pools invalidated")
 
     def close_pool(self) -> None:
         """Cleanly shut down the connection pool."""
         self._invalidate_pool()
+
+    def _discover_read_replica(self) -> Optional[str]:
+        """Auto-discover Lakebase read replica host via SDK.
+
+        Checks ``endpoint.status.hosts.read_only_host`` which is populated
+        when readable secondaries are enabled on the Lakebase endpoint.
+        Called lazily on first read-connection request.
+        """
+        if not self._use_oauth or not self._endpoint_name:
+            return None
+        try:
+            from databricks.sdk import WorkspaceClient
+            w = WorkspaceClient()
+            ep = w.postgres.get_endpoint(name=self._endpoint_name)
+            ro_host = getattr(getattr(getattr(ep, "status", None), "hosts", None), "read_only_host", None)
+            if ro_host:
+                logger.info("Lakebase read replica discovered: %s", ro_host)
+                return ro_host
+            logger.info("Lakebase endpoint has no read replica configured")
+        except Exception as e:
+            logger.debug("Read replica discovery failed: %s", e)
+        return None
+
+    def _get_or_create_read_pool(self) -> Optional["ThreadedConnectionPool"]:
+        """Get or lazily create the read replica connection pool.
+
+        On first call, attempts to discover the read replica host via SDK.
+        Falls back to None (caller should use primary pool).
+        """
+        if not self._read_host_discovered:
+            self._read_host_discovered = True
+            self._read_host = self._discover_read_replica()
+
+        if not self._read_host:
+            return None
+
+        with self._read_pool_lock:
+            if self._read_pool is not None and not self._read_pool.closed:
+                return self._read_pool
+            kwargs = self._get_pool_kwargs()
+            if kwargs is None:
+                return None
+            kwargs["host"] = self._read_host
+            try:
+                self._read_pool = ThreadedConnectionPool(minconn=1, maxconn=8, **kwargs)
+                logger.info("Lakebase read replica pool created (min=1, max=8)")
+                return self._read_pool
+            except Exception as e:
+                logger.warning("Failed to create read replica pool: %s", e)
+                return None
 
     @contextmanager
     def _get_connection(self):
@@ -313,6 +375,38 @@ class LakebaseService:
                 else:
                     conn.close()
 
+    @contextmanager
+    def _get_read_connection(self):
+        """Context manager for read-only queries. Uses read replica if available.
+
+        Tries the read replica pool first. If no replica is configured or the
+        pool fails, falls back transparently to the primary connection.
+        """
+        read_pool = self._get_or_create_read_pool()
+        if read_pool is not None:
+            conn = None
+            try:
+                conn = read_pool.getconn()
+                yield conn
+            except Exception:
+                if conn is not None:
+                    try:
+                        read_pool.putconn(conn, close=True)
+                    except Exception:
+                        pass
+                    conn = None
+                raise
+            finally:
+                if conn is not None:
+                    try:
+                        read_pool.putconn(conn)
+                    except Exception:
+                        pass
+        else:
+            # No read replica — fall back to primary
+            with self._get_connection() as conn:
+                yield conn
+
     _MAX_MIGRATION_RETRIES = 3
 
     def _ensure_airport_columns(self) -> None:
@@ -358,7 +452,7 @@ class LakebaseService:
             return None
 
         try:
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         """
@@ -405,7 +499,7 @@ class LakebaseService:
             return None
 
         try:
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         """
@@ -530,7 +624,7 @@ class LakebaseService:
 
         try:
             import json
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         """
@@ -656,7 +750,7 @@ class LakebaseService:
         self._ensure_airport_columns()
 
         try:
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     type_clause = ""
                     params: list = [airport_icao]
@@ -864,7 +958,7 @@ class LakebaseService:
         self._ensure_airport_columns()
 
         try:
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         """
@@ -960,7 +1054,7 @@ class LakebaseService:
         self._ensure_airport_columns()
 
         try:
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         """
@@ -1081,7 +1175,7 @@ class LakebaseService:
             import json
             self._ensure_airport_config_table()
 
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         "SELECT config_json FROM airport_config_cache WHERE icao_code = %s",
@@ -1184,7 +1278,7 @@ class LakebaseService:
         try:
             self._ensure_user_usage_table()
 
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
@@ -1214,7 +1308,7 @@ class LakebaseService:
         try:
             self._ensure_airport_config_table()
 
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("SELECT icao_code FROM airport_config_cache")
                     return [row[0] for row in cur.fetchall()]
@@ -1293,7 +1387,7 @@ class LakebaseService:
         self._ensure_airport_columns()
 
         try:
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         """
@@ -1735,7 +1829,7 @@ class LakebaseService:
 
         tile_key = f"{zoom}/{tile_x}/{tile_y}"
         try:
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         """SELECT inpainted_image, aircraft_count, original_etag,
@@ -1828,7 +1922,7 @@ class LakebaseService:
             return None
 
         try:
-            with self._get_connection() as conn:
+            with self._get_read_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("""
                         SELECT
