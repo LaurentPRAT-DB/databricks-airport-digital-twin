@@ -68,3 +68,9 @@ env:
   # Genie Space for Airport Operations Assistant
   - name: GENIE_SPACE_ID
     value: "01f12612fa6314ae943d0526f5ae3a00"
+
+  # Platform links (for frontend UI)
+  - name: DASHBOARD_ID
+    value: "01f1288ade9c12418399b38be2b35960"
+  - name: LAKEBASE_PROJECT_ID
+    value: "1764ee4a-d6c7-4a08-b4cd-5db35ec7ee86"

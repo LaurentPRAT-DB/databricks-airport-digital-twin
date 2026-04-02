@@ -488,7 +488,9 @@ async def get_version(request: Request):
 
 @app.get("/api/config")
 async def get_demo_config():
-    """Return current demo configuration."""
+    """Return current demo configuration including platform links."""
+    host = os.getenv("DATABRICKS_HOST", "")
+    workspace_url = f"https://{host}" if host else ""
     return {
         "build_number": BUILD_NUMBER,
         "git_commit": GIT_COMMIT,
@@ -496,6 +498,14 @@ async def get_demo_config():
         "default_airport_icao": DEFAULT_AIRPORT_ICAO,
         "default_airport_iata": DEFAULT_AIRPORT_IATA,
         "default_flight_count": DEFAULT_FLIGHT_COUNT,
+        "platform": {
+            "workspace_url": workspace_url,
+            "catalog": os.getenv("DATABRICKS_CATALOG", ""),
+            "schema": os.getenv("DATABRICKS_SCHEMA", ""),
+            "dashboard_id": os.getenv("DASHBOARD_ID", ""),
+            "genie_space_id": os.getenv("GENIE_SPACE_ID", ""),
+            "lakebase_project_id": os.getenv("LAKEBASE_PROJECT_ID", ""),
+        },
     }
 
 

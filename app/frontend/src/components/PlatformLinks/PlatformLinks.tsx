@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-// Platform configuration - update these URLs based on your Databricks workspace
-const WORKSPACE_URL = 'https://fevm-serverless-stable-3n0ihb.cloud.databricks.com';
-const CATALOG = 'serverless_stable_3n0ihb_catalog';
-const SCHEMA = 'airport_digital_twin';
+interface PlatformConfig {
+  workspace_url: string;
+  catalog: string;
+  schema: string;
+  dashboard_id: string;
+  genie_space_id: string;
+  lakebase_project_id: string;
+}
 
 interface PlatformLink {
   id: string;
@@ -13,49 +17,63 @@ interface PlatformLink {
   description: string;
 }
 
-const DASHBOARD_ID = '01f1288ade9c12418399b38be2b35960';
-const GENIE_SPACE_ID = '01f12612fa6314ae943d0526f5ae3a00';
-
-const platformLinks: PlatformLink[] = [
-  {
-    id: 'dashboard',
-    label: 'Flight Dashboard',
-    icon: '📊',
-    url: `${WORKSPACE_URL}/sql/dashboardsv3/${DASHBOARD_ID}/pages/overview`,
-    description: 'View real-time flight metrics in Lakeview',
-  },
-  {
-    id: 'genie',
-    label: 'Airport Ops Genie',
-    icon: '🗣️',
-    url: `${WORKSPACE_URL}/genie/spaces/${GENIE_SPACE_ID}`,
-    description: 'Ask natural language questions about flight ops',
-  },
-  {
-    id: 'mlflow',
-    label: 'ML Experiments',
-    icon: '📈',
-    url: `${WORKSPACE_URL}/ml/experiments`,
-    description: 'View model experiments in MLflow',
-  },
-  {
-    id: 'catalog',
-    label: 'Unity Catalog',
-    icon: '📁',
-    url: `${WORKSPACE_URL}/explore/data/${CATALOG}/${SCHEMA}`,
-    description: 'Browse tables in Unity Catalog',
-  },
-  {
-    id: 'lakebase',
-    label: 'Lakebase',
-    icon: '🐘',
-    url: `${WORKSPACE_URL}/sql/postgres/projects/airport-digital-twin`,
-    description: 'Manage Lakebase PostgreSQL endpoint',
-  },
-];
+function buildLinks(cfg: PlatformConfig): PlatformLink[] {
+  const w = cfg.workspace_url;
+  return [
+    {
+      id: 'dashboard',
+      label: 'Flight Dashboard',
+      icon: '📊',
+      url: `${w}/sql/dashboardsv3/${cfg.dashboard_id}/pages/overview`,
+      description: 'View real-time flight metrics in Lakeview',
+    },
+    {
+      id: 'genie',
+      label: 'Airport Ops Genie',
+      icon: '🗣️',
+      url: `${w}/genie/spaces/${cfg.genie_space_id}`,
+      description: 'Ask natural language questions about flight ops',
+    },
+    {
+      id: 'mlflow',
+      label: 'ML Experiments',
+      icon: '📈',
+      url: `${w}/ml/experiments`,
+      description: 'View model experiments in MLflow',
+    },
+    {
+      id: 'catalog',
+      label: 'Unity Catalog',
+      icon: '📁',
+      url: `${w}/explore/data/${cfg.catalog}/${cfg.schema}`,
+      description: 'Browse tables in Unity Catalog',
+    },
+    {
+      id: 'lakebase',
+      label: 'Lakebase',
+      icon: '🐘',
+      url: `${w}/lakebase/projects/${cfg.lakebase_project_id}`,
+      description: 'Manage Lakebase PostgreSQL endpoint',
+    },
+  ];
+}
 
 export default function PlatformLinks() {
   const [isOpen, setIsOpen] = useState(false);
+  const [links, setLinks] = useState<PlatformLink[]>([]);
+
+  useEffect(() => {
+    fetch('/api/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data.platform?.workspace_url) {
+          setLinks(buildLinks(data.platform));
+        }
+      })
+      .catch(() => {}); // silent — links just won't appear
+  }, []);
+
+  if (links.length === 0) return null;
 
   return (
     <div className="relative">
@@ -92,7 +110,7 @@ export default function PlatformLinks() {
             </div>
 
             <div className="py-2">
-              {platformLinks.map((link) => (
+              {links.map((link) => (
                 <a
                   key={link.id}
                   href={link.url}

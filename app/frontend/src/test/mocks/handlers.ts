@@ -416,6 +416,26 @@ export const handlers = [
     return HttpResponse.json({ status: 'ok', user: 'anonymous', airports: ['KSFO'], already_cached: 1, warming: 0 })
   }),
 
+  // App config endpoint (platform links, demo config)
+  http.get('/api/config', () => {
+    return HttpResponse.json({
+      build_number: '0',
+      git_commit: 'test',
+      demo_mode: true,
+      default_airport_icao: 'KSFO',
+      default_airport_iata: 'SFO',
+      default_flight_count: 50,
+      platform: {
+        workspace_url: 'https://test.cloud.databricks.com',
+        catalog: 'test_catalog',
+        schema: 'test_schema',
+        dashboard_id: 'dash-123',
+        genie_space_id: 'genie-456',
+        lakebase_project_id: 'lake-789',
+      },
+    })
+  }),
+
   // Simulation files endpoint
   http.get('/api/simulation/files', () => {
     return HttpResponse.json({ files: [] })
