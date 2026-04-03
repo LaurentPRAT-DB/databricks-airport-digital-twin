@@ -36,6 +36,9 @@ os.chdir(bundle_root)
 
 from datetime import datetime, timezone
 from pyspark.sql import Row
+from pyspark.sql.types import (
+    StructType, StructField, StringType, DoubleType, BooleanType, TimestampType,
+)
 
 CATALOG = "serverless_stable_3n0ihb_catalog"
 SCHEMA = "airport_digital_twin"
@@ -49,6 +52,55 @@ ENRICHED_TABLE = f"{CATALOG}.{SCHEMA}.opensky_enriched_snapshots"
 M_TO_FT = 3.28084
 MS_TO_KTS = 1.94384
 MS_TO_FTMIN = 196.85
+
+# Explicit schemas to avoid NullType inference on None values (assigned_gate, heading)
+PHASE_SCHEMA = StructType([
+    StructField("airport_icao", StringType(), False),
+    StructField("collection_date", StringType(), False),
+    StructField("time", StringType(), False),
+    StructField("icao24", StringType(), False),
+    StructField("callsign", StringType(), True),
+    StructField("from_phase", StringType(), False),
+    StructField("to_phase", StringType(), False),
+    StructField("latitude", DoubleType(), True),
+    StructField("longitude", DoubleType(), True),
+    StructField("altitude", DoubleType(), True),
+    StructField("aircraft_type", StringType(), True),
+    StructField("assigned_gate", StringType(), True),
+    StructField("_enriched_at", TimestampType(), True),
+])
+
+GATE_EVENT_SCHEMA = StructType([
+    StructField("airport_icao", StringType(), False),
+    StructField("collection_date", StringType(), False),
+    StructField("time", StringType(), False),
+    StructField("icao24", StringType(), False),
+    StructField("callsign", StringType(), True),
+    StructField("gate", StringType(), False),
+    StructField("event_type", StringType(), False),
+    StructField("aircraft_type", StringType(), True),
+    StructField("gate_distance_m", DoubleType(), True),
+    StructField("_enriched_at", TimestampType(), True),
+])
+
+ENRICHED_SCHEMA = StructType([
+    StructField("airport_icao", StringType(), False),
+    StructField("collection_date", StringType(), False),
+    StructField("time", StringType(), False),
+    StructField("icao24", StringType(), False),
+    StructField("callsign", StringType(), True),
+    StructField("latitude", DoubleType(), True),
+    StructField("longitude", DoubleType(), True),
+    StructField("altitude", DoubleType(), True),
+    StructField("velocity", DoubleType(), True),
+    StructField("heading", DoubleType(), True),
+    StructField("vertical_rate", DoubleType(), True),
+    StructField("phase", StringType(), True),
+    StructField("on_ground", BooleanType(), True),
+    StructField("aircraft_type", StringType(), True),
+    StructField("assigned_gate", StringType(), True),
+    StructField("_enriched_at", TimestampType(), True),
+])
 
 print(f"Raw states:          {RAW_TABLE}")
 print(f"Gates:               {GATES_TABLE}")
@@ -234,7 +286,7 @@ for airport_icao, date in pending:
                 assigned_gate=pt["assigned_gate"],
                 _enriched_at=enriched_at,
             ))
-        df_phases = spark.createDataFrame(phase_rows)
+        df_phases = spark.createDataFrame(phase_rows, schema=PHASE_SCHEMA)
         df_phases.write.mode("append").partitionBy("collection_date").saveAsTable(PHASE_TABLE)
         total_phases += n_phases
 
@@ -254,7 +306,7 @@ for airport_icao, date in pending:
                 gate_distance_m=ge["gate_distance_m"],
                 _enriched_at=enriched_at,
             ))
-        df_gate_ev = spark.createDataFrame(gate_rows)
+        df_gate_ev = spark.createDataFrame(gate_rows, schema=GATE_EVENT_SCHEMA)
         df_gate_ev.write.mode("append").partitionBy("collection_date").saveAsTable(GATE_EVENTS_TABLE)
         total_gate_events += n_gate_ev
 
@@ -280,7 +332,7 @@ for airport_icao, date in pending:
                 assigned_gate=s["assigned_gate"],
                 _enriched_at=enriched_at,
             ))
-        df_snaps = spark.createDataFrame(snap_rows)
+        df_snaps = spark.createDataFrame(snap_rows, schema=ENRICHED_SCHEMA)
         df_snaps.write.mode("append").partitionBy("collection_date").saveAsTable(ENRICHED_TABLE)
         total_snapshots += n_snaps
 
