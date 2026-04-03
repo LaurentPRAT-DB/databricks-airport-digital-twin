@@ -140,6 +140,8 @@ def _build_regional_airlines(region: str) -> dict[str, float]:
 def auto_calibrate_airport(
     icao_code: str,
     use_opensky: bool = True,
+    opensky_client_id: str | None = None,
+    opensky_client_secret: str | None = None,
 ) -> AirportProfile | None:
     """Auto-calibrate an airport by combining multiple data sources.
 
@@ -210,7 +212,7 @@ def auto_calibrate_airport(
                 end_ts = now - day_offset * 86400
                 begin_ts = end_ts - 86400
 
-                deps = query_departures(icao_code, begin_ts, end_ts)
+                deps = query_departures(icao_code, begin_ts, end_ts, client_id=opensky_client_id, client_secret=opensky_client_secret)
                 for flight in deps:
                     total_flights += 1
                     callsign = (flight.get("callsign") or "").strip()
@@ -227,7 +229,7 @@ def auto_calibrate_airport(
 
                 time.sleep(2.0)
 
-                arrs = query_arrivals(icao_code, begin_ts, end_ts)
+                arrs = query_arrivals(icao_code, begin_ts, end_ts, client_id=opensky_client_id, client_secret=opensky_client_secret)
                 for flight in arrs:
                     total_flights += 1
                     callsign = (flight.get("callsign") or "").strip()

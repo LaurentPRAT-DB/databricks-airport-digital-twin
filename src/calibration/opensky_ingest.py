@@ -21,6 +21,39 @@ logger = logging.getLogger(__name__)
 
 # OpenSky REST API base URL
 _OPENSKY_API = "https://opensky-network.org/api"
+_OPENSKY_AUTH_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
+
+# Module-level token cache
+_oauth_token: Optional[str] = None
+
+
+def _get_oauth_token(client_id: str, client_secret: str) -> Optional[str]:
+    """Get OAuth2 access token using client credentials flow. Cached per session."""
+    global _oauth_token
+    if _oauth_token:
+        return _oauth_token
+    import urllib.request
+    import urllib.parse
+    import json
+
+    data = urllib.parse.urlencode({
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }).encode()
+    req = urllib.request.Request(
+        _OPENSKY_AUTH_URL,
+        data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            token_data = json.loads(resp.read().decode())
+            _oauth_token = token_data.get("access_token")
+            return _oauth_token
+    except Exception as e:
+        logger.warning("OpenSky OAuth2 token fetch failed: %s", e)
+        return None
 
 # Common airline ICAO prefixes → 3-letter carrier code
 _CALLSIGN_TO_CARRIER: dict[str, str] = {
@@ -55,7 +88,8 @@ def query_departures(
     airport_icao: str,
     begin_ts: int,
     end_ts: int,
-    auth: Optional[tuple[str, str]] = None,
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None,
 ) -> list[dict]:
     """Query OpenSky departures API for an airport in a time window.
 
@@ -63,7 +97,8 @@ def query_departures(
         airport_icao: ICAO code (e.g., "EGLL")
         begin_ts: Unix timestamp for window start
         end_ts: Unix timestamp for window end
-        auth: Optional (username, password) for authenticated access
+        client_id: OpenSky OAuth2 client ID for authenticated access
+        client_secret: OpenSky OAuth2 client secret
 
     Returns:
         List of departure dicts from OpenSky API
@@ -73,10 +108,10 @@ def query_departures(
 
     url = f"{_OPENSKY_API}/flights/departure?airport={airport_icao}&begin={begin_ts}&end={end_ts}"
     req = urllib.request.Request(url)
-    if auth:
-        import base64
-        credentials = base64.b64encode(f"{auth[0]}:{auth[1]}".encode()).decode()
-        req.add_header("Authorization", f"Basic {credentials}")
+    if client_id and client_secret:
+        token = _get_oauth_token(client_id, client_secret)
+        if token:
+            req.add_header("Authorization", f"Bearer {token}")
 
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -91,7 +126,8 @@ def query_arrivals(
     airport_icao: str,
     begin_ts: int,
     end_ts: int,
-    auth: Optional[tuple[str, str]] = None,
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None,
 ) -> list[dict]:
     """Query OpenSky arrivals API for an airport in a time window."""
     import urllib.request
@@ -99,10 +135,10 @@ def query_arrivals(
 
     url = f"{_OPENSKY_API}/flights/arrival?airport={airport_icao}&begin={begin_ts}&end={end_ts}"
     req = urllib.request.Request(url)
-    if auth:
-        import base64
-        credentials = base64.b64encode(f"{auth[0]}:{auth[1]}".encode()).decode()
-        req.add_header("Authorization", f"Basic {credentials}")
+    if client_id and client_secret:
+        token = _get_oauth_token(client_id, client_secret)
+        if token:
+            req.add_header("Authorization", f"Bearer {token}")
 
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -116,7 +152,8 @@ def query_arrivals(
 def build_profile_from_opensky(
     airport_iata: str,
     days: int = 7,
-    auth: Optional[tuple[str, str]] = None,
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None,
     rate_limit_delay: float = 2.0,
 ) -> AirportProfile:
     """Build an AirportProfile by querying OpenSky for recent flight data.
@@ -127,7 +164,8 @@ def build_profile_from_opensky(
     Args:
         airport_iata: IATA code (e.g., "LHR")
         days: Number of days of data to fetch (max 7 for free tier)
-        auth: Optional (username, password) for higher rate limits
+        client_id: OpenSky OAuth2 client ID for authenticated access
+        client_secret: OpenSky OAuth2 client secret
         rate_limit_delay: Seconds to wait between API calls
 
     Returns:
@@ -148,7 +186,7 @@ def build_profile_from_opensky(
         begin_ts = end_ts - 86400  # 24-hour window
 
         # Query departures
-        deps = query_departures(icao, begin_ts, end_ts, auth=auth)
+        deps = query_departures(icao, begin_ts, end_ts, client_id=client_id, client_secret=client_secret)
         for flight in deps:
             total_flights += 1
             callsign = (flight.get("callsign") or "").strip()
@@ -170,7 +208,7 @@ def build_profile_from_opensky(
         time.sleep(rate_limit_delay)
 
         # Query arrivals
-        arrs = query_arrivals(icao, begin_ts, end_ts, auth=auth)
+        arrs = query_arrivals(icao, begin_ts, end_ts, client_id=client_id, client_secret=client_secret)
         for flight in arrs:
             total_flights += 1
             callsign = (flight.get("callsign") or "").strip()

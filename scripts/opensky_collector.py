@@ -28,7 +28,7 @@ airline ICAO code (from callsign), and collection metadata.
     uv run python scripts/opensky_collector.py --airports LSGG,EDDF,EGLL,LFPG --duration 28800
 
     8-hour session across 4 major European airports. Authenticated
-    accounts recommended (set OPENSKY_USERNAME/OPENSKY_PASSWORD) for
+    accounts recommended (set OPENSKY_CLIENT_ID/OPENSKY_CLIENT_SECRET) for
     higher rate limits.
 
 ## Upload to Databricks
@@ -38,8 +38,8 @@ airline ICAO code (from callsign), and collection metadata.
     databricks bundle run opensky_ingestion --target dev
 
 Environment variables:
-    OPENSKY_USERNAME  — OpenSky account username (optional, improves rate limits)
-    OPENSKY_PASSWORD  — OpenSky account password
+    OPENSKY_CLIENT_ID      — OpenSky OAuth2 client ID (optional, improves rate limits)
+    OPENSKY_CLIENT_SECRET  — OpenSky OAuth2 client secret
 """
 
 import argparse
@@ -64,6 +64,7 @@ logging.basicConfig(
 logger = logging.getLogger("opensky_collector")
 
 OPENSKY_API_URL = "https://opensky-network.org/api/states/all"
+OPENSKY_AUTH_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 OPENSKY_AIRCRAFT_DB_URL = "https://opensky-network.org/datasets/metadata/aircraftDatabase.csv"
 
 # Bounding-box half-size in degrees (~0.5° ≈ 30 nm)
@@ -216,12 +217,42 @@ def extract_airline_icao(callsign: str | None) -> str:
 
 # ── Data collection ──────────────────────────────────────────────────────
 
+_oauth_token: str | None = None
+
+
+def get_oauth_token(
+    client: httpx.Client,
+    client_id: str,
+    client_secret: str,
+) -> str | None:
+    """Get OAuth2 access token using client credentials flow. Cached per session."""
+    global _oauth_token
+    if _oauth_token:
+        return _oauth_token
+    try:
+        resp = client.post(
+            OPENSKY_AUTH_URL,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+            timeout=30.0,
+        )
+        if resp.status_code == 200:
+            _oauth_token = resp.json().get("access_token")
+            return _oauth_token
+    except Exception as e:
+        logger.warning("OAuth2 token fetch failed: %s", e)
+    return None
+
+
 def fetch_states(
     client: httpx.Client,
     lat: float,
     lon: float,
     radius_deg: float,
-    auth: tuple[str, str] | None,
+    oauth_creds: tuple[str, str] | None,
 ) -> tuple[int | None, list[list] | None]:
     """Fetch state vectors from OpenSky. Returns (api_time, states) or (None, None)."""
     params = {
@@ -230,11 +261,13 @@ def fetch_states(
         "lomin": lon - radius_deg,
         "lomax": lon + radius_deg,
     }
-    kwargs: dict = {"params": params, "timeout": 15.0}
-    if auth:
-        kwargs["auth"] = auth
+    headers: dict = {}
+    if oauth_creds:
+        token = get_oauth_token(client, oauth_creds[0], oauth_creds[1])
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
 
-    resp = client.get(OPENSKY_API_URL, **kwargs)
+    resp = client.get(OPENSKY_API_URL, params=params, headers=headers, timeout=15.0)
 
     if resp.status_code == 429:
         return None, None  # caller handles backoff
@@ -283,14 +316,14 @@ def collect_once(
     lat: float,
     lon: float,
     radius_deg: float,
-    auth: tuple[str, str] | None,
+    oauth_creds: tuple[str, str] | None,
     output_dir: Path,
 ) -> int:
     """Run one collection cycle. Returns number of states written, or -1 for rate limit."""
     now = datetime.now(timezone.utc)
     collection_time = now.isoformat()
 
-    api_time, states = fetch_states(client, lat, lon, radius_deg, auth)
+    api_time, states = fetch_states(client, lat, lon, radius_deg, oauth_creds)
     if states is None:
         return -1  # rate limited
 
@@ -393,10 +426,10 @@ def main():
         # Default: LSGG (Geneva)
         airports.append(("LSGG", *AIRPORT_COORDS["LSGG"]))
 
-    # Auth from env
-    username = os.getenv("OPENSKY_USERNAME")
-    password = os.getenv("OPENSKY_PASSWORD")
-    auth = (username, password) if username and password else None
+    # OAuth2 credentials from env
+    client_id = os.getenv("OPENSKY_CLIENT_ID")
+    client_secret = os.getenv("OPENSKY_CLIENT_SECRET")
+    oauth_creds = (client_id, client_secret) if client_id and client_secret else None
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -423,7 +456,7 @@ def main():
                 args.interval, effective_interval, len(airports))
     logger.info("  Duration: %s", duration_str)
     logger.info("  Radius: %.2f°", args.radius)
-    logger.info("  Auth: %s", "authenticated" if auth else "anonymous (lower rate limits)")
+    logger.info("  Auth: %s", "OAuth2 authenticated" if oauth_creds else "anonymous (lower rate limits)")
     logger.info("  Output: %s", output_dir.resolve())
 
     client = httpx.Client()
@@ -445,7 +478,7 @@ def main():
             airport_idx = (airport_idx + 1) % len(airports)
 
             try:
-                count = collect_once(client, airport_icao, lat, lon, args.radius, auth, output_dir)
+                count = collect_once(client, airport_icao, lat, lon, args.radius, oauth_creds, output_dir)
                 if count == -1:
                     # Rate limited — exponential backoff
                     wait = min(backoff * 10, 120)

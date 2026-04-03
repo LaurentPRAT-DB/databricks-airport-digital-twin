@@ -66,19 +66,45 @@ def determine_flight_phase(
 class OpenSkyService:
     """Fetches live ADS-B data from the OpenSky Network API."""
 
+    AUTH_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
+
     def __init__(
         self,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
         timeout: float = 15.0,
     ):
-        self._auth = (username, password) if username and password else None
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._token: Optional[str] = None
         self._timeout = timeout
         self._last_fetch_time: Optional[float] = None
         self._last_flight_count: int = 0
         self._last_error: Optional[str] = None
         self._client = httpx.AsyncClient(timeout=timeout)
         self._reachable: Optional[bool] = None  # None = not tested yet
+
+    async def _get_token(self) -> Optional[str]:
+        """Get OAuth2 access token using client credentials flow."""
+        if not self._client_id or not self._client_secret:
+            return None
+        if self._token:
+            return self._token
+        try:
+            response = await self._client.post(
+                self.AUTH_URL,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self._client_id,
+                    "client_secret": self._client_secret,
+                },
+            )
+            if response.status_code == 200:
+                self._token = response.json().get("access_token")
+            return self._token
+        except Exception as e:
+            logger.warning("OpenSky OAuth2 token fetch failed: %s", e)
+            return None
 
     async def fetch_flights(
         self,
@@ -104,11 +130,12 @@ class OpenSkyService:
         }
 
         try:
-            kwargs: dict = {"params": params}
-            if self._auth:
-                kwargs["auth"] = self._auth
+            headers = {}
+            token = await self._get_token()
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
 
-            response = await self._client.get(OPENSKY_API_URL, **kwargs)
+            response = await self._client.get(OPENSKY_API_URL, params=params, headers=headers)
 
             if response.status_code == 429:
                 logger.warning("OpenSky rate limited (429), backing off")
@@ -220,7 +247,7 @@ class OpenSkyService:
             ),
             "last_flight_count": self._last_flight_count,
             "last_error": self._last_error,
-            "authenticated": self._auth is not None,
+            "authenticated": self._client_id is not None,
         }
 
     async def close(self):
@@ -233,18 +260,22 @@ _opensky_service: Optional[OpenSkyService] = None
 
 
 def _resolve_opensky_credentials() -> tuple[Optional[str], Optional[str]]:
-    """Resolve OpenSky credentials: Databricks secrets first, then env vars."""
+    """Resolve OpenSky OAuth2 credentials: Databricks secrets first, then env vars.
+
+    Returns:
+        (client_id, client_secret) tuple, or (None, None) for anonymous access.
+    """
     import os
 
     # Try Databricks secrets (secure, no plaintext in app.yaml)
     try:
         from databricks.sdk import WorkspaceClient
         w = WorkspaceClient()
-        username = w.dbutils.secrets.get(scope="airport-digital-twin", key="opensky-username")
-        password = w.dbutils.secrets.get(scope="airport-digital-twin", key="opensky-password")
-        if username and password:
-            logger.info("OpenSky credentials loaded from Databricks secrets")
-            return username, password
+        client_id = w.dbutils.secrets.get(scope="airport-digital-twin", key="opensky-client-id")
+        client_secret = w.dbutils.secrets.get(scope="airport-digital-twin", key="opensky-client-secret")
+        if client_id and client_secret:
+            logger.info("OpenSky OAuth2 credentials loaded from Databricks secrets")
+            return client_id, client_secret
         else:
             logger.warning("Databricks secrets returned empty values for OpenSky credentials")
     except Exception as e:
@@ -252,11 +283,11 @@ def _resolve_opensky_credentials() -> tuple[Optional[str], Optional[str]]:
                        type(e).__name__, e)
 
     # Fall back to env vars (local dev)
-    username = os.getenv("OPENSKY_USERNAME")
-    password = os.getenv("OPENSKY_PASSWORD")
-    if username and password:
-        logger.info("OpenSky credentials loaded from environment variables")
-        return username, password
+    client_id = os.getenv("OPENSKY_CLIENT_ID")
+    client_secret = os.getenv("OPENSKY_CLIENT_SECRET")
+    if client_id and client_secret:
+        logger.info("OpenSky OAuth2 credentials loaded from environment variables")
+        return client_id, client_secret
 
     logger.warning("No OpenSky credentials found — using anonymous access (lower rate limits)")
     return None, None
@@ -266,6 +297,6 @@ def get_opensky_service() -> OpenSkyService:
     """Get or create the OpenSky service singleton."""
     global _opensky_service
     if _opensky_service is None:
-        username, password = _resolve_opensky_credentials()
-        _opensky_service = OpenSkyService(username=username, password=password)
+        client_id, client_secret = _resolve_opensky_credentials()
+        _opensky_service = OpenSkyService(client_id=client_id, client_secret=client_secret)
     return _opensky_service

@@ -40,7 +40,8 @@ def build_profiles(
     raw_data_dir: Optional[Path] = None,
     output_dir: Optional[Path] = None,
     use_opensky: bool = False,
-    opensky_auth: Optional[tuple[str, str]] = None,
+    opensky_client_id: Optional[str] = None,
+    opensky_client_secret: Optional[str] = None,
     use_openflights: bool = True,
 ) -> list[AirportProfile]:
     """Build calibration profiles for a list of airports.
@@ -53,7 +54,8 @@ def build_profiles(
         raw_data_dir: Directory containing raw CSV files
         output_dir: Directory to write profile JSONs
         use_opensky: Whether to query OpenSky for international airports
-        opensky_auth: Optional (username, password) for OpenSky
+        opensky_client_id: OpenSky OAuth2 client ID
+        opensky_client_secret: OpenSky OAuth2 client secret
         use_openflights: Whether to use OpenFlights routes.dat (default True)
 
     Returns:
@@ -70,7 +72,8 @@ def build_profiles(
     for iata in airports:
         logger.info("Building profile for %s...", iata)
         profile = _build_single_profile(
-            iata, raw_dir, use_opensky=use_opensky, opensky_auth=opensky_auth,
+            iata, raw_dir, use_opensky=use_opensky,
+            opensky_client_id=opensky_client_id, opensky_client_secret=opensky_client_secret,
             use_openflights=use_openflights,
         )
         profile.profile_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -94,7 +97,8 @@ def _build_single_profile(
     iata: str,
     raw_dir: Path,
     use_opensky: bool = False,
-    opensky_auth: Optional[tuple[str, str]] = None,
+    opensky_client_id: Optional[str] = None,
+    opensky_client_secret: Optional[str] = None,
     use_openflights: bool = True,
 ) -> AirportProfile:
     """Build profile for a single airport, trying data sources in priority order."""
@@ -145,7 +149,8 @@ def _build_single_profile(
         try:
             from src.calibration.opensky_ingest import build_profile_from_opensky
             return build_profile_from_opensky(
-                iata, days=7, auth=opensky_auth,
+                iata, days=7,
+                client_id=opensky_client_id, client_secret=opensky_client_secret,
             )
         except Exception as e:
             logger.warning("OpenSky failed for %s: %s, falling back", iata, e)

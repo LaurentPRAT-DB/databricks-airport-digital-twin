@@ -219,17 +219,24 @@ class TestFetchFlightsAuth:
     """Tests for authenticated requests."""
 
     async def test_auth_passed_to_client(self):
-        service = OpenSkyService(username="user", password="pass")
+        service = OpenSkyService(client_id="test-client", client_secret="test-secret")
+
+        # Mock token fetch
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {"access_token": "test-token-123"}
+
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"time": 1700000000, "states": []}
 
-        with patch.object(service._client, "get", new_callable=AsyncMock, return_value=mock_response) as mock_get:
-            await service.fetch_flights(37.6, -122.4)
+        with patch.object(service._client, "post", new_callable=AsyncMock, return_value=mock_token_resp):
+            with patch.object(service._client, "get", new_callable=AsyncMock, return_value=mock_response) as mock_get:
+                await service.fetch_flights(37.6, -122.4)
 
         call_kwargs = mock_get.call_args.kwargs
-        assert call_kwargs["auth"] == ("user", "pass")
+        assert call_kwargs["headers"]["Authorization"] == "Bearer test-token-123"
 
     async def test_no_auth_when_no_credentials(self):
         service = OpenSkyService()
@@ -242,7 +249,7 @@ class TestFetchFlightsAuth:
             await service.fetch_flights(37.6, -122.4)
 
         call_kwargs = mock_get.call_args.kwargs
-        assert "auth" not in call_kwargs
+        assert call_kwargs["headers"] == {}
 
 
 class TestFetchFlightsEdgeCases:
@@ -369,7 +376,7 @@ class TestGetStatus:
         assert status["authenticated"] is False
 
     def test_status_with_auth(self):
-        service = OpenSkyService(username="user", password="pass")
+        service = OpenSkyService(client_id="test-client", client_secret="test-secret")
         status = service.get_status()
         assert status["authenticated"] is True
 
