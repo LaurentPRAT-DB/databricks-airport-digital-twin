@@ -432,6 +432,69 @@ TBLPROPERTIES (
 COMMENT 'Calibration profiles for synthetic flight generation — learned distributions per airport'
 """
 
+OPENSKY_PHASE_TRANSITIONS_DDL = """
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.opensky_phase_transitions (
+  airport_icao STRING NOT NULL COMMENT 'ICAO airport code',
+  collection_date DATE NOT NULL COMMENT 'Partition key — date of recording',
+  time STRING NOT NULL COMMENT 'ISO timestamp of phase change',
+  icao24 STRING NOT NULL COMMENT 'Aircraft ICAO 24-bit hex address',
+  callsign STRING COMMENT 'ATC callsign',
+  from_phase STRING NOT NULL COMMENT 'Previous flight phase',
+  to_phase STRING NOT NULL COMMENT 'New flight phase',
+  latitude DOUBLE COMMENT 'WGS84 latitude at transition',
+  longitude DOUBLE COMMENT 'WGS84 longitude at transition',
+  altitude DOUBLE COMMENT 'Altitude in feet at transition',
+  aircraft_type STRING COMMENT 'ICAO type designator from aircraft DB',
+  assigned_gate STRING COMMENT 'Gate ID if parked at time of transition',
+  _enriched_at TIMESTAMP COMMENT 'When enrichment was performed'
+) USING DELTA
+PARTITIONED BY (collection_date)
+TBLPROPERTIES ('delta.columnMapping.mode' = 'name')
+COMMENT 'Phase transitions inferred from raw OpenSky ADS-B positions'
+"""
+
+OPENSKY_GATE_EVENTS_DDL = """
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.opensky_gate_events (
+  airport_icao STRING NOT NULL COMMENT 'ICAO airport code',
+  collection_date DATE NOT NULL COMMENT 'Partition key — date of recording',
+  time STRING NOT NULL COMMENT 'ISO timestamp of gate event',
+  icao24 STRING NOT NULL COMMENT 'Aircraft ICAO 24-bit hex address',
+  callsign STRING COMMENT 'ATC callsign',
+  gate STRING NOT NULL COMMENT 'Gate ref from OSM (e.g., A1, G23)',
+  event_type STRING NOT NULL COMMENT 'assign, occupy, or release',
+  aircraft_type STRING COMMENT 'ICAO type designator from aircraft DB',
+  gate_distance_m DOUBLE COMMENT 'Haversine distance to gate at event time',
+  _enriched_at TIMESTAMP COMMENT 'When enrichment was performed'
+) USING DELTA
+PARTITIONED BY (collection_date)
+TBLPROPERTIES ('delta.columnMapping.mode' = 'name')
+COMMENT 'Gate events (chock-on/off) inferred from OpenSky ADS-B positions + OSM gate geometry'
+"""
+
+OPENSKY_ENRICHED_SNAPSHOTS_DDL = """
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.opensky_enriched_snapshots (
+  airport_icao STRING NOT NULL COMMENT 'ICAO airport code',
+  collection_date DATE NOT NULL COMMENT 'Partition key — date of recording',
+  time STRING NOT NULL COMMENT 'ISO timestamp of snapshot',
+  icao24 STRING NOT NULL COMMENT 'Aircraft ICAO 24-bit hex address',
+  callsign STRING COMMENT 'ATC callsign',
+  latitude DOUBLE COMMENT 'WGS84 latitude',
+  longitude DOUBLE COMMENT 'WGS84 longitude',
+  altitude DOUBLE COMMENT 'Altitude in feet',
+  velocity DOUBLE COMMENT 'Ground speed in knots',
+  heading DOUBLE COMMENT 'True track in degrees',
+  vertical_rate DOUBLE COMMENT 'Vertical rate in ft/min',
+  phase STRING COMMENT 'Inferred sim-compatible flight phase',
+  on_ground BOOLEAN COMMENT 'Whether aircraft is on the ground',
+  aircraft_type STRING COMMENT 'ICAO type designator from aircraft DB',
+  assigned_gate STRING COMMENT 'Gate ID from proximity inference',
+  _enriched_at TIMESTAMP COMMENT 'When enrichment was performed'
+) USING DELTA
+PARTITIONED BY (collection_date)
+TBLPROPERTIES ('delta.columnMapping.mode' = 'name')
+COMMENT 'Enriched OpenSky ADS-B snapshots with inferred gate assignments and flight phases'
+"""
+
 ALL_TABLES = [
     ("airport_metadata", AIRPORT_METADATA_DDL),
     ("gates", GATES_DDL),
@@ -449,6 +512,9 @@ ALL_TABLES = [
     ("gate_assignment_history", GATE_ASSIGNMENT_HISTORY_DDL),
     ("ml_prediction_history", ML_PREDICTION_HISTORY_DDL),
     ("airport_profiles", AIRPORT_PROFILES_DDL),
+    ("opensky_phase_transitions", OPENSKY_PHASE_TRANSITIONS_DDL),
+    ("opensky_gate_events", OPENSKY_GATE_EVENTS_DDL),
+    ("opensky_enriched_snapshots", OPENSKY_ENRICHED_SNAPSHOTS_DDL),
 ]
 
 

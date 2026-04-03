@@ -1,0 +1,27 @@
+# OpenSky event enrichment job
+# Reads raw ADS-B states, runs gate proximity matching + phase inference,
+# writes to opensky_phase_transitions, opensky_gate_events, opensky_enriched_snapshots
+
+resources:
+  jobs:
+    opensky_enrichment:
+      name: "[${bundle.target}] Airport Digital Twin - OpenSky Event Enrichment"
+      description: "Enriches raw OpenSky states with gate assignments, phase transitions, and gate events"
+
+      tasks:
+        - task_key: enrich_opensky_events
+          notebook_task:
+            notebook_path: ../databricks/notebooks/enrich_opensky_events.py
+
+      # Run every 30 minutes — processes any new unenriched airport/date pairs
+      schedule:
+        quartz_cron_expression: "0 */30 * * * ?"
+        timezone_id: "UTC"
+        pause_status: PAUSED
+
+      tags:
+        project: airport-digital-twin
+        component: opensky-enrichment
+        target: ${bundle.target}
+
+      timeout_seconds: 1800

@@ -265,15 +265,67 @@ class TestEventFormat:
 
     def test_gate_event_fields(self):
         """Gate events have all required fields from recorder.py."""
-        required = {"time", "icao24", "callsign", "gate", "event_type", "aircraft_type"}
+        required = {"time", "icao24", "callsign", "gate", "event_type", "aircraft_type", "gate_distance_m"}
         for ge in self.result["gate_events"]:
             assert set(ge.keys()) == required, f"Missing fields: {required - set(ge.keys())}"
+            assert isinstance(ge["gate_distance_m"], float)
 
     def test_gate_event_types_valid(self):
         """Gate event types are one of assign/occupy/release."""
         valid_types = {"assign", "occupy", "release"}
         for ge in self.result["gate_events"]:
             assert ge["event_type"] in valid_types
+
+
+# ── Enriched snapshots ───────────────────────────────────────────────────
+
+class TestEnrichedSnapshots:
+    def setup_method(self):
+        self.inferrer = OpenSkyEventInferrer(SAMPLE_GATES)
+
+    def test_snapshots_accumulated(self):
+        """Every processed state vector produces an enriched snapshot."""
+        self.inferrer.process_frame("2026-04-03T10:00:00", [
+            _snap(icao24="ac1", velocity=10, lat=46.2295, lon=6.1040),
+            _snap(icao24="ac2", velocity=10, lat=46.2305, lon=6.1065),
+        ])
+        self.inferrer.process_frame("2026-04-03T10:01:00", [
+            _snap(icao24="ac1", velocity=0, lat=46.2300, lon=6.1050),
+        ])
+        snaps = self.inferrer.get_enriched_snapshots()
+        assert len(snaps) == 3  # 2 in frame 1, 1 in frame 2
+
+    def test_snapshot_has_all_fields(self):
+        """Enriched snapshots have the full column set for Delta table."""
+        self.inferrer.process_frame("2026-04-03T10:00:00", [_snap()])
+        snaps = self.inferrer.get_enriched_snapshots()
+        required = {
+            "time", "icao24", "callsign", "latitude", "longitude",
+            "altitude", "velocity", "heading", "vertical_rate",
+            "phase", "on_ground", "aircraft_type", "assigned_gate",
+        }
+        assert set(snaps[0].keys()) == required
+
+    def test_snapshot_gate_assignment(self):
+        """Parked aircraft get assigned_gate in their snapshots."""
+        # Frame 1: taxiing
+        self.inferrer.process_frame("2026-04-03T10:00:00", [
+            _snap(velocity=15.0, lat=46.2295, lon=6.1040),
+        ])
+        # Frame 2: stopped at gate A1
+        self.inferrer.process_frame("2026-04-03T10:01:00", [
+            _snap(velocity=0.0, lat=46.2300, lon=6.1050),
+        ])
+        snaps = self.inferrer.get_enriched_snapshots()
+        parked_snaps = [s for s in snaps if s["assigned_gate"] == "A1"]
+        assert len(parked_snaps) >= 1
+
+    def test_results_include_enriched_snapshots(self):
+        """get_results() includes enriched_snapshots key."""
+        self.inferrer.process_frame("2026-04-03T10:00:00", [_snap()])
+        result = self.inferrer.get_results()
+        assert "enriched_snapshots" in result
+        assert len(result["enriched_snapshots"]) == 1
 
 
 # ── Edge cases ───────────────────────────────────────────────────────────

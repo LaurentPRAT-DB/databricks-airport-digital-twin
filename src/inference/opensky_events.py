@@ -96,6 +96,7 @@ class OpenSkyEventInferrer:
         self._trackers: dict[str, AircraftTracker] = {}
         self._phase_transitions: list[dict[str, Any]] = []
         self._gate_events: list[dict[str, Any]] = []
+        self._enriched_snapshots: list[dict[str, Any]] = []
 
         logger.info("OpenSkyEventInferrer initialized with %d gate positions", len(self._gate_positions))
 
@@ -147,6 +148,7 @@ class OpenSkyEventInferrer:
         tracker: AircraftTracker,
         gate: str,
         event_type: str,
+        gate_distance_m: float = 0.0,
     ) -> None:
         self._gate_events.append({
             "time": timestamp,
@@ -155,6 +157,7 @@ class OpenSkyEventInferrer:
             "gate": gate,
             "event_type": event_type,
             "aircraft_type": "",  # Unknown from ADS-B
+            "gate_distance_m": round(gate_distance_m, 1),
         })
 
     def _infer_phase(
@@ -261,12 +264,12 @@ class OpenSkyEventInferrer:
                 if phase == "parked" and near_gate:
                     tracker.assigned_gate = near_gate
                     tracker.parked_since = timestamp
-                    self._emit_gate_event(timestamp, tracker, near_gate, "assign")
-                    self._emit_gate_event(timestamp, tracker, near_gate, "occupy")
+                    self._emit_gate_event(timestamp, tracker, near_gate, "assign", gate_dist)
+                    self._emit_gate_event(timestamp, tracker, near_gate, "occupy", gate_dist)
 
                 # Gate release: was parked, now moving
                 if prev_phase == "parked" and tracker.assigned_gate:
-                    self._emit_gate_event(timestamp, tracker, tracker.assigned_gate, "release")
+                    self._emit_gate_event(timestamp, tracker, tracker.assigned_gate, "release", gate_dist)
                     tracker.assigned_gate = None
                     tracker.parked_since = None
 
@@ -276,21 +279,49 @@ class OpenSkyEventInferrer:
                 tracker.parked_since = timestamp
                 cur.phase = phase
 
+            # Accumulate enriched snapshot
+            self._enriched_snapshots.append({
+                "time": timestamp,
+                "icao24": icao24,
+                "callsign": callsign,
+                "latitude": lat,
+                "longitude": lon,
+                "altitude": altitude_ft,
+                "velocity": velocity_kts,
+                "heading": heading,
+                "vertical_rate": vrate_ftmin,
+                "phase": phase,
+                "on_ground": on_ground,
+                "aircraft_type": snap.get("aircraft_type", ""),
+                "assigned_gate": tracker.assigned_gate,
+            })
+
             tracker.prev = cur
+
+    def get_enriched_snapshots(self) -> list[dict[str, Any]]:
+        """Return all processed frames with inferred phase and gate assignment.
+
+        Each snapshot has: time, icao24, callsign, latitude, longitude, altitude,
+        velocity, heading, vertical_rate, phase, on_ground, aircraft_type, assigned_gate.
+        """
+        return self._enriched_snapshots
 
     def get_results(self) -> dict[str, Any]:
         """Return enriched events in simulation-compatible format.
 
         Returns:
-            Dict with "phase_transitions" and "gate_events" lists.
+            Dict with "phase_transitions", "gate_events", and "enriched_snapshots" lists.
         """
         logger.info(
-            "Event inference complete: %d phase transitions, %d gate events, %d aircraft tracked",
+            "Event inference complete: %d phase transitions, %d gate events, "
+            "%d enriched snapshots, %d aircraft tracked",
             len(self._phase_transitions),
             len(self._gate_events),
+            len(self._enriched_snapshots),
             len(self._trackers),
         )
         return {
             "phase_transitions": self._phase_transitions,
             "gate_events": self._gate_events,
+            "enriched_snapshots": self._enriched_snapshots,
         }
