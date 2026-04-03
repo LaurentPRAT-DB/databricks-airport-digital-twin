@@ -549,6 +549,8 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
             sharedViewport={viewport}
             onViewportChange={handle2DViewportChange}
             satellite={satellite}
+            inpainting={inpainting && satellite}
+            airportIcao={currentAirport ?? undefined}
           />
         </Suspense>
       </div>

@@ -17,6 +17,10 @@ interface AirportMapProps {
   onViewportChange?: (vp: SharedViewport) => void;
   /** Show satellite imagery instead of street map */
   satellite?: boolean;
+  /** Route satellite tiles through the inpainting proxy to remove aircraft */
+  inpainting?: boolean;
+  /** Airport ICAO code for cache tagging when inpainting is enabled */
+  airportIcao?: string;
 }
 
 /**
@@ -166,7 +170,71 @@ const STREET_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">Op
 const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const SAT_ATTR = '&copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, GIS User Community';
 
-export default function AirportMap({ sharedViewport, onViewportChange, satellite = false }: AirportMapProps) {
+/**
+ * Custom Leaflet GridLayer that fetches satellite tiles through the
+ * inpainting proxy (`POST /api/inpainting/clean-tile`) to remove aircraft.
+ * Falls back to the raw Esri tile on error.
+ */
+const InpaintingGridLayer = L.GridLayer.extend({
+  createTile(coords: { x: number; y: number; z: number }, done: (err: Error | null, tile: HTMLElement) => void) {
+    const tile = document.createElement('img') as HTMLImageElement;
+    tile.setAttribute('role', 'presentation');
+    tile.style.width = tile.style.height = `${this.getTileSize().x}px`;
+
+    const esriUrl = SAT_URL
+      .replace('{z}', String(coords.z))
+      .replace('{y}', String(coords.y))
+      .replace('{x}', String(coords.x));
+
+    const airportIcao = (this.options as { airportIcao?: string }).airportIcao;
+    const params = new URLSearchParams({ url: esriUrl });
+    if (airportIcao) params.set('airport_icao', airportIcao);
+
+    fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST' })
+      .then((resp) => {
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return resp.blob();
+      })
+      .then((blob) => {
+        tile.src = URL.createObjectURL(blob);
+        tile.onload = () => {
+          URL.revokeObjectURL(tile.src);
+          done(null, tile);
+        };
+      })
+      .catch(() => {
+        // Fallback: load raw Esri tile
+        tile.crossOrigin = 'anonymous';
+        tile.src = esriUrl;
+        tile.onload = () => done(null, tile);
+        tile.onerror = () => done(null, tile);
+      });
+
+    return tile;
+  },
+});
+
+/** React wrapper for the inpainting grid layer. */
+function InpaintingTileLayer({ airportIcao }: { airportIcao?: string }) {
+  const map = useMap();
+  const layerRef = useRef<L.GridLayer | null>(null);
+
+  useEffect(() => {
+    const layer = new (InpaintingGridLayer as unknown as new (opts: object) => L.GridLayer)({
+      attribution: SAT_ATTR,
+      airportIcao,
+    });
+    layer.addTo(map);
+    layerRef.current = layer;
+    return () => {
+      map.removeLayer(layer);
+    };
+  }, [map, airportIcao]);
+
+  return null;
+}
+
+export default function AirportMap({ sharedViewport, onViewportChange, satellite = false, inpainting = false, airportIcao }: AirportMapProps) {
   const { filteredFlights: flights, isLoading, error, lastUpdated } = useFlightContext();
   const [zoom, setZoom] = useState(sharedViewport?.zoom ?? DEFAULT_ZOOM);
 
@@ -183,22 +251,35 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
         zoom={initialZoom}
         className="h-full w-full"
       >
-        <TileLayer
-          key={satellite ? 'sat' : 'street'}
-          attribution={satellite ? SAT_ATTR : STREET_ATTR}
-          url={satellite ? SAT_URL : STREET_URL}
-        />
+        {satellite && inpainting ? (
+          <InpaintingTileLayer key="inpaint" airportIcao={airportIcao} />
+        ) : (
+          <TileLayer
+            key={satellite ? 'sat' : 'street'}
+            attribution={satellite ? SAT_ATTR : STREET_ATTR}
+            url={satellite ? SAT_URL : STREET_URL}
+          />
+        )}
         <MapRecenter sharedViewport={sharedViewport} />
         <MapViewportSaver onViewportChange={onViewportChange} />
         <MapControlExposer />
         <ZoomTracker onZoom={setZoom} />
         <AirportOverlay />
         <TrajectoryLine />
-        {flights
-          .filter((f) => f.latitude != null && f.longitude != null && !isNaN(f.latitude) && !isNaN(f.longitude))
-          .map((flight) => (
-            <FlightMarker key={flight.icao24} flight={flight} zoom={zoom} />
-          ))}
+        {/* Deduplicate by icao24 to prevent multiple markers with same key */}
+        {(() => {
+          const seen = new Set<string>();
+          return flights
+            .filter((f) => {
+              if (f.latitude == null || f.longitude == null || isNaN(f.latitude) || isNaN(f.longitude)) return false;
+              if (seen.has(f.icao24)) return false;
+              seen.add(f.icao24);
+              return true;
+            })
+            .map((flight) => (
+              <FlightMarker key={flight.icao24} flight={flight} zoom={zoom} />
+            ));
+        })()}
       </MapContainer>
 
       {/* Status overlay — hidden on mobile */}

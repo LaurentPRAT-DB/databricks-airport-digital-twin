@@ -446,9 +446,9 @@ describe('End-to-end user interaction flows', () => {
       // Find and click the airport selector button
       const selectorButton = screen.getByTitle(/select airport|san francisco|KSFO/i)
 
+      // Brief delay to let mount-time fetch settle before opening
+      await new Promise((r) => setTimeout(r, 100))
       const openTime = await timed(async () => {
-        // Brief delay to let mount-time fetch settle before opening
-        await new Promise((r) => setTimeout(r, 100))
         await user.click(selectorButton)
         await waitFor(() => {
           // Should see airport list with well-known airports
