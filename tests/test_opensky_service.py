@@ -16,10 +16,10 @@ from app.backend.services.opensky_service import (
 
 class TestDetermineFlightPhase:
     def test_on_ground(self):
-        assert _determine_flight_phase(0, 0, True) == "ground"
+        assert _determine_flight_phase(0, 0, True) == "parked"
 
     def test_on_ground_overrides_altitude(self):
-        assert _determine_flight_phase(5000, 500, True) == "ground"
+        assert _determine_flight_phase(5000, 500, True) == "parked"
 
     def test_takeoff(self):
         assert _determine_flight_phase(1500, 1000, False) == "takeoff"
@@ -34,13 +34,13 @@ class TestDetermineFlightPhase:
         assert _determine_flight_phase(8000, 800, False) == "departing"
 
     def test_climb(self):
-        assert _determine_flight_phase(15000, 500, False) == "climb"
+        assert _determine_flight_phase(15000, 500, False) == "departing"
 
     def test_descent(self):
-        assert _determine_flight_phase(15000, -500, False) == "descent"
+        assert _determine_flight_phase(15000, -500, False) == "approaching"
 
     def test_cruise(self):
-        assert _determine_flight_phase(35000, 50, False) == "cruise"
+        assert _determine_flight_phase(35000, 50, False) == "enroute"
 
 
 # ── OpenSky state vector to flight conversion ──
@@ -112,7 +112,7 @@ class TestStateToFlight:
         state = _make_state(on_ground=True)
         result = self.service._state_to_flight(state)
         assert result["on_ground"] is True
-        assert result["flight_phase"] == "ground"
+        assert result["flight_phase"] == "parked"
 
     def test_missing_position_returns_none(self):
         state = _make_state(lat=None)

@@ -78,9 +78,10 @@ interface SimulationData {
   scenario_events: ScenarioEvent[];
 }
 
-/** Map simulation phase names to the frontend flight_phase enum (fine-grained). */
+/** Map simulation/recorded phase names to the frontend flight_phase enum. */
 function mapPhase(phase: string): Flight['flight_phase'] {
   const map: Record<string, Flight['flight_phase']> = {
+    // Simulation engine phases
     approaching: 'approaching',
     landing: 'landing',
     taxi_to_gate: 'taxi_in',
@@ -90,12 +91,24 @@ function mapPhase(phase: string): Flight['flight_phase'] {
     takeoff: 'takeoff',
     departing: 'departing',
     enroute: 'enroute',
+    // Legacy/fallback aliases (recorded data before enrichment)
+    ground: 'parked',
+    climb: 'departing',
+    descent: 'approaching',
+    cruise: 'enroute',
+    approach: 'approaching',
+    departure: 'departing',
+    taxi_in: 'taxi_in',
+    taxi_out: 'taxi_out',
   };
   return map[phase] ?? 'parked';
 }
 
 /** Convert a position snapshot to the Flight interface. */
-function snapshotToFlight(snap: PositionSnapshot): Flight {
+function snapshotToFlight(
+  snap: PositionSnapshot,
+  dataSource: string = 'simulation',
+): Flight {
   return {
     icao24: snap.icao24,
     callsign: snap.callsign,
@@ -107,7 +120,7 @@ function snapshotToFlight(snap: PositionSnapshot): Flight {
     on_ground: snap.on_ground,
     vertical_rate: snap.vertical_rate ?? null,
     last_seen: snap.time,
-    data_source: 'simulation',
+    data_source: dataSource,
     flight_phase: mapPhase(snap.phase),
     aircraft_type: snap.aircraft_type,
     assigned_gate: snap.assigned_gate ?? null,
@@ -206,6 +219,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const [isFetchingRecordings, setIsFetchingRecordings] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const dataSourceRef = useRef<string>('simulation');
 
   const isActive = simData !== null;
   const totalFrames = simData?.frame_count ?? 0;
@@ -251,6 +265,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const loadFile = useCallback(async (filename: string, startHour = 0, endHour = 24) => {
     setIsLoading(true);
     setIsPlaying(false);
+    dataSourceRef.current = 'simulation';
     try {
       const res = await fetch(
         `/api/simulation/data/${encodeURIComponent(filename)}?start_hour=${startHour}&end_hour=${endHour}`
@@ -266,7 +281,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       if (data.frame_timestamps.length > 0) {
         const firstTimestamp = data.frame_timestamps[0];
         const snapshots = data.frames[firstTimestamp] || [];
-        setFlights(snapshots.map(snapshotToFlight));
+        setFlights(snapshots.map((s) => snapshotToFlight(s, 'simulation')));
       }
     } catch (err) {
       console.error('Failed to load simulation file:', err);
@@ -279,6 +294,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const loadWindow = useCallback(async (filename: string, startTime: string, endTime: string) => {
     setIsLoading(true);
     setIsPlaying(false);
+    dataSourceRef.current = 'simulation';
     try {
       const params = new URLSearchParams({
         start_time: startTime,
@@ -297,7 +313,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       if (data.frame_timestamps.length > 0) {
         const firstTimestamp = data.frame_timestamps[0];
         const snapshots = data.frames[firstTimestamp] || [];
-        setFlights(snapshots.map(snapshotToFlight));
+        setFlights(snapshots.map((s) => snapshotToFlight(s, 'simulation')));
       }
     } catch (err) {
       console.error('Failed to load simulation window:', err);
@@ -311,6 +327,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setIsLoading(true);
     setIsPlaying(false);
     setSwitchPaused(false);
+    dataSourceRef.current = 'simulation';
     try {
       const res = await fetch(`/api/simulation/demo/${encodeURIComponent(airportIcao)}`);
       if (res.status === 202) {
@@ -327,7 +344,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       if (data.frame_timestamps.length > 0) {
         const firstTimestamp = data.frame_timestamps[0];
         const snapshots = data.frames[firstTimestamp] || [];
-        setFlights(snapshots.map(snapshotToFlight));
+        setFlights(snapshots.map((s) => snapshotToFlight(s, 'simulation')));
       }
 
       // Auto-play demo
@@ -360,6 +377,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setIsLoading(true);
     setIsPlaying(false);
     setSwitchPaused(false);
+    dataSourceRef.current = 'opensky_recorded';
     try {
       const res = await fetch(`/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`);
       if (!res.ok) throw new Error(`Failed to load recording: ${res.statusText}`);
@@ -372,7 +390,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       if (data.frame_timestamps.length > 0) {
         const firstTimestamp = data.frame_timestamps[0];
         const snapshots = data.frames[firstTimestamp] || [];
-        setFlights(snapshots.map(snapshotToFlight));
+        setFlights(snapshots.map((s) => snapshotToFlight(s, 'opensky_recorded')));
       }
 
       // Auto-play recording
@@ -395,7 +413,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     if (!simData || currentFrameIndex >= simData.frame_timestamps.length) return;
     const timestamp = simData.frame_timestamps[currentFrameIndex];
     const snapshots = simData.frames[timestamp] || [];
-    setFlights(snapshots.map(snapshotToFlight));
+    const src = dataSourceRef.current;
+    setFlights(snapshots.map((s) => snapshotToFlight(s, src)));
   }, [simData, currentFrameIndex]);
 
   // Compute sim-seconds between consecutive frames from the loaded data.
@@ -487,6 +506,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setSwitchPaused(false);
     setMetadata(null);
     setCurrentWindow(null);
+    dataSourceRef.current = 'simulation';
   }, []);
 
   // Phase groups for trajectory segmentation.

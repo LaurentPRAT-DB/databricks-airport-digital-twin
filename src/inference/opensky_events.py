@@ -173,11 +173,11 @@ class OpenSkyEventInferrer:
                 return "parked"
             if velocity_ms < STATIONARY_VELOCITY_MS:
                 # Stationary but not near a gate — could be holding position
-                return "parked" if was_parked else "taxi_in"
+                return "parked" if was_parked else "taxi_to_gate"
             if velocity_ms > TAXI_MAX_VELOCITY_MS:
                 return "takeoff"
             # Moving on ground — taxi direction inferred from context
-            return "taxi_out" if was_parked else "taxi_in"
+            return "taxi_to_runway" if was_parked else "taxi_to_gate"
         # Airborne
         return "airborne"  # Caller can refine with altitude/vrate
 
@@ -246,11 +246,11 @@ class OpenSkyEventInferrer:
                 elif altitude_ft < 3000 and vrate_ftmin > 200:
                     phase = "takeoff"
                 elif altitude_ft < 10000 and vrate_ftmin < -200:
-                    phase = "approach"
+                    phase = "approaching"
                 elif altitude_ft < 10000 and vrate_ftmin > 200:
-                    phase = "departure"
+                    phase = "departing"
                 else:
-                    phase = "cruise"
+                    phase = "enroute"
 
             cur.phase = phase
             prev_phase = prev.phase if prev else "unknown"

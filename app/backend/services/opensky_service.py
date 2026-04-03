@@ -45,9 +45,14 @@ OPENSKY_API_URL = "https://opensky-network.org/api/states/all"
 def determine_flight_phase(
     altitude_ft: float, vertical_rate_ftmin: float, on_ground: bool
 ) -> str:
-    """Determine flight phase from altitude, vertical rate, and ground status."""
+    """Determine flight phase from altitude, vertical rate, and ground status.
+
+    Phase names are aligned with the simulation engine vocabulary so that
+    recorded/live OpenSky data and simulated data share the same phase
+    strings, avoiding UI mismatches.
+    """
     if on_ground:
-        return "ground"
+        return "parked"
     if altitude_ft < 3000 and vertical_rate_ftmin > 200:
         return "takeoff"
     if altitude_ft < 3000 and vertical_rate_ftmin < -200:
@@ -57,10 +62,10 @@ def determine_flight_phase(
     if altitude_ft < 10000 and vertical_rate_ftmin > 500:
         return "departing"
     if vertical_rate_ftmin > 200:
-        return "climb"
+        return "departing"
     if vertical_rate_ftmin < -200:
-        return "descent"
-    return "cruise"
+        return "approaching"
+    return "enroute"
 
 
 class OpenSkyService:

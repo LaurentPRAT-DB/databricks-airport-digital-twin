@@ -23,18 +23,21 @@ logger = logging.getLogger(__name__)
 def _determine_flight_phase(
     altitude: float, vertical_rate: float, on_ground: bool
 ) -> str:
-    """Determine the flight phase based on flight parameters."""
+    """Determine the flight phase based on flight parameters.
+
+    Phase names aligned with simulation engine vocabulary.
+    """
     if on_ground:
-        return "ground"
+        return "parked"
     if altitude < 3000 and vertical_rate > 2:
         return "takeoff"
     if altitude < 3000 and vertical_rate < -2:
         return "landing"
     if vertical_rate > 2:
-        return "climb"
+        return "departing"
     if vertical_rate < -2:
-        return "descent"
-    return "cruise"
+        return "approaching"
+    return "enroute"
 
 
 def _dict_to_flight_position(data: dict, source: str) -> FlightPosition:

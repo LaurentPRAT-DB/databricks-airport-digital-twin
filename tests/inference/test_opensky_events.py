@@ -156,7 +156,7 @@ class TestParkingDetection:
         assert releases[0]["gate"] == "A1"
 
         pushbacks = [pt for pt in result["phase_transitions"]
-                     if pt["from_phase"] == "parked" and pt["to_phase"] == "taxi_out"]
+                     if pt["from_phase"] == "parked" and pt["to_phase"] == "taxi_to_runway"]
         assert len(pushbacks) >= 1
 
 
@@ -200,7 +200,7 @@ class TestAirborneTransitions:
         transitions = result["phase_transitions"]
         assert len(transitions) >= 1
         phases = [pt["to_phase"] for pt in transitions]
-        assert "takeoff" in phases or "departure" in phases
+        assert "takeoff" in phases or "departing" in phases
 
     def test_cruise_phase(self):
         """Climbing → level at cruise altitude → should transition to cruise."""
@@ -213,7 +213,7 @@ class TestAirborneTransitions:
 
         result = self.inferrer.get_results()
         transitions = result["phase_transitions"]
-        assert any(pt["to_phase"] == "cruise" for pt in transitions)
+        assert any(pt["to_phase"] == "enroute" for pt in transitions)
 
 
 # ── Multiple aircraft ────────────────────────────────────────────────────

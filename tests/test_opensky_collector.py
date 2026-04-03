@@ -143,7 +143,7 @@ class TestCollectLoop:
             {"icao24": "abc123", "callsign": "UAL1", "latitude": 37.6,
              "longitude": -122.4, "altitude": 5000, "velocity": 200,
              "heading": 90, "vertical_rate": 0, "on_ground": False,
-             "flight_phase": "cruise", "aircraft_type": None,
+             "flight_phase": "enroute", "aircraft_type": None,
              "assigned_gate": None, "origin_airport": None,
              "destination_airport": None, "data_source": "opensky",
              "last_seen": 1700000000},
