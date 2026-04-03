@@ -19,6 +19,15 @@ interface ScheduledFlight {
   flight_type: 'arrival' | 'departure';
 }
 
+/** Buffered arrival entry — keeps landed flights visible on the FIDS board. */
+interface StickyArrival {
+  entry: ScheduledFlight;
+  lastSeenMs: number; // sim-time epoch ms when last in trackedFlights
+}
+
+/** How long (sim-time ms) a landed flight stays on the arrivals board. */
+const ARRIVAL_RETENTION_MS = 30 * 60_000; // 30 minutes
+
 interface ScheduleResponse {
   flights: ScheduledFlight[];
   count: number;
@@ -103,6 +112,10 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
   // without re-triggering the effect on every frame.
   const simTimeRef = useRef(simTime);
   simTimeRef.current = simTime;
+
+  // Sticky buffer: keeps recently-arrived flights visible on the FIDS board
+  // even after they leave the simulation's tracked flights list.
+  const stickyArrivals = useRef<Map<string, StickyArrival>>(new Map());
 
   // Airline name lookup (ICAO 3-letter codes)
   const AIRLINE_NAMES: Record<string, string> = useMemo(() => ({
@@ -271,10 +284,33 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
       else dep.push(entry);
     }
 
+    // ── Sticky arrival buffer ──────────────────────────────────────
+    // Real FIDS keep landed flights visible for ~30 min so passengers
+    // at the arrivals hall can still see them.
+    const nowMs = simTime ? new Date(simTime).getTime() : Date.now();
+    const buffer = stickyArrivals.current;
+    const currentCallsigns = new Set(arr.map(a => a.flight_number));
+
+    // Update buffer: refresh timestamp for every arrival currently tracked
+    for (const a of arr) {
+      buffer.set(a.flight_number, { entry: { ...a, status: a.status }, lastSeenMs: nowMs });
+    }
+
+    // Inject buffered arrivals that left the tracked list but are still within retention
+    for (const [callsign, sticky] of buffer) {
+      if (currentCallsigns.has(callsign)) continue; // still tracked — already in list
+      if (nowMs - sticky.lastSeenMs > ARRIVAL_RETENTION_MS) {
+        buffer.delete(callsign); // expired — evict
+        continue;
+      }
+      // Re-add with "Arrived" status (flight has landed and left the sim)
+      arr.push({ ...sticky.entry, status: 'arrived' });
+    }
+
     arr.sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time));
     dep.sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time));
     return { arrivals: arr, departures: dep };
-  }, [trackedFlights, hourAnchor, currentAirport, isSimReplay, AIRLINE_NAMES]);
+  }, [trackedFlights, hourAnchor, currentAirport, isSimReplay, AIRLINE_NAMES, simTime]);
 
   // When in simulation replay mode, use derived schedule from map flights.
   // In live mode, fetch from the REST API.
