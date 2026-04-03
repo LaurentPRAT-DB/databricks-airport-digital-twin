@@ -1,0 +1,26 @@
+# OpenSky raw data ingestion job
+# Reads JSONL files from UC Volume (uploaded from local collector) and appends to Delta table
+
+resources:
+  jobs:
+    opensky_ingestion:
+      name: "[${bundle.target}] Airport Digital Twin - OpenSky Data Ingestion"
+      description: "Loads raw OpenSky ADS-B data from UC Volume into Delta table opensky_states_raw"
+
+      tasks:
+        - task_key: load_opensky_from_volume
+          notebook_task:
+            notebook_path: ../databricks/notebooks/load_opensky_from_volume.py
+
+      # Run every 15 minutes — processes any new files uploaded since last run
+      schedule:
+        quartz_cron_expression: "0 */15 * * * ?"
+        timezone_id: "UTC"
+        pause_status: PAUSED
+
+      tags:
+        project: airport-digital-twin
+        component: opensky-ingestion
+        target: ${bundle.target}
+
+      timeout_seconds: 600

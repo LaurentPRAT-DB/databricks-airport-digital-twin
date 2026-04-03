@@ -11,7 +11,7 @@ command:
 env:
   # Debug mode — set to "true" only for local troubleshooting
   - name: DEBUG_MODE
-    value: "false"
+    value: "true"
 
   # Demo mode configuration
   - name: DEMO_MODE

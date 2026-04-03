@@ -6,7 +6,7 @@ import type { SimTrajectoryPoint } from '../hooks/useSimulationReplay';
 /** Function that extracts trajectory from simulation frames for a given flight. */
 export type SimTrajectoryProvider = (icao24: string) => SimTrajectoryPoint[];
 
-export type DataMode = 'simulation' | 'live';
+export type DataMode = 'simulation' | 'live' | 'recorded';
 
 interface FlightContextType {
   flights: Flight[];
@@ -21,7 +21,7 @@ interface FlightContextType {
   isLoading: boolean;
   error: Error | null;
   lastUpdated: string | null;
-  dataSource: 'live' | 'cached' | 'synthetic' | 'simulation' | 'opensky' | null;
+  dataSource: 'live' | 'cached' | 'synthetic' | 'simulation' | 'opensky' | 'opensky_recorded' | null;
   simTrajectoryProvider: SimTrajectoryProvider | null;
   dataMode: DataMode;
   setDataMode: (mode: DataMode) => void;

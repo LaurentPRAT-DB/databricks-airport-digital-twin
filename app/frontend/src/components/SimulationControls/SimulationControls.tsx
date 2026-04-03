@@ -6,6 +6,7 @@ import {
   SimulationFile,
   SimulationMetadata,
   ScenarioEvent,
+  RecordingFile,
 } from '../../hooks/useSimulationReplay';
 import { useFlightContext } from '../../context/FlightContext';
 import type { DataMode } from '../../context/FlightContext';
@@ -527,6 +528,7 @@ export function SimulationControls({
   backendReady,
   currentAirport,
   demoReady,
+  openskyAvailable,
 }: {
   onFlightsChange: (flights: import('../../types/flight').Flight[] | null) => void;
   onActiveChange: (active: boolean) => void;
@@ -536,6 +538,7 @@ export function SimulationControls({
   backendReady?: boolean;
   currentAirport?: string | null;
   demoReady?: boolean;
+  openskyAvailable?: boolean;
 }) {
   const sim = useSimulationReplay();
   const { dataMode, setDataMode, flights: contextFlights, lastUpdated: contextLastUpdated } = useFlightContext();
@@ -714,8 +717,8 @@ export function SimulationControls({
 
   return (
     <>
-      {/* Data mode toggle — always visible */}
-      <DataModeToggle mode={dataMode} onChange={handleModeChange} />
+      {/* Data mode toggle — only visible when OpenSky API is reachable */}
+      {openskyAvailable && <DataModeToggle mode={dataMode} onChange={handleModeChange} />}
 
       {/* Simulation controls — only in simulation mode */}
       {dataMode === 'simulation' && (

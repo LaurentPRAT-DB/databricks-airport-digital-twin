@@ -15,6 +15,17 @@ export interface SimulationFile {
   scenario_name?: string | null;
 }
 
+export interface RecordingFile {
+  airport_icao: string;
+  date: string;
+  aircraft_count: number;
+  state_count: number;
+  first_seen: string;
+  last_seen: string;
+  duration_minutes: number;
+  data_source: string;
+}
+
 export interface SimulationMetadata {
   config: Record<string, unknown>;
   summary: Record<string, unknown>;
@@ -129,6 +140,8 @@ export interface UseSimulationReplayResult {
   currentSimTime: string | null;
   flights: Flight[];
   availableFiles: SimulationFile[];
+  availableRecordings: RecordingFile[];
+  isFetchingRecordings: boolean;
   loadedFile: string | null;
   summary: Record<string, unknown> | null;
   scenarioEvents: ScenarioEvent[];
@@ -144,7 +157,9 @@ export interface UseSimulationReplayResult {
   loadFile: (filename: string, startHour?: number, endHour?: number) => Promise<void>;
   loadWindow: (filename: string, startTime: string, endTime: string) => Promise<void>;
   loadDemo: (airportIcao: string) => Promise<void>;
+  loadRecording: (airport: string, date: string) => Promise<void>;
   fetchMetadata: (filename: string) => Promise<SimulationMetadata | null>;
+  fetchRecordings: () => Promise<void>;
   play: () => void;
   pause: () => void;
   togglePlayPause: () => void;
@@ -187,6 +202,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const [switchPaused, setSwitchPaused] = useState(false);
   const [metadata, setMetadata] = useState<SimulationMetadata | null>(null);
   const [currentWindow, setCurrentWindow] = useState<TimeWindow | null>(null);
+  const [availableRecordings, setAvailableRecordings] = useState<RecordingFile[]>([]);
+  const [isFetchingRecordings, setIsFetchingRecordings] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -317,6 +334,51 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       setIsPlaying(true);
     } catch (err) {
       console.error('Failed to load demo simulation:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Fetch available recorded OpenSky sessions
+  const fetchRecordings = useCallback(async () => {
+    setIsFetchingRecordings(true);
+    try {
+      const res = await fetch('/api/opensky/recordings');
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableRecordings(data.recordings || []);
+      }
+    } catch {
+      // Silently fail — recordings might not be available
+    } finally {
+      setIsFetchingRecordings(false);
+    }
+  }, []);
+
+  // Load a recorded OpenSky session for replay
+  const loadRecording = useCallback(async (airport: string, date: string) => {
+    setIsLoading(true);
+    setIsPlaying(false);
+    setSwitchPaused(false);
+    try {
+      const res = await fetch(`/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`);
+      if (!res.ok) throw new Error(`Failed to load recording: ${res.statusText}`);
+      const data: SimulationData = await res.json();
+      setSimData(data);
+      setLoadedFile(`recording_${airport}_${date}`);
+      setCurrentFrameIndex(0);
+      setCurrentWindow(null);
+
+      if (data.frame_timestamps.length > 0) {
+        const firstTimestamp = data.frame_timestamps[0];
+        const snapshots = data.frames[firstTimestamp] || [];
+        setFlights(snapshots.map(snapshotToFlight));
+      }
+
+      // Auto-play recording
+      setIsPlaying(true);
+    } catch (err) {
+      console.error('Failed to load recorded data:', err);
     } finally {
       setIsLoading(false);
     }
@@ -533,6 +595,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     currentSimTime,
     flights,
     availableFiles,
+    availableRecordings,
+    isFetchingRecordings,
     loadedFile,
     summary: simData?.summary as Record<string, unknown> | null ?? null,
     scenarioEvents: simData?.scenario_events ?? [],
@@ -547,7 +611,9 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     loadFile,
     loadWindow,
     loadDemo,
+    loadRecording,
     fetchMetadata,
+    fetchRecordings,
     play,
     pause,
     togglePlayPause,

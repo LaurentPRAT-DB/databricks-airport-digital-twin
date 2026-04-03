@@ -332,6 +332,20 @@ async def _background_init(app: FastAPI):
         except Exception as e:
             logger.warning(f"INIT | MCP connection setup skipped: {e}")
 
+        # ── Phase 7: Probe OpenSky API connectivity ──────────────────────
+        async def _probe_opensky():
+            try:
+                from app.backend.services.opensky_service import get_opensky_service
+                opensky = get_opensky_service()
+                reachable = await opensky.probe_connectivity()
+                app.state.opensky_available = reachable
+                logger.info(f"INIT | OpenSky connectivity: {'reachable' if reachable else 'BLOCKED'}")
+            except Exception as e:
+                app.state.opensky_available = False
+                logger.warning(f"INIT | OpenSky probe failed: {e}")
+
+        asyncio.create_task(_probe_opensky())
+
     except Exception as e:
         total_ms = (time.monotonic() - t_start) * 1000
         logger.error(f"INIT | Initialization FAILED after {total_ms:.0f}ms: {e}", exc_info=DEBUG_MODE)
@@ -438,6 +452,7 @@ async def readiness():
         "ready": getattr(app.state, "ready", False),
         "status": getattr(app.state, "startup_status", "Initializing..."),
         "demo_ready": demo_svc.has_demo(DEFAULT_AIRPORT_ICAO),
+        "opensky_available": getattr(app.state, "opensky_available", None),
     }
 
 

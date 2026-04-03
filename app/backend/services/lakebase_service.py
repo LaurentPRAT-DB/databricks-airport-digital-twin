@@ -132,6 +132,7 @@ class LakebaseService:
         self._airport_columns_retries = 0
         self._ml_tables_ensured = False
         self._ml_tables_retries = 0
+        self._data_source_col_ensured = False
         # Connection pool (primary — read-write)
         self._pool: Optional["ThreadedConnectionPool"] = None
         self._pool_lock = threading.Lock()
@@ -431,6 +432,12 @@ class LakebaseService:
             self._airport_columns_ensured = True
             logger.debug("Ensured airport_icao columns exist on all tables")
         except Exception as e:
+            err_msg = str(e).lower()
+            # Permission errors are permanent — columns were likely added by the table owner
+            if "must be owner" in err_msg or "permission denied" in err_msg:
+                self._airport_columns_ensured = True
+                logger.info("Airport column migration skipped (not table owner) — columns likely exist already")
+                return
             self._airport_columns_retries += 1
             if self._airport_columns_retries >= self._MAX_MIGRATION_RETRIES:
                 self._airport_columns_ensured = True
@@ -1557,12 +1564,43 @@ class LakebaseService:
             self._ml_tables_ensured = True
             logger.debug("Ensured ML training data tables exist")
         except Exception as e:
+            err_msg = str(e).lower()
+            # Permission errors are permanent — tables/indexes were likely created by the table owner
+            if "must be owner" in err_msg or "permission denied" in err_msg:
+                self._ml_tables_ensured = True
+                logger.info("ML tables migration skipped (not table owner) — tables likely exist already")
+                return
             self._ml_tables_retries += 1
             if self._ml_tables_retries >= self._MAX_MIGRATION_RETRIES:
                 self._ml_tables_ensured = True
                 logger.error(f"ML tables migration failed after {self._MAX_MIGRATION_RETRIES} retries: {e}")
             else:
                 logger.warning(f"ML tables migration failed (attempt {self._ml_tables_retries}, will retry): {e}")
+
+    def _ensure_data_source_column(self) -> None:
+        """Ensure data_source column exists on flight_position_snapshots.
+
+        Isolated migration — runs independently of _ensure_ml_tables so a
+        pre-existing table (created before the column was added) gets patched
+        even if other migration steps fail.
+        """
+        if self._data_source_col_ensured or not self.is_available:
+            return
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        ALTER TABLE flight_position_snapshots
+                        ADD COLUMN IF NOT EXISTS data_source VARCHAR(20) DEFAULT 'simulation'
+                    """)
+                    conn.commit()
+            self._data_source_col_ensured = True
+        except Exception as e:
+            # Table may not exist yet — _ensure_ml_tables will create it
+            if "does not exist" in str(e):
+                self._data_source_col_ensured = True  # table doesn't exist yet, will be created with column
+            else:
+                logger.warning("data_source column migration failed: %s", e)
 
     def insert_flight_snapshots(
         self, snapshots: list[dict], session_id: str, airport_icao: str
@@ -1572,6 +1610,7 @@ class LakebaseService:
             return 0
 
         self._ensure_ml_tables()
+        self._ensure_data_source_column()
 
         try:
             with self._get_connection() as conn:

@@ -31,10 +31,10 @@ _TRUE_TRACK = 10  # degrees
 _VERTICAL_RATE = 11  # m/s
 _GEO_ALTITUDE = 13  # meters
 
-# Unit conversions
-_M_TO_FT = 3.28084
-_MS_TO_KTS = 1.94384
-_MS_TO_FTMIN = 196.85
+# Unit conversions (public for reuse by recordings API)
+M_TO_FT = 3.28084
+MS_TO_KTS = 1.94384
+MS_TO_FTMIN = 196.85
 
 # Default bounding box radius in degrees (~30nm ≈ 0.5°)
 _DEFAULT_RADIUS_DEG = 0.5
@@ -42,7 +42,7 @@ _DEFAULT_RADIUS_DEG = 0.5
 OPENSKY_API_URL = "https://opensky-network.org/api/states/all"
 
 
-def _determine_flight_phase(
+def determine_flight_phase(
     altitude_ft: float, vertical_rate_ftmin: float, on_ground: bool
 ) -> str:
     """Determine flight phase from altitude, vertical rate, and ground status."""
@@ -78,6 +78,7 @@ class OpenSkyService:
         self._last_flight_count: int = 0
         self._last_error: Optional[str] = None
         self._client = httpx.AsyncClient(timeout=timeout)
+        self._reachable: Optional[bool] = None  # None = not tested yet
 
     async def fetch_flights(
         self,
@@ -163,11 +164,11 @@ class OpenSkyService:
         last_contact = state[_LAST_CONTACT]
 
         # Convert units
-        altitude_ft = baro_alt_m * _M_TO_FT
-        velocity_kts = velocity_ms * _MS_TO_KTS
-        vrate_ftmin = vrate_ms * _MS_TO_FTMIN
+        altitude_ft = baro_alt_m * M_TO_FT
+        velocity_kts = velocity_ms * MS_TO_KTS
+        vrate_ftmin = vrate_ms * MS_TO_FTMIN
 
-        flight_phase = _determine_flight_phase(altitude_ft, vrate_ftmin, on_ground)
+        flight_phase = determine_flight_phase(altitude_ft, vrate_ftmin, on_ground)
 
         return {
             "icao24": icao24,
@@ -188,10 +189,30 @@ class OpenSkyService:
             "destination_airport": None,
         }
 
+    async def probe_connectivity(self) -> bool:
+        """Test if the OpenSky API is reachable (TCP connect + HTTP response).
+
+        Sets self._reachable and returns the result. Safe to call multiple times.
+        """
+        try:
+            response = await self._client.get(
+                OPENSKY_API_URL,
+                params={"lamin": 0, "lamax": 0.01, "lomin": 0, "lomax": 0.01},
+            )
+            self._reachable = response.status_code in (200, 429)
+            logger.info("OpenSky connectivity probe: reachable=%s (HTTP %s)",
+                        self._reachable, response.status_code)
+        except Exception as e:
+            self._reachable = False
+            logger.warning("OpenSky connectivity probe failed: %s: %s",
+                           type(e).__name__, e)
+        return self._reachable
+
     def get_status(self) -> dict:
         """Return service health status."""
         return {
-            "available": True,
+            "available": self._reachable if self._reachable is not None else True,
+            "reachable": self._reachable,
             "last_fetch_time": (
                 datetime.fromtimestamp(self._last_fetch_time, tz=timezone.utc).isoformat()
                 if self._last_fetch_time
@@ -224,8 +245,11 @@ def _resolve_opensky_credentials() -> tuple[Optional[str], Optional[str]]:
         if username and password:
             logger.info("OpenSky credentials loaded from Databricks secrets")
             return username, password
-    except Exception:
-        pass  # Not on Databricks or secrets not available
+        else:
+            logger.warning("Databricks secrets returned empty values for OpenSky credentials")
+    except Exception as e:
+        logger.warning("Failed to load OpenSky credentials from Databricks secrets: %s: %s",
+                       type(e).__name__, e)
 
     # Fall back to env vars (local dev)
     username = os.getenv("OPENSKY_USERNAME")

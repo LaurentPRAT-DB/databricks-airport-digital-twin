@@ -370,6 +370,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
   const [, setSimulationActive] = useState(false);
   const [simTime, setSimTime] = useState<string | null>(null);
   const [demoReady, setDemoReady] = useState(false);
+  const [openskyAvailable, setOpenskyAvailable] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>('map');
   const [showChat, setShowChat] = useState(false);
 
@@ -466,6 +467,9 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
           if (data.demo_ready && !demoReady) {
             setDemoReady(true);
           }
+          if (data.opensky_available === true) {
+            setOpenskyAvailable(true);
+          }
           // Stop polling once both are ready
           if (data.ready && data.demo_ready) {
             clearInterval(poll);
@@ -489,6 +493,9 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
           }
           if (data.demo_ready) {
             setDemoReady(true);
+          }
+          if (data.opensky_available === true) {
+            setOpenskyAvailable(true);
           }
         }
       } catch {
@@ -528,6 +535,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
       backendReady={backendReady}
       currentAirport={currentAirport}
       demoReady={demoReady}
+      openskyAvailable={openskyAvailable}
     />
   );
 

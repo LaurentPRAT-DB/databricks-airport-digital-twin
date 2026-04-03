@@ -1,0 +1,10 @@
+# UC Volume for raw OpenSky ADS-B data (JSONL files uploaded from local collector)
+# Files are uploaded via: databricks fs cp data/opensky_raw/*.jsonl dbfs:/Volumes/${var.catalog}/${var.schema}/opensky_raw/
+
+resources:
+  volumes:
+    opensky_raw:
+      catalog_name: ${var.catalog}
+      schema_name: ${var.schema}
+      name: opensky_raw
+      volume_type: MANAGED

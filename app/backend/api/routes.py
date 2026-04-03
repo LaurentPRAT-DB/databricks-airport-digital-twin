@@ -67,6 +67,9 @@ for _logger_name in (
     "app.backend.api.routes",
     "src.persistence.airport_repository",
     "app.backend.services.lakebase_service",
+    "app.backend.services.opensky_service",
+    "app.backend.services.opensky_collector",
+    "app.backend.api.opensky",
 ):
     _lg = logging.getLogger(_logger_name)
     _lg.addHandler(_ring_handler)

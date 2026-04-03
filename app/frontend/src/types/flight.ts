@@ -25,7 +25,7 @@ export interface FlightsResponse {
   flights: Flight[];
   count: number;
   timestamp: string;
-  data_source: 'live' | 'cached' | 'synthetic' | 'opensky';
+  data_source: 'live' | 'cached' | 'synthetic' | 'opensky' | 'opensky_recorded';
 }
 
 // Prediction types

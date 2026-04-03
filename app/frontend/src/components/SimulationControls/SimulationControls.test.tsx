@@ -67,6 +67,7 @@ function defaultProps() {
     backendReady: true,
     currentAirport: 'KSFO',
     demoReady: false,
+    openskyAvailable: true,
   };
 }
 
