@@ -318,14 +318,21 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
     rows = result[0]
 
     # Group by collection_time into frames, converting to simulation snapshot format
+    # Deduplicate per (collection_time, icao24) — APPEND-only ingestion can create dupes
     frames: dict[str, list] = {}
     unique_aircraft: set[str] = set()
+    seen_in_frame: dict[str, set[str]] = {}
 
     for row in rows:
         ct = row["collection_time"]
         ts = ct.isoformat() if isinstance(ct, datetime) else str(ct)
 
         icao24 = row["icao24"]
+        if ts not in seen_in_frame:
+            seen_in_frame[ts] = set()
+        if icao24 in seen_in_frame[ts]:
+            continue  # skip duplicate icao24 within same frame
+        seen_in_frame[ts].add(icao24)
         unique_aircraft.add(icao24)
 
         baro_alt_m = row["baro_altitude"] or 0.0
