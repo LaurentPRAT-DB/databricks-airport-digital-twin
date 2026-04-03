@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.backend.services.opensky_service import (
     OpenSkyService,
-    _determine_flight_phase,
-    _M_TO_FT,
-    _MS_TO_KTS,
-    _MS_TO_FTMIN,
+    determine_flight_phase as _determine_flight_phase,
+    M_TO_FT as _M_TO_FT,
+    MS_TO_KTS as _MS_TO_KTS,
+    MS_TO_FTMIN as _MS_TO_FTMIN,
 )
 
 

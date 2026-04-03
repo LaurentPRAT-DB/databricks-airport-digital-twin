@@ -94,7 +94,9 @@ export function FlightProvider({
     : (simulationFlights ?? liveFlights);
   const dataSource = dataMode === 'live'
     ? 'opensky' as const
-    : (simulationFlights ? 'simulation' as const : liveDataSource);
+    : dataMode === 'recorded'
+      ? 'opensky_recorded' as const
+      : (simulationFlights ? 'simulation' as const : liveDataSource);
   // Phase filter state
   const [hiddenPhases, setHiddenPhasesState] = useState<Set<string>>(new Set());
 

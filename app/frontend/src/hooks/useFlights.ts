@@ -17,7 +17,7 @@ export interface UseFlightsResult {
   isLoading: boolean;
   error: Error | null;
   lastUpdated: string | null;
-  dataSource: 'live' | 'cached' | 'synthetic' | 'opensky' | null;
+  dataSource: 'live' | 'cached' | 'synthetic' | 'opensky' | 'opensky_recorded' | null;
 }
 
 /** Build the WebSocket URL from the current page origin. */

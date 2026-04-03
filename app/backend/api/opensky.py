@@ -254,6 +254,7 @@ async def list_recordings() -> dict:
             "data_source": "opensky_live",
         })
 
+    logger.info("Recordings list: %d sessions found", len(recordings))
     return {"recordings": recordings, "count": len(recordings)}
 
 
@@ -289,7 +290,8 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
                         latitude, longitude,
                         baro_altitude, geo_altitude,
                         velocity, true_track, vertical_rate,
-                        on_ground, collection_time
+                        on_ground, collection_time,
+                        aircraft_type, airline_icao
                     FROM {_RECORDINGS_TABLE}
                     WHERE airport_icao = '{airport}'
                       AND collection_date = '{date}'
@@ -348,7 +350,8 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
             "heading": row["true_track"],
             "phase": phase,
             "on_ground": on_ground,
-            "aircraft_type": "",
+            "aircraft_type": row.get("aircraft_type") or "",
+            "assigned_gate": None,
             "vertical_rate": vrate_ftmin,
         }
 
@@ -357,6 +360,42 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         frames[ts].append(snap)
 
     sorted_timestamps = sorted(frames.keys())
+
+    # ── Event inference: derive gate_events + phase_transitions from positions ──
+    from src.inference.opensky_events import OpenSkyEventInferrer
+
+    try:
+        service = get_airport_config_service()
+        config = service.get_config()
+        gates = config.get("gates", [])
+    except Exception:
+        gates = []
+
+    inferrer = OpenSkyEventInferrer(gates)
+    for ts in sorted_timestamps:
+        inferrer.process_frame(ts, frames[ts])
+    enrichment = inferrer.get_results()
+
+    # Update snapshots with inferred gate assignments
+    gate_by_aircraft: dict[str, str] = {}
+    for ge in enrichment["gate_events"]:
+        if ge["event_type"] in ("assign", "occupy"):
+            gate_by_aircraft[ge["icao24"]] = ge["gate"]
+        elif ge["event_type"] == "release":
+            gate_by_aircraft.pop(ge["icao24"], None)
+
+    for ts_key in sorted_timestamps:
+        for snap in frames[ts_key]:
+            gate = gate_by_aircraft.get(snap["icao24"])
+            if gate:
+                snap["assigned_gate"] = gate
+
+    logger.info(
+        "Recording %s/%s: %d rows → %d frames, %d unique aircraft, "
+        "%d phase transitions, %d gate events inferred",
+        airport, date, len(rows), len(sorted_timestamps), len(unique_aircraft),
+        len(enrichment["phase_transitions"]), len(enrichment["gate_events"]),
+    )
 
     return {
         "config": {
@@ -373,7 +412,11 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         "frames": {t: frames[t] for t in sorted_timestamps},
         "frame_timestamps": sorted_timestamps,
         "frame_count": len(sorted_timestamps),
-        "phase_transitions": [],
-        "gate_events": [],
+        "phase_transitions": enrichment["phase_transitions"],
+        "gate_events": enrichment["gate_events"],
         "scenario_events": [],
+        "time_window": {
+            "start_time": sorted_timestamps[0] if sorted_timestamps else None,
+            "end_time": sorted_timestamps[-1] if sorted_timestamps else None,
+        },
     }

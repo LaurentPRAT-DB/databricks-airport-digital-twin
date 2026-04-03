@@ -85,6 +85,10 @@ OPENSKY_SCHEMA = StructType([
     StructField("collection_time", StringType(), True),
     StructField("airport_icao", StringType(), True),
     StructField("data_source", StringType(), True),
+    # Enrichment fields (added by collector v2 — nullable for backward compat)
+    StructField("aircraft_type", StringType(), True),
+    StructField("registration", StringType(), True),
+    StructField("airline_icao", StringType(), True),
 ])
 
 # Read all pending files

@@ -479,7 +479,149 @@ function LiveBar({ flightCount, lastUpdated }: { flightCount: number; lastUpdate
   );
 }
 
-/** Toggle button for switching between Simulation and Live data modes. */
+/** Format a date string for display. */
+function formatRecordingDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}
+
+/** Format duration in minutes. */
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${Math.round(minutes)}min`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+/** Recording picker dialog for loading recorded OpenSky data. */
+function RecordingPicker({
+  recordings,
+  isLoading,
+  isFetching,
+  onLoad,
+  onClose,
+}: {
+  recordings: RecordingFile[];
+  isLoading: boolean;
+  isFetching: boolean;
+  onLoad: (airport: string, date: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-[560px] max-h-[520px] overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b dark:border-slate-700">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Recorded ADS-B Data</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Real aircraft positions captured from the OpenSky Network
+            </p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xl leading-none">&times;</button>
+        </div>
+        <div className="p-5 overflow-y-auto max-h-[420px]">
+          {isFetching ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
+              <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-slate-500 text-sm">Loading recordings from lakehouse...</p>
+            </div>
+          ) : recordings.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-slate-500 text-sm">No recorded data available.</p>
+              <p className="text-slate-400 text-xs mt-2">
+                Use <code className="bg-slate-100 dark:bg-slate-700 px-1 rounded">scripts/opensky_collector.py</code> to capture live ADS-B data,
+                then upload to the lakehouse.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recordings.map((r) => (
+                <button
+                  key={`${r.airport_icao}_${r.date}`}
+                  onClick={() => onLoad(r.airport_icao, r.date)}
+                  disabled={isLoading}
+                  className="w-full text-left px-4 py-3 rounded-lg border border-amber-200 dark:border-amber-700/50 hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors disabled:opacity-50"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-slate-800 dark:text-slate-200">
+                      {r.airport_icao} &mdash; {formatRecordingDate(r.date)}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                        {formatDuration(r.duration_minutes)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                    <span>{r.aircraft_count} aircraft tracked</span>
+                    <span>&middot;</span>
+                    <span>{r.state_count.toLocaleString()} position snapshots</span>
+                    <span>&middot;</span>
+                    <span className="text-amber-500">OpenSky ADS-B</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Status bar shown during recorded data playback. */
+function RecordedBar({
+  flightCount,
+  simTime,
+  airport,
+}: {
+  flightCount: number;
+  simTime: string | null;
+  airport: string | null;
+}) {
+  const timeStr = simTime
+    ? new Date(simTime).toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit' })
+    : '--:--';
+  const dateStr = simTime
+    ? new Date(simTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : '';
+
+  return (
+    <div className="fixed left-0 right-0 z-[1400] bg-amber-900/90 backdrop-blur text-white px-4 py-1 shadow-lg bottom-[60px] md:bottom-[48px]">
+      <div className="flex items-center gap-4 max-w-screen-xl mx-auto text-xs">
+        {/* Recorded indicator */}
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-amber-400" />
+          <span className="font-semibold uppercase tracking-wider text-amber-200">Recorded</span>
+        </div>
+
+        {airport && (
+          <span className="text-amber-300 font-medium">{airport}</span>
+        )}
+
+        <div className="flex-1" />
+
+        <span className="font-mono text-amber-100">{flightCount} aircraft</span>
+
+        <span className="text-amber-300/70">{dateStr} {timeStr}</span>
+
+        {/* Source badge */}
+        <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-800/60 text-amber-300">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+          Real ADS-B Data
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Toggle button for switching between Simulation, Live, and Recorded data modes. */
 function DataModeToggle({ mode, onChange }: { mode: DataMode; onChange: (mode: DataMode) => void }) {
   return (
     <div className="flex items-center bg-slate-700 rounded-lg p-0.5">
@@ -502,6 +644,17 @@ function DataModeToggle({ mode, onChange }: { mode: DataMode; onChange: (mode: D
         }`}
       >
         Live
+      </button>
+      <button
+        onClick={() => onChange('recorded')}
+        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+          mode === 'recorded'
+            ? 'bg-amber-600 text-white shadow-sm'
+            : 'text-slate-300 hover:text-white'
+        }`}
+        title="Replay recorded real ADS-B data from OpenSky Network"
+      >
+        Recorded
       </button>
     </div>
   );
@@ -528,7 +681,7 @@ export function SimulationControls({
   backendReady,
   currentAirport,
   demoReady,
-  openskyAvailable,
+  openskyAvailable: _openskyAvailable,
 }: {
   onFlightsChange: (flights: import('../../types/flight').Flight[] | null) => void;
   onActiveChange: (active: boolean) => void;
@@ -548,6 +701,7 @@ export function SimulationControls({
   const [windowPickerMetadata, setWindowPickerMetadata] = useState<SimulationMetadata | null>(null);
   const [pendingAirport, setPendingAirport] = useState<string | null>(null);
   const [demoAutoStarted, setDemoAutoStarted] = useState(false);
+  const [showRecordingPicker, setShowRecordingPicker] = useState(false);
 
   // Fetch available files on mount (for manual simulation picker)
   useEffect(() => {
@@ -708,17 +862,27 @@ export function SimulationControls({
   };
 
   const handleModeChange = (mode: DataMode) => {
-    if (mode === 'live') {
-      // Stop any active simulation when switching to live
+    if (mode !== 'simulation') {
+      // Stop any active simulation/recording when switching away
       if (sim.isActive) sim.stop();
+    }
+    if (mode === 'recorded') {
+      // Auto-open recording picker and fetch list
+      sim.fetchRecordings();
+      setShowRecordingPicker(true);
     }
     setDataMode(mode);
   };
 
+  const handleLoadRecording = (airport: string, date: string) => {
+    setShowRecordingPicker(false);
+    sim.loadRecording(airport, date);
+  };
+
   return (
     <>
-      {/* Data mode toggle — only visible when OpenSky API is reachable */}
-      {openskyAvailable && <DataModeToggle mode={dataMode} onChange={handleModeChange} />}
+      {/* Data mode toggle — always visible (recordings work without live OpenSky) */}
+      <DataModeToggle mode={dataMode} onChange={handleModeChange} />
 
       {/* Simulation controls — only in simulation mode */}
       {dataMode === 'simulation' && (
@@ -791,6 +955,51 @@ export function SimulationControls({
       {/* Live status bar — shown in live mode */}
       {dataMode === 'live' && (
         <LiveBar flightCount={contextFlights.length} lastUpdated={contextLastUpdated} />
+      )}
+
+      {/* Recorded mode controls */}
+      {dataMode === 'recorded' && (
+        <>
+          {/* Load recording button (shown when no recording is playing) */}
+          {!sim.isActive && (
+            <button
+              onClick={() => {
+                sim.fetchRecordings();
+                setShowRecordingPicker(true);
+              }}
+              className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-lg text-sm transition-colors"
+              title="Load recorded ADS-B data"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Load Recording
+            </button>
+          )}
+
+          {/* Playback bar reused for recorded data */}
+          {sim.isActive && !sim.switchPaused && (
+            <>
+              <PlaybackBar sim={sim} />
+              <RecordedBar
+                flightCount={sim.flights.length}
+                simTime={sim.currentSimTime}
+                airport={sim.airport}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* Recording picker modal */}
+      {showRecordingPicker && (
+        <RecordingPicker
+          recordings={sim.availableRecordings}
+          isLoading={sim.isLoading}
+          isFetching={sim.isFetchingRecordings}
+          onLoad={handleLoadRecording}
+          onClose={() => setShowRecordingPicker(false)}
+        />
       )}
     </>
   );
