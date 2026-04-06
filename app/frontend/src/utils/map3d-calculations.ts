@@ -9,9 +9,8 @@
 // Coordinate Transformations
 // ============================================================================
 
-/** Default airport center coordinates (SFO) */
-export const DEFAULT_CENTER_LAT = 37.6213;
-export const DEFAULT_CENTER_LON = -122.379;
+import { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON } from '../constants/defaults';
+export { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON };
 export const DEFAULT_COORDINATE_SCALE = 10000;
 
 /**

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { GeoJSON, CircleMarker, Tooltip, Polygon, Polyline, useMapEvents } from 'react-leaflet';
 import L, { PathOptions, LatLngExpression } from 'leaflet';
 import { Feature, Geometry } from 'geojson';
-import { airportLayout, getFeaturesByType } from '../../constants/airportLayout';
+import { SFO_FALLBACK_LAYOUT, getFeaturesByType } from '../../constants/airportLayout';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { GeoPosition } from '../../types/airportFormats';
 import { useCongestion } from '../../hooks/usePredictions';
@@ -76,8 +76,8 @@ function onEachFeature(feature: Feature<Geometry>, layer: L.Layer) {
 
 // Filter out gate points (we'll render them separately)
 const nonGateFeatures = {
-  ...airportLayout,
-  features: airportLayout.features.filter(
+  ...SFO_FALLBACK_LAYOUT,
+  features: SFO_FALLBACK_LAYOUT.features.filter(
     (f) => f.properties?.type !== 'gate'
   ),
 };

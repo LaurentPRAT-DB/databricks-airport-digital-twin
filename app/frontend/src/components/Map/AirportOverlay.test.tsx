@@ -64,7 +64,7 @@ vi.mock('../../context/AirportConfigContext', () => ({
 }))
 
 vi.mock('../../constants/airportLayout', () => ({
-  airportLayout: { type: 'FeatureCollection', features: [] },
+  SFO_FALLBACK_LAYOUT: { type: 'FeatureCollection', features: [] },
   getFeaturesByType: () => [],
 }))
 

@@ -21,7 +21,7 @@ import {
 } from '../types/airportFormats';
 import { AIRPORT_3D_CONFIG, RunwayConfig, TaxiwayConfig } from '../constants/airport3D';
 import { BuildingPlacement } from '../config/buildingModels';
-import { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON } from '../utils/map3d-calculations';
+import { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON } from '../constants/defaults';
 import { getCachedConfig, setCachedConfig } from '../utils/airportConfigCache';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';

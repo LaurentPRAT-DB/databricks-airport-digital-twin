@@ -1,10 +1,7 @@
 import { FeatureCollection, Feature, Polygon, LineString, Point } from 'geojson';
 
-// Airport center coordinates (SFO - San Francisco International Airport)
-export const AIRPORT_CENTER: [number, number] = [37.6213, -122.379];
-
-// Zoom level for initial view
-export const DEFAULT_ZOOM = 14;
+// Re-export DEFAULT_ZOOM from centralized defaults for backwards compatibility
+export { DEFAULT_ZOOM } from './defaults';
 
 // ============================================================================
 // SEPARATION CONSTRAINTS (FAA/ICAO Standards)
@@ -49,7 +46,7 @@ export const MAX_TAXI_AIRCRAFT = 2;
 
 // Gate definitions (matching backend fallback.py) - Real SFO terminal positions
 // Gates spread across International Terminal (G, A) and Domestic Terminals (B, C)
-export const GATE_POSITIONS: Record<string, [number, number]> = {
+export const SFO_GATE_POSITIONS: Record<string, [number, number]> = {
   // International Terminal - Boarding Area G
   'G1': [37.6145, -122.3955],  // Wide-body capable
   'G2': [37.6140, -122.3945],
@@ -66,7 +63,7 @@ export const GATE_POSITIONS: Record<string, [number, number]> = {
 };
 
 // GeoJSON FeatureCollection for airport layout - Real SFO from FAA data
-export const airportLayout: FeatureCollection = {
+export const SFO_FALLBACK_LAYOUT: FeatureCollection = {
   type: 'FeatureCollection',
   features: [
     // Runway 28R/10L - 11,870 ft (north parallel, extends into bay)
@@ -206,7 +203,7 @@ export const airportLayout: FeatureCollection = {
 
     // Gates (5 total, matching backend separation constraints)
     // Gate spacing: 0.008 deg = ~800m to allow for aircraft + ground equipment
-    ...Object.entries(GATE_POSITIONS).map(([name, coords]): Feature<Point> => ({
+    ...Object.entries(SFO_GATE_POSITIONS).map(([name, coords]): Feature<Point> => ({
       type: 'Feature',
       properties: {
         type: 'gate',
@@ -225,7 +222,7 @@ export const airportLayout: FeatureCollection = {
 
 // Helper function to get features by type
 export function getFeaturesByType(type: string): Feature[] {
-  return airportLayout.features.filter(
+  return SFO_FALLBACK_LAYOUT.features.filter(
     (feature) => feature.properties?.type === type
   );
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { AIRPORT_CENTER, DEFAULT_ZOOM } from '../../constants/airportLayout';
+import { DEFAULT_ZOOM } from '../../constants/airportLayout';
 import AirportOverlay from './AirportOverlay';
 import FlightMarker from './FlightMarker';
 import TrajectoryLine from './TrajectoryLine';
@@ -236,12 +236,14 @@ function InpaintingTileLayer({ airportIcao }: { airportIcao?: string }) {
 
 export default function AirportMap({ sharedViewport, onViewportChange, satellite = false, inpainting = false, airportIcao }: AirportMapProps) {
   const { filteredFlights: flights, isLoading, error, lastUpdated } = useFlightContext();
+  const { getAirportCenter } = useAirportConfigContext();
   const [zoom, setZoom] = useState(sharedViewport?.zoom ?? DEFAULT_ZOOM);
 
-  // Use shared viewport center/zoom if available, otherwise defaults
+  // Use shared viewport center/zoom if available, then dynamic airport center, then SFO fallback
+  const dynamicCenter = getAirportCenter();
   const initialCenter: [number, number] = sharedViewport
     ? [sharedViewport.center.lat, sharedViewport.center.lon]
-    : AIRPORT_CENTER;
+    : [dynamicCenter.lat, dynamicCenter.lon];
   const initialZoom = sharedViewport?.zoom ?? DEFAULT_ZOOM;
 
   return (
