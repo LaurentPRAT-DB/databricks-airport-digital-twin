@@ -308,11 +308,15 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
               return (
                 <div
                   key={`${event.time}-${i}`}
-                  className="absolute top-0 -translate-x-1/2"
+                  className="absolute top-0 -translate-x-1/2 cursor-pointer z-10"
                   style={{ left: `${pos}%` }}
                   title={`${event.event_type}: ${event.description}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    sim.seekToTime(event.time);
+                  }}
                 >
-                  <div className={`w-1.5 h-3 rounded-sm ${colorClass} opacity-80 hover:opacity-100 transition-opacity`} />
+                  <div className={`w-1.5 h-3 rounded-sm ${colorClass} opacity-80 hover:opacity-100 hover:scale-150 transition-all`} />
                 </div>
               );
             })}

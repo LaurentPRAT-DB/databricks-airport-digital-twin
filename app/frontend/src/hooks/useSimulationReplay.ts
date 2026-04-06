@@ -179,6 +179,7 @@ export interface UseSimulationReplayResult {
   setSpeed: (speed: PlaybackSpeed) => void;
   seekTo: (frameIndex: number) => void;
   seekToPercent: (pct: number) => void;
+  seekToTime: (isoTime: string) => void;
   stop: () => void;
   fetchFiles: () => Promise<void>;
   pauseForSwitch: () => void;
@@ -497,6 +498,21 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     seekTo(idx);
   }, [totalFrames, seekTo]);
 
+  const seekToTime = useCallback((isoTime: string) => {
+    if (!simData || simData.frame_timestamps.length === 0) return;
+    const targetMs = new Date(isoTime).getTime();
+    let bestIdx = 0;
+    let bestDiff = Infinity;
+    for (let i = 0; i < simData.frame_timestamps.length; i++) {
+      const diff = Math.abs(new Date(simData.frame_timestamps[i]).getTime() - targetMs);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIdx = i;
+      }
+    }
+    seekTo(bestIdx);
+  }, [simData, seekTo]);
+
   const stop = useCallback(() => {
     setIsPlaying(false);
     setSimData(null);
@@ -640,6 +656,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setSpeed,
     seekTo,
     seekToPercent,
+    seekToTime,
     stop,
     fetchFiles,
     pauseForSwitch,

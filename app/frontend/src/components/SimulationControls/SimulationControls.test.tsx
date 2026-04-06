@@ -33,6 +33,7 @@ function createMockSim(overrides: Partial<UseSimulationReplayResult> = {}): UseS
     setSpeed: vi.fn(),
     seekTo: vi.fn(),
     seekToPercent: vi.fn(),
+    seekToTime: vi.fn(),
     stop: vi.fn(),
     fetchFiles: vi.fn().mockResolvedValue(undefined),
     pauseForSwitch: vi.fn(),
