@@ -911,8 +911,16 @@ export function SimulationControls({
       {/* Recorded mode controls */}
       {dataMode === 'recorded' && (
         <>
-          {/* Load recording button (shown when no recording is playing) */}
-          {!sim.isActive && (
+          {/* Loading indicator while fetching recording data */}
+          {sim.isLoading && (
+            <div className="flex items-center gap-2 px-3 py-1.5 text-sm text-amber-300">
+              <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+              Loading recording...
+            </div>
+          )}
+
+          {/* Load recording button (shown when no recording is playing and not loading) */}
+          {!sim.isActive && !sim.isLoading && (
             <button
               onClick={() => {
                 sim.fetchRecordings();

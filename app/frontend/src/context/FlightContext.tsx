@@ -89,9 +89,12 @@ export function FlightProvider({
   }, []);
 
   // Use simulation flights when provided, otherwise live/opensky based on mode
+  // In recorded mode, ONLY show recording flights — never fall back to WebSocket demo data
   const flights = dataMode === 'live'
     ? openSkyFlights
-    : (simulationFlights ?? liveFlights);
+    : dataMode === 'recorded'
+      ? (simulationFlights ?? [])
+      : (simulationFlights ?? liveFlights);
   const dataSource = dataMode === 'live'
     ? 'opensky' as const
     : dataMode === 'recorded'
