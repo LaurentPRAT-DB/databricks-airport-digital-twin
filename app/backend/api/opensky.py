@@ -654,7 +654,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         inferrer.process_frame(ts, frames[ts])
     enrichment = inferrer.get_results()
 
-    # Update snapshots with inferred gate assignments
+    # Update snapshots with inferred gate assignments + snap parked positions
     gate_by_aircraft: dict[str, str] = {}
     for ge in enrichment["gate_events"]:
         if ge["event_type"] in ("assign", "occupy"):
@@ -662,11 +662,23 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         elif ge["event_type"] == "release":
             gate_by_aircraft.pop(ge["icao24"], None)
 
+    # Build gate coordinate lookup for position snapping
+    gate_coords: dict[str, tuple[float, float]] = {}
+    for g in gates:
+        gid = g.get("ref") or g.get("id") or ""
+        geo = g.get("geo", {})
+        glat, glon = geo.get("latitude"), geo.get("longitude")
+        if gid and glat is not None and glon is not None:
+            gate_coords[str(gid)] = (float(glat), float(glon))
+
     for ts_key in sorted_timestamps:
         for snap in frames[ts_key]:
             gate = gate_by_aircraft.get(snap["icao24"])
             if gate:
                 snap["assigned_gate"] = gate
+                # Snap parked aircraft to gate position (ADS-B ground positions are inaccurate)
+                if snap.get("on_ground") and float(snap.get("velocity", 0) or 0) < 5 and gate in gate_coords:
+                    snap["latitude"], snap["longitude"] = gate_coords[gate]
 
     # ── Origin/destination enrichment (cascading) ─────────────────────
     # Collect first-seen snapshot per aircraft for heading heuristic

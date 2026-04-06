@@ -85,6 +85,7 @@ class OpenSkyEventInferrer:
                    "ref" (or "id") and "geo": {"latitude": ..., "longitude": ...}
         """
         self._gate_positions: list[tuple[str, float, float]] = []
+        self._gate_coords: dict[str, tuple[float, float]] = {}
         for g in gates:
             gate_id = g.get("ref") or g.get("id") or ""
             geo = g.get("geo", {})
@@ -92,6 +93,7 @@ class OpenSkyEventInferrer:
             lon = geo.get("longitude")
             if gate_id and lat is not None and lon is not None:
                 self._gate_positions.append((str(gate_id), float(lat), float(lon)))
+                self._gate_coords[str(gate_id)] = (float(lat), float(lon))
 
         self._trackers: dict[str, AircraftTracker] = {}
         self._phase_transitions: list[dict[str, Any]] = []
@@ -279,13 +281,16 @@ class OpenSkyEventInferrer:
                 tracker.parked_since = timestamp
                 cur.phase = phase
 
-            # Accumulate enriched snapshot
+            # Accumulate enriched snapshot — snap parked aircraft to gate position
+            snap_lat, snap_lon = lat, lon
+            if phase == "parked" and tracker.assigned_gate and tracker.assigned_gate in self._gate_coords:
+                snap_lat, snap_lon = self._gate_coords[tracker.assigned_gate]
             self._enriched_snapshots.append({
                 "time": timestamp,
                 "icao24": icao24,
                 "callsign": callsign,
-                "latitude": lat,
-                "longitude": lon,
+                "latitude": snap_lat,
+                "longitude": snap_lon,
                 "altitude": altitude_ft,
                 "velocity": velocity_kts,
                 "heading": heading,
