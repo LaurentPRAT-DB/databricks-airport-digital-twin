@@ -699,8 +699,9 @@ class TestPushbackMovement:
 
         initial_pos = (state.latitude, state.longitude)
 
-        # Several ticks of pushback
-        for _ in range(20):
+        # Simulate through tug-connect phase into active push window
+        # (movement starts at progress 0.2 ≈ 30s, so run 60s of ticks)
+        for _ in range(60):
             state = _update_flight_state(state, 1.0)
             if state.phase != FlightPhase.PUSHBACK:
                 break

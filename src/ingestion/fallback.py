@@ -4025,19 +4025,20 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.phase_progress = 0
 
     elif state.phase == FlightPhase.PUSHBACK:
-        # Slow pushback from gate WITH separation check
-        # Real pushback: tug pushes aircraft ~50-80m back from the gate onto the apron/taxiway.
-        # Total phase is ~60s of movement (at 3kts ≈ 90m).
+        # Pushback phases: tug connect (0-30s), actual push (30-90s), engine start (90-150s).
+        # Only move during the push portion: ~60s at 3kts ≈ 90m (real pushback is 50-80m).
         pb_heading = _get_pushback_heading(state.assigned_gate) if state.assigned_gate else 180.0
-        state.phase_progress += dt / 150.0  # ~150s (2.5 min) for pushback: tug connect + push + engine start
-        if _check_taxi_separation(state):
+        state.phase_progress += dt / 150.0  # ~150s total: tug connect + push + engine start
+        # Only move during the active push window (progress 0.2–0.6 ≈ 30s–90s)
+        is_pushing = 0.2 <= state.phase_progress < 0.6
+        if is_pushing and _check_taxi_separation(state):
             state.velocity = TAXI_SPEED_PUSHBACK_KTS
             pb_rad = math.radians(pb_heading)
             pb_speed_deg = TAXI_SPEED_PUSHBACK_KTS * _KTS_TO_DEG_PER_SEC * dt
             state.latitude += pb_speed_deg * math.cos(pb_rad)
             state.longitude += pb_speed_deg * math.sin(pb_rad)
         else:
-            state.velocity = 0  # Hold movement if blocked, but timer still advances
+            state.velocity = 0  # Stationary during tug connect / engine start / blocked
 
         # Smooth heading rotation: nose swings from parked heading toward
         # the pushback nose direction (opposite of movement) over the pushback duration.
