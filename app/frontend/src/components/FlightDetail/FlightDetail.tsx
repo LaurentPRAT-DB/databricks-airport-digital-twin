@@ -52,15 +52,15 @@ export default function FlightDetail() {
     3
   );
 
-  // Fetch trajectory when enabled (skip API call during simulation)
-  const isSimulation = dataSource === 'simulation';
+  // Fetch trajectory when enabled (skip API call during simulation/recorded replay)
+  const usesReplayTrajectory = dataSource === 'simulation' || dataSource === 'opensky_recorded';
   const { data: trajectoryData, isLoading: isTrajectoryLoading } = useTrajectory(
     selectedFlight?.icao24 ?? null,
-    showTrajectory && !isSimulation
+    showTrajectory && !usesReplayTrajectory
   );
 
-  // Get sim trajectory point count for display
-  const simTrajectoryCount = isSimulation && simTrajectoryProvider && selectedFlight?.icao24 && showTrajectory
+  // Get replay trajectory point count for display (simulation and recorded data)
+  const simTrajectoryCount = usesReplayTrajectory && simTrajectoryProvider && selectedFlight?.icao24 && showTrajectory
     ? simTrajectoryProvider(selectedFlight.icao24).length
     : 0;
 
@@ -190,7 +190,7 @@ export default function FlightDetail() {
             )}
             {showTrajectory && (trajectoryData || simTrajectoryCount > 0) && (
               <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                {isSimulation ? simTrajectoryCount : trajectoryData?.count ?? 0} pts
+                {usesReplayTrajectory ? simTrajectoryCount : trajectoryData?.count ?? 0} pts
               </span>
             )}
             <div className={`w-10 h-6 rounded-full p-1 transition-colors ${

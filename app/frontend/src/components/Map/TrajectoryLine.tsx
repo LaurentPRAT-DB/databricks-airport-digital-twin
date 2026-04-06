@@ -21,21 +21,21 @@ export default function TrajectoryLine() {
   const { selectedFlight, showTrajectory, dataSource, simTrajectoryProvider } = useFlightContext();
 
   // API-based trajectory (for live flights)
-  const isSimulation = dataSource === 'simulation';
+  const usesReplayTrajectory = dataSource === 'simulation' || dataSource === 'opensky_recorded';
   const { data: apiTrajectory } = useTrajectory(
     selectedFlight?.icao24 ?? null,
-    showTrajectory && !isSimulation
+    showTrajectory && !usesReplayTrajectory
   );
 
-  // Simulation-based trajectory (from frames)
+  // Replay-based trajectory (from frames — simulation and recorded data)
   const simPoints = useMemo(() => {
-    if (!isSimulation || !simTrajectoryProvider || !selectedFlight?.icao24) return null;
+    if (!usesReplayTrajectory || !simTrajectoryProvider || !selectedFlight?.icao24) return null;
     return simTrajectoryProvider(selectedFlight.icao24);
-  }, [isSimulation, simTrajectoryProvider, selectedFlight?.icao24]);
+  }, [usesReplayTrajectory, simTrajectoryProvider, selectedFlight?.icao24]);
 
   // Normalize to common point format
   const validPoints: NormalizedPoint[] = useMemo(() => {
-    if (isSimulation && simPoints) {
+    if (usesReplayTrajectory && simPoints) {
       return simPoints
         .filter(p => p.latitude != null && p.longitude != null)
         .map(p => ({
@@ -58,7 +58,7 @@ export default function TrajectoryLine() {
         }));
     }
     return [];
-  }, [isSimulation, simPoints, apiTrajectory]);
+  }, [usesReplayTrajectory, simPoints, apiTrajectory]);
 
   // Split trajectory into traveled (past) and remaining (future) at the
   // aircraft's current position.  The split index is the closest trajectory
