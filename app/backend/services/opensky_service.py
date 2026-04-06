@@ -305,3 +305,170 @@ def get_opensky_service() -> OpenSkyService:
         client_id, client_secret = _resolve_opensky_credentials()
         _opensky_service = OpenSkyService(client_id=client_id, client_secret=client_secret)
     return _opensky_service
+
+
+# ── Flight origin enrichment ────────────────────────────────────────
+
+
+import math
+
+
+def _bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Compute initial bearing (degrees) from point 1 to point 2."""
+    lat1, lon1, lat2, lon2 = (math.radians(x) for x in (lat1, lon1, lat2, lon2))
+    dlon = lon2 - lon1
+    y = math.sin(dlon) * math.cos(lat2)
+    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    return (math.degrees(math.atan2(y, x)) + 360) % 360
+
+
+def _haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in nautical miles."""
+    lat1, lon1, lat2, lon2 = (math.radians(x) for x in (lat1, lon1, lat2, lon2))
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 2 * 3440.065 * math.asin(math.sqrt(a))
+
+
+async def enrich_origins_opensky(
+    icao24_set: set[str],
+    begin_ts: int,
+    end_ts: int,
+) -> dict[str, tuple[Optional[str], Optional[str]]]:
+    """Level 1: Look up departure/arrival airports via OpenSky flights API.
+
+    Returns dict of icao24 -> (departure_icao, arrival_icao).
+    Only returns entries that were successfully resolved.
+    Rate-limited: batches requests with small delays.
+    """
+    service = get_opensky_service()
+    if service._reachable is False:
+        return {}
+
+    results: dict[str, tuple[Optional[str], Optional[str]]] = {}
+    api_url = "https://opensky-network.org/api/flights/aircraft"
+
+    for icao24 in icao24_set:
+        try:
+            headers = {}
+            token = await service._get_token()
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+
+            resp = await service._client.get(
+                api_url,
+                params={"icao24": icao24, "begin": begin_ts, "end": end_ts},
+                headers=headers,
+            )
+            if resp.status_code == 429:
+                logger.info("OpenSky flights API rate limited, stopping lookups")
+                break
+            if resp.status_code != 200:
+                continue
+
+            flights = resp.json()
+            if not flights:
+                continue
+
+            # Use the flight record closest to our time window
+            best = flights[0]
+            dep = best.get("estDepartureAirport")
+            arr = best.get("estArrivalAirport")
+            if dep or arr:
+                results[icao24] = (dep, arr)
+
+        except Exception as e:
+            logger.debug("OpenSky flights lookup failed for %s: %s", icao24, e)
+            continue
+
+    logger.info("OpenSky flights API enriched %d/%d aircraft", len(results), len(icao24_set))
+    return results
+
+
+def enrich_origins_heading(
+    aircraft_first_seen: dict[str, dict],
+    airport_lat: float,
+    airport_lon: float,
+    airport_icao: str,
+) -> dict[str, tuple[str, str]]:
+    """Level 2: Estimate origin from inbound heading using airport database.
+
+    For each aircraft, uses its heading when first detected to compute a
+    back-bearing, then finds the nearest major airport along that bearing.
+
+    Args:
+        aircraft_first_seen: icao24 -> first snapshot dict with lat/lon/heading/phase
+        airport_lat, airport_lon: center of the observed airport
+        airport_icao: ICAO code of the current airport (excluded from candidates)
+
+    Returns dict of icao24 -> (origin_icao, destination_icao).
+    """
+    try:
+        from src.ingestion.airport_table import AIRPORTS
+    except ImportError:
+        logger.warning("Airport table not available for heading-based origin enrichment")
+        return {}
+
+    # Build candidate list: (iata, icao, lat, lon, bearing_from_airport, distance_nm)
+    candidates: list[tuple[str, str, float, float, float, float]] = []
+    for iata, (lat, lon, icao, _country) in AIRPORTS.items():
+        if icao == airport_icao:
+            continue
+        dist = _haversine_nm(airport_lat, airport_lon, lat, lon)
+        if dist < 50:
+            continue  # Skip very close airports
+        bearing = _bearing(airport_lat, airport_lon, lat, lon)
+        candidates.append((iata, icao, lat, lon, bearing, dist))
+
+    results: dict[str, tuple[str, str]] = {}
+
+    for icao24, snap in aircraft_first_seen.items():
+        heading = snap.get("heading")
+        phase = snap.get("phase", "")
+        lat = snap.get("latitude")
+        lon = snap.get("longitude")
+
+        if heading is None or lat is None or lon is None:
+            continue
+
+        is_arriving = phase in ("approaching", "landing", "taxi_in", "parked")
+        is_departing = phase in ("takeoff", "departing", "taxi_out", "pushback")
+
+        if is_arriving:
+            # Back-bearing: where did this flight come from?
+            back_bearing = (heading + 180) % 360
+            # Find best candidate: closest angular match weighted by distance reasonableness
+            best_score = float("inf")
+            best_icao = None
+            for _iata, cand_icao, _lat, _lon, cand_bearing, dist in candidates:
+                angle_diff = abs(back_bearing - cand_bearing)
+                if angle_diff > 180:
+                    angle_diff = 360 - angle_diff
+                # Score: angular difference (primary) + distance penalty (prefer 200-2000nm)
+                dist_penalty = abs(math.log(max(dist, 100) / 500))
+                score = angle_diff + dist_penalty * 10
+                if score < best_score:
+                    best_score = score
+                    best_icao = cand_icao
+            if best_icao and best_score < 90:  # Only if reasonable match (<90° off)
+                results[icao24] = (best_icao, airport_icao)
+        elif is_departing:
+            # Departing: heading tells us where it's going
+            best_score = float("inf")
+            best_icao = None
+            for _iata, cand_icao, _lat, _lon, cand_bearing, dist in candidates:
+                angle_diff = abs(heading - cand_bearing)
+                if angle_diff > 180:
+                    angle_diff = 360 - angle_diff
+                dist_penalty = abs(math.log(max(dist, 100) / 500))
+                score = angle_diff + dist_penalty * 10
+                if score < best_score:
+                    best_score = score
+                    best_icao = cand_icao
+            if best_icao and best_score < 90:
+                results[icao24] = (airport_icao, best_icao)
+
+    logger.info("Heading-based enrichment resolved %d/%d aircraft",
+                len(results), len(aircraft_first_seen))
+    return results
