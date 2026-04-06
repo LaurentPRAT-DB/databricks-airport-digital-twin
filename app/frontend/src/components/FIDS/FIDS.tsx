@@ -533,7 +533,7 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
           {simClockDisplay && (
             <span className="font-mono text-slate-300 text-sm">{simClockDisplay}</span>
           )}
-          <span>Synthetic data for demo</span>
+          <span>{dataSource === 'opensky_recorded' ? 'Real ADS-B recorded data' : dataSource === 'opensky' ? 'Live ADS-B data' : 'Synthetic data for demo'}</span>
         </div>
       </div>
     </div>
