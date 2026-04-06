@@ -201,13 +201,15 @@ const InpaintingGridLayer = L.GridLayer.extend({
           URL.revokeObjectURL(tile.src);
           done(null, tile);
         };
+        tile.onerror = () => {
+          URL.revokeObjectURL(tile.src);
+          // Let the base satellite TileLayer show through
+          done(null, tile);
+        };
       })
       .catch(() => {
-        // Fallback: load raw Esri tile
-        tile.crossOrigin = 'anonymous';
-        tile.src = esriUrl;
-        tile.onload = () => done(null, tile);
-        tile.onerror = () => done(null, tile);
+        // Let the base satellite TileLayer show through
+        done(null, tile);
       });
 
     return tile;
@@ -253,14 +255,13 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
         zoom={initialZoom}
         className="h-full w-full"
       >
-        {satellite && inpainting ? (
+        <TileLayer
+          key={satellite ? 'sat' : 'street'}
+          attribution={satellite ? SAT_ATTR : STREET_ATTR}
+          url={satellite ? SAT_URL : STREET_URL}
+        />
+        {satellite && inpainting && (
           <InpaintingTileLayer key="inpaint" airportIcao={airportIcao} />
-        ) : (
-          <TileLayer
-            key={satellite ? 'sat' : 'street'}
-            attribution={satellite ? SAT_ATTR : STREET_ATTR}
-            url={satellite ? SAT_URL : STREET_URL}
-          />
         )}
         <MapRecenter sharedViewport={sharedViewport} />
         <MapViewportSaver onViewportChange={onViewportChange} />
