@@ -2,14 +2,15 @@
 # MAGIC %md
 # MAGIC # Load OpenSky Raw Data from UC Volume
 # MAGIC
-# MAGIC Reads JSON-lines files uploaded to the `opensky_raw` UC Volume and appends them
-# MAGIC to the `opensky_states_raw` Delta table. Processed files are moved to a `processed/`
-# MAGIC subfolder to avoid re-ingestion.
+# MAGIC Reads JSON-lines files uploaded to the `opensky_raw` UC Volume and merges them
+# MAGIC into the `opensky_states_raw` Delta table. Uses MERGE (not APPEND) on the natural
+# MAGIC key `(icao24, collection_time, airport_icao)` to prevent duplicate rows on re-upload.
+# MAGIC Processed files are moved to a `processed/` subfolder.
 # MAGIC
 # MAGIC **Data source:** Real ADS-B data from OpenSky Network, collected locally via
 # MAGIC `scripts/opensky_collector.py` and uploaded to the Volume.
 # MAGIC
-# MAGIC **Direction:** UC Volume (JSONL) → Delta table (append)
+# MAGIC **Direction:** UC Volume (JSONL) → Delta table (merge/upsert)
 
 # COMMAND ----------
 
@@ -104,9 +105,11 @@ if row_count == 0:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 3. Add derived columns and write to Delta
+# MAGIC ## 3. Add derived columns and MERGE into Delta (dedup)
 
 # COMMAND ----------
+
+from delta.tables import DeltaTable
 
 df = (
     df_raw
@@ -126,17 +129,43 @@ df = (
 df.select("airport_icao", "icao24", "callsign", "latitude", "longitude",
           "baro_altitude", "velocity", "on_ground", "collection_time", "data_source").show(5, truncate=False)
 
-# Append to Delta table (create if not exists, with partition)
-(
-    df.write
-    .mode("append")
-    .partitionBy("collection_date")
-    .option("mergeSchema", "true")
-    .saveAsTable(DELTA_TABLE)
-)
+# Create table if it doesn't exist yet (first run)
+if not spark.catalog.tableExists(DELTA_TABLE):
+    print(f"Creating new table {DELTA_TABLE}")
+    (
+        df.write
+        .partitionBy("collection_date")
+        .option("mergeSchema", "true")
+        .saveAsTable(DELTA_TABLE)
+    )
+    new_rows = row_count
+else:
+    # MERGE: insert only rows whose natural key doesn't already exist
+    target = DeltaTable.forName(spark, DELTA_TABLE)
+    merge_result = (
+        target.alias("t")
+        .merge(
+            df.alias("s"),
+            """
+            t.icao24 = s.icao24
+            AND t.collection_time = s.collection_time
+            AND t.airport_icao = s.airport_icao
+            """
+        )
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
+    # Count how many rows were actually inserted
+    new_count = spark.table(DELTA_TABLE).count()
+    pre_count = new_count - row_count  # upper bound before merge
+    # Read merge metrics from the operation history
+    history = spark.sql(f"DESCRIBE HISTORY {DELTA_TABLE} LIMIT 1").collect()[0]
+    metrics = history.operationMetrics or {}
+    new_rows = int(metrics.get("numTargetRowsInserted", 0))
+    print(f"MERGE complete: {new_rows} new rows inserted, {row_count - new_rows} duplicates skipped")
 
 final_count = spark.table(DELTA_TABLE).count()
-print(f"Appended {row_count} rows to {DELTA_TABLE} (total now: {final_count})")
+print(f"Table {DELTA_TABLE} now has {final_count:,} total rows")
 
 # COMMAND ----------
 
@@ -194,5 +223,5 @@ print(f"  Date range:       {stats.earliest} → {stats.latest}")
 print(f"  Days of data:     {stats.days}")
 print(f"{'='*60}")
 
-exit_msg = f"SUCCESS: ingested {row_count} rows from {len(pending_files)} files, table total: {stats.total_rows:,}"
+exit_msg = f"SUCCESS: {new_rows} new rows from {len(pending_files)} files ({row_count - new_rows} duplicates skipped), table total: {stats.total_rows:,}"
 dbutils.notebook.exit(exit_msg)
