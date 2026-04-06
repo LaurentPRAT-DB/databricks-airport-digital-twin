@@ -62,9 +62,6 @@ const SAMPLE_QUESTIONS = [
   'Show me scheduled arrivals for the next 2 hours',
 ];
 
-const WORKSPACE_URL = 'https://fevm-serverless-stable-3n0ihb.cloud.databricks.com';
-const GENIE_SPACE_ID = '01f12612fa6314ae943d0526f5ae3a00';
-
 interface GenieChatProps {
   /** Hide the floating action button (caller controls open state externally) */
   hideFab?: boolean;
@@ -89,6 +86,20 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastQuestionRef = useRef<string>('');
+
+  // Fetch platform config (workspace URL + Genie space ID) from backend
+  const [workspaceUrl, setWorkspaceUrl] = useState('');
+  const [genieSpaceId, setGenieSpaceId] = useState('');
+  useEffect(() => {
+    fetch('/api/config')
+      .then(r => r.json())
+      .then(data => {
+        const p = data.platform;
+        if (p?.workspace_url) setWorkspaceUrl(p.workspace_url);
+        if (p?.genie_space_id) setGenieSpaceId(p.genie_space_id);
+      })
+      .catch(() => {});
+  }, []);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -259,7 +270,7 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
                 </button>
               )}
               <a
-                href={`${WORKSPACE_URL}/genie/spaces/${GENIE_SPACE_ID}`}
+                href={`${workspaceUrl}/genie/rooms/${genieSpaceId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors"
@@ -326,7 +337,7 @@ export default function GenieChat({ hideFab, externalOpen, onClose }: GenieChatP
 
                     {/* Data table */}
                     {msg.columns && msg.data && msg.data.length > 0 && (
-                      <DataTable columns={msg.columns} data={msg.data} rowCount={msg.rowCount || 0} />
+                      <DataTable columns={msg.columns} data={msg.data} rowCount={msg.rowCount || 0} genieUrl={workspaceUrl && genieSpaceId ? `${workspaceUrl}/genie/rooms/${genieSpaceId}` : undefined} />
                     )}
 
                     {/* Retry button for errors */}
@@ -440,10 +451,12 @@ function DataTable({
   columns,
   data,
   rowCount,
+  genieUrl,
 }: {
   columns: string[];
   data: (string | number | null)[][];
   rowCount: number;
+  genieUrl?: string;
 }) {
   const maxDisplay = 10;
   const displayData = data.slice(0, maxDisplay);
@@ -487,14 +500,16 @@ function DataTable({
       {rowCount > maxDisplay && (
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 text-center">
           Showing {maxDisplay} of {rowCount} rows
-          <a
-            href={`${WORKSPACE_URL}/genie/spaces/${GENIE_SPACE_ID}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-1 text-blue-600 dark:text-blue-400 hover:underline"
-          >
-            View all in Genie
-          </a>
+          {genieUrl && (
+            <a
+              href={genieUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-1 text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              View all in Genie
+            </a>
+          )}
         </p>
       )}
     </div>

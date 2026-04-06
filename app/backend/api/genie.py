@@ -82,7 +82,7 @@ async def _genie_api(
     json_body: dict | None = None,
 ) -> dict:
     """Make a request to the Databricks Genie REST API."""
-    url = f"{host}/api/2.0/genie/rooms/{GENIE_SPACE_ID}{path}"
+    url = f"{host}/api/2.0/genie/spaces/{GENIE_SPACE_ID}{path}"
     headers = {"Authorization": f"Bearer {token}"}
 
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -316,3 +316,59 @@ async def followup_genie(body: FollowupRequest, request: Request):
 async def get_genie_space_info():
     """Return the configured Genie Space ID for the frontend."""
     return {"space_id": GENIE_SPACE_ID}
+
+
+@genie_router.get("/validate")
+async def validate_genie_config(request: Request):
+    """Validate Genie configuration: check space ID and connectivity.
+
+    Returns detailed status so operators can diagnose misconfiguration.
+    """
+    result: dict = {
+        "space_id": GENIE_SPACE_ID,
+        "configured": bool(GENIE_SPACE_ID),
+    }
+
+    if not GENIE_SPACE_ID:
+        result["status"] = "error"
+        result["message"] = "GENIE_SPACE_ID environment variable is not set"
+        return result
+
+    try:
+        host, token = _get_databricks_auth(request)
+        result["host"] = host
+    except HTTPException as e:
+        result["status"] = "error"
+        result["message"] = f"Authentication failed: {e.detail}"
+        return result
+
+    # Try to access the Genie space
+    try:
+        url = f"{host}/api/2.0/genie/spaces/{GENIE_SPACE_ID}"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+
+        result["http_status"] = resp.status_code
+
+        if resp.status_code == 200:
+            data = resp.json()
+            result["status"] = "ok"
+            result["space_name"] = data.get("title") or data.get("display_name") or data.get("name")
+            result["message"] = "Genie space is accessible"
+            result["url"] = f"{host}/genie/rooms/{GENIE_SPACE_ID}"
+        elif resp.status_code == 403:
+            result["status"] = "error"
+            result["message"] = "Access denied — the app service principal may lack permission on this Genie space"
+        elif resp.status_code == 404:
+            result["status"] = "error"
+            result["message"] = f"Genie space {GENIE_SPACE_ID} not found — check GENIE_SPACE_ID in app.yaml"
+        else:
+            result["status"] = "error"
+            result["message"] = f"Unexpected response: HTTP {resp.status_code}"
+            result["response_body"] = resp.text[:300]
+
+    except Exception as e:
+        result["status"] = "error"
+        result["message"] = f"Connection failed: {type(e).__name__}: {e}"
+
+    return result
