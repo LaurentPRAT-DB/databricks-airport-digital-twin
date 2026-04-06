@@ -248,7 +248,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   }, [sim, summary, filteredEvents, captures, fromHour, toHour]);
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm" style={{ paddingBottom: 'var(--playbar-h, 0px)' }}>
       <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-700 w-[900px] max-w-[95vw] max-h-[85vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
