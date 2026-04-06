@@ -412,8 +412,6 @@ async def _execute_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, 
         return flight.model_dump(mode="json")
 
     elif tool_name == "get_flight_trajectory":
-        import os
-        from app.backend.demo_config import DEMO_MODE
         from app.backend.services.delta_service import get_delta_service
         from app.backend.models.flight import TrajectoryPoint, TrajectoryResponse
         from src.ingestion.fallback import generate_synthetic_trajectory
@@ -421,10 +419,9 @@ async def _execute_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, 
         icao24 = arguments["icao24"]
         minutes = arguments.get("minutes", 60)
         limit = 1000
-        use_mock = DEMO_MODE or os.getenv("USE_MOCK_BACKEND", "true").lower() == "true"
         trajectory_data = None
-        if not use_mock:
-            delta = get_delta_service()
+        delta = get_delta_service()
+        if delta.is_available:
             trajectory_data = delta.get_trajectory(icao24, minutes=minutes, limit=limit)
         if trajectory_data is None or len(trajectory_data) == 0:
             trajectory_data = generate_synthetic_trajectory(icao24, minutes=minutes, limit=limit)

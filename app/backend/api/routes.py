@@ -248,16 +248,15 @@ async def get_flight_trajectory(
     Raises:
         404: If no trajectory data found for this flight.
     """
-    from app.backend.demo_config import DEMO_MODE
-    use_mock = DEMO_MODE or os.getenv("USE_MOCK_BACKEND", "true").lower() == "true"
     trajectory_data = None
 
-    # Try Delta tables first if not in mock mode
-    if not use_mock:
-        delta = get_delta_service()
+    # Always try Delta tables first — OpenSky/live flights won't exist in the
+    # simulation state, so the synthetic fallback would return 0 points for them.
+    delta = get_delta_service()
+    if delta.is_available:
         trajectory_data = delta.get_trajectory(icao24, minutes=minutes, limit=limit)
 
-    # Fall back to synthetic trajectory if no data or in mock mode
+    # Fall back to synthetic trajectory (works for simulated flights only)
     if trajectory_data is None or len(trajectory_data) == 0:
         trajectory_data = generate_synthetic_trajectory(icao24, minutes=minutes, limit=limit)
 
