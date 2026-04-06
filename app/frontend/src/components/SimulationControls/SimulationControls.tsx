@@ -181,7 +181,7 @@ function getEventPosition(event: ScenarioEvent, startTime: string | null, endTim
 }
 
 /** Playback control bar shown at the bottom of the screen during simulation replay. */
-function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
+function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResult; isRecorded?: boolean }) {
   const [showReport, setShowReport] = useState(false);
   const progressPct = sim.totalFrames > 0
     ? (sim.currentFrameIndex / (sim.totalFrames - 1)) * 100
@@ -224,7 +224,24 @@ function PlaybackBar({ sim }: { sim: UseSimulationReplayResult }) {
   ];
 
   return (
-    <div className="fixed left-0 right-0 z-[1500] bg-slate-900/95 backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0">
+    <div className={`fixed left-0 right-0 z-[1500] backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0 ${isRecorded ? 'bg-slate-900/95 border-t-2 border-amber-500/60' : 'bg-slate-900/95'}`}>
+      {/* Recorded mode header strip */}
+      {isRecorded && (
+        <div className="flex items-center gap-3 max-w-screen-xl mx-auto mb-1.5 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="font-semibold uppercase tracking-wider text-amber-300">Recorded</span>
+          </div>
+          {sim.airport && <span className="text-amber-300/80 font-medium">{sim.airport}</span>}
+          <div className="flex-1" />
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-800/40 text-amber-300">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+            Real ADS-B Data
+          </div>
+        </div>
+      )}
       {/* Event legend — hidden on mobile */}
       {visibleEventTypes.length > 0 && (
         <div className="hidden md:flex items-center gap-3 max-w-screen-xl mx-auto mb-1.5 pl-[136px]">
@@ -573,56 +590,9 @@ function RecordingPicker({
   );
 }
 
-/** Status bar shown during recorded data playback. */
-function RecordedBar({
-  flightCount,
-  simTime,
-  airport,
-}: {
-  flightCount: number;
-  simTime: string | null;
-  airport: string | null;
-}) {
-  const timeStr = simTime
-    ? new Date(simTime).toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit' })
-    : '--:--';
-  const dateStr = simTime
-    ? new Date(simTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : '';
-
-  return (
-    <div className="fixed left-0 right-0 z-[1400] bg-amber-900/90 backdrop-blur text-white px-4 py-1 shadow-lg bottom-[60px] md:bottom-[48px]">
-      <div className="flex items-center gap-4 max-w-screen-xl mx-auto text-xs">
-        {/* Recorded indicator */}
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-amber-400" />
-          <span className="font-semibold uppercase tracking-wider text-amber-200">Recorded</span>
-        </div>
-
-        {airport && (
-          <span className="text-amber-300 font-medium">{airport}</span>
-        )}
-
-        <div className="flex-1" />
-
-        <span className="font-mono text-amber-100">{flightCount} aircraft</span>
-
-        <span className="text-amber-300/70">{dateStr} {timeStr}</span>
-
-        {/* Source badge */}
-        <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-800/60 text-amber-300">
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-          </svg>
-          Real ADS-B Data
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /** Toggle button for switching between Simulation, Live, and Recorded data modes. */
-function DataModeToggle({ mode, onChange }: { mode: DataMode; onChange: (mode: DataMode) => void }) {
+export function DataModeToggle({ mode, onChange, showLive = true }: { mode: DataMode; onChange: (mode: DataMode) => void; showLive?: boolean }) {
   return (
     <div className="flex items-center bg-slate-700 rounded-lg p-0.5">
       <button
@@ -635,16 +605,18 @@ function DataModeToggle({ mode, onChange }: { mode: DataMode; onChange: (mode: D
       >
         Simulation
       </button>
-      <button
-        onClick={() => onChange('live')}
-        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-          mode === 'live'
-            ? 'bg-emerald-600 text-white shadow-sm'
-            : 'text-slate-300 hover:text-white'
-        }`}
-      >
-        Live
-      </button>
+      {showLive && (
+        <button
+          onClick={() => onChange('live')}
+          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+            mode === 'live'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-300 hover:text-white'
+          }`}
+        >
+          Live
+        </button>
+      )}
       <button
         onClick={() => onChange('recorded')}
         className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
@@ -681,7 +653,6 @@ export function SimulationControls({
   backendReady,
   currentAirport,
   demoReady,
-  openskyAvailable: _openskyAvailable,
 }: {
   onFlightsChange: (flights: import('../../types/flight').Flight[] | null) => void;
   onActiveChange: (active: boolean) => void;
@@ -691,10 +662,9 @@ export function SimulationControls({
   backendReady?: boolean;
   currentAirport?: string | null;
   demoReady?: boolean;
-  openskyAvailable?: boolean;
 }) {
   const sim = useSimulationReplay();
-  const { dataMode, setDataMode, flights: contextFlights, lastUpdated: contextLastUpdated } = useFlightContext();
+  const { dataMode, flights: contextFlights, lastUpdated: contextLastUpdated } = useFlightContext();
   const [showPicker, setShowPicker] = useState(false);
   const [showWindowPicker, setShowWindowPicker] = useState(false);
   const [windowPickerFile, setWindowPickerFile] = useState<string | null>(null);
@@ -861,18 +831,19 @@ export function SimulationControls({
     return null;
   };
 
-  const handleModeChange = (mode: DataMode) => {
-    if (mode !== 'simulation') {
-      // Stop any active simulation/recording when switching away
-      if (sim.isActive) sim.stop();
+  // React to dataMode changes (toggle now lives in Header)
+  const prevDataMode = useRef(dataMode);
+  useEffect(() => {
+    if (prevDataMode.current === dataMode) return;
+    prevDataMode.current = dataMode;
+    if (dataMode !== 'simulation' && sim.isActive) {
+      sim.stop();
     }
-    if (mode === 'recorded') {
-      // Auto-open recording picker and fetch list
+    if (dataMode === 'recorded') {
       sim.fetchRecordings();
       setShowRecordingPicker(true);
     }
-    setDataMode(mode);
-  };
+  }, [dataMode, sim]);
 
   const handleLoadRecording = (airport: string, date: string) => {
     setShowRecordingPicker(false);
@@ -881,9 +852,6 @@ export function SimulationControls({
 
   return (
     <>
-      {/* Data mode toggle — always visible (recordings work without live OpenSky) */}
-      <DataModeToggle mode={dataMode} onChange={handleModeChange} />
-
       {/* Simulation controls — only in simulation mode */}
       {dataMode === 'simulation' && (
         <>
@@ -977,16 +945,9 @@ export function SimulationControls({
             </button>
           )}
 
-          {/* Playback bar reused for recorded data */}
+          {/* Playback bar reused for recorded data — with recorded badge integrated */}
           {sim.isActive && !sim.switchPaused && (
-            <>
-              <PlaybackBar sim={sim} />
-              <RecordedBar
-                flightCount={sim.flights.length}
-                simTime={sim.currentSimTime}
-                airport={sim.airport}
-              />
-            </>
+            <PlaybackBar sim={sim} isRecorded />
           )}
         </>
       )}

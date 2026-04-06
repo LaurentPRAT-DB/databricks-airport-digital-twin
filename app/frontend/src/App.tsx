@@ -15,7 +15,7 @@ import GenieChat from './components/GenieChat/GenieChat';
 import MobileTabBar, { type MobileTab } from './components/MobileTabBar/MobileTabBar';
 import { useIsMobile } from './hooks/useIsMobile';
 import { useViewportState, SharedViewport } from './hooks/useViewportState';
-import SimulationControls from './components/SimulationControls/SimulationControls';
+import SimulationControls, { DataModeToggle } from './components/SimulationControls/SimulationControls';
 import { Flight } from './types/flight';
 
 // Lazy load 3D map to reduce initial bundle size
@@ -397,7 +397,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
     }, 3000);
     return () => clearTimeout(timer);
   }, []);
-  const { flights, filteredFlights, selectedFlight, setSelectedFlight } = useFlightContext();
+  const { flights, filteredFlights, selectedFlight, setSelectedFlight, dataMode, setDataMode } = useFlightContext();
   const { currentAirport, refresh: refreshConfig, loadAirport } = useAirportConfigContext();
 
   // Expose airport control API on window for headless video renderer (Playwright)
@@ -535,8 +535,11 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
       backendReady={backendReady}
       currentAirport={currentAirport}
       demoReady={demoReady}
-      openskyAvailable={openskyAvailable}
     />
+  );
+
+  const dataModeToggleNode = (
+    <DataModeToggle mode={dataMode} onChange={setDataMode} showLive={openskyAvailable} />
   );
 
   // Shared map view (used in both desktop and mobile layouts)
@@ -611,7 +614,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <Header onShowFIDS={() => setShowFIDS(true)} simulationControls={simulationControlsNode} />
+      <Header onShowFIDS={() => setShowFIDS(true)} simulationControls={simulationControlsNode} dataModeToggle={dataModeToggleNode} />
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
       <GenieChat />
       <main className="flex-1 flex overflow-hidden">

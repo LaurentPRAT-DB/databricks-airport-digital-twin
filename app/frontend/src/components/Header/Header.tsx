@@ -11,9 +11,10 @@ import PhaseFilter from './PhaseFilter';
 interface HeaderProps {
   onShowFIDS?: () => void;
   simulationControls?: ReactNode;
+  dataModeToggle?: ReactNode;
 }
 
-export default function Header({ onShowFIDS, simulationControls }: HeaderProps) {
+export default function Header({ onShowFIDS, simulationControls, dataModeToggle }: HeaderProps) {
   const { error, setSelectedFlight } = useFlightContext();
   const { currentAirport, isLoading: isLoadingAirport, error: airportError, loadAirport, switchProgress } = useAirportConfigContext();
   const { isDark, toggle: toggleTheme } = useTheme();
@@ -51,6 +52,8 @@ export default function Header({ onShowFIDS, simulationControls }: HeaderProps) 
           isLoading={isLoadingAirport}
         />
 
+        {/* Data mode toggle — fixed position next to airport selector */}
+        {dataModeToggle}
       </div>
 
       <div className="flex items-center gap-6">
