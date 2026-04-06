@@ -31,7 +31,7 @@ function buildLinks(cfg: PlatformConfig): PlatformLink[] {
       id: 'genie',
       label: 'Airport Ops Genie',
       icon: '🗣️',
-      url: `${w}/genie/spaces/${cfg.genie_space_id}`,
+      url: `${w}/genie/rooms/${cfg.genie_space_id}`,
       description: 'Ask natural language questions about flight ops',
     },
     {

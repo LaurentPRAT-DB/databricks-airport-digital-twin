@@ -225,23 +225,6 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
 
   return (
     <div className={`fixed left-0 right-0 z-[1500] backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0 ${isRecorded ? 'bg-slate-900/95 border-t-2 border-amber-500/60' : 'bg-slate-900/95'}`}>
-      {/* Recorded mode header strip */}
-      {isRecorded && (
-        <div className="flex items-center gap-3 max-w-screen-xl mx-auto mb-1.5 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <span className="font-semibold uppercase tracking-wider text-amber-300">Recorded</span>
-          </div>
-          {sim.airport && <span className="text-amber-300/80 font-medium">{sim.airport}</span>}
-          <div className="flex-1" />
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-800/40 text-amber-300">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-            Real ADS-B Data
-          </div>
-        </div>
-      )}
       {/* Event legend — hidden on mobile */}
       {visibleEventTypes.length > 0 && (
         <div className="hidden md:flex items-center gap-3 max-w-screen-xl mx-auto mb-1.5 pl-[136px]">
