@@ -236,6 +236,50 @@ function InpaintingTileLayer({ airportIcao }: { airportIcao?: string }) {
   return null;
 }
 
+/**
+ * Auto-pans the map to follow the selected flight during replay.
+ * Disables follow when the user manually pans; re-enables on new flight selection.
+ */
+function FlightFollower() {
+  const map = useMap();
+  const { selectedFlight } = useFlightContext();
+  const userPannedRef = useRef(false);
+  const prevSelectedIdRef = useRef<string | null>(null);
+
+  // Reset follow when a new flight is selected
+  useEffect(() => {
+    const id = selectedFlight?.icao24 ?? null;
+    if (id !== prevSelectedIdRef.current) {
+      userPannedRef.current = false;
+      prevSelectedIdRef.current = id;
+    }
+  }, [selectedFlight?.icao24]);
+
+  // Detect user-initiated pans (dragend) to disable follow
+  useMapEvents({
+    dragend: () => {
+      userPannedRef.current = true;
+    },
+  });
+
+  // Pan to selected flight position on each update
+  useEffect(() => {
+    if (!selectedFlight || userPannedRef.current) return;
+    const { latitude, longitude } = selectedFlight;
+    if (latitude == null || longitude == null || isNaN(latitude) || isNaN(longitude)) return;
+
+    const currentCenter = map.getCenter();
+    const dx = Math.abs(currentCenter.lat - latitude);
+    const dy = Math.abs(currentCenter.lng - longitude);
+    // Only pan if the flight has moved significantly (avoids jitter on parked flights)
+    if (dx > 0.0001 || dy > 0.0001) {
+      map.panTo([latitude, longitude], { animate: true, duration: 0.3 });
+    }
+  }, [map, selectedFlight]);
+
+  return null;
+}
+
 export default function AirportMap({ sharedViewport, onViewportChange, satellite = false, inpainting = false, airportIcao }: AirportMapProps) {
   const { filteredFlights: flights, isLoading, error, lastUpdated } = useFlightContext();
   const { getAirportCenter } = useAirportConfigContext();
@@ -266,6 +310,7 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
         <MapRecenter sharedViewport={sharedViewport} />
         <MapViewportSaver onViewportChange={onViewportChange} />
         <MapControlExposer />
+        <FlightFollower />
         <ZoomTracker onZoom={setZoom} />
         <AirportOverlay />
         <TrajectoryLine />

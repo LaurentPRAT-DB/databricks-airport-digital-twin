@@ -35,6 +35,8 @@ class SimulationRecorder:
         aircraft_type: str,
         assigned_gate: str | None = None,
         vertical_rate: float = 0.0,
+        origin_airport: str | None = None,
+        destination_airport: str | None = None,
     ) -> None:
         self.position_snapshots.append({
             "time": sim_time.isoformat(),
@@ -50,6 +52,8 @@ class SimulationRecorder:
             "aircraft_type": aircraft_type,
             "assigned_gate": assigned_gate,
             "vertical_rate": vertical_rate,
+            "origin_airport": origin_airport,
+            "destination_airport": destination_airport,
         })
 
     def record_phase_transition(

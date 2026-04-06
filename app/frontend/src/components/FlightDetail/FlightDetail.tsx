@@ -41,7 +41,7 @@ function DetailRow({ label, value, unit }: DetailRowProps) {
 }
 
 export default function FlightDetail() {
-  const { selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, dataSource, simTrajectoryProvider } = useFlightContext();
+  const { selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, dataSource, simTrajectoryProvider, simFlightLogProvider, isolateSelected, setIsolateSelected } = useFlightContext();
 
   // Fetch predictions for selected flight
   const { delay, isLoading: isDelayLoading } = useDelayPrediction(
@@ -203,6 +203,68 @@ export default function FlightDetail() {
           </div>
         </button>
       </div>
+
+      {/* Isolate Flight Toggle */}
+      <div className="mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+        <button
+          onClick={() => setIsolateSelected(!isolateSelected)}
+          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-colors ${
+            isolateSelected
+              ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+              : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <span className="font-medium text-sm">Isolate Flight</span>
+          </div>
+          <div className={`w-10 h-6 rounded-full p-1 transition-colors ${
+            isolateSelected ? 'bg-amber-500' : 'bg-slate-300'
+          }`}>
+            <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              isolateSelected ? 'translate-x-4' : 'translate-x-0'
+            }`} />
+          </div>
+        </button>
+      </div>
+
+      {/* Download Flight Log (available during simulation/recorded replay) */}
+      {simFlightLogProvider && (
+        <div className="mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+          <button
+            onClick={() => {
+              const log = simFlightLogProvider(icao24);
+              if (log.length === 0) return;
+              const headers = 'time,callsign,latitude,longitude,altitude_ft,speed_kts,heading_deg,vertical_rate_ftmin,phase,on_ground,aircraft_type,assigned_gate,origin,destination';
+              const rows = log.map(s =>
+                [s.time, s.callsign, s.latitude, s.longitude, s.altitude, s.velocity, s.heading, s.vertical_rate ?? '', s.phase, s.on_ground, s.aircraft_type, s.assigned_gate ?? '', s.origin_airport ?? '', s.destination_airport ?? ''].join(',')
+              );
+              const csv = [headers, ...rows].join('\n');
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `${(callsign?.trim() || icao24).replace(/\s+/g, '_')}_flight_log.csv`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            }}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span className="font-medium text-sm">Download Flight Log</span>
+          </button>
+        </div>
+      )}
 
       {/* Position Section */}
       <div className="mb-4">

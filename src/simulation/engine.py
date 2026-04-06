@@ -1286,6 +1286,8 @@ class SimulationEngine:
                 state.velocity, state.heading, state.phase.value,
                 state.on_ground, state.aircraft_type, state.assigned_gate,
                 vr,
+                origin_airport=state.origin_airport,
+                destination_airport=state.destination_airport,
             )
 
         if bulk_due:

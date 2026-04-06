@@ -43,7 +43,7 @@ export interface TimeWindow {
   endTime: string;
 }
 
-interface PositionSnapshot {
+export interface PositionSnapshot {
   time: string;
   icao24: string;
   callsign: string;
@@ -57,6 +57,8 @@ interface PositionSnapshot {
   aircraft_type: string;
   assigned_gate?: string | null;
   vertical_rate?: number | null;
+  origin_airport?: string | null;
+  destination_airport?: string | null;
 }
 
 export interface ScenarioEvent {
@@ -124,6 +126,8 @@ function snapshotToFlight(
     flight_phase: mapPhase(snap.phase),
     aircraft_type: snap.aircraft_type,
     assigned_gate: snap.assigned_gate ?? null,
+    origin_airport: snap.origin_airport ?? undefined,
+    destination_airport: snap.destination_airport ?? undefined,
   };
 }
 
@@ -184,6 +188,7 @@ export interface UseSimulationReplayResult {
   fetchFiles: () => Promise<void>;
   pauseForSwitch: () => void;
   getFlightTrajectory: (icao24: string) => SimTrajectoryPoint[];
+  getFlightLog: (icao24: string) => PositionSnapshot[];
 }
 
 // TypeScript declaration for the headless video renderer control API
@@ -601,6 +606,20 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     return sampled;
   }, [simData, currentFrameIndex]);
 
+  // Extract full flight log (all frames) for a given flight — used for CSV export
+  const getFlightLog = useCallback((icao24: string): PositionSnapshot[] => {
+    if (!simData) return [];
+    const timestamps = simData.frame_timestamps;
+    const log: PositionSnapshot[] = [];
+    for (const ts of timestamps) {
+      const snapshots = simData.frames[ts];
+      if (!snapshots) continue;
+      const snap = snapshots.find(s => s.icao24 === icao24);
+      if (snap) log.push(snap);
+    }
+    return log;
+  }, [simData]);
+
   // Expose control API on window for headless video renderer (Playwright)
   useEffect(() => {
     window.__simControl = {
@@ -661,5 +680,6 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     fetchFiles,
     pauseForSwitch,
     getFlightTrajectory,
+    getFlightLog,
   };
 }

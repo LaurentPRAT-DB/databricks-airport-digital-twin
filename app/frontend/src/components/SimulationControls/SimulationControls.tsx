@@ -652,6 +652,7 @@ export function SimulationControls({
   onActiveChange,
   onAirportChange,
   onTrajectoryProviderChange,
+  onFlightLogProviderChange,
   onSimTimeChange,
   backendReady,
   currentAirport,
@@ -661,6 +662,7 @@ export function SimulationControls({
   onActiveChange: (active: boolean) => void;
   onAirportChange?: (icaoCode: string) => Promise<void>;
   onTrajectoryProviderChange?: (provider: ((icao24: string) => import('../../hooks/useSimulationReplay').SimTrajectoryPoint[]) | null) => void;
+  onFlightLogProviderChange?: (provider: ((icao24: string) => import('../../hooks/useSimulationReplay').PositionSnapshot[]) | null) => void;
   onSimTimeChange?: (simTime: string | null) => void;
   backendReady?: boolean;
   currentAirport?: string | null;
@@ -746,6 +748,13 @@ export function SimulationControls({
       onTrajectoryProviderChange(sim.isActive && !sim.switchPaused ? sim.getFlightTrajectory : null);
     }
   }, [sim.isActive, sim.switchPaused, sim.getFlightTrajectory, onTrajectoryProviderChange]);
+
+  // Push simulation flight log provider to parent (for CSV export)
+  useEffect(() => {
+    if (onFlightLogProviderChange) {
+      onFlightLogProviderChange(sim.isActive && !sim.switchPaused ? sim.getFlightLog : null);
+    }
+  }, [sim.isActive, sim.switchPaused, sim.getFlightLog, onFlightLogProviderChange]);
 
   // Push simulation time to parent (for FIDS alignment)
   useEffect(() => {
@@ -850,6 +859,15 @@ export function SimulationControls({
 
   const handleLoadRecording = (airport: string, date: string) => {
     setShowRecordingPicker(false);
+    // Switch airport immediately so map updates in parallel with recording fetch
+    if (onAirportChange && currentAirport) {
+      const icao = airport.length === 3 ? `K${airport}` : airport;
+      if (icao !== currentAirport) {
+        onAirportChange(airport).catch((err) => {
+          console.warn('Failed to switch airport for recording:', err);
+        });
+      }
+    }
     sim.loadRecording(airport, date);
   };
 

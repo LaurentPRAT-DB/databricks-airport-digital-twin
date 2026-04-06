@@ -1,10 +1,13 @@
 import { createContext, useContext, useState, useMemo, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { useFlights } from '../hooks/useFlights';
 import { Flight } from '../types/flight';
-import type { SimTrajectoryPoint } from '../hooks/useSimulationReplay';
+import type { SimTrajectoryPoint, PositionSnapshot } from '../hooks/useSimulationReplay';
 
 /** Function that extracts trajectory from simulation frames for a given flight. */
 export type SimTrajectoryProvider = (icao24: string) => SimTrajectoryPoint[];
+
+/** Function that extracts full flight log (all frames) for CSV export. */
+export type SimFlightLogProvider = (icao24: string) => PositionSnapshot[];
 
 export type DataMode = 'simulation' | 'live' | 'recorded';
 
@@ -23,6 +26,9 @@ interface FlightContextType {
   lastUpdated: string | null;
   dataSource: 'live' | 'cached' | 'synthetic' | 'simulation' | 'opensky' | 'opensky_recorded' | null;
   simTrajectoryProvider: SimTrajectoryProvider | null;
+  simFlightLogProvider: SimFlightLogProvider | null;
+  isolateSelected: boolean;
+  setIsolateSelected: (isolate: boolean) => void;
   dataMode: DataMode;
   setDataMode: (mode: DataMode) => void;
 }
@@ -33,10 +39,12 @@ export function FlightProvider({
   children,
   simulationFlights,
   simTrajectoryProvider,
+  simFlightLogProvider,
 }: {
   children: ReactNode;
   simulationFlights?: Flight[] | null;
   simTrajectoryProvider?: SimTrajectoryProvider | null;
+  simFlightLogProvider?: SimFlightLogProvider | null;
 }) {
   const { flights: liveFlights, isLoading, error, lastUpdated, dataSource: liveDataSource } = useFlights();
 
@@ -146,6 +154,12 @@ export function FlightProvider({
     setShowTrajectoryState(show);
   }, []);
 
+  // Flight isolation mode — dim non-selected flights
+  const [isolateSelected, setIsolateSelectedState] = useState(false);
+  const setIsolateSelected = useCallback((isolate: boolean) => {
+    setIsolateSelectedState(isolate);
+  }, []);
+
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => ({
     flights,
@@ -162,9 +176,12 @@ export function FlightProvider({
     lastUpdated: dataMode === 'live' ? openSkyLastUpdated : lastUpdated,
     dataSource,
     simTrajectoryProvider: simTrajectoryProvider ?? null,
+    simFlightLogProvider: simFlightLogProvider ?? null,
+    isolateSelected,
+    setIsolateSelected,
     dataMode,
     setDataMode,
-  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider, dataMode, setDataMode, openSkyLoading, openSkyLastUpdated]);
+  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider, simFlightLogProvider, isolateSelected, setIsolateSelected, dataMode, setDataMode, openSkyLoading, openSkyLastUpdated]);
 
   return (
     <FlightContext.Provider value={contextValue}>

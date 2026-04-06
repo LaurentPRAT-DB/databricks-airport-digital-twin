@@ -488,7 +488,7 @@ declare global {
   }
 }
 
-function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: { handleSimFlightsChange: (flights: Flight[] | null) => void; handleTrajectoryProviderChange: (provider: ((icao24: string) => import('./hooks/useSimulationReplay').SimTrajectoryPoint[]) | null) => void }) {
+function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, handleFlightLogProviderChange }: { handleSimFlightsChange: (flights: Flight[] | null) => void; handleTrajectoryProviderChange: (provider: ((icao24: string) => import('./hooks/useSimulationReplay').SimTrajectoryPoint[]) | null) => void; handleFlightLogProviderChange: (provider: ((icao24: string) => import('./hooks/useSimulationReplay').PositionSnapshot[]) | null) => void }) {
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
   const [satellite, setSatellite] = useState(false);
@@ -528,6 +528,14 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
   }, []);
   const { flights, filteredFlights, selectedFlight, setSelectedFlight, dataMode, setDataMode } = useFlightContext();
   const { currentAirport, refresh: refreshConfig, loadAirport } = useAirportConfigContext();
+
+  // Turn off clean tiles (inpainting) when switching to recorded data mode
+  // to avoid tile processing competing with recording loading
+  useEffect(() => {
+    if (dataMode === 'recorded' && inpainting) {
+      setInpainting(false);
+    }
+  }, [dataMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Expose airport control API on window for headless video renderer (Playwright)
   useEffect(() => {
@@ -660,6 +668,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
       onActiveChange={setSimulationActive}
       onAirportChange={loadAirport}
       onTrajectoryProviderChange={handleTrajectoryProviderChange}
+      onFlightLogProviderChange={handleFlightLogProviderChange}
       onSimTimeChange={setSimTime}
       backendReady={backendReady}
       currentAirport={currentAirport}
@@ -781,6 +790,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
 function App() {
   const [simulationFlights, setSimulationFlights] = useState<Flight[] | null>(null);
   const [simTrajectoryProvider, setSimTrajectoryProvider] = useState<((icao24: string) => import('./hooks/useSimulationReplay').SimTrajectoryPoint[]) | null>(null);
+  const [simFlightLogProvider, setSimFlightLogProvider] = useState<((icao24: string) => import('./hooks/useSimulationReplay').PositionSnapshot[]) | null>(null);
 
   const handleSimFlightsChange = useCallback((flights: Flight[] | null) => {
     setSimulationFlights(flights);
@@ -791,12 +801,16 @@ function App() {
     setSimTrajectoryProvider(() => provider);
   }, []);
 
+  const handleFlightLogProviderChange = useCallback((provider: ((icao24: string) => import('./hooks/useSimulationReplay').PositionSnapshot[]) | null) => {
+    setSimFlightLogProvider(() => provider);
+  }, []);
+
   return (
     <ThemeProvider>
       <AirportConfigProvider>
-        <FlightProvider simulationFlights={simulationFlights} simTrajectoryProvider={simTrajectoryProvider}>
+        <FlightProvider simulationFlights={simulationFlights} simTrajectoryProvider={simTrajectoryProvider} simFlightLogProvider={simFlightLogProvider}>
           <CongestionFilterProvider>
-            <AppContent handleSimFlightsChange={handleSimFlightsChange} handleTrajectoryProviderChange={handleTrajectoryProviderChange} />
+            <AppContent handleSimFlightsChange={handleSimFlightsChange} handleTrajectoryProviderChange={handleTrajectoryProviderChange} handleFlightLogProviderChange={handleFlightLogProviderChange} />
           </CongestionFilterProvider>
         </FlightProvider>
       </AirportConfigProvider>

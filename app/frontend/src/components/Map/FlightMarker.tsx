@@ -71,7 +71,7 @@ function getIconSize(zoom: number, aircraftType?: string, latitude?: number): nu
 }
 
 // Create airplane SVG icon with rotation, ARIA label, aircraft-type silhouette, and optional gate label
-function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'], isSelected: boolean, size: number, callsign?: string | null, icao24?: string, gateName?: string | null, aircraftType?: string): L.DivIcon {
+function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'], isSelected: boolean, size: number, callsign?: string | null, icao24?: string, gateName?: string | null, aircraftType?: string, dimmed?: boolean): L.DivIcon {
   const rotation = heading ?? 0;
   const label = callsign || icao24 || 'Unknown';
   const category = getAircraftCategory(aircraftType);
@@ -99,12 +99,13 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
     ? `<div class="selected-pulse-ring" style="width:${displaySize + 20}px;height:${displaySize + 20}px;top:${-10}px;left:${-10}px;"></div>`
     : '';
 
+  const opacity = dimmed ? 0.15 : 1;
   const svgIcon = `
     ${pulseRing}
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${displaySize}" height="${displaySize}" style="transform: rotate(${rotation}deg); transform-origin: center; filter: ${shadow};" role="img" aria-label="Flight ${label}">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${displaySize}" height="${displaySize}" style="transform: rotate(${rotation}deg); transform-origin: center; filter: ${shadow}; opacity: ${opacity};" role="img" aria-label="Flight ${label}">
       <path d="${path}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
     </svg>
-    ${gateLabel}
+    ${dimmed ? '' : gateLabel}
   `;
 
   return L.divIcon({
@@ -123,14 +124,15 @@ function formatAltitude(altitude: number | null): string {
 }
 
 export default function FlightMarker({ flight, zoom = 14 }: FlightMarkerProps) {
-  const { selectedFlight, setSelectedFlight } = useFlightContext();
+  const { selectedFlight, setSelectedFlight, isolateSelected } = useFlightContext();
   const isSelected = selectedFlight?.icao24 === flight.icao24;
+  const dimmed = isolateSelected && !!selectedFlight && !isSelected;
   const markerRef = useRef<L.Marker>(null);
   const size = getIconSize(zoom, flight.aircraft_type, flight.latitude);
 
   const icon = useMemo(
-    () => createAirplaneIcon(flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type),
-    [flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type, flight.latitude]
+    () => createAirplaneIcon(flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type, dimmed),
+    [flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type, flight.latitude, dimmed]
   );
 
   // Update marker icon when selection changes without full re-render
