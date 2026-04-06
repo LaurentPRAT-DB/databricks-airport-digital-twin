@@ -2,13 +2,17 @@
 
 import logging
 import os
+import threading
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
 from app.backend.services.opensky_service import (
     get_opensky_service,
     determine_flight_phase,
+    enrich_origins_opensky,
+    enrich_origins_heading,
     M_TO_FT,
     MS_TO_KTS,
     MS_TO_FTMIN,
@@ -182,6 +186,241 @@ def _get_delta_connection():
     if not svc.is_available:
         raise HTTPException(status_code=503, detail="Databricks SQL not available")
     return svc._get_connection()
+
+
+def _derive_schedule_from_recording(
+    inferrer: Any,
+    enrichment: dict[str, Any],
+    origins: dict[str, tuple[str | None, str | None]],
+    airport_icao: str,
+    sorted_timestamps: list[str],
+    frames: dict[str, list[dict]],
+) -> list[dict]:
+    """Derive a flight schedule from observed aircraft lifecycles in recorded data.
+
+    Extracts real arrival/departure times, gate assignments, and origin/destination
+    from the inferred events. Only fills gaps with heuristics when data is missing.
+    """
+    if not sorted_timestamps:
+        return []
+
+    # Build lookup structures from events
+    gate_by_aircraft: dict[str, str] = {}  # icao24 -> last assigned gate
+    gate_times: dict[str, list[tuple[str, str, str]]] = {}  # icao24 -> [(time, gate, event_type)]
+
+    for ge in enrichment["gate_events"]:
+        icao24 = ge["icao24"]
+        if icao24 not in gate_times:
+            gate_times[icao24] = []
+        gate_times[icao24].append((ge["time"], ge["gate"], ge["event_type"]))
+        if ge["event_type"] in ("assign", "occupy"):
+            gate_by_aircraft[icao24] = ge["gate"]
+
+    # Phase transition lookup: icao24 -> [(time, from_phase, to_phase)]
+    transitions_by_aircraft: dict[str, list[tuple[str, str, str]]] = {}
+    for pt in enrichment["phase_transitions"]:
+        icao24 = pt["icao24"]
+        if icao24 not in transitions_by_aircraft:
+            transitions_by_aircraft[icao24] = []
+        transitions_by_aircraft[icao24].append((pt["time"], pt["from_phase"], pt["to_phase"]))
+
+    # First and last seen per aircraft (from frames)
+    first_seen: dict[str, dict] = {}
+    last_seen: dict[str, dict] = {}
+    for ts in sorted_timestamps:
+        for snap in frames[ts]:
+            icao24 = snap["icao24"]
+            if icao24 not in first_seen:
+                first_seen[icao24] = snap
+            last_seen[icao24] = snap
+
+    schedule: list[dict] = []
+
+    for icao24, tracker in inferrer._trackers.items():
+        callsign = tracker.callsign or icao24
+        first = first_seen.get(icao24)
+        last = last_seen.get(icao24)
+        if not first or not last:
+            continue
+
+        origin_info = origins.get(icao24, (None, None))
+        gate = gate_by_aircraft.get(icao24)
+        transitions = transitions_by_aircraft.get(icao24, [])
+
+        # Determine if this aircraft arrived and/or departed during the recording
+        first_phase = first.get("phase", "unknown")
+        last_phase = last.get("phase", "unknown")
+
+        saw_landing = any(tp == "landing" or tp == "taxi_to_gate" for _, _, tp in transitions)
+        saw_takeoff = any(tp == "takeoff" for _, _, tp in transitions)
+        was_airborne_initially = first_phase in ("airborne", "enroute", "approaching", "landing", "departing")
+        was_on_ground_initially = first_phase in ("parked", "taxi_to_gate", "taxi_to_runway")
+
+        # Find key timestamps from transitions
+        arrival_time = None
+        departure_time = None
+
+        # Arrival: first landing or taxi_to_gate transition, or first seen if already on ground arriving
+        for t, _, to_phase in transitions:
+            if to_phase in ("landing", "taxi_to_gate") and arrival_time is None:
+                arrival_time = t
+                break
+        if arrival_time is None and was_airborne_initially:
+            arrival_time = first.get("time")
+
+        # Departure: last takeoff transition, or gate release followed by takeoff
+        for t, _, to_phase in reversed(transitions):
+            if to_phase == "takeoff":
+                departure_time = t
+                break
+
+        # Create arrival schedule entry
+        if saw_landing or was_airborne_initially:
+            sched_time = arrival_time or first.get("time")
+            schedule.append({
+                "flight_number": callsign,
+                "airline": _extract_airline(callsign),
+                "airline_code": _extract_airline_code(callsign),
+                "origin": origin_info[0],
+                "destination": airport_icao,
+                "scheduled_time": sched_time,
+                "estimated_time": sched_time,
+                "actual_time": arrival_time,
+                "gate": gate,
+                "status": "Landed",
+                "delay_minutes": 0,
+                "delay_reason": None,
+                "aircraft_type": first.get("aircraft_type", ""),
+                "flight_type": "arrival",
+            })
+
+        # Create departure schedule entry
+        if saw_takeoff:
+            sched_time = departure_time or last.get("time")
+            schedule.append({
+                "flight_number": callsign,
+                "airline": _extract_airline(callsign),
+                "airline_code": _extract_airline_code(callsign),
+                "origin": airport_icao,
+                "destination": origin_info[1],
+                "scheduled_time": sched_time,
+                "estimated_time": sched_time,
+                "actual_time": departure_time,
+                "gate": gate,
+                "status": "Departed",
+                "delay_minutes": 0,
+                "delay_reason": None,
+                "aircraft_type": last.get("aircraft_type", ""),
+                "flight_type": "departure",
+            })
+
+        # Aircraft observed only parked (no arrival or departure seen)
+        if not saw_landing and not was_airborne_initially and not saw_takeoff:
+            sched_time = first.get("time")
+            schedule.append({
+                "flight_number": callsign,
+                "airline": _extract_airline(callsign),
+                "airline_code": _extract_airline_code(callsign),
+                "origin": origin_info[0],
+                "destination": origin_info[1],
+                "scheduled_time": sched_time,
+                "estimated_time": sched_time,
+                "actual_time": sched_time,
+                "gate": gate,
+                "status": "On Time",
+                "delay_minutes": 0,
+                "delay_reason": None,
+                "aircraft_type": first.get("aircraft_type", ""),
+                "flight_type": "arrival",
+            })
+
+    logger.info("Derived %d schedule entries from recording %s/%s", len(schedule), airport_icao, sorted_timestamps[0][:10] if sorted_timestamps else "?")
+    return schedule
+
+
+def _extract_airline(callsign: str) -> str:
+    """Extract airline name prefix from callsign (e.g. 'UAL123' -> 'UAL')."""
+    prefix = ""
+    for ch in callsign:
+        if ch.isalpha():
+            prefix += ch
+        else:
+            break
+    return prefix or callsign
+
+
+def _extract_airline_code(callsign: str) -> str:
+    """Extract airline ICAO code from callsign (first 3 alpha chars)."""
+    return _extract_airline(callsign)[:3]
+
+
+def _persist_recording_to_lakebase(
+    enrichment: dict[str, Any],
+    enriched_snapshots: list[dict],
+    schedule: list[dict],
+    origins: dict[str, tuple[str | None, str | None]],
+    airport_icao: str,
+    date: str,
+) -> None:
+    """Persist enriched recording data to Lakebase for ML training.
+
+    Runs synchronously — intended to be called from a background thread.
+    """
+    from app.backend.services.lakebase_service import get_lakebase_service
+
+    lakebase = get_lakebase_service()
+    if not lakebase.is_available:
+        logger.info("Lakebase not available, skipping recording persistence")
+        return
+
+    session_id = f"recorded-{airport_icao}-{date}"
+
+    # 1. Persist enriched position snapshots
+    snapshots_for_lakebase = [
+        {
+            "icao24": s["icao24"],
+            "callsign": s.get("callsign"),
+            "latitude": s.get("latitude"),
+            "longitude": s.get("longitude"),
+            "altitude": s.get("altitude"),
+            "velocity": s.get("velocity"),
+            "heading": s.get("heading"),
+            "vertical_rate": s.get("vertical_rate"),
+            "on_ground": s.get("on_ground"),
+            "flight_phase": s.get("phase"),
+            "aircraft_type": s.get("aircraft_type"),
+            "assigned_gate": s.get("assigned_gate"),
+            "origin_airport": origins.get(s["icao24"], (None, None))[0],
+            "destination_airport": origins.get(s["icao24"], (None, None))[1],
+            "data_source": "opensky_recorded",
+            "snapshot_time": s.get("time"),
+        }
+        for s in enriched_snapshots
+    ]
+    snap_count = lakebase.insert_flight_snapshots(snapshots_for_lakebase, session_id, airport_icao)
+
+    # 2. Persist gate events
+    gate_events_for_lakebase = [
+        {**ge, "event_time": ge["time"]}
+        for ge in enrichment["gate_events"]
+    ]
+    gate_count = lakebase.insert_gate_events(gate_events_for_lakebase, session_id, airport_icao)
+
+    # 3. Persist phase transitions
+    transitions_for_lakebase = [
+        {**pt, "event_time": pt["time"]}
+        for pt in enrichment["phase_transitions"]
+    ]
+    trans_count = lakebase.insert_phase_transitions(transitions_for_lakebase, session_id, airport_icao)
+
+    # 4. Persist derived schedule
+    sched_count = lakebase.upsert_schedule(schedule, airport_icao=airport_icao)
+
+    logger.info(
+        "Recording %s/%s persisted to Lakebase: %d snapshots, %d gate events, "
+        "%d phase transitions, %d schedule entries",
+        airport_icao, date, snap_count, gate_count, trans_count, sched_count,
+    )
 
 
 @opensky_router.get("/recordings")
@@ -397,12 +636,67 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
             if gate:
                 snap["assigned_gate"] = gate
 
+    # ── Origin/destination enrichment (cascading) ─────────────────────
+    # Collect first-seen snapshot per aircraft for heading heuristic
+    aircraft_first_seen: dict[str, dict] = {}
+    for ts_key in sorted_timestamps:
+        for snap in frames[ts_key]:
+            if snap["icao24"] not in aircraft_first_seen:
+                aircraft_first_seen[snap["icao24"]] = snap
+
+    origins: dict[str, tuple[str | None, str | None]] = {}
+
+    # Level 1: OpenSky flights API (if reachable)
+    if sorted_timestamps:
+        try:
+            begin_dt = datetime.fromisoformat(sorted_timestamps[0])
+            end_dt = datetime.fromisoformat(sorted_timestamps[-1])
+            begin_ts = int(begin_dt.timestamp())
+            end_ts = int(end_dt.timestamp())
+            api_results = await enrich_origins_opensky(unique_aircraft, begin_ts, end_ts)
+            origins.update(api_results)
+        except Exception as e:
+            logger.warning("OpenSky flights API enrichment failed: %s", e)
+
+    # Level 2: Heading-based heuristic for remaining aircraft
+    remaining = {ic for ic in unique_aircraft if ic not in origins}
+    if remaining:
+        remaining_first_seen = {ic: aircraft_first_seen[ic] for ic in remaining if ic in aircraft_first_seen}
+        heading_results = enrich_origins_heading(remaining_first_seen, lat, lon, airport)
+        origins.update(heading_results)
+
+    # Apply origins to all snapshots
+    enriched_count = 0
+    for ts_key in sorted_timestamps:
+        for snap in frames[ts_key]:
+            origin_info = origins.get(snap["icao24"])
+            if origin_info:
+                snap["origin_airport"] = origin_info[0]
+                snap["destination_airport"] = origin_info[1]
+                enriched_count += 1
+
+    # ── Derive schedule from observed aircraft lifecycles ───────────────
+    derived_schedule = _derive_schedule_from_recording(
+        inferrer, enrichment, origins, airport, sorted_timestamps, frames,
+    )
+
     logger.info(
         "Recording %s/%s: %d rows → %d frames, %d unique aircraft, "
-        "%d phase transitions, %d gate events inferred",
+        "%d phase transitions, %d gate events inferred, "
+        "%d/%d aircraft origins resolved, %d schedule entries derived",
         airport, date, len(rows), len(sorted_timestamps), len(unique_aircraft),
         len(enrichment["phase_transitions"]), len(enrichment["gate_events"]),
+        len(origins), len(unique_aircraft), len(derived_schedule),
     )
+
+    # ── Persist enriched data to Lakebase (background, fire-and-forget) ──
+    enriched_snapshots = inferrer.get_enriched_snapshots()
+    persist_thread = threading.Thread(
+        target=_persist_recording_to_lakebase,
+        args=(enrichment, enriched_snapshots, derived_schedule, origins, airport, date),
+        daemon=True,
+    )
+    persist_thread.start()
 
     return {
         "config": {
@@ -415,7 +709,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
             "data_source": "opensky_live",
             "scenario_name": f"Recorded ADS-B — {airport} {date}",
         },
-        "schedule": [],
+        "schedule": derived_schedule,
         "frames": {t: frames[t] for t in sorted_timestamps},
         "frame_timestamps": sorted_timestamps,
         "frame_count": len(sorted_timestamps),
