@@ -182,6 +182,22 @@ function getEventPosition(event: ScenarioEvent, startTime: string | null, endTim
 
 /** Playback control bar shown at the bottom of the screen during simulation replay. */
 function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResult; isRecorded?: boolean }) {
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // Publish bar height as CSS variable so other panels can add matching bottom padding
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      document.documentElement.style.setProperty('--playbar-h', `${entry.contentRect.height + 16}px`);
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty('--playbar-h');
+    };
+  }, []);
+
   const [showReport, setShowReport] = useState(false);
   const progressPct = sim.totalFrames > 0
     ? (sim.currentFrameIndex / (sim.totalFrames - 1)) * 100
@@ -224,7 +240,7 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
   ];
 
   return (
-    <div className={`fixed left-0 right-0 z-[1500] backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0 ${isRecorded ? 'bg-slate-900/95 border-t-2 border-amber-500/60' : 'bg-slate-900/95'}`}>
+    <div ref={barRef} className={`fixed left-0 right-0 z-[1500] backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0 ${isRecorded ? 'bg-slate-900/95 border-t-2 border-amber-500/60' : 'bg-slate-900/95'}`}>
       {/* Event legend — hidden on mobile */}
       {visibleEventTypes.length > 0 && (
         <div className="hidden md:flex items-center gap-3 max-w-screen-xl mx-auto mb-1.5 pl-[136px]">

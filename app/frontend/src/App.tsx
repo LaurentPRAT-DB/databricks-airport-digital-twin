@@ -734,7 +734,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List + recorded mode indicator */}
         <div className="w-64 flex-shrink-0 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden" style={{ paddingBottom: 'var(--playbar-h, 0px)' }}>
             <FlightList />
           </div>
           {dataMode === 'recorded' && (
@@ -755,7 +755,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
         {mapView}
 
         {/* Right panel: Flight Detail + Gate Status */}
-        <div className="w-80 flex-shrink-0 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 pb-16 space-y-4">
+        <div className="w-80 flex-shrink-0 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 space-y-4" style={{ paddingBottom: 'var(--playbar-h, 4rem)' }}>
           <FlightDetail />
           <GateStatus />
         </div>
