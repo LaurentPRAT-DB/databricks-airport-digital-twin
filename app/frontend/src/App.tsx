@@ -166,6 +166,21 @@ function ViewToggle({
     }
   }, [satellite, inpainting]);
 
+  // Auto-enable inpainting when satellite is turned on and endpoint is ready
+  useEffect(() => {
+    if (!satellite || inpainting) return;
+    let cancelled = false;
+    (async () => {
+      const result = await checkEndpointStatus();
+      if (cancelled) return;
+      if (result === 'ready') {
+        setEndpointStatus('ready');
+        onInpaintingToggle(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [satellite]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Poll cache stats while inpainting is active
   useEffect(() => {
     if (!inpainting || !satellite) {
@@ -681,7 +696,6 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
               sharedViewport={viewport}
               onViewportChange={handle3DViewportChange}
               satellite={satellite}
-              inpainting={inpainting && satellite}
               airportIcao={currentAirport ?? undefined}
             />
           </Suspense>

@@ -40,6 +40,7 @@ vi.mock('@react-three/fiber', () => ({
     return <div data-testid="r3f-canvas">{children}</div>;
   },
   useThree: () => ({
+    scene: { background: null },
     camera: {
       position: { x: 0, y: 300, z: 200, distanceTo: () => 360 },
       getWorldDirection: (v: { x: number; y: number; z: number; copy: () => unknown; add: () => unknown }) => {
@@ -75,6 +76,7 @@ vi.mock('./AirportScene', () => ({
 // Mock THREE
 vi.mock('three', () => ({
   PCFShadowMap: 1,
+  Color: class { constructor() {} },
   Vector3: class {
     x = 0; y = 0; z = 0;
     constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }

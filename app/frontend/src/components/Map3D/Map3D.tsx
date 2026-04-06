@@ -13,6 +13,18 @@ import { latLonTo3D, position3DToLatLon } from '../../utils/map3d-calculations';
 import { SharedViewport } from '../../hooks/useViewportState';
 import { isGroundPhase } from '../../utils/phaseUtils';
 
+const SKY_COLOR = 0x87ceeb;
+
+/** Sets the scene background color (must be inside Canvas). */
+function SkyBackground() {
+  const { scene } = useThree();
+  useEffect(() => {
+    scene.background = new THREE.Color(SKY_COLOR);
+    return () => { scene.background = null; };
+  }, [scene]);
+  return null;
+}
+
 interface Map3DProps {
   className?: string;
   flights?: Flight[];
@@ -318,6 +330,8 @@ export function Map3D({
         shadows={{ type: THREE.PCFShadowMap }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
       >
+        <SkyBackground />
+
         {/* Camera auto-positioned to frame the airport infrastructure */}
         <PerspectiveCamera
           makeDefault
