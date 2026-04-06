@@ -193,6 +193,16 @@ async def cache_stats():
     return {"error": "Lakebase tile cache not available"}
 
 
+@inpainting_router.delete("/cache")
+async def clear_cache(
+    airport_icao: Optional[str] = Query(None, description="Airport ICAO to clear (all if omitted)"),
+):
+    """Clear cached inpainted tiles from Lakebase."""
+    lakebase = get_lakebase_service()
+    deleted = lakebase.clear_tile_cache(airport_icao)
+    return {"deleted": deleted, "airport_icao": airport_icao}
+
+
 @inpainting_router.post("/clean-tile")
 async def clean_tile(
     request: Request,

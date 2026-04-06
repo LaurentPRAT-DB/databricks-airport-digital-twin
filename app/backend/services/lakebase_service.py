@@ -1966,6 +1966,35 @@ class LakebaseService:
             self._invalidate_credentials_if_auth_error(e)
             return False
 
+    def clear_tile_cache(self, airport_icao: str | None = None) -> int:
+        """Delete cached tiles, optionally filtered by airport.
+
+        Returns the number of rows deleted.
+        """
+        self._ensure_tile_cache_table()
+        if not self.is_available:
+            return 0
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    if airport_icao:
+                        cur.execute(
+                            "DELETE FROM satellite_tile_cache WHERE airport_icao = %s",
+                            (airport_icao.upper(),),
+                        )
+                    else:
+                        cur.execute("DELETE FROM satellite_tile_cache")
+                    deleted = cur.rowcount
+                    conn.commit()
+            logger.info("Cleared %d cached tiles%s", deleted,
+                        f" for {airport_icao.upper()}" if airport_icao else "")
+            return deleted
+        except Exception as e:
+            logger.warning("Tile cache clear failed: %s", e)
+            self._invalidate_credentials_if_auth_error(e)
+            return 0
+
     def get_tile_cache_stats(self) -> dict | None:
         """Return stats about the tile cache."""
         self._ensure_tile_cache_table()

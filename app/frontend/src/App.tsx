@@ -118,6 +118,7 @@ function ViewToggle({
   onSatelliteToggle,
   inpainting,
   onInpaintingToggle,
+  airportIcao,
 }: {
   viewMode: ViewMode;
   onToggle: (mode: ViewMode) => void;
@@ -125,19 +126,33 @@ function ViewToggle({
   onSatelliteToggle: (on: boolean) => void;
   inpainting: boolean;
   onInpaintingToggle: (on: boolean) => void;
+  airportIcao?: string;
 }) {
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>('unknown');
   const [statusMessage, setStatusMessage] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Stop polling on unmount or when inpainting is disabled
+  // Cache stats state
+  interface CacheStats {
+    total_tiles: number;
+    total_aircraft_removed: number;
+    cache_size: string;
+    newest_tile: string | null;
+  }
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
+  const [, setPrevTileCount] = useState<number | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const cacheStatsRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Stop polling on unmount
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (cacheStatsRef.current) clearInterval(cacheStatsRef.current);
     };
   }, []);
 
-  // Stop polling when banner is dismissed (inpainting turned off or satellite off)
+  // Stop endpoint polling when banner is dismissed (inpainting turned off or satellite off)
   useEffect(() => {
     if (!satellite || inpainting) {
       if (pollRef.current) {
@@ -150,6 +165,45 @@ function ViewToggle({
       }
     }
   }, [satellite, inpainting]);
+
+  // Poll cache stats while inpainting is active
+  useEffect(() => {
+    if (!inpainting || !satellite) {
+      if (cacheStatsRef.current) {
+        clearInterval(cacheStatsRef.current);
+        cacheStatsRef.current = null;
+      }
+      setProcessing(false);
+      setPrevTileCount(null);
+      return;
+    }
+
+    const fetchStats = async () => {
+      try {
+        const resp = await fetch('/api/inpainting/cache-stats');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.error) return;
+        setCacheStats(data);
+        setPrevTileCount(prev => {
+          if (prev !== null && data.total_tiles > prev) {
+            setProcessing(true);
+          } else if (prev !== null && data.total_tiles === prev) {
+            setProcessing(false);
+          }
+          return data.total_tiles;
+        });
+      } catch { /* ignore */ }
+    };
+
+    // Fetch immediately, then poll
+    setProcessing(true);
+    fetchStats();
+    cacheStatsRef.current = setInterval(fetchStats, 5000);
+    return () => {
+      if (cacheStatsRef.current) clearInterval(cacheStatsRef.current);
+    };
+  }, [inpainting, satellite]);
 
   const checkEndpointStatus = async (): Promise<'ready' | 'not_ready' | 'error'> => {
     try {
@@ -172,14 +226,12 @@ function ViewToggle({
         setStatusMessage('Endpoint is ready!');
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
-        // Auto-enable inpainting
         onInpaintingToggle(true);
       }
     }, 5000);
   };
 
   const handleCleanTilesClick = async () => {
-    // If already on, just turn off
     if (inpainting) {
       onInpaintingToggle(false);
       setEndpointStatus('unknown');
@@ -187,7 +239,6 @@ function ViewToggle({
       return;
     }
 
-    // Check endpoint status first
     setEndpointStatus('checking');
     setStatusMessage('Checking endpoint...');
     const result = await checkEndpointStatus();
@@ -224,6 +275,21 @@ function ViewToggle({
     }
   };
 
+  const handleRefreshTiles = async () => {
+    const params = airportIcao ? `?airport_icao=${airportIcao}` : '';
+    try {
+      await fetch(`/api/inpainting/cache${params}`, { method: 'DELETE' });
+      setCacheStats(null);
+      setPrevTileCount(null);
+      setProcessing(true);
+      // Toggle inpainting off then on to force re-fetch
+      onInpaintingToggle(false);
+      setTimeout(() => onInpaintingToggle(true), 100);
+    } catch {
+      // ignore
+    }
+  };
+
   const dismissBanner = () => {
     setEndpointStatus('unknown');
     setStatusMessage('');
@@ -234,6 +300,14 @@ function ViewToggle({
   };
 
   const showBanner = endpointStatus === 'not_ready' || endpointStatus === 'waking' || endpointStatus === 'error';
+
+  const formatDate = (iso: string | null) => {
+    if (!iso) return null;
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch { return null; }
+  };
 
   return (
     <div className="absolute top-4 right-4 z-[1001] flex flex-col items-end gap-2">
@@ -333,6 +407,46 @@ function ViewToggle({
               <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
             </svg>
           </button>
+        </div>
+      )}
+
+      {/* Cache status info — shown when inpainting is active */}
+      {inpainting && satellite && (
+        <div className="bg-slate-800/90 backdrop-blur text-white rounded-lg shadow-md px-3 py-2 text-xs max-w-[280px]">
+          {processing ? (
+            <div className="flex items-center gap-2">
+              <svg className="animate-spin w-3 h-3 flex-shrink-0 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-emerald-300">
+                Processing tiles{cacheStats ? ` ... ${cacheStats.total_tiles} cached` : '...'}
+              </span>
+            </div>
+          ) : cacheStats && cacheStats.total_tiles > 0 ? (
+            <div className="flex items-center gap-2">
+              <svg className="w-3 h-3 flex-shrink-0 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              <span className="text-emerald-300">{cacheStats.total_tiles} tiles cleaned</span>
+            </div>
+          ) : null}
+
+          {cacheStats && cacheStats.total_tiles > 0 && (
+            <div className="mt-1 flex items-center justify-between text-slate-400">
+              <span>
+                Cached{formatDate(cacheStats.newest_tile) ? ` ${formatDate(cacheStats.newest_tile)}` : ''}
+                {cacheStats.cache_size ? ` · ${cacheStats.cache_size}` : ''}
+              </span>
+              <button
+                onClick={handleRefreshTiles}
+                className="ml-2 text-blue-400 hover:text-blue-300 transition-colors"
+                title="Clear cache and re-fetch satellite tiles"
+              >
+                Refresh
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -545,7 +659,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
   // Shared map view (used in both desktop and mobile layouts)
   const mapView = (
     <div className="flex-1 overflow-hidden relative">
-      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} />
+      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} />
       <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
         <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>
           <AirportMap
@@ -618,9 +732,23 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange }: 
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
       <GenieChat />
       <main className="flex-1 flex overflow-hidden">
-        {/* Left panel: Flight List */}
-        <div className="w-64 flex-shrink-0 overflow-hidden">
-          <FlightList />
+        {/* Left panel: Flight List + recorded mode indicator */}
+        <div className="w-64 flex-shrink-0 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            <FlightList />
+          </div>
+          {dataMode === 'recorded' && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/95 border-t-2 border-amber-500/60 text-xs text-amber-300">
+              <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+              <span className="font-semibold uppercase tracking-wider">Recorded</span>
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-800/40 ml-auto">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+                <span className="whitespace-nowrap">Real ADS-B</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Center: Airport Map (2D or 3D) */}
