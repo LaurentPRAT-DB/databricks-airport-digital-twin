@@ -607,6 +607,38 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
 
     sorted_timestamps = sorted(frames.keys())
 
+    # ── Aircraft type enrichment from OpenSky aircraft database ────────
+    from app.backend.services.aircraft_db import get_aircraft_database
+
+    aircraft_db = get_aircraft_database()
+    try:
+        await aircraft_db.ensure_loaded()
+    except Exception as e:
+        logger.warning("Aircraft database load failed: %s", e)
+
+    if aircraft_db.loaded:
+        enriched_types = 0
+        for ts_key in sorted_timestamps:
+            for snap in frames[ts_key]:
+                if not snap.get("aircraft_type"):
+                    typecode, _ = aircraft_db.lookup(snap["icao24"])
+                    if typecode:
+                        snap["aircraft_type"] = typecode
+                        enriched_types += 1
+        if enriched_types:
+            logger.info("Enriched aircraft_type for %d snapshots from OpenSky DB", enriched_types)
+
+    # ── Historical METAR weather enrichment ────────────────────────────
+    from app.backend.services.metar_history import fetch_historical_metar
+    from datetime import date as date_type
+
+    target_date = date_type.fromisoformat(date)
+    weather_snapshots: list[dict] = []
+    try:
+        weather_snapshots = await fetch_historical_metar(airport, target_date)
+    except Exception as e:
+        logger.warning("Historical METAR fetch failed for %s/%s: %s", airport, date, e)
+
     # ── Event inference: derive gate_events + phase_transitions from positions ──
     from src.inference.opensky_events import OpenSkyEventInferrer
 
@@ -683,10 +715,12 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
     logger.info(
         "Recording %s/%s: %d rows → %d frames, %d unique aircraft, "
         "%d phase transitions, %d gate events inferred, "
-        "%d/%d aircraft origins resolved, %d schedule entries derived",
+        "%d/%d aircraft origins resolved, %d schedule entries derived, "
+        "%d weather snapshots",
         airport, date, len(rows), len(sorted_timestamps), len(unique_aircraft),
         len(enrichment["phase_transitions"]), len(enrichment["gate_events"]),
         len(origins), len(unique_aircraft), len(derived_schedule),
+        len(weather_snapshots),
     )
 
     # ── Persist enriched data to Lakebase (background, fire-and-forget) ──
@@ -715,6 +749,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         "frame_count": len(sorted_timestamps),
         "phase_transitions": enrichment["phase_transitions"],
         "gate_events": enrichment["gate_events"],
+        "weather_snapshots": weather_snapshots,
         "scenario_events": [],
         "time_window": {
             "start_time": sorted_timestamps[0] if sorted_timestamps else None,
