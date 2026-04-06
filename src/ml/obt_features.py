@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import random
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -93,6 +94,41 @@ _AIRPORT_COUNTRY: Dict[str, str] = {
     "HKG": "HK", "NRT": "JP", "HND": "JP", "SIN": "SG", "SYD": "AU",
     "DXB": "AE", "ICN": "KR", "GRU": "BR", "JNB": "ZA",
 }
+
+# ---------------------------------------------------------------------------
+# Calibrated delay sampling for recorded data
+# ---------------------------------------------------------------------------
+_profile_loader: Optional["AirportProfileLoader"] = None
+
+
+def _sample_calibrated_delay(airport_iata: str) -> tuple[float, float]:
+    """Sample delay from calibration profile for recorded data.
+
+    Returns (arrival_delay_min, scheduled_buffer_min).
+    Uses the same log-normal distribution the simulation uses for training
+    data (see _generate_delay_details in schedule_generator.py).
+    """
+    global _profile_loader
+    if _profile_loader is None:
+        from src.calibration.profile import AirportProfileLoader
+        _profile_loader = AirportProfileLoader()
+
+    profile = _profile_loader.get_profile(airport_iata) if airport_iata else None
+    delay_rate = profile.delay_rate if profile else 0.15
+    mean_delay = profile.mean_delay_minutes if profile else 20.0
+
+    if random.random() > delay_rate:
+        return 0.0, 0.0
+
+    # Log-normal delay — right-skewed, same params as simulation
+    sigma = 0.8
+    mu = math.log(max(mean_delay, 5.0)) - sigma * sigma / 2.0
+    delay_minutes = float(max(5, min(120, round(random.lognormvariate(mu, sigma)))))
+
+    # Negative buffer ≈ arrived late by some fraction of the delay
+    scheduled_buffer = -delay_minutes * random.uniform(0.5, 1.0)
+
+    return delay_minutes, scheduled_buffer
 
 
 @dataclass
@@ -526,5 +562,146 @@ def extract_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]:
     logger.info(
         f"Extracted {len(results)} OBT training samples from {path.name} "
         f"(airport={airport_iata})"
+    )
+    return results
+
+
+def extract_training_data_from_recording(recording_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract OBT training features from enriched recorded OpenSky data.
+
+    Same logic as extract_training_data() but operates on an in-memory dict
+    (from the /api/opensky/recordings endpoint) rather than a simulation JSON
+    file. Handles known gaps in recorded data:
+
+    - arrival_delay_min: sampled from airport calibration profile delay distribution
+    - scheduled_buffer_min: derived from sampled delay (negative = arrived late)
+    - is_weather_scenario: always False
+    - weather: from historical METAR if available in weather_snapshots
+    - source: marked as 'recorded' for domain tracking
+
+    Args:
+        recording_data: Dict from get_recording_data() with keys:
+            config, schedule, phase_transitions, gate_events,
+            weather_snapshots (from METAR enrichment), scenario_events.
+
+    Returns:
+        List of dicts with 'features', 'target', 'airport', 'flight_id',
+        'callsign', and 'source' fields.
+    """
+    schedule = recording_data.get("schedule", [])
+    phase_transitions = recording_data.get("phase_transitions", [])
+    gate_events = recording_data.get("gate_events", [])
+    weather_snapshots = recording_data.get("weather_snapshots", [])
+    config = recording_data.get("config", {})
+    airport_code = config.get("airport", "")
+
+    gate_events_sorted = sorted(gate_events, key=lambda e: e["time"])
+
+    # Build lookups
+    schedule_by_callsign: Dict[str, Dict[str, Any]] = {}
+    for s in schedule:
+        schedule_by_callsign[s["flight_number"]] = s
+
+    parked_transitions: Dict[str, Dict[str, Any]] = {}
+    pushback_transitions: Dict[str, Dict[str, Any]] = {}
+
+    for pt in phase_transitions:
+        if pt["to_phase"] == "parked":
+            parked_transitions[pt["icao24"]] = pt
+        if pt["from_phase"] == "parked" and pt["to_phase"] == "pushback":
+            pushback_transitions[pt["icao24"]] = pt
+
+    gate_assignments: Dict[str, str] = {}
+    for ge in gate_events:
+        if ge["event_type"] in ("assign", "occupy"):
+            gate_assignments[ge["icao24"]] = ge["gate"]
+
+    usable_icao24s = set(parked_transitions.keys()) & set(pushback_transitions.keys())
+
+    results = []
+    for icao24 in usable_icao24s:
+        parked_pt = parked_transitions[icao24]
+        pushback_pt = pushback_transitions[icao24]
+
+        parked_time = _parse_iso(parked_pt["time"])
+        pushback_time = _parse_iso(pushback_pt["time"])
+
+        turnaround_min = (pushback_time - parked_time).total_seconds() / 60.0
+        if turnaround_min < MIN_TURNAROUND_MIN or turnaround_min > MAX_TURNAROUND_MIN:
+            continue
+
+        callsign = parked_pt.get("callsign", "")
+        sched = schedule_by_callsign.get(callsign, {})
+
+        # Aircraft category (enriched from OpenSky DB if available)
+        aircraft_type = parked_pt.get("aircraft_type") or sched.get("aircraft_type", "")
+        aircraft_category = classify_aircraft(aircraft_type) if aircraft_type else "narrow"
+
+        airline_code = sched.get("airline_code", callsign[:3] if len(callsign) >= 3 else "UNK")
+
+        gate_id = gate_assignments.get(icao24, parked_pt.get("assigned_gate", ""))
+        gate_pfx = _gate_prefix(gate_id)
+        is_remote = _is_remote_stand(gate_id)
+
+        origin = sched.get("origin", "")
+        destination = sched.get("destination", "")
+        is_intl = _is_international_route(origin, destination, airport_code)
+
+        # Sample from calibration profile delay distribution
+        arrival_delay, scheduled_buffer = _sample_calibrated_delay(airport_code)
+
+        # Offset scheduled dep hour backward by delay to approximate real schedule
+        scheduled_dep_hour = (parked_time.hour - int(arrival_delay / 60)) % 24
+
+        # Weather from historical METAR enrichment
+        weather = _find_nearest_weather(weather_snapshots, parked_time)
+        wind_speed = float(weather.get("wind_speed_kts", 0) or 0)
+        visibility = float(weather.get("visibility_sm", 10.0) or 10.0)
+
+        # No scenario events in recorded data
+        ground_stop = False
+
+        concurrent_ops = _count_concurrent_gate_ops(
+            gate_events_sorted, parked_time, icao24
+        )
+
+        h_sin, h_cos = _cyclical_hour(parked_time.hour)
+
+        hub_connecting = is_hub_connection(airline_code, airport_code)
+
+        features = OBTFeatureSet(
+            aircraft_category=aircraft_category,
+            airline_code=airline_code,
+            hour_of_day=parked_time.hour,
+            is_international=is_intl,
+            arrival_delay_min=arrival_delay,
+            gate_id_prefix=gate_pfx,
+            is_remote_stand=is_remote,
+            concurrent_gate_ops=concurrent_ops,
+            wind_speed_kt=wind_speed,
+            visibility_sm=visibility,
+            has_active_ground_stop=ground_stop,
+            scheduled_departure_hour=scheduled_dep_hour,
+            airport_code=airport_code,
+            day_of_week=parked_time.weekday(),
+            hour_sin=h_sin,
+            hour_cos=h_cos,
+            is_weather_scenario=False,
+            scheduled_buffer_min=scheduled_buffer,
+            is_hub_connecting=hub_connecting,
+        )
+
+        results.append({
+            "features": asdict(features),
+            "target": turnaround_min,
+            "airport": airport_code,
+            "flight_id": icao24,
+            "callsign": callsign,
+            "source": "recorded",
+        })
+
+    logger.info(
+        "Extracted %d OBT training samples from recorded data (airport=%s)",
+        len(results), airport_code,
     )
     return results
