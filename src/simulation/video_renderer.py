@@ -374,6 +374,18 @@ class VideoRenderer:
             # Wait for loading to complete
             await self._wait_for_sim_loaded(page)
 
+            # Clear the "Simulation Paused" state that occurs when the
+            # airport switch triggers SimulationControls.pauseForSwitch().
+            # Without this, onFlightsChange(null) is called and no flights
+            # appear on the map despite the sim data being loaded.
+            await page.evaluate(
+                "() => window.__simControl?.clearSwitchPause?.()"
+            )
+            # Give React a moment to propagate the unpause
+            await page.evaluate(
+                "() => new Promise(r => setTimeout(r, 300))"
+            )
+
             # Get total frames
             info = await page.evaluate("window.__simControl.getInfo()")
             total_frames = info["totalFrames"]
@@ -386,6 +398,30 @@ class VideoRenderer:
             # Determine which frames to capture based on speed setting
             frame_indices = list(range(0, total_frames, self.speed))
             captured = 0
+
+            # Ensure map is centered on the correct airport.
+            # This must happen AFTER sim load + clearSwitchPause, because
+            # React viewport resets can override earlier setView calls.
+            airport_lat, airport_lon = self._get_airport_center_from_sim()
+            if airport_lat is not None:
+                current_view = await page.evaluate(
+                    "() => window.__mapControl?.getView?.()"
+                )
+                if current_view:
+                    dist = (
+                        abs(current_view["lat"] - airport_lat)
+                        + abs(current_view["lon"] - airport_lon)
+                    )
+                    if dist > 1.0:
+                        logger.info(
+                            "Map still far from airport — forcing center to %.4f, %.4f",
+                            airport_lat, airport_lon,
+                        )
+                        await page.evaluate(
+                            "([lat, lon]) => window.__mapControl?.setView(lat, lon, 15)",
+                            [airport_lat, airport_lon],
+                        )
+                        await page.wait_for_timeout(3000)
 
             # Determine screenshot region
             clip = None
@@ -604,7 +640,7 @@ class VideoRenderer:
                     airport_lat, airport_lon,
                 )
                 await page.evaluate(
-                    "([lat, lon]) => window.__mapControl?.setView(lat, lon, 14)",
+                    "([lat, lon]) => window.__mapControl?.setView(lat, lon, 15)",
                     [airport_lat, airport_lon],
                 )
             else:

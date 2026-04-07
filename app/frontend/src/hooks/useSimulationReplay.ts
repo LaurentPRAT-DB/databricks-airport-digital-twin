@@ -197,12 +197,14 @@ declare global {
     __simControl?: {
       loadFile: (filename: string, startHour?: number, endHour?: number) => Promise<void>;
       seekTo: (frameIndex: number) => void;
+      clearSwitchPause: () => void;
       getInfo: () => {
         totalFrames: number;
         currentFrame: number;
         currentSimTime: string | null;
         isLoading: boolean;
         isActive: boolean;
+        switchPaused: boolean;
       };
     };
   }
@@ -626,18 +628,20 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     window.__simControl = {
       loadFile,
       seekTo,
+      clearSwitchPause: () => setSwitchPaused(false),
       getInfo: () => ({
         totalFrames,
         currentFrame: currentFrameIndex,
         currentSimTime,
         isLoading,
         isActive,
+        switchPaused,
       }),
     };
     return () => {
       delete window.__simControl;
     };
-  }, [loadFile, seekTo, totalFrames, currentFrameIndex, currentSimTime, isLoading, isActive]);
+  }, [loadFile, seekTo, totalFrames, currentFrameIndex, currentSimTime, isLoading, isActive, switchPaused]);
 
   return {
     isActive,
