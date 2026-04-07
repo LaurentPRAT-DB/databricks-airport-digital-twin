@@ -1,0 +1,25 @@
+# OpenSky OBT model evaluation job
+# Reads enriched phase transitions, extracts turnarounds, compares OBT predictions vs observed.
+# On-demand only (no schedule) — run manually after data collection + enrichment.
+
+resources:
+  jobs:
+    opensky_evaluation:
+      name: "[${bundle.target}] Airport Digital Twin - OBT Model Evaluation"
+      description: "Evaluates OBT turnaround model against real OpenSky ADS-B data"
+
+      tasks:
+        - task_key: evaluate_obt_model
+          notebook_task:
+            notebook_path: ../databricks/notebooks/evaluate_obt_model.py
+            base_parameters:
+              airport_icao: "EDDF"
+              airport_iata: "FRA"
+              days: "7"
+
+      tags:
+        project: airport-digital-twin
+        component: obt-evaluation
+        target: ${bundle.target}
+
+      timeout_seconds: 1800
