@@ -535,26 +535,83 @@ class VideoRenderer:
         current = await page.evaluate(
             "() => window.__airportControl?.getCurrentAirport()"
         )
-        if current and current.upper() == icao.upper():
-            logger.info("Already on airport %s", icao)
-            return
 
-        logger.info("Switching airport to %s (from sim config: %s)", icao, airport_code)
-        await page.evaluate(
-            "code => window.__airportControl.loadAirport(code)", icao
-        )
-        # Wait for airport to finish loading (OSM data fetch + render)
-        for _ in range(60):
+        if current and current.upper() == icao.upper():
+            # The app state already shows this airport (e.g. from a previous
+            # render), but this is a fresh page load so the Leaflet map may
+            # still be centered on the default airport.  Re-trigger loadAirport
+            # to ensure OSM fetch + map centering happen on this page.
+            logger.info("Airport state shows %s — re-triggering to center map", icao)
+            try:
+                await page.evaluate(
+                    "code => window.__airportControl.loadAirport(code)", icao
+                )
+            except Exception:
+                # "Another activation in progress" — the initial page load
+                # is still activating.  Just wait for it to finish.
+                pass
+        else:
+            logger.info("Switching airport to %s (from sim config: %s)", icao, airport_code)
+            await page.evaluate(
+                "code => window.__airportControl.loadAirport(code)", icao
+            )
+
+        # Wait for the airport state to confirm and OSM/tiles to settle
+        for _ in range(90):
             cur = await page.evaluate(
                 "() => window.__airportControl?.getCurrentAirport()"
             )
             if cur and cur.upper() == icao.upper():
-                logger.info("Airport switched to %s", icao)
-                # Give map tiles time to load
-                await page.wait_for_timeout(3000)
-                return
+                break
             await page.wait_for_timeout(1000)
-        logger.warning("Airport switch to %s may not have completed", icao)
+        else:
+            logger.warning("Airport switch to %s may not have completed", icao)
+
+        # Wait for the map to actually center near the target airport.
+        # First try: wait for the app's FitBounds to fire (via WebSocket
+        # airport_switch_complete → config with bounds).  If that doesn't
+        # happen within 15s, fall back to looking up airport coords from
+        # our simulation data and using __mapControl.setView() directly.
+        initial_view = await page.evaluate(
+            "() => window.__mapControl?.getView?.()"
+        )
+        initial_lat = initial_view.get("lat", 0) if initial_view else 0
+        initial_lon = initial_view.get("lon", 0) if initial_view else 0
+        logger.info(
+            "Waiting for map to center on %s (initial: %.2f, %.2f)",
+            icao, initial_lat, initial_lon,
+        )
+        centered = False
+        for _ in range(15):
+            view = await page.evaluate(
+                "() => window.__mapControl?.getView?.()"
+            )
+            if view:
+                lat, lon = view["lat"], view["lon"]
+                if abs(lat - initial_lat) > 0.5 or abs(lon - initial_lon) > 0.5:
+                    centered = True
+                    logger.info("Map auto-centered on %s at %.2f, %.2f", icao, lat, lon)
+                    break
+            await page.wait_for_timeout(1000)
+
+        if not centered:
+            # Fall back: compute airport center from simulation position data
+            # and set the view directly via Leaflet
+            airport_lat, airport_lon = self._get_airport_center_from_sim()
+            if airport_lat is not None:
+                logger.info(
+                    "Forcing map center to %.4f, %.4f (from sim data)",
+                    airport_lat, airport_lon,
+                )
+                await page.evaluate(
+                    "([lat, lon]) => window.__mapControl?.setView(lat, lon, 14)",
+                    [airport_lat, airport_lon],
+                )
+            else:
+                logger.warning("Could not determine airport center for %s", icao)
+
+        # Give map tiles time to render
+        await page.wait_for_timeout(5000)
 
     async def _wait_for_backend(self, page) -> None:
         """Poll until the app's backend readiness check passes."""
@@ -582,6 +639,23 @@ class VideoRenderer:
                 return
             await page.wait_for_timeout(500)
         raise RuntimeError("Simulation file did not load within 60 seconds")
+
+    def _get_airport_center_from_sim(self) -> tuple[float | None, float | None]:
+        """Compute airport center from the median position in simulation data."""
+        filepath = _find_simulation_file(self.simulation_file)
+        with open(filepath) as f:
+            data = json.load(f)
+        snaps = data.get("position_snapshots", [])
+        if not snaps:
+            return None, None
+        # Use on-ground positions for a tighter center estimate
+        ground = [s for s in snaps if s.get("on_ground")]
+        pool = ground if len(ground) > 10 else snaps
+        lats = sorted(s["latitude"] for s in pool if s.get("latitude"))
+        lons = sorted(s["longitude"] for s in pool if s.get("longitude"))
+        if not lats or not lons:
+            return None, None
+        return lats[len(lats) // 2], lons[len(lons) // 2]
 
     async def _get_canvas_clip(self, page) -> dict | None:
         """Get bounding box of the map area for cropping (2D or 3D)."""
