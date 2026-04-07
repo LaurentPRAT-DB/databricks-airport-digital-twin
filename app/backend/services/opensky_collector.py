@@ -28,6 +28,8 @@ COLLECTOR_AIRPORTS: dict[str, tuple[float, float]] = {
     "OMAA": (24.4431, 54.6511),   # Abu Dhabi
     "LGAV": (37.9364, 23.9445),   # Athens
     "LSGG": (46.2381, 6.1090),    # Geneva
+    # OBT model evaluation targets
+    "EDDF": (50.0379, 8.5622),    # Frankfurt
 }
 
 

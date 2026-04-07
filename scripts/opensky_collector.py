@@ -218,6 +218,14 @@ def extract_airline_icao(callsign: str | None) -> str:
 # ── Data collection ──────────────────────────────────────────────────────
 
 _oauth_token: str | None = None
+_oauth_expires_at: float = 0.0  # monotonic time when token expires
+
+
+def invalidate_oauth_token() -> None:
+    """Clear cached OAuth token so the next call re-authenticates."""
+    global _oauth_token, _oauth_expires_at
+    _oauth_token = None
+    _oauth_expires_at = 0.0
 
 
 def get_oauth_token(
@@ -225,11 +233,16 @@ def get_oauth_token(
     client_id: str,
     client_secret: str,
 ) -> str | None:
-    """Get OAuth2 access token using client credentials flow. Cached per session."""
-    global _oauth_token
-    if _oauth_token:
+    """Get OAuth2 access token using client credentials flow.
+
+    Caches the token and refreshes it 60s before expiry.
+    """
+    global _oauth_token, _oauth_expires_at
+    if _oauth_token and time.monotonic() < _oauth_expires_at - 60:
         return _oauth_token
     try:
+        if _oauth_token:
+            logger.info("OAuth2 token near expiry, refreshing...")
         resp = client.post(
             OPENSKY_AUTH_URL,
             data={
@@ -240,7 +253,11 @@ def get_oauth_token(
             timeout=30.0,
         )
         if resp.status_code == 200:
-            _oauth_token = resp.json().get("access_token")
+            data = resp.json()
+            _oauth_token = data.get("access_token")
+            expires_in = int(data.get("expires_in", 3000))
+            _oauth_expires_at = time.monotonic() + expires_in
+            logger.info("OAuth2 token obtained, expires in %ds", expires_in)
             return _oauth_token
     except Exception as e:
         logger.warning("OAuth2 token fetch failed: %s", e)
@@ -493,7 +510,11 @@ def main():
                     stats_by_airport[airport_icao] = stats_by_airport.get(airport_icao, 0) + count
 
             except httpx.HTTPStatusError as e:
-                logger.error("HTTP error: %s", e)
+                if e.response.status_code == 401 and oauth_creds:
+                    logger.warning("Got 401 — invalidating OAuth token for re-auth")
+                    invalidate_oauth_token()
+                else:
+                    logger.error("HTTP error: %s", e)
             except Exception as e:
                 logger.error("Fetch error: %s", e)
 
