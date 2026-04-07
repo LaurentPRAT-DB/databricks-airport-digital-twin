@@ -139,9 +139,13 @@ class TestArrivalUsesGraph:
         mock_get_service.return_value = _make_mock_service(graph=None)
         mock_get_gates.return_value = {"G1": (37.616, -122.389)}
 
-        # With SFO center, should fall back to TAXI_WAYPOINTS_ARRIVAL
+        # Without graph, should generate geometry-derived route ending at gate
         result = _get_taxi_waypoints_arrival("G1")
-        assert result == TAXI_WAYPOINTS_ARRIVAL
+        assert isinstance(result, list)
+        assert len(result) >= 2
+        # Last waypoint should be near gate position (lon, lat)
+        assert abs(result[-1][0] - (-122.389)) < 0.01
+        assert abs(result[-1][1] - 37.616) < 0.01
 
     @patch(_SERVICE_PATCH)
     @patch("src.ingestion.fallback.get_gates")
@@ -151,7 +155,11 @@ class TestArrivalUsesGraph:
         mock_get_gates.return_value = {"G1": (37.616, -122.389)}
 
         result = _get_taxi_waypoints_arrival("G1")
-        assert result == TAXI_WAYPOINTS_ARRIVAL
+        assert isinstance(result, list)
+        assert len(result) >= 2
+        # Last waypoint should be near gate position
+        assert abs(result[-1][0] - (-122.389)) < 0.01
+        assert abs(result[-1][1] - 37.616) < 0.01
 
     @patch(_SERVICE_PATCH)
     @patch("src.ingestion.fallback.get_gates")
@@ -162,7 +170,8 @@ class TestArrivalUsesGraph:
         mock_get_gates.return_value = {"G1": (37.616, -122.389)}
 
         result = _get_taxi_waypoints_arrival("G1")
-        assert result == TAXI_WAYPOINTS_ARRIVAL
+        assert isinstance(result, list)
+        assert len(result) >= 2
 
     @patch(_SERVICE_PATCH)
     @patch("src.ingestion.fallback.get_gates")
@@ -219,8 +228,13 @@ class TestDepartureUsesGraph:
         mock_get_service.return_value = _make_mock_service(graph=None)
         mock_get_gates.return_value = {"G1": (37.616, -122.389)}
 
+        # Without graph, should generate geometry-derived route starting at gate
         result = _get_taxi_waypoints_departure("G1")
-        assert result == TAXI_WAYPOINTS_DEPARTURE
+        assert isinstance(result, list)
+        assert len(result) >= 2
+        # First waypoint should be near gate position (lon, lat)
+        assert abs(result[0][0] - (-122.389)) < 0.01
+        assert abs(result[0][1] - 37.616) < 0.01
 
     @patch(_SERVICE_PATCH)
     @patch("src.ingestion.fallback.get_gates")
@@ -246,7 +260,8 @@ class TestDepartureUsesGraph:
         mock_get_gates.return_value = {"G1": (37.616, -122.389)}
 
         result = _get_taxi_waypoints_departure("G1")
-        assert result == TAXI_WAYPOINTS_DEPARTURE
+        assert isinstance(result, list)
+        assert len(result) >= 2
 
 
 class TestPushbackHeading:

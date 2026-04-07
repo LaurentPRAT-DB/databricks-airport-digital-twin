@@ -1107,24 +1107,257 @@ GATES = _DEFAULT_GATES
 # Routes from runways to gates, aligned with frontend taxiway definitions
 # Coordinates follow actual SFO ground movement paths
 
-# Arrival route: Runway 28L → Terminal gates
-# Aircraft land heading west (280°), exit via high-speed taxiway, turn north to terminal
+# Default arrival/departure taxi waypoints — generated at module load from
+# runway thresholds and terminal center.  These are the fallback when OSM
+# taxiway graph is not available AND no gate ref is provided.
+# Overwritten by apply_airport_offset() for non-SFO airports.
 TAXI_WAYPOINTS_ARRIVAL = [
     (-122.370, 37.615),    # High-speed exit from 28L (midpoint rollout)
-    (-122.378, 37.616),    # Taxiway Alpha intersection
+    (-122.378, 37.616),    # Taxiway intersection
     (-122.385, 37.617),    # Turn toward terminal complex
     (-122.390, 37.616),    # Terminal apron entry
 ]
 
-# Departure route: Terminal gates → Runway 28R
-# Aircraft push back, taxi south then east to runway 28R for departure
 TAXI_WAYPOINTS_DEPARTURE = [
     (-122.390, 37.616),    # Leave terminal apron
-    (-122.385, 37.618),    # Taxiway Bravo
+    (-122.385, 37.618),    # Taxiway junction
     (-122.378, 37.620),    # Join main taxiway
-    (-122.370, 37.622),    # Hold short runway 28R
-    (-122.360, 37.614),    # Runway 28R entry point
+    (-122.370, 37.622),    # Hold short departure runway
+    (-122.360, 37.614),    # Runway entry point
 ]
+
+
+# ============================================================================
+# GEOMETRY-DERIVED TAXI ROUTING
+# ============================================================================
+# Generates realistic taxi routes for ANY airport by computing a parallel
+# taxiway line between runway and terminal, then routing gate→taxiway→runway.
+# No per-airport dictionaries — all derived from runway/gate/center geometry.
+
+def _compute_taxiway_line(
+    runway_threshold: tuple,  # (lon, lat) — arrival runway touchdown end
+    runway_far_end: tuple,    # (lon, lat) — opposite end of same runway
+    terminal_center: tuple,   # (lat, lon)
+    offset_fraction: float = 0.25,
+) -> tuple:
+    """Compute a taxiway reference line parallel to the runway, offset toward terminals.
+
+    Returns (taxiway_start, taxiway_end) as (lon, lat) tuples — the two endpoints
+    of a synthetic taxiway centerline between the runway and terminal area.
+    """
+    rwy_lon1, rwy_lat1 = runway_threshold
+    rwy_lon2, rwy_lat2 = runway_far_end
+    term_lat, term_lon = terminal_center
+
+    # Offset the runway line toward the terminal by offset_fraction of the
+    # perpendicular distance from runway midpoint to terminal center
+    rwy_mid_lon = (rwy_lon1 + rwy_lon2) / 2
+    rwy_mid_lat = (rwy_lat1 + rwy_lat2) / 2
+
+    # Vector from runway midpoint to terminal center
+    dlat = term_lat - rwy_mid_lat
+    dlon = term_lon - rwy_mid_lon
+
+    # Taxiway line = runway shifted toward terminal by offset_fraction
+    tw_lat1 = rwy_lat1 + dlat * offset_fraction
+    tw_lon1 = rwy_lon1 + dlon * offset_fraction
+    tw_lat2 = rwy_lat2 + dlat * offset_fraction
+    tw_lon2 = rwy_lon2 + dlon * offset_fraction
+
+    return (tw_lon1, tw_lat1), (tw_lon2, tw_lat2)
+
+
+def _project_onto_line(
+    point_lon: float, point_lat: float,
+    line_start: tuple, line_end: tuple,
+) -> tuple:
+    """Project a point onto a line segment, returning the closest point (lon, lat).
+
+    Uses parametric projection clamped to [0, 1].
+    """
+    x1, y1 = line_start  # (lon, lat)
+    x2, y2 = line_end
+    dx, dy = x2 - x1, y2 - y1
+    len_sq = dx * dx + dy * dy
+    if len_sq < 1e-15:
+        return line_start
+    t = max(0.0, min(1.0, ((point_lon - x1) * dx + (point_lat - y1) * dy) / len_sq))
+    return (x1 + t * dx, y1 + t * dy)
+
+
+def _t_on_line(point_lon: float, point_lat: float,
+               line_start: tuple, line_end: tuple) -> float:
+    """Compute parametric position t of a point's projection onto a line.
+
+    Returns t in [0, 1] where 0 = line_start, 1 = line_end.
+    """
+    x1, y1 = line_start
+    x2, y2 = line_end
+    dx, dy = x2 - x1, y2 - y1
+    len_sq = dx * dx + dy * dy
+    if len_sq < 1e-15:
+        return 0.0
+    return max(0.0, min(1.0, ((point_lon - x1) * dx + (point_lat - y1) * dy) / len_sq))
+
+
+def _generate_taxi_spine(
+    line_start: tuple, line_end: tuple, num_points: int = 6,
+) -> List[tuple]:
+    """Generate evenly-spaced waypoints along a taxiway line.
+
+    Returns list of (lon, lat, t) from line_start to line_end,
+    where t is the parametric position [0, 1].
+    """
+    pts = []
+    for i in range(num_points):
+        t = i / max(1, num_points - 1)
+        lon = line_start[0] + t * (line_end[0] - line_start[0])
+        lat = line_start[1] + t * (line_end[1] - line_start[1])
+        pts.append((lon, lat, t))
+    return pts
+
+
+def _get_arrival_runway_endpoints() -> tuple:
+    """Get arrival runway (threshold, far_end) as (lon, lat) tuples.
+
+    Uses OSM data when available, falls back to module-level constants
+    (which may have been shifted by apply_airport_offset).
+    """
+    rwy = _get_osm_primary_runway()
+    if rwy:
+        threshold, far_end, _ = _osm_runway_endpoints(rwy)
+        return threshold, far_end
+    return RUNWAY_28L_THRESHOLD, RUNWAY_10R_THRESHOLD
+
+
+def _get_departure_runway_endpoints() -> tuple:
+    """Get departure runway (threshold, far_end) as (lon, lat) tuples.
+
+    Uses OSM data when available, falls back to module-level constants.
+    """
+    rwy = _get_osm_primary_runway()
+    if rwy:
+        threshold, far_end, _ = _osm_runway_endpoints(rwy)
+        return threshold, far_end
+    return RUNWAY_28R_THRESHOLD, RUNWAY_10L_THRESHOLD
+
+
+def get_terminal_center() -> tuple:
+    """Get the terminal center (lat, lon).
+
+    Returns the module-level TERMINAL_CENTER which is updated by
+    apply_airport_offset for non-SFO airports.
+    """
+    return TERMINAL_CENTER
+
+
+def _build_arrival_taxi_route(
+    gate_pos: tuple,          # (lat, lon)
+    start_pos: tuple = None,  # (lon, lat) aircraft rollout position
+) -> List[tuple]:
+    """Build a geometry-derived arrival taxi route: rollout → taxiway → gate.
+
+    Computes a parallel taxiway line between the arrival runway and
+    terminal area, then routes along it to the gate's perpendicular
+    projection point before turning into the ramp.
+
+    Returns list of (lon, lat) waypoints.
+    """
+    arr_rwy, arr_far = _get_arrival_runway_endpoints()
+
+    term = get_terminal_center()  # (lat, lon)
+    tw_start, tw_end = _compute_taxiway_line(arr_rwy, arr_far, term, offset_fraction=0.25)
+
+    gate_lat, gate_lon = gate_pos
+
+    # Parametric positions along the taxiway line (0 = tw_start, 1 = tw_end)
+    t_exit = _t_on_line(
+        start_pos[0] if start_pos else arr_rwy[0],
+        start_pos[1] if start_pos else arr_rwy[1],
+        tw_start, tw_end,
+    )
+    t_turnoff = _t_on_line(gate_lon, gate_lat, tw_start, tw_end)
+    t_lo, t_hi = min(t_exit, t_turnoff), max(t_exit, t_turnoff)
+    walk_reversed = t_exit > t_turnoff
+
+    # Project points onto the taxiway line
+    exit_point = _project_onto_line(
+        start_pos[0] if start_pos else arr_rwy[0],
+        start_pos[1] if start_pos else arr_rwy[1],
+        tw_start, tw_end,
+    )
+    turnoff = _project_onto_line(gate_lon, gate_lat, tw_start, tw_end)
+
+    # Build route: rollout exit → along taxiway → turn-off → ramp → gate
+    route: List[tuple] = []
+    if start_pos:
+        route.append(start_pos)
+    route.append(exit_point)
+
+    # Add spine points between exit and turnoff (in correct direction)
+    spine = _generate_taxi_spine(tw_start, tw_end, num_points=8)
+    spine_between = [(lon, lat) for lon, lat, t in spine if t_lo < t < t_hi]
+    if walk_reversed:
+        spine_between.reverse()
+    route.extend(spine_between)
+
+    # Turnoff, ramp midpoint, gate
+    route.append(turnoff)
+    ramp_lon = (turnoff[0] + gate_lon) / 2
+    ramp_lat = (turnoff[1] + gate_lat) / 2
+    route.append((ramp_lon, ramp_lat))
+    route.append((gate_lon, gate_lat))
+
+    return route
+
+
+def _build_departure_taxi_route(
+    gate_pos: tuple,  # (lat, lon)
+) -> List[tuple]:
+    """Build a geometry-derived departure taxi route: gate → taxiway → runway.
+
+    Computes a parallel taxiway line between the departure runway and
+    terminal area, then routes from the gate to the runway hold line.
+
+    Returns list of (lon, lat) waypoints.
+    """
+    dep_rwy, dep_far = _get_departure_runway_endpoints()
+
+    term = get_terminal_center()  # (lat, lon)
+    tw_start, tw_end = _compute_taxiway_line(dep_rwy, dep_far, term, offset_fraction=0.25)
+
+    gate_lat, gate_lon = gate_pos
+
+    # Parametric positions along the taxiway line
+    t_merge = _t_on_line(gate_lon, gate_lat, tw_start, tw_end)
+    t_hold = _t_on_line(dep_rwy[0], dep_rwy[1], tw_start, tw_end)
+    t_lo, t_hi = min(t_merge, t_hold), max(t_merge, t_hold)
+    walk_reversed = t_merge > t_hold
+
+    merge = _project_onto_line(gate_lon, gate_lat, tw_start, tw_end)
+    hold_line = _project_onto_line(dep_rwy[0], dep_rwy[1], tw_start, tw_end)
+
+    route: List[tuple] = []
+
+    # Gate → ramp → merge onto taxiway
+    route.append((gate_lon, gate_lat))
+    ramp_lon = (merge[0] + gate_lon) / 2
+    ramp_lat = (merge[1] + gate_lat) / 2
+    route.append((ramp_lon, ramp_lat))
+    route.append(merge)
+
+    # Spine points between merge and hold line (in correct direction)
+    spine = _generate_taxi_spine(tw_start, tw_end, num_points=8)
+    spine_between = [(lon, lat) for lon, lat, t in spine if t_lo < t < t_hi]
+    if walk_reversed:
+        spine_between.reverse()
+    route.extend(spine_between)
+
+    # Hold line → runway threshold
+    route.append(hold_line)
+    route.append(dep_rwy)
+
+    return route
 
 # ============================================================================
 # ILS APPROACH PATH - Runway 28L
@@ -1717,66 +1950,6 @@ def _get_takeoff_runway_geometry() -> tuple:
     return start, end, 284.0, 11381.0
 
 
-def _get_apron_aware_fallback(gate_pos: tuple, center: tuple) -> List[tuple]:
-    """Build an apron-aware taxi route that avoids cutting through terminals.
-
-    Instead of a straight line center→gate, routes via the nearest apron
-    centroid as an intermediate waypoint, creating an L-shaped path that
-    stays on paved ramp areas.
-
-    Args:
-        gate_pos: (lat, lon) of the gate
-        center: (lat, lon) of the airport center
-
-    Returns:
-        List of (lon, lat) waypoints, or empty list if no apron data.
-    """
-    try:
-        from app.backend.services.airport_config_service import get_airport_config_service
-        service = get_airport_config_service()
-        config = service.get_config()
-        aprons = config.get("osmAprons", [])
-        if not aprons:
-            return []
-
-        gate_lat, gate_lon = gate_pos
-        center_lat, center_lon = center
-
-        # Find the nearest apron centroid to the gate
-        best_apron_geo = None
-        best_dist = float("inf")
-        for apron in aprons:
-            geo = apron.get("geo", {})
-            a_lat = geo.get("latitude")
-            a_lon = geo.get("longitude")
-            if a_lat is None or a_lon is None:
-                continue
-            d = (float(a_lat) - gate_lat) ** 2 + (float(a_lon) - gate_lon) ** 2
-            if d < best_dist:
-                best_dist = d
-                best_apron_geo = (float(a_lat), float(a_lon))
-
-        if best_apron_geo is None:
-            return []
-
-        apron_lat, apron_lon = best_apron_geo
-
-        # Route: runway area → apron centroid → gate
-        # This creates an L-shaped path that goes around the terminal.
-        # Only use the apron waypoint if it's not collinear with center→gate
-        # (i.e., it actually helps avoid a building).
-        waypoints = [
-            (center_lon, center_lat),
-            (apron_lon, apron_lat),
-            (gate_lon, gate_lat),
-        ]
-        return waypoints
-
-    except ImportError:
-        return []
-    except Exception:
-        return []
-
 
 def _get_taxi_waypoints_arrival(gate_ref: str, start_pos: tuple = None) -> List[tuple]:
     """Get taxi route from landing rollout position to assigned gate.
@@ -1817,22 +1990,15 @@ def _get_taxi_waypoints_arrival(gate_ref: str, start_pos: tuple = None) -> List[
     except Exception as e:
         logger.warning("Taxiway graph arrival route failed for gate %s: %s", gate_ref, e)
 
-    # Fallback: existing behavior
-    center = get_airport_center()
-    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01:
-        return TAXI_WAYPOINTS_ARRIVAL
+    # Geometry-derived routing: works for any airport using runway/gate/terminal positions
+    gate_pos = get_gates().get(gate_ref)
+    if gate_ref and gate_pos:
+        route = _build_arrival_taxi_route(gate_pos, start_pos=start_pos)
+        if route and len(route) >= 2:
+            return route
 
-    # Apron-aware fallback: route via nearest apron centroid to avoid
-    # cutting through terminal buildings
-    gate_pos = get_gates().get(gate_ref, center)
-    apron_route = _get_apron_aware_fallback(gate_pos, center)
-    if apron_route:
-        logger.debug("Using apron-aware fallback for arrival gate %s", gate_ref)
-        return apron_route
-
-    # Last resort: straight line from center to gate
-    logger.debug("Using straight-line fallback for arrival gate %s", gate_ref)
-    return [(center[1], center[0]), (gate_pos[1], gate_pos[0])]
+    # Last resort: generic waypoints (offset for non-SFO airports)
+    return list(TAXI_WAYPOINTS_ARRIVAL)
 
 
 def _get_taxi_waypoints_departure(gate_ref: str) -> List[tuple]:
@@ -1862,23 +2028,15 @@ def _get_taxi_waypoints_departure(gate_ref: str) -> List[tuple]:
     except Exception as e:
         logger.warning("Taxiway graph departure route failed for gate %s: %s", gate_ref, e)
 
-    # Fallback: existing behavior
-    center = get_airport_center()
-    if abs(center[0] - AIRPORT_CENTER[0]) < 0.01:
-        return TAXI_WAYPOINTS_DEPARTURE
+    # Geometry-derived routing: works for any airport using runway/gate/terminal positions
+    gate_pos = get_gates().get(gate_ref)
+    if gate_ref and gate_pos:
+        route = _build_departure_taxi_route(gate_pos)
+        if route and len(route) >= 2:
+            return route
 
-    # Apron-aware fallback: route via nearest apron centroid to avoid
-    # cutting through terminal buildings (reversed: gate → apron → runway)
-    gate_pos = get_gates().get(gate_ref, center)
-    apron_route = _get_apron_aware_fallback(gate_pos, center)
-    if apron_route:
-        logger.debug("Using apron-aware fallback for departure gate %s", gate_ref)
-        # Reverse the arrival route for departures: gate → apron → runway
-        return list(reversed(apron_route))
-
-    # Last resort: straight line from gate to center
-    logger.debug("Using straight-line fallback for departure gate %s", gate_ref)
-    return [(gate_pos[1], gate_pos[0]), (center[1], center[0])]
+    # Last resort: generic waypoints (offset for non-SFO airports)
+    return list(TAXI_WAYPOINTS_DEPARTURE)
 
 
 def _get_pushback_heading(gate_ref: str) -> float:
