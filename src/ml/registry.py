@@ -103,36 +103,12 @@ class AirportModelRegistry:
     def register_to_unity_catalog(
         self, airport_code: str, catalog: str = "", schema: str = ""
     ) -> Dict[str, str]:
-        """Register model artifacts to UC model registry.
+        """Deprecated — UC registration is handled by the training notebook.
 
-        Args:
-            airport_code: ICAO code.
-            catalog: Unity Catalog catalog name.
-            schema: Unity Catalog schema name.
-
-        Returns:
-            Dict mapping model name to registered model URI (or status).
+        See databricks/notebooks/train_obt_model.py which registers models
+        via mlflow.pyfunc.log_model with registered_model_name.
         """
-        if not MLFLOW_AVAILABLE:
-            return {"status": "mlflow_not_available"}
-
-        if not catalog or not schema:
-            return {"status": "catalog_or_schema_not_configured"}
-
-        results = {}
-        model_keys = ["delay", "gate", "congestion"]
-        if _get_obt_predictor_class() is not None:
-            model_keys.append("obt")
-        for model_key in model_keys:
-            model_name = f"{catalog}.{schema}.{model_key}_model_{airport_code}"
-            try:
-                results[model_key] = f"registered:{model_name}"
-                logger.info(f"Registered {model_name}")
-            except Exception as e:
-                results[model_key] = f"error:{e}"
-                logger.warning(f"Failed to register {model_name}: {e}")
-
-        return results
+        return {"status": "deprecated_use_training_notebook"}
 
     def load_from_unity_catalog(self, airport_code: str) -> bool:
         """Load registered models from UC if available.

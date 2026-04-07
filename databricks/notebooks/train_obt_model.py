@@ -442,6 +442,22 @@ import pickle
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_experiment(EXPERIMENT_NAME)
 
+
+class OBTModelWrapper(mlflow.pyfunc.PythonModel):
+    """Wraps OBT pickle models for UC Model Registry registration."""
+
+    def __init__(self, stage: str = "refined"):
+        self.stage = stage
+
+    def load_context(self, context):
+        import pickle as _pickle
+        pkl_path = context.artifacts["model_pkl"]
+        with open(pkl_path, "rb") as f:
+            self._state = _pickle.load(f)
+
+    def predict(self, context, model_input):
+        return model_input
+
 with mlflow.start_run(run_name="obt_three_stage_v3_catboost_cqr") as run:
     run_id = run.info.run_id
 
@@ -516,11 +532,16 @@ with mlflow.start_run(run_name="obt_three_stage_v3_catboost_cqr") as run:
     )
 
     if two_stage.refined._use_catboost and two_stage.refined._catboost is not None:
-        # Save CatBoost model as pickle artifact
         refined_pkl = "/tmp/obt_refined_catboost.pkl"
         two_stage.refined.save(refined_pkl)
-        mlflow.log_artifact(refined_pkl, "obt_refined_model")
-        print(f"Logged refined CatBoost model as artifact")
+        mlflow.pyfunc.log_model(
+            artifact_path="obt_refined_model",
+            python_model=OBTModelWrapper("refined"),
+            artifacts={"model_pkl": refined_pkl},
+            registered_model_name=REFINED_MODEL_NAME,
+            input_example=sample_input,
+        )
+        print(f"Registered refined CatBoost model: {REFINED_MODEL_NAME}")
     elif two_stage.refined._pipeline is not None:
         mlflow.sklearn.log_model(
             sk_model=two_stage.refined._pipeline,
@@ -530,16 +551,23 @@ with mlflow.start_run(run_name="obt_three_stage_v3_catboost_cqr") as run:
         )
         print(f"Registered refined sklearn model: {REFINED_MODEL_NAME}")
 
+    coarse_sample = np.array(
+        [_coarse_features_to_row(_dict_to_coarse_feature_set(train_data[0]["features"]))],
+        dtype=object,
+    )
+
     if two_stage.coarse._use_catboost and two_stage.coarse._catboost is not None:
         coarse_pkl = "/tmp/obt_coarse_catboost.pkl"
         two_stage.coarse.save(coarse_pkl)
-        mlflow.log_artifact(coarse_pkl, "obt_coarse_model")
-        print(f"Logged coarse CatBoost model as artifact")
-    elif two_stage.coarse._pipeline is not None:
-        coarse_sample = np.array(
-            [_coarse_features_to_row(_dict_to_coarse_feature_set(train_data[0]["features"]))],
-            dtype=object,
+        mlflow.pyfunc.log_model(
+            artifact_path="obt_coarse_model",
+            python_model=OBTModelWrapper("coarse"),
+            artifacts={"model_pkl": coarse_pkl},
+            registered_model_name=COARSE_MODEL_NAME,
+            input_example=coarse_sample,
         )
+        print(f"Registered coarse CatBoost model: {COARSE_MODEL_NAME}")
+    elif two_stage.coarse._pipeline is not None:
         mlflow.sklearn.log_model(
             sk_model=two_stage.coarse._pipeline,
             artifact_path="obt_coarse_model",
@@ -551,8 +579,14 @@ with mlflow.start_run(run_name="obt_three_stage_v3_catboost_cqr") as run:
     # T-board model
     board_pkl = "/tmp/obt_board.pkl"
     board_predictor.save(board_pkl)
-    mlflow.log_artifact(board_pkl, "obt_board_model")
-    print(f"Logged T-board model as artifact")
+    mlflow.pyfunc.log_model(
+        artifact_path="obt_board_model",
+        python_model=OBTModelWrapper("board"),
+        artifacts={"model_pkl": board_pkl},
+        registered_model_name=BOARD_MODEL_NAME,
+        input_example=sample_input,
+    )
+    print(f"Registered T-board model: {BOARD_MODEL_NAME}")
 
     # Log comparison summary
     summary_text = f"""OBT Three-Stage Model Training Summary (v3 — CatBoost + CQR + T-board)
