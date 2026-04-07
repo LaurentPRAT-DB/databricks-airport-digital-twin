@@ -240,9 +240,14 @@ function InpaintingTileLayer({ airportIcao }: { airportIcao?: string }) {
  * Auto-pans the map to follow the selected flight during replay.
  * Disables follow when the user manually pans; re-enables on new flight selection.
  */
+// Max distance (degrees) from airport center before camera-follow stops panning.
+// ~0.1° ≈ 11km / 6nm — keeps the airport visible while tracking nearby flights.
+const FOLLOW_MAX_DISTANCE_DEG = 0.1;
+
 function FlightFollower() {
   const map = useMap();
   const { selectedFlight } = useFlightContext();
+  const { getAirportCenter } = useAirportConfigContext();
   const userPannedRef = useRef(false);
   const prevSelectedIdRef = useRef<string | null>(null);
 
@@ -262,11 +267,19 @@ function FlightFollower() {
     },
   });
 
-  // Pan to selected flight position on each update
+  // Pan to selected flight position on each update, clamped to airport vicinity
   useEffect(() => {
     if (!selectedFlight || userPannedRef.current) return;
     const { latitude, longitude } = selectedFlight;
     if (latitude == null || longitude == null || isNaN(latitude) || isNaN(longitude)) return;
+
+    // Clamp: don't pan if the flight is too far from the airport center
+    const airportCenter = getAirportCenter();
+    if (airportCenter) {
+      const dLat = Math.abs(latitude - airportCenter.lat);
+      const dLng = Math.abs(longitude - airportCenter.lon);
+      if (dLat > FOLLOW_MAX_DISTANCE_DEG || dLng > FOLLOW_MAX_DISTANCE_DEG) return;
+    }
 
     const currentCenter = map.getCenter();
     const dx = Math.abs(currentCenter.lat - latitude);
@@ -275,7 +288,7 @@ function FlightFollower() {
     if (dx > 0.0001 || dy > 0.0001) {
       map.panTo([latitude, longitude], { animate: true, duration: 0.3 });
     }
-  }, [map, selectedFlight]);
+  }, [map, selectedFlight, getAirportCenter]);
 
   return null;
 }
