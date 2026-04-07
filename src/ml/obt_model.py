@@ -1197,6 +1197,10 @@ class OBTBoardPredictor:
             horizon="t_board",
         )
 
+    def get_feature_importances(self) -> Optional[Dict[str, float]]:
+        """Return feature importances if model is trained."""
+        return self._feature_importances
+
     def save(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
