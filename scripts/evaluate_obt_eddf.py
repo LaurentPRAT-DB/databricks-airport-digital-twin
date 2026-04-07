@@ -466,8 +466,16 @@ def evaluate(
                       f"parked at {pt['time'][:19]}  ({elapsed:.0f} min so far)")
         return
 
-    # 5. Compare against OBT model predictions
-    predictor = OBTPredictor()
+    # 5. Compare against OBT model predictions (load calibration profile)
+    from src.calibration.profile import AirportProfileLoader
+    profile_loader = AirportProfileLoader()
+    profile = profile_loader.get_profile(airport_iata)
+    predictor = OBTPredictor(airport_code=airport, airport_profile=profile)
+    if profile and profile.turnaround_median_min > 0:
+        logger.info("Using calibrated turnaround median: %.1f min (from %s)",
+                     profile.turnaround_median_min, profile.data_source)
+    else:
+        logger.info("No calibrated turnaround data — using fallback (narrow=45, wide=90, regional=35)")
 
     print("\n" + "=" * 90)
     print(f"{'Callsign':10s} {'Gate':8s} {'Type':6s} {'Observed':>10s} {'Predicted':>10s} "

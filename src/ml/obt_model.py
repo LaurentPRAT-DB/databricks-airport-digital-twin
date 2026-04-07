@@ -535,12 +535,24 @@ class OBTPredictor:
     def predict(self, features: OBTFeatureSet) -> OBTPrediction:
         """Predict turnaround duration in minutes.
 
-        Falls back to GSE constants if untrained.
+        Falls back to calibration profile turnaround median when available,
+        then to GSE constants if no profile data exists.
         """
         if not self.is_trained:
-            duration = self._fallback_durations.get(
-                features.aircraft_category, 45.0
-            )
+            # Prefer calibrated turnaround median from airport profile
+            if self._profile and self._profile.turnaround_median_min > 0:
+                duration = self._profile.turnaround_median_min
+                # Scale by aircraft category relative to narrow-body baseline
+                if features.aircraft_category == "wide":
+                    duration *= 90.0 / 45.0  # 2x for wide-body
+                elif features.aircraft_category == "regional":
+                    duration *= 35.0 / 45.0  # 0.78x for regional
+                confidence = 0.4  # better than blind fallback
+            else:
+                duration = self._fallback_durations.get(
+                    features.aircraft_category, 45.0
+                )
+                confidence = 0.3
             # Hub connecting flights get 5-10% faster turnaround
             if features.is_hub_connecting:
                 duration *= 0.925  # ~7.5% reduction
@@ -548,7 +560,7 @@ class OBTPredictor:
                 turnaround_minutes=duration,
                 lower_bound_minutes=duration * 0.8,
                 upper_bound_minutes=duration * 1.2,
-                confidence=0.3,
+                confidence=confidence,
                 is_fallback=True,
             )
 

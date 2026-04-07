@@ -132,9 +132,9 @@
   "taxi_out_p95_min": 0.0,
   "taxi_in_mean_min": 0.0,
   "taxi_in_p95_min": 0.0,
-  "turnaround_median_min": 0.0,
-  "turnaround_p75_min": 0.0,
-  "turnaround_p95_min": 0.0,
+  "turnaround_median_min": 75.0,
+  "turnaround_p75_min": 85.9,
+  "turnaround_p95_min": 89.5,
   "delay_rate": 0.18,
   "delay_distribution": {
     "81": 0.2,
@@ -148,8 +148,8 @@
     "41": 0.04
   },
   "mean_delay_minutes": 21.0,
-  "data_source": "auto_calibrate+europe_west",
+  "data_source": "auto_calibrate+europe_west+opensky_observed",
   "region": "europe_west",
   "profile_date": "2026-04-06",
-  "sample_size": 0
+  "sample_size": 5
 }
