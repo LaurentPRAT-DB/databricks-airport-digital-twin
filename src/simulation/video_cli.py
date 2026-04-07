@@ -20,6 +20,8 @@ import argparse
 import asyncio
 import logging
 import sys
+from datetime import datetime
+from pathlib import Path
 
 
 def parse_resolution(value: str) -> tuple[int, int]:
@@ -117,6 +119,11 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    # Inject timestamp into output filename: foo.mp4 → foo_20260407_153012.mp4
+    out = Path(args.output)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    args.output = str(out.with_name(f"{out.stem}_{ts}{out.suffix}"))
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

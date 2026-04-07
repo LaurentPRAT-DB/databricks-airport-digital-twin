@@ -221,6 +221,34 @@ describe('FlightContext', () => {
     })
   })
 
+  describe('Isolate selected', () => {
+    it('initializes with isolateSelected false', () => {
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      expect(result.current.isolateSelected).toBe(false)
+    })
+
+    it('can toggle isolateSelected', () => {
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      act(() => {
+        result.current.setIsolateSelected(true)
+      })
+
+      expect(result.current.isolateSelected).toBe(true)
+
+      act(() => {
+        result.current.setIsolateSelected(false)
+      })
+
+      expect(result.current.isolateSelected).toBe(false)
+    })
+  })
+
   describe('Context throws without provider', () => {
     it('throws error when used outside provider', () => {
       // Suppress console.error for this test

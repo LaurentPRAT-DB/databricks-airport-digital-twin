@@ -1,6 +1,6 @@
 # Plan: Single-Flight Recording & Follow Mode
 
-**Status:** Backlog
+**Status:** Done (verified 2026-04-06 — all 4 features already implemented)
 **Date added:** 2026-04-06
 **Scope:** Backend origin/dest in snapshots + Frontend camera follow + flight isolation + CSV export
 

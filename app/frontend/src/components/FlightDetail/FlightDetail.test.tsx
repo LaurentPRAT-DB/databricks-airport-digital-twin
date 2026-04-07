@@ -277,6 +277,40 @@ describe('FlightDetail', () => {
     })
   })
 
+  describe('Isolate toggle', () => {
+    it('shows isolate flight toggle', async () => {
+      renderWithFlightSelection(0)
+
+      await waitFor(
+        () => {
+          expect(screen.getByText(/isolate flight/i)).toBeInTheDocument()
+        },
+        { timeout: 5000 }
+      )
+    })
+
+    it('clicking isolate toggle changes state', async () => {
+      const user = userEvent.setup()
+      renderWithFlightSelection(0)
+
+      await waitFor(
+        () => {
+          expect(screen.getByText(/isolate flight/i)).toBeInTheDocument()
+        },
+        { timeout: 5000 }
+      )
+
+      const toggle = screen.getByText(/isolate flight/i).closest('button')!
+      await user.click(toggle)
+
+      // After clicking, the toggle indicator should change to amber (active)
+      await waitFor(() => {
+        const indicator = toggle.querySelector('[class*="bg-amber"]')
+        expect(indicator).toBeInTheDocument()
+      })
+    })
+  })
+
   describe('Close functionality', () => {
     it('close button clears selection', async () => {
       const user = userEvent.setup()

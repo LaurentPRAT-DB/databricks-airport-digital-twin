@@ -484,6 +484,7 @@ declare global {
       getSelectedFlight: () => string | null;
       getSelectedFlightPosition: () => { lat: number; lon: number; alt: number } | null;
       getFlights: () => { icao24: string; callsign: string | null; flight_phase: string }[];
+      setIsolateSelected: (value: boolean) => void;
     };
   }
 }
@@ -526,7 +527,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
     }, 3000);
     return () => clearTimeout(timer);
   }, []);
-  const { flights, filteredFlights, selectedFlight, setSelectedFlight, dataMode, setDataMode } = useFlightContext();
+  const { flights, filteredFlights, selectedFlight, setSelectedFlight, setIsolateSelected, dataMode, setDataMode } = useFlightContext();
   const { currentAirport, refresh: refreshConfig, loadAirport } = useAirportConfigContext();
 
   // Turn off clean tiles (inpainting) when switching to recorded data mode
@@ -565,11 +566,12 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
         return { lat: selectedFlight.latitude, lon: selectedFlight.longitude, alt: selectedFlight.altitude ?? 0 };
       },
       getFlights: () => flights.map(f => ({ icao24: f.icao24, callsign: f.callsign, flight_phase: f.flight_phase })),
+      setIsolateSelected: (value: boolean) => setIsolateSelected(value),
     };
     return () => {
       delete window.__flightControl;
     };
-  }, [flights, selectedFlight, setSelectedFlight]);
+  }, [flights, selectedFlight, setSelectedFlight, setIsolateSelected]);
 
   const { viewport, setViewport, setLastSource } = useViewportState();
 

@@ -510,6 +510,69 @@ describe('useSimulationReplay', () => {
     });
   });
 
+  describe('getFlightLog', () => {
+    it('returns all frames for a specific flight', async () => {
+      // Create data with a persistent flight across multiple frames
+      const data = makeDemoData(3);
+      const timestamps = data.frame_timestamps;
+      // Add the same flight (icao24='target') to all 3 frames
+      for (let i = 0; i < timestamps.length; i++) {
+        data.frames[timestamps[i]].push({
+          time: timestamps[i],
+          icao24: 'target',
+          callsign: 'DLH100',
+          latitude: 50.0 + i * 0.01,
+          longitude: 8.5 + i * 0.01,
+          altitude: 0,
+          velocity: 5,
+          heading: 90,
+          phase: 'parked',
+          on_ground: true,
+          aircraft_type: 'A320',
+          origin_airport: 'EGLL',
+          destination_airport: 'EDDF',
+        });
+      }
+
+      globalThis.fetch = mockFetchSuccess(data);
+      const { result } = renderHook(() => useSimulationReplay());
+
+      await act(async () => {
+        await result.current.loadFile('test.json');
+      });
+
+      const log = result.current.getFlightLog('target');
+      expect(log).toHaveLength(3);
+      expect(log[0].icao24).toBe('target');
+      expect(log[0].callsign).toBe('DLH100');
+      expect(log[0].origin_airport).toBe('EGLL');
+      expect(log[0].destination_airport).toBe('EDDF');
+      // Verify positions progress
+      expect(log[1].latitude).toBeCloseTo(50.01);
+      expect(log[2].latitude).toBeCloseTo(50.02);
+    });
+
+    it('returns empty array for unknown flight', async () => {
+      globalThis.fetch = mockFetchSuccess(makeDemoData(3));
+      const { result } = renderHook(() => useSimulationReplay());
+
+      await act(async () => {
+        await result.current.loadFile('test.json');
+      });
+
+      const log = result.current.getFlightLog('nonexistent');
+      expect(log).toHaveLength(0);
+    });
+
+    it('returns empty array when no data loaded', () => {
+      globalThis.fetch = mockFetchSuccess({ files: [] });
+      const { result } = renderHook(() => useSimulationReplay());
+
+      const log = result.current.getFlightLog('abc');
+      expect(log).toHaveLength(0);
+    });
+  });
+
   describe('window.__simControl', () => {
     it('exposes control API on window', async () => {
       globalThis.fetch = mockFetchSuccess(makeDemoData(3));

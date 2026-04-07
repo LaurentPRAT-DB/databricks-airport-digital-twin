@@ -200,6 +200,7 @@ declare global {
       getInfo: () => {
         totalFrames: number;
         currentFrame: number;
+        currentSimTime: string | null;
         isLoading: boolean;
         isActive: boolean;
       };
@@ -628,6 +629,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       getInfo: () => ({
         totalFrames,
         currentFrame: currentFrameIndex,
+        currentSimTime,
         isLoading,
         isActive,
       }),
@@ -635,7 +637,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     return () => {
       delete window.__simControl;
     };
-  }, [loadFile, seekTo, totalFrames, currentFrameIndex, isLoading, isActive]);
+  }, [loadFile, seekTo, totalFrames, currentFrameIndex, currentSimTime, isLoading, isActive]);
 
   return {
     isActive,

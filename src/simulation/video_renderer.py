@@ -363,6 +363,20 @@ class VideoRenderer:
             if self.crop_to_canvas:
                 clip = await self._get_canvas_clip(page)
 
+            # Inject timestamp overlay (top-left, semi-transparent background)
+            await page.evaluate("""() => {
+                const el = document.createElement('div');
+                el.id = '__video_timestamp';
+                el.style.cssText = `
+                    position: fixed; top: 12px; left: 12px; z-index: 99999;
+                    background: rgba(0,0,0,0.6); color: #fff;
+                    font: bold 16px/1 'SF Mono', 'Consolas', monospace;
+                    padding: 6px 12px; border-radius: 6px;
+                    pointer-events: none; white-space: nowrap;
+                `;
+                document.body.appendChild(el);
+            }""")
+
             # Track whether we've selected the flight (done after first seek
             # so the flight exists in the current frame)
             flight_selected = False
@@ -384,15 +398,61 @@ class VideoRenderer:
                         "() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))"
                     )
 
+                # Update timestamp overlay
+                await page.evaluate("""() => {
+                    const el = document.getElementById('__video_timestamp');
+                    if (!el) return;
+                    const info = window.__simControl?.getInfo?.();
+                    const t = info?.currentSimTime;
+                    if (t) {
+                        const d = new Date(t);
+                        const pad = n => String(n).padStart(2, '0');
+                        el.textContent = d.getFullYear() + '-' +
+                            pad(d.getMonth()+1) + '-' + pad(d.getDate()) + '  ' +
+                            pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' +
+                            pad(d.getSeconds());
+                    } else {
+                        el.textContent = '';
+                    }
+                }""")
+
                 # Select tracked flight if requested (re-select each frame
                 # because the flight may appear/disappear between frames)
                 if self.track_flight:
+                    # Wait for the flight to appear in the flights array after
+                    # the seek (React needs a render cycle to update state)
                     await page.evaluate(
-                        "icao24 => window.__flightControl?.selectFlight(icao24)",
-                        self.track_flight,
+                        """([icao24, timeout]) => new Promise(resolve => {
+                            const start = Date.now();
+                            const check = () => {
+                                const ctrl = window.__flightControl;
+                                if (ctrl) {
+                                    const flights = ctrl.getFlights?.() || [];
+                                    if (flights.some(f => f.icao24 === icao24)) {
+                                        ctrl.selectFlight(icao24);
+                                        resolve(true);
+                                        return;
+                                    }
+                                }
+                                if (Date.now() - start < timeout) {
+                                    requestAnimationFrame(check);
+                                } else {
+                                    resolve(false);
+                                }
+                            };
+                            check();
+                        })""",
+                        [self.track_flight, 500],
                     )
                     if not flight_selected:
-                        # Give trajectory a moment to render on first selection
+                        # Give trajectory + isolate a moment to render
+                        await page.evaluate(
+                            "() => new Promise(r => setTimeout(r, 300))"
+                        )
+                        # Enable isolate mode to dim other flights
+                        await page.evaluate(
+                            "() => window.__flightControl?.setIsolateSelected?.(true)"
+                        )
                         await page.evaluate(
                             "() => new Promise(r => setTimeout(r, 200))"
                         )
@@ -433,8 +493,13 @@ class VideoRenderer:
         filepath = _find_simulation_file(self.simulation_file)
         with open(filepath) as f:
             data = json.load(f)
-        iata = data.get("config", {}).get("airport", "")
-        icao = self._IATA_TO_ICAO.get(iata, f"K{iata}")  # default: prepend K
+        airport_code = data.get("config", {}).get("airport", "")
+        # If the code is already a 4-char ICAO code, use it directly.
+        # Otherwise treat it as IATA and look up / prepend K.
+        if len(airport_code) == 4 and airport_code.isalpha():
+            icao = airport_code.upper()
+        else:
+            icao = self._IATA_TO_ICAO.get(airport_code, f"K{airport_code}")
 
         current = await page.evaluate(
             "() => window.__airportControl?.getCurrentAirport()"
@@ -443,7 +508,7 @@ class VideoRenderer:
             logger.info("Already on airport %s", icao)
             return
 
-        logger.info("Switching airport to %s (from sim config: %s)", icao, iata)
+        logger.info("Switching airport to %s (from sim config: %s)", icao, airport_code)
         await page.evaluate(
             "code => window.__airportControl.loadAirport(code)", icao
         )
