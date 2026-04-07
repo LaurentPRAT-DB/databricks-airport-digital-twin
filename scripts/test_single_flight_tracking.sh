@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 
 # ── Config ──────────────────────────────────────────────────────────
 KSFO_SIM="simulation_output_sfo_100.json"
-KSFO_FLIGHT="sim00070"    # ASA2319, 199 frames
+KSFO_FLIGHT="sim00070"    # ASA2319, 199 frames, hours 17-19
 EDDF_SIM="simulation_output_eddf_opensky.json"
 EDDF_FLIGHT="3c4b26"      # DLH572, 64 frames
 BACKEND_PORT=8000
@@ -141,7 +141,7 @@ fi
 echo ""
 echo "=== Step 4: Render KSFO tracked flight video ==="
 echo "  Flight: $KSFO_FLIGHT (ASA2319)"
-echo "  Window: hour 6-7"
+echo "  Window: hour 17-19 (flight appears at hour 17.3)"
 mkdir -p "$OUTPUT_DIR"
 
 uv run python -m src.simulation.video_cli \
@@ -149,7 +149,7 @@ uv run python -m src.simulation.video_cli \
     --output "$OUTPUT_DIR/ksfo_tracked_ASA2319.mp4" \
     --app-url "$APP_URL" \
     --track-flight "$KSFO_FLIGHT" \
-    --start-hour 6 --end-hour 7 \
+    --start-hour 17 --end-hour 19 \
     --fps 15 --speed 2 -y 2>&1 | grep -v "^$"
 
 # Output filename now includes a timestamp suffix (e.g. _20260407_153012)

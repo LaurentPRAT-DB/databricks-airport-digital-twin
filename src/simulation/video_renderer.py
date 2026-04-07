@@ -89,6 +89,35 @@ def _count_frames_in_window(
     return len(windowed), windowed[0], windowed[-1]
 
 
+def find_flight_hours(filepath: Path, icao24: str) -> tuple[float, float] | None:
+    """Find the start/end hours of a specific flight within a simulation file.
+
+    Returns (start_hour, end_hour) relative to simulation start, or None if
+    the flight is not found.  Adds a small buffer (±0.5h) around the flight's
+    actual time range.
+    """
+    with open(filepath) as f:
+        data = json.load(f)
+    config = data.get("config", {})
+    snapshots = data.get("position_snapshots", [])
+    flight_times = sorted(
+        s["time"] for s in snapshots if s.get("icao24") == icao24
+    )
+    if not flight_times:
+        return None
+
+    all_times = sorted(set(s["time"] for s in snapshots))
+    start_time_iso = config.get("start_time") or all_times[0]
+    sim_start = datetime.fromisoformat(
+        start_time_iso.replace("Z", "+00:00") if isinstance(start_time_iso, str) else start_time_iso.isoformat()
+    )
+    first = datetime.fromisoformat(flight_times[0].replace("Z", "+00:00"))
+    last = datetime.fromisoformat(flight_times[-1].replace("Z", "+00:00"))
+    start_hour = max(0, (first - sim_start).total_seconds() / 3600 - 0.5)
+    end_hour = (last - sim_start).total_seconds() / 3600 + 0.5
+    return start_hour, end_hour
+
+
 @dataclass
 class VideoEstimate:
     """Pre-render estimate of video output."""
@@ -363,18 +392,21 @@ class VideoRenderer:
             if self.crop_to_canvas:
                 clip = await self._get_canvas_clip(page)
 
-            # Inject timestamp overlay (top-left, semi-transparent background)
+            # Inject timestamp overlay inside the map container so it
+            # survives the crop-to-canvas clipping region.
             await page.evaluate("""() => {
+                const container = document.querySelector('.leaflet-container') || document.body;
                 const el = document.createElement('div');
                 el.id = '__video_timestamp';
                 el.style.cssText = `
-                    position: fixed; top: 12px; left: 12px; z-index: 99999;
-                    background: rgba(0,0,0,0.6); color: #fff;
-                    font: bold 16px/1 'SF Mono', 'Consolas', monospace;
-                    padding: 6px 12px; border-radius: 6px;
+                    position: absolute; top: 12px; left: 12px; z-index: 99999;
+                    background: rgba(0,0,0,0.65); color: #fff;
+                    font: bold 18px/1 'SF Mono', 'Consolas', monospace;
+                    padding: 8px 14px; border-radius: 6px;
                     pointer-events: none; white-space: nowrap;
+                    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
                 `;
-                document.body.appendChild(el);
+                container.appendChild(el);
             }""")
 
             # Track whether we've selected the flight (done after first seek
@@ -386,19 +418,60 @@ class VideoRenderer:
                 await page.evaluate(
                     "idx => window.__simControl.seekTo(idx)", frame_idx
                 )
-                # Wait for render: 2D needs Leaflet marker update, 3D needs RAF
-                if self.view_mode == "2d":
-                    # Leaflet updates markers synchronously on state change,
-                    # but give React + DOM a tick to settle
-                    await page.evaluate(
-                        "() => new Promise(r => setTimeout(r, 50))"
-                    )
-                else:
-                    await page.evaluate(
-                        "() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))"
+                # Wait for React to propagate seekTo through the full render
+                # pipeline (~4 render cycles).  We poll until flights appear
+                # for this frame (and optionally select the tracked flight).
+                track_icao = self.track_flight or ""
+                settled = await page.evaluate(
+                    """([targetFrame, trackIcao, timeout]) => new Promise(resolve => {
+                        const start = Date.now();
+                        const check = () => {
+                            const ctrl = window.__flightControl;
+                            const flights = ctrl?.getFlights?.() || [];
+                            if (flights.length > 0) {
+                                // Flights rendered — now select tracked flight if present
+                                if (trackIcao && flights.some(f => f.icao24 === trackIcao)) {
+                                    ctrl.selectFlight(trackIcao);
+                                }
+                                // Extra rAF to let markers + selection paint
+                                requestAnimationFrame(() => resolve({
+                                    ok: true,
+                                    count: flights.length,
+                                    selected: ctrl?.getSelectedFlight?.() || null,
+                                }));
+                                return;
+                            }
+                            if (Date.now() - start < timeout) {
+                                requestAnimationFrame(check);
+                            } else {
+                                resolve({ ok: false, count: 0, selected: null });
+                            }
+                        };
+                        requestAnimationFrame(check);
+                    })""",
+                    [frame_idx, track_icao, 2000],
+                )
+
+                # Enable isolate mode once after first successful selection
+                if self.track_flight and not flight_selected:
+                    if settled.get("selected"):
+                        await page.evaluate(
+                            "() => window.__flightControl?.setIsolateSelected?.(true)"
+                        )
+                        await page.evaluate(
+                            "() => new Promise(r => setTimeout(r, 300))"
+                        )
+                        flight_selected = True
+
+                # Log diagnostics on first few frames
+                if i < 3 or i % 200 == 0:
+                    logger.info(
+                        "Frame %d diag: flights=%d selected=%s settled=%s",
+                        i, settled.get("count", 0),
+                        settled.get("selected"), settled.get("ok"),
                     )
 
-                # Update timestamp overlay
+                # Update timestamp overlay from the simulation's frame time
                 await page.evaluate("""() => {
                     const el = document.getElementById('__video_timestamp');
                     if (!el) return;
@@ -415,48 +488,6 @@ class VideoRenderer:
                         el.textContent = '';
                     }
                 }""")
-
-                # Select tracked flight if requested (re-select each frame
-                # because the flight may appear/disappear between frames)
-                if self.track_flight:
-                    # Wait for the flight to appear in the flights array after
-                    # the seek (React needs a render cycle to update state)
-                    await page.evaluate(
-                        """([icao24, timeout]) => new Promise(resolve => {
-                            const start = Date.now();
-                            const check = () => {
-                                const ctrl = window.__flightControl;
-                                if (ctrl) {
-                                    const flights = ctrl.getFlights?.() || [];
-                                    if (flights.some(f => f.icao24 === icao24)) {
-                                        ctrl.selectFlight(icao24);
-                                        resolve(true);
-                                        return;
-                                    }
-                                }
-                                if (Date.now() - start < timeout) {
-                                    requestAnimationFrame(check);
-                                } else {
-                                    resolve(false);
-                                }
-                            };
-                            check();
-                        })""",
-                        [self.track_flight, 500],
-                    )
-                    if not flight_selected:
-                        # Give trajectory + isolate a moment to render
-                        await page.evaluate(
-                            "() => new Promise(r => setTimeout(r, 300))"
-                        )
-                        # Enable isolate mode to dim other flights
-                        await page.evaluate(
-                            "() => window.__flightControl?.setIsolateSelected?.(true)"
-                        )
-                        await page.evaluate(
-                            "() => new Promise(r => setTimeout(r, 200))"
-                        )
-                        flight_selected = True
 
                 # Screenshot
                 screenshot_path = tmp_dir / f"frame_{captured:05d}.png"

@@ -130,7 +130,21 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    from src.simulation.video_renderer import VideoRenderer
+    from src.simulation.video_renderer import VideoRenderer, find_flight_hours, _find_simulation_file
+
+    # Auto-detect time window when tracking a flight and using default hours
+    if args.track_flight and args.start_hour == 0 and args.end_hour == 24:
+        try:
+            filepath = _find_simulation_file(args.simulation_file)
+            window = find_flight_hours(filepath, args.track_flight)
+            if window:
+                args.start_hour, args.end_hour = window
+                print(f"Auto-detected time window for {args.track_flight}: "
+                      f"hour {args.start_hour:.1f} – {args.end_hour:.1f}")
+            else:
+                print(f"WARNING: Flight {args.track_flight} not found in simulation data")
+        except FileNotFoundError:
+            pass  # will be caught later by estimate()
 
     width, height = args.resolution
     renderer = VideoRenderer(
