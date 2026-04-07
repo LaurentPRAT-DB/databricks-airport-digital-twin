@@ -423,6 +423,10 @@ def evaluate(
             leave_time = datetime.fromisoformat(pt["time"])
             duration_min = (leave_time - park_time).total_seconds() / 60.0
 
+            # Filter out false turnarounds (brief taxi stops, not real gate time)
+            if duration_min < 10.0 or duration_min > 180.0:
+                continue
+
             turnarounds.append({
                 "icao24": icao24,
                 "callsign": pt.get("callsign", icao24),

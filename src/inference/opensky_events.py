@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 STATIONARY_VELOCITY_MS = 2.0   # < 2 m/s ≈ 4 kts → considered stopped
 TAXI_MAX_VELOCITY_MS = 30.0    # > 30 m/s ≈ 58 kts → likely takeoff roll
-GATE_MATCH_RADIUS_M = 100.0    # Max distance to match aircraft to a gate
+GATE_MATCH_RADIUS_M = 200.0    # Max distance to match aircraft to a gate (ADS-B ±50-100m)
 
 # Earth radius for haversine
 _R_EARTH_M = 6_371_000.0
@@ -260,12 +260,14 @@ class OpenSkyEventInferrer:
             # ── Detect transitions ───────────────────────────────────
 
             if prev_phase != phase and prev_phase != "unknown":
-                self._emit_phase_transition(timestamp, tracker, prev_phase, phase, cur)
-
-                # Gate occupy: transitioned to parked near a gate
+                # Gate occupy: assign gate BEFORE emitting transition so it's in the record
                 if phase == "parked" and near_gate:
                     tracker.assigned_gate = near_gate
                     tracker.parked_since = timestamp
+
+                self._emit_phase_transition(timestamp, tracker, prev_phase, phase, cur)
+
+                if phase == "parked" and near_gate:
                     self._emit_gate_event(timestamp, tracker, near_gate, "assign", gate_dist)
                     self._emit_gate_event(timestamp, tracker, near_gate, "occupy", gate_dist)
 

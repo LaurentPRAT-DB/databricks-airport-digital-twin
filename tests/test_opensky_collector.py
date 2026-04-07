@@ -16,10 +16,10 @@ from app.backend.services.opensky_collector import (
 class TestCollectorConfig:
     def test_default_airports(self):
         collector = OpenSkyCollector()
-        assert collector.airport_count == 9
+        assert collector.airport_count == 10
 
     def test_default_airports_include_required(self):
-        required = {"KJFK", "KLAX", "KATL", "KORD", "KDEN", "KSFO", "OMAA", "LGAV", "LSGG"}
+        required = {"KJFK", "KLAX", "KATL", "KORD", "KDEN", "KSFO", "OMAA", "LGAV", "LSGG", "EDDF"}
         assert required == set(COLLECTOR_AIRPORTS.keys())
 
     def test_custom_airports(self):
@@ -75,10 +75,10 @@ class TestCollectorStatus:
         collector = OpenSkyCollector()
         status = collector.get_status()
         assert status["running"] is False
-        assert status["airport_count"] == 9
+        assert status["airport_count"] == 10
         assert status["total_snapshots"] == 0
         assert status["started_at"] is None
-        assert len(status["airports"]) == 9
+        assert len(status["airports"]) == 10
 
     async def test_status_after_start(self):
         collector = OpenSkyCollector()
@@ -293,7 +293,7 @@ class TestCollectorAPI:
             "running": True,
             "session_id": "collector-test",
             "started_at": "2026-04-02T10:00:00+00:00",
-            "airport_count": 9,
+            "airport_count": 10,
             "total_snapshots": 42,
             "airports": {},
         }
