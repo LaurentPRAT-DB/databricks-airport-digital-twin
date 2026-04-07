@@ -8,6 +8,7 @@ against the current OBT model predictions.
 Usage:
     uv run python scripts/evaluate_obt_eddf.py
     uv run python scripts/evaluate_obt_eddf.py --data-dir data/opensky_raw --airport EDDF
+    uv run python scripts/evaluate_obt_eddf.py --from-delta --days 7
 """
 
 import argparse
@@ -83,6 +84,70 @@ def _ensure_lakebase_env() -> None:
         value = env_entry.get("value", "")
         if name.startswith("LAKEBASE_") and not os.getenv(name):
             os.environ[name] = value
+
+
+def load_phase_transitions_from_delta(airport_icao: str, days: int = 7) -> list[dict]:
+    """Load pre-enriched phase transitions from Databricks Delta table.
+
+    The enrichment job (enrich_opensky_events.py) already ran OpenSkyEventInferrer
+    with OSM gate positions, so we get phase transitions with gate assignments.
+    Returns phase transition dicts compatible with the turnaround extraction logic.
+    """
+    _ensure_lakebase_env()
+
+    host = os.getenv("DATABRICKS_HOST")
+    token = os.getenv("DATABRICKS_TOKEN")
+    if not host or not token:
+        logger.error("DATABRICKS_HOST and DATABRICKS_TOKEN required for Delta queries")
+        return []
+
+    try:
+        from databricks.sdk import WorkspaceClient
+        from databricks.sdk.service.sql import StatementState
+
+        w = WorkspaceClient(host=host, token=token)
+
+        # Find a SQL warehouse
+        warehouses = list(w.warehouses.list())
+        if not warehouses:
+            logger.error("No SQL warehouses found")
+            return []
+        warehouse_id = warehouses[0].id
+        logger.info("Using SQL warehouse: %s (%s)", warehouses[0].name, warehouse_id)
+
+        catalog = "serverless_stable_3n0ihb_catalog"
+        schema = "airport_digital_twin"
+
+        result = w.statement_execution.execute_statement(
+            warehouse_id=warehouse_id,
+            statement=f"""
+                SELECT time, icao24, callsign, from_phase, to_phase,
+                       latitude, longitude, altitude, aircraft_type, assigned_gate
+                FROM {catalog}.{schema}.opensky_phase_transitions
+                WHERE airport_icao = '{airport_icao}'
+                  AND collection_date >= date_sub(current_date(), {days})
+                ORDER BY time, icao24
+            """,
+            wait_timeout="60s",
+        )
+
+        if result.status.state != StatementState.SUCCEEDED:
+            logger.error("Delta query failed: %s", result.status.error)
+            return []
+
+        cols = [c.name for c in result.manifest.schema.columns]
+        transitions = []
+        if result.result and result.result.data_array:
+            for row in result.result.data_array:
+                transitions.append(dict(zip(cols, row)))
+
+        logger.info("Loaded %d phase transitions from Delta for %s (last %d days)",
+                     len(transitions), airport_icao, days)
+        return transitions
+
+    except Exception as e:
+        logger.error("Delta query failed: %s", e)
+        return []
 
 
 def load_from_lakebase(airport_icao: str, days: int = 7) -> list[dict]:
@@ -295,42 +360,54 @@ def evaluate(
     airport_iata: str,
     include_synced: bool = False,
     from_lakebase: bool = False,
+    from_delta: bool = False,
     days: int = 7,
 ) -> None:
     """Run the full evaluation pipeline."""
-    # 1. Load data
-    if from_lakebase:
-        records = load_from_lakebase(airport, days=days)
+
+    # ── Fast path: read pre-enriched data from Delta ──
+    if from_delta:
+        phase_transitions = load_phase_transitions_from_delta(airport, days=days)
+        if not phase_transitions:
+            logger.warning("No phase transitions in Delta for %s", airport)
+            return
+        gate_events = []  # Not needed for turnaround extraction
+        logger.info("Phase transitions from Delta: %d", len(phase_transitions))
+
     else:
-        records = load_jsonl_files(data_dir, airport)
-        if include_synced:
-            synced_dir = data_dir / "synced"
-            if synced_dir.is_dir():
-                synced = load_jsonl_files(synced_dir, airport)
-                records.extend(synced)
-                logger.info("Total records after including synced: %d", len(records))
-    if not records:
-        return
+        # 1. Load raw data
+        if from_lakebase:
+            records = load_from_lakebase(airport, days=days)
+        else:
+            records = load_jsonl_files(data_dir, airport)
+            if include_synced:
+                synced_dir = data_dir / "synced"
+                if synced_dir.is_dir():
+                    synced = load_jsonl_files(synced_dir, airport)
+                    records.extend(synced)
+                    logger.info("Total records after including synced: %d", len(records))
+        if not records:
+            return
 
-    # 2. Fetch gates from OSM (with cache)
-    cache_path = data_dir / f".gates_cache_{airport}.json"
-    gates = fetch_gates(airport, cache_path=cache_path)
-    if not gates:
-        logger.warning("No gates found — event inference will have no gate matching")
+        # 2. Fetch gates from OSM (with cache)
+        cache_path = data_dir / f".gates_cache_{airport}.json"
+        gates = fetch_gates(airport, cache_path=cache_path)
+        if not gates:
+            logger.warning("No gates found — event inference will have no gate matching")
 
-    # 3. Group into frames and run inferrer
-    frames = group_lakebase_into_frames(records) if from_lakebase else group_into_frames(records)
-    inferrer = OpenSkyEventInferrer(gates)
+        # 3. Group into frames and run inferrer
+        frames = group_lakebase_into_frames(records) if from_lakebase else group_into_frames(records)
+        inferrer = OpenSkyEventInferrer(gates)
 
-    for ts, snapshots in frames:
-        inferrer.process_frame(ts, snapshots)
+        for ts, snapshots in frames:
+            inferrer.process_frame(ts, snapshots)
 
-    results = inferrer.get_results()
-    phase_transitions = results["phase_transitions"]
-    gate_events = results["gate_events"]
+        results = inferrer.get_results()
+        phase_transitions = results["phase_transitions"]
+        gate_events = results["gate_events"]
 
-    logger.info("Phase transitions: %d", len(phase_transitions))
-    logger.info("Gate events: %d", len(gate_events))
+        logger.info("Phase transitions: %d", len(phase_transitions))
+        logger.info("Gate events: %d", len(gate_events))
 
     # 4. Extract turnaround durations (parked → taxi_to_runway/takeoff)
     parked_at: dict[str, dict] = {}   # icao24 → transition
@@ -366,16 +443,21 @@ def evaluate(
         for pt in phase_transitions:
             print(f"  {pt['time'][:19]}  {pt['callsign']:8s}  {pt['from_phase']:15s} → {pt['to_phase']}")
 
-        print("\n=== Gate Events ===")
-        for ge in gate_events:
-            print(f"  {ge['time'][:19]}  {ge['callsign']:8s}  gate={ge['gate']:6s}  {ge['event_type']}")
+        if gate_events:
+            print("\n=== Gate Events ===")
+            for ge in gate_events:
+                print(f"  {ge['time'][:19]}  {ge['callsign']:8s}  gate={ge['gate']:6s}  {ge['event_type']}")
 
         # Show aircraft still parked (incomplete turnarounds)
         if parked_at:
             print(f"\n=== Aircraft Still Parked (incomplete turnarounds) ===")
+            last_time = phase_transitions[-1]["time"] if phase_transitions else None
             for icao24, pt in parked_at.items():
                 park_time = datetime.fromisoformat(pt["time"])
-                elapsed = (datetime.fromisoformat(frames[-1][0]) - park_time).total_seconds() / 60.0
+                if last_time:
+                    elapsed = (datetime.fromisoformat(last_time) - park_time).total_seconds() / 60.0
+                else:
+                    elapsed = 0.0
                 print(f"  {pt.get('callsign', icao24):8s}  gate={pt.get('assigned_gate', '?'):6s}  "
                       f"parked at {pt['time'][:19]}  ({elapsed:.0f} min so far)")
         return
@@ -430,14 +512,18 @@ def main():
                         help="Also include data from data_dir/synced/")
     parser.add_argument("--from-lakebase", action="store_true",
                         help="Read from Lakebase instead of local JSONL files")
+    parser.add_argument("--from-delta", action="store_true",
+                        help="Read pre-enriched phase transitions from Delta tables "
+                             "(requires DATABRICKS_HOST + DATABRICKS_TOKEN)")
     parser.add_argument("--days", type=int, default=7,
-                        help="Days of data to query from Lakebase (default: 7)")
+                        help="Days of data to query from Lakebase/Delta (default: 7)")
     args = parser.parse_args()
 
     evaluate(
         Path(args.data_dir), args.airport, args.iata,
         include_synced=args.include_synced,
         from_lakebase=args.from_lakebase,
+        from_delta=args.from_delta,
         days=args.days,
     )
 
