@@ -59,6 +59,8 @@ BOARD_MODEL_NAME = f"{UC_CATALOG}.{UC_SCHEMA}.obt_board_model"
 EXPERIMENT_NAME = f"/Users/{dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()}/airport_dt_obt_three_stage_model"
 
 MIN_SIMULATION_FILES = 3  # Minimum files to proceed (soft threshold)
+MAX_SIMULATION_FILES = 60  # Cap to avoid OOM on serverless compute
+MAX_TRAINING_SAMPLES = 60_000  # Cap total samples — 7-day sims yield ~1290 each
 
 # COMMAND ----------
 
@@ -68,19 +70,44 @@ MIN_SIMULATION_FILES = 3  # Minimum files to proceed (soft threshold)
 # COMMAND ----------
 
 # List simulation files in the volume
-sim_files = sorted([
+all_sim_files = sorted([
     f for f in os.listdir(VOLUME_PATH)
     if f.endswith(".json") and (f.startswith("simulation_") or f.startswith("cal_"))
 ])
-print(f"Found {len(sim_files)} simulation files in UC Volume:")
+print(f"Found {len(all_sim_files)} simulation files in UC Volume")
+
+if len(all_sim_files) < MIN_SIMULATION_FILES:
+    msg = f"Only {len(all_sim_files)} simulation files (need >={MIN_SIMULATION_FILES}). Skipping training."
+    print(f"WARNING: {msg}")
+    dbutils.notebook.exit(json.dumps({"status": "SKIP", "reason": msg}))
+
+# Stratified sampling by airport to stay within memory limits
+if len(all_sim_files) > MAX_SIMULATION_FILES:
+    by_airport = {}
+    for f in all_sim_files:
+        # Extract airport code from filename: cal_{airport}_... or simulation_{airport}_...
+        parts = f.split("_")
+        airport = parts[1] if len(parts) > 1 else "unknown"
+        by_airport.setdefault(airport, []).append(f)
+
+    # Take equal share per airport, prefer weather + diverse days
+    per_airport = max(1, MAX_SIMULATION_FILES // len(by_airport))
+    sim_files = []
+    for airport in sorted(by_airport):
+        files = by_airport[airport]
+        # Prioritize weather files, then take remaining up to per_airport
+        weather = [f for f in files if "weather" in f]
+        normal = [f for f in files if "weather" not in f]
+        selected = weather[:max(1, per_airport // 4)] + normal[:per_airport - len(weather[:max(1, per_airport // 4)])]
+        sim_files.extend(selected[:per_airport])
+    sim_files = sorted(sim_files)[:MAX_SIMULATION_FILES]
+    print(f"Sampled {len(sim_files)} files from {len(by_airport)} airports (cap={MAX_SIMULATION_FILES})")
+else:
+    sim_files = all_sim_files
+
 for f in sim_files:
     size_mb = os.path.getsize(os.path.join(VOLUME_PATH, f)) / (1024 * 1024)
     print(f"  {f} ({size_mb:.1f} MB)")
-
-if len(sim_files) < MIN_SIMULATION_FILES:
-    msg = f"Only {len(sim_files)} simulation files (need >={MIN_SIMULATION_FILES}). Skipping training."
-    print(f"WARNING: {msg}")
-    dbutils.notebook.exit(json.dumps({"status": "SKIP", "reason": msg}))
 
 # COMMAND ----------
 
@@ -98,6 +125,10 @@ for fname in sim_files:
     samples = extract_training_data(path)
     print(f"{len(samples)} samples")
     all_data.extend(samples)
+    if len(all_data) >= MAX_TRAINING_SAMPLES:
+        print(f"  Reached sample cap ({MAX_TRAINING_SAMPLES}), stopping file ingestion.")
+        all_data = all_data[:MAX_TRAINING_SAMPLES]
+        break
 
 print(f"\nTotal training samples: {len(all_data)}")
 
