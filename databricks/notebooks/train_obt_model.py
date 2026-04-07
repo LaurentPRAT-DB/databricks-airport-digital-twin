@@ -60,7 +60,7 @@ EXPERIMENT_NAME = f"/Users/{dbutils.notebook.entry_point.getDbutils().notebook()
 
 MIN_SIMULATION_FILES = 3  # Minimum files to proceed (soft threshold)
 MAX_SIMULATION_FILES = 60  # Cap to avoid OOM on serverless compute
-MAX_TRAINING_SAMPLES = 60_000  # Cap total samples — 7-day sims yield ~1290 each
+MAX_TRAINING_SAMPLES = 15_000  # Cap total samples to stay within driver memory
 
 # COMMAND ----------
 
