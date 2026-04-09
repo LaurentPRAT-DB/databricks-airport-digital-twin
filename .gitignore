@@ -154,3 +154,6 @@ screenshots/
 *credentials*.json
 *secret*
 
+# Graphify output
+graphify-out/
+
