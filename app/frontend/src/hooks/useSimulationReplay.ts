@@ -392,6 +392,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       if (!res.ok) throw new Error(`Failed to load recording: ${res.statusText}`);
       const data: SimulationData = await res.json();
       setSimData(data);
+      setSwitchPaused(false);
       setLoadedFile(`recording_${airport}_${date}`);
       setCurrentFrameIndex(0);
       setCurrentWindow(null);

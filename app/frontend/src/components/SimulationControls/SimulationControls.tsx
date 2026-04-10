@@ -700,6 +700,8 @@ export function SimulationControls({
   // Pause demo on airport switch
   useEffect(() => {
     if (!currentAirport) return;
+    // Only pause for airport switch in simulation mode — recordings handle their own airport
+    if (dataMode !== 'simulation') return;
     // If demo is active and airport changed, pause and set pending airport
     if (sim.isActive && currentAirport !== pendingAirport) {
       // Check if the sim airport matches currentAirport (IATA vs ICAO)
