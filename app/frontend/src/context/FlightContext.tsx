@@ -27,8 +27,6 @@ interface FlightContextType {
   dataSource: 'live' | 'cached' | 'synthetic' | 'simulation' | 'opensky' | 'opensky_recorded' | null;
   simTrajectoryProvider: SimTrajectoryProvider | null;
   simFlightLogProvider: SimFlightLogProvider | null;
-  isolateSelected: boolean;
-  setIsolateSelected: (isolate: boolean) => void;
   dataMode: DataMode;
   setDataMode: (mode: DataMode) => void;
 }
@@ -154,12 +152,6 @@ export function FlightProvider({
     setShowTrajectoryState(show);
   }, []);
 
-  // Flight isolation mode — dim non-selected flights
-  const [isolateSelected, setIsolateSelectedState] = useState(false);
-  const setIsolateSelected = useCallback((isolate: boolean) => {
-    setIsolateSelectedState(isolate);
-  }, []);
-
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => ({
     flights,
@@ -177,11 +169,9 @@ export function FlightProvider({
     dataSource,
     simTrajectoryProvider: simTrajectoryProvider ?? null,
     simFlightLogProvider: simFlightLogProvider ?? null,
-    isolateSelected,
-    setIsolateSelected,
     dataMode,
     setDataMode,
-  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider, simFlightLogProvider, isolateSelected, setIsolateSelected, dataMode, setDataMode, openSkyLoading, openSkyLastUpdated]);
+  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider, simFlightLogProvider, dataMode, setDataMode, openSkyLoading, openSkyLastUpdated]);
 
   return (
     <FlightContext.Provider value={contextValue}>
