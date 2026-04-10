@@ -7,9 +7,11 @@ expectations and transformations to the raw Bronze layer baggage data.
 import dlt
 from pyspark.sql import functions as F
 
+from src.pipelines import BAGGAGE_EVENTS_BRONZE, BAGGAGE_EVENTS_SILVER
+
 
 @dlt.table(
-    name="baggage_events_silver",
+    name=BAGGAGE_EVENTS_SILVER,
     comment="Cleaned and validated baggage events",
     table_properties={
         "quality": "silver",
@@ -33,7 +35,7 @@ def baggage_events_silver():
         DataFrame: Cleaned baggage events with quality expectations
     """
     return (
-        dlt.read_stream("baggage_events_bronze")
+        dlt.read_stream(BAGGAGE_EVENTS_BRONZE)
         .withColumn("recorded_date", F.to_date("recorded_at"))
         .withColumn("airport_icao", F.upper(F.col("airport_icao")))
         .dropDuplicates(["airport_icao", "flight_number", "recorded_at"])

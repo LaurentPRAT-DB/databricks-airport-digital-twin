@@ -7,9 +7,11 @@ from the Silver layer and computes derived metrics like flight phase.
 import dlt
 from pyspark.sql import functions as F
 
+from src.pipelines import FLIGHTS_SILVER, FLIGHT_STATUS_GOLD
+
 
 @dlt.table(
-    name="flight_status_gold",
+    name=FLIGHT_STATUS_GOLD,
     comment="Business-ready aggregated flight status with computed metrics",
     table_properties={
         "quality": "gold",
@@ -38,7 +40,7 @@ def flight_status_gold():
         DataFrame: Aggregated flight status with computed metrics
     """
     return (
-        dlt.read_stream("flights_silver")
+        dlt.read_stream(FLIGHTS_SILVER)
         .groupBy("icao24")
         .agg(
             F.last("callsign").alias("callsign"),

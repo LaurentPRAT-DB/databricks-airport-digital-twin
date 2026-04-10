@@ -74,7 +74,7 @@ def _get_databricks_auth(request: Request) -> tuple[str, str]:
     raise HTTPException(status_code=503, detail="No Databricks authentication available")
 
 
-async def _genie_api(
+async def genie_api(
     method: str,
     path: str,
     host: str,
@@ -143,7 +143,7 @@ def _parse_message_response(msg: dict) -> GenieResponse:
     return result
 
 
-async def _poll_message(
+async def poll_genie_message(
     host: str,
     token: str,
     conversation_id: str,
@@ -153,7 +153,7 @@ async def _poll_message(
     start = time.monotonic()
 
     while time.monotonic() - start < _MAX_POLL_TIME:
-        msg = await _genie_api(
+        msg = await genie_api(
             "GET",
             f"/conversations/{conversation_id}/messages/{message_id}",
             host,
@@ -171,7 +171,7 @@ async def _poll_message(
                         att_id = attachment.get("id")
                         if att_id:
                             try:
-                                query_result = await _genie_api(
+                                query_result = await genie_api(
                                     "GET",
                                     f"/conversations/{conversation_id}/messages/{message_id}/query-result/{att_id}",
                                     host,
@@ -219,7 +219,7 @@ async def ask_genie(body: AskRequest, request: Request):
         )
 
     try:
-        resp = await _genie_api(
+        resp = await genie_api(
             "POST",
             "/start-conversation",
             host,
@@ -253,7 +253,7 @@ async def ask_genie(body: AskRequest, request: Request):
             text_response="The assistant returned an unexpected response. Please try again.",
         )
 
-    return await _poll_message(host, token, conversation_id, message_id)
+    return await poll_genie_message(host, token, conversation_id, message_id)
 
 
 @genie_router.post("/followup", response_model=GenieResponse)
@@ -270,7 +270,7 @@ async def followup_genie(body: FollowupRequest, request: Request):
         )
 
     try:
-        resp = await _genie_api(
+        resp = await genie_api(
             "POST",
             f"/conversations/{body.conversation_id}/messages",
             host,
@@ -309,7 +309,7 @@ async def followup_genie(body: FollowupRequest, request: Request):
             text_response="The assistant returned an unexpected response. Please try again.",
         )
 
-    return await _poll_message(host, token, body.conversation_id, message_id)
+    return await poll_genie_message(host, token, body.conversation_id, message_id)
 
 
 @genie_router.get("/space")

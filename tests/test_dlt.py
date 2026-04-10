@@ -250,7 +250,7 @@ class TestBaggageGoldPipeline:
 
     def test_baggage_gold_reads_from_silver(self, baggage_gold_source: str) -> None:
         """Validate baggage gold reads from baggage silver table."""
-        assert "baggage_events_silver" in baggage_gold_source
+        assert "BAGGAGE_EVENTS_SILVER" in baggage_gold_source
 
     def test_baggage_gold_has_partition(self, baggage_gold_source: str) -> None:
         """Validate baggage events gold is partitioned by recorded_date."""

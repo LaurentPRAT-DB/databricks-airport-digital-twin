@@ -211,3 +211,30 @@ class TestAssistantResponseFormat:
         assert "get_weather" in names
         assert "get_delay_predictions" in names
         assert len(funcs) == 14  # 13 MCP + 1 query_genie
+
+
+class TestGeniePublicInterface:
+    """Verify assistant uses only public functions from genie module."""
+
+    def test_genie_api_is_importable(self):
+        from app.backend.api.genie import genie_api
+        assert callable(genie_api)
+
+    def test_poll_genie_message_is_importable(self):
+        from app.backend.api.genie import poll_genie_message
+        assert callable(poll_genie_message)
+
+    def test_assistant_does_not_import_private_genie_names(self):
+        """Ensure assistant.py never imports _-prefixed names from genie."""
+        import ast
+        from pathlib import Path
+
+        src = Path("app/backend/api/assistant.py").read_text()
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module and "genie" in node.module:
+                for alias in node.names:
+                    assert not alias.name.startswith("_"), (
+                        f"assistant.py imports private name '{alias.name}' from genie — "
+                        f"use the public interface instead"
+                    )

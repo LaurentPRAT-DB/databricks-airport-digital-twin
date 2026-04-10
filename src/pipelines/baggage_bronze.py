@@ -7,9 +7,11 @@ The sync job writes baggage_status_gold from Lakebase PostgreSQL to Delta.
 import dlt
 from pyspark.sql import functions as F
 
+from src.pipelines import BAGGAGE_EVENTS_BRONZE, LAKEBASE_BAGGAGE_STATUS
+
 
 @dlt.table(
-    name="baggage_events_bronze",
+    name=BAGGAGE_EVENTS_BRONZE,
     comment="Baggage data from Lakebase sync (Delta table)",
     table_properties={
         "quality": "bronze",
@@ -27,7 +29,7 @@ def baggage_events_bronze():
         DataFrame: Baggage data with metadata columns
     """
     return (
-        spark.read.table("serverless_stable_3n0ihb_catalog.airport_digital_twin.baggage_status_gold")
+        spark.read.table(LAKEBASE_BAGGAGE_STATUS)
         .withColumn("_ingested_at", F.current_timestamp())
         .withColumn("_source_file", F.lit("lakebase_sync"))
     )

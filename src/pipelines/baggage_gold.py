@@ -8,9 +8,11 @@ This module defines two Gold layer tables:
 import dlt
 from pyspark.sql import functions as F
 
+from src.pipelines import BAGGAGE_EVENTS_GOLD, BAGGAGE_EVENTS_SILVER, BAGGAGE_STATUS_GOLD
+
 
 @dlt.table(
-    name="baggage_status_gold",
+    name=BAGGAGE_STATUS_GOLD,
     comment="Current baggage status per flight (latest snapshot)",
     table_properties={
         "quality": "gold",
@@ -29,7 +31,7 @@ def baggage_status_gold():
         DataFrame: Latest baggage status per flight
     """
     return (
-        dlt.read_stream("baggage_events_silver")
+        dlt.read_stream(BAGGAGE_EVENTS_SILVER)
         .withWatermark("recorded_at", "10 minutes")
         .groupBy("airport_icao", "flight_number")
         .agg(
@@ -44,7 +46,7 @@ def baggage_status_gold():
 
 
 @dlt.table(
-    name="baggage_events_gold",
+    name=BAGGAGE_EVENTS_GOLD,
     comment="Complete baggage event history for analytics",
     table_properties={
         "quality": "gold",
@@ -62,4 +64,4 @@ def baggage_events_gold():
     Returns:
         DataFrame: Complete baggage event history
     """
-    return dlt.read_stream("baggage_events_silver")
+    return dlt.read_stream(BAGGAGE_EVENTS_SILVER)

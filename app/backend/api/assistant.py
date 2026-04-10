@@ -188,10 +188,10 @@ async def _execute_genie_query(
     conversation_id: str | None = None,
 ) -> dict:
     """Execute a Genie query and return structured result."""
-    from app.backend.api.genie import _genie_api, _poll_message
+    from app.backend.api.genie import genie_api, poll_genie_message
 
     if conversation_id:
-        resp = await _genie_api(
+        resp = await genie_api(
             "POST",
             f"/conversations/{conversation_id}/messages",
             host, token,
@@ -199,7 +199,7 @@ async def _execute_genie_query(
         )
         message_id = resp.get("message_id") or resp.get("id")
     else:
-        resp = await _genie_api(
+        resp = await genie_api(
             "POST",
             "/start-conversation",
             host, token,
@@ -211,7 +211,7 @@ async def _execute_genie_query(
     if not conversation_id or not message_id:
         return {"error": "Genie returned no conversation/message ID", "text": ""}
 
-    genie_result = await _poll_message(host, token, conversation_id, message_id)
+    genie_result = await poll_genie_message(host, token, conversation_id, message_id)
     return {
         "conversation_id": conversation_id,
         "text": genie_result.text_response or "",

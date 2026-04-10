@@ -14,9 +14,11 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
+from src.pipelines import FLIGHTS_BRONZE, FLIGHTS_SILVER
+
 
 @dlt.table(
-    name="flights_silver",
+    name=FLIGHTS_SILVER,
     comment="Cleaned and validated flight position data with quality checks",
     table_properties={
         "quality": "silver",
@@ -47,7 +49,7 @@ def flights_silver():
         DataFrame: Cleaned flight position data with quality expectations
     """
     return (
-        dlt.read_stream("flights_bronze")
+        dlt.read_stream(FLIGHTS_BRONZE)
         # Explode the states array to get individual flight records
         .withColumn("state", F.explode("states"))
         # Extract all 17 fields from the state vector by index
