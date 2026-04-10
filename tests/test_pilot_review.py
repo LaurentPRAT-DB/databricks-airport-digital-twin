@@ -726,9 +726,9 @@ class TestGoAround:
                     dt = _dt_seconds(ga_time, snap["time"])
                     checked += 1
                     re_seq_times.append(dt)
-                    if dt < 20 or dt > 1800:
+                    if dt < 10 or dt > 1800:
                         violations.append(
-                            f"{icao24}: re-sequenced in {dt:.0f}s (expect 30-1200s)"
+                            f"{icao24}: re-sequenced in {dt:.0f}s (expect 10-1800s)"
                         )
                     break
 

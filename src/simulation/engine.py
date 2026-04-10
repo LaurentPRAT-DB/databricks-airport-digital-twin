@@ -51,6 +51,7 @@ from src.ingestion.fallback import (
     reset_airport_offset,
     set_calibration_gate_minutes,
     set_calibration_taxi_out,
+    set_calibration_taxi_in,
 )
 from src.ingestion.schedule_generator import (
     AIRPORT_COORDINATES,
@@ -329,6 +330,12 @@ class SimulationEngine:
             set_calibration_taxi_out(profile.taxi_out_mean_min)
         else:
             set_calibration_taxi_out(0.0)
+
+        # Set calibrated taxi-in hold from BTS OTP data
+        if profile.taxi_in_mean_min > 0:
+            set_calibration_taxi_in(profile.taxi_in_mean_min)
+        else:
+            set_calibration_taxi_in(0.0)
 
         _flight_states.clear()
         _gate_states.clear()

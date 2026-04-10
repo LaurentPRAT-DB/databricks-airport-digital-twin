@@ -320,7 +320,7 @@ class TestAirportModelRegistry:
         reg.get_models("KSFO")
         with patch("src.ml.registry.MLFLOW_AVAILABLE", False):
             result = reg.register_to_unity_catalog("KSFO", "cat", "schema")
-            assert result == {"status": "mlflow_not_available"}
+            assert result == {"status": "deprecated_use_training_notebook"}
 
     def test_register_to_unity_catalog_no_catalog(self):
         from src.ml.registry import AirportModelRegistry
@@ -329,7 +329,7 @@ class TestAirportModelRegistry:
         reg.get_models("KSFO")
         with patch("src.ml.registry.MLFLOW_AVAILABLE", True):
             result = reg.register_to_unity_catalog("KSFO", "", "")
-            assert result == {"status": "catalog_or_schema_not_configured"}
+            assert result == {"status": "deprecated_use_training_notebook"}
 
     def test_register_to_unity_catalog_with_config(self):
         from src.ml.registry import AirportModelRegistry
@@ -338,9 +338,7 @@ class TestAirportModelRegistry:
         reg.get_models("KSFO")
         with patch("src.ml.registry.MLFLOW_AVAILABLE", True):
             result = reg.register_to_unity_catalog("KSFO", "my_cat", "my_schema")
-            assert "delay" in result
-            assert "registered:" in result["delay"]
-            assert "KSFO" in result["delay"]
+            assert result == {"status": "deprecated_use_training_notebook"}
 
     def test_load_from_unity_catalog_no_mlflow(self):
         from src.ml.registry import AirportModelRegistry

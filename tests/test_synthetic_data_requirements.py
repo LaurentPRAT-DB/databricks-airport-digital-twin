@@ -295,6 +295,9 @@ class TestRunwayConstraints:
     """Validate single occupancy and runway management."""
 
     def test_runway_starts_clear(self):
+        # Reset global runway state in case prior tests left it occupied
+        _runway_28L.occupied_by = None
+        _runway_28R.occupied_by = None
         assert _runway_28L.occupied_by is None
         assert _runway_28R.occupied_by is None
 

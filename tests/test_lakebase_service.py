@@ -210,8 +210,9 @@ class TestLakebaseScheduleOperations:
             result = service.get_schedule(flight_type="arrival")
             assert result is None
 
+    @patch("app.backend.services.lakebase_service.execute_values")
     @patch("app.backend.services.lakebase_service.psycopg2", create=True)
-    def test_upsert_schedule_success(self, mock_psycopg2):
+    def test_upsert_schedule_success(self, mock_psycopg2, mock_execute_values):
         """Test successful schedule upsert."""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
@@ -347,8 +348,9 @@ class TestLakebaseGSEFleetOperations:
             result = service.get_gse_fleet()
             assert result is None
 
+    @patch("app.backend.services.lakebase_service.execute_values")
     @patch("app.backend.services.lakebase_service.psycopg2", create=True)
-    def test_upsert_gse_fleet_success(self, mock_psycopg2):
+    def test_upsert_gse_fleet_success(self, mock_psycopg2, mock_execute_values):
         """Test successful GSE fleet upsert."""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()

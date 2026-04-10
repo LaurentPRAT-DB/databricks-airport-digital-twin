@@ -225,7 +225,9 @@ class TestT02ApproachAltitude:
             avg_first = sum(p["altitude"] for p in q1) / len(q1)
             avg_last = sum(p["altitude"] for p in q4) / len(q4)
 
-            assert avg_last < avg_first, (
+            # Allow 200ft tolerance: go-arounds with re-sequence holds can
+            # produce a slight altitude gain in the last quarter
+            assert avg_last < avg_first + 200, (
                 f"T02 FAIL: {icao24} approach altitude not decreasing "
                 f"(first quarter avg {avg_first:.0f} ft, last quarter avg {avg_last:.0f} ft)"
             )

@@ -115,6 +115,26 @@ def set_calibration_taxi_out(mean_minutes: float, waypoint_travel_s: float = 180
     _calibration_taxi_out_waypoint_s = waypoint_travel_s
 
 
+# Calibration: BTS taxi-in mean time in seconds.  When set (> 0), the
+# taxi_to_gate phase adds an arrival hold so total taxi-in duration
+# (waypoint travel + hold) matches the real-world BTS mean.
+_calibration_taxi_in_target_s: float = 0.0
+_calibration_taxi_in_waypoint_s: float = 0.0
+
+
+def set_calibration_taxi_in(mean_minutes: float, waypoint_travel_s: float = 120.0) -> None:
+    """Set calibrated taxi-in target from BTS OTP data.
+
+    Args:
+        mean_minutes: BTS mean taxi-in time in minutes (e.g. 7.6 for SFO).
+        waypoint_travel_s: estimated seconds the sim's waypoint path takes
+            without any hold (default 120s ~ 2 min at 30 kts inbound).
+    """
+    global _calibration_taxi_in_target_s, _calibration_taxi_in_waypoint_s
+    _calibration_taxi_in_target_s = mean_minutes * 60.0
+    _calibration_taxi_in_waypoint_s = waypoint_travel_s
+
+
 # ============================================================================
 # WEATHER STATE — updated by simulation engine each weather tick
 # ============================================================================
@@ -2105,6 +2125,9 @@ class FlightState:
     turnaround_schedule: Optional[Dict] = None # {phase: {"start_offset_s", "duration_s", "done", "started"}}
     departure_queue_hold_s: float = 0.0        # Remaining departure queue hold (seconds, calibrated)
     departure_queue_set: bool = False           # True once the hold has been computed
+    arrival_hold_s: float = 0.0                 # Remaining arrival taxi hold (seconds, calibrated)
+    arrival_hold_set: bool = False              # True once the arrival hold has been computed
+    go_around_hold_until: float = 0.0           # time.time() before which aircraft cannot re-enter approach
     cruise_altitude: float = 0.0               # Target cruise FL (hemispheric rule)
     star_name: str = ""                          # Assigned STAR procedure name
     sid_name: str = ""                           # Assigned SID procedure name
@@ -3697,6 +3720,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             )
             _set_phase(state, FlightPhase.ENROUTE)
             state.waypoint_index = 0
+            # Minimum 30s hold before re-entering approach (ATC vectoring delay)
+            state.go_around_hold_until = time.time() + 30.0
 
             logger.info(
                 "GO-AROUND #%d %s (%s): %s at %.0fft → ENROUTE for re-sequence",
@@ -3966,6 +3991,17 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
     elif state.phase == FlightPhase.TAXI_TO_GATE:
         # Taxi along waypoints to assigned gate WITH SEPARATION
+
+        # Calibrated arrival hold — pads taxi-in to match BTS mean.
+        # Computed once on first tick, then decremented.
+        if not state.arrival_hold_set and _calibration_taxi_in_target_s > 0:
+            hold_base = max(0.0, _calibration_taxi_in_target_s - _calibration_taxi_in_waypoint_s)
+            state.arrival_hold_s = hold_base * random.uniform(0.80, 1.20)
+            state.arrival_hold_set = True
+        if state.arrival_hold_s > 0:
+            state.arrival_hold_s -= dt
+            state.velocity = 0
+            return state
 
         # First, ensure we have an assigned gate before proceeding
         if state.assigned_gate is None:
@@ -4575,6 +4611,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                               + _count_aircraft_in_phase(FlightPhase.LANDING))
             can_start_approach = approach_count < MAX_APPROACH_AIRCRAFT
 
+            # Go-around hold: wait minimum vectoring time before re-entering approach
+            if state.go_around_hold_until > 0 and time.time() < state.go_around_hold_until:
+                can_start_approach = False
 
             if can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
                 # Close enough — transition to approach
