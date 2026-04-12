@@ -21,7 +21,6 @@ import {
   MAX_APPROACH_AIRCRAFT,
   MAX_PARKED_AIRCRAFT,
   MAX_TAXI_AIRCRAFT,
-  SFO_GATE_POSITIONS,
   getWakeCategory,
   getRequiredSeparationNM,
   getRequiredSeparationDeg,
@@ -413,71 +412,7 @@ describe('getSeparationStatus', () => {
 })
 
 // ============================================================================
-// 11. Gate positions satisfy minimum gate separation
-// ============================================================================
-describe('Gate positions satisfy separation constraints', () => {
-  const gateEntries = Object.entries(SFO_GATE_POSITIONS)
-
-  it('no two gates overlap (all pairs separated by at least taxi minimum)', () => {
-    const violations: string[] = []
-
-    for (let i = 0; i < gateEntries.length; i++) {
-      for (let j = i + 1; j < gateEntries.length; j++) {
-        const [nameA, posA] = gateEntries[i]
-        const [nameB, posB] = gateEntries[j]
-        const latDiff = posA[0] - posB[0]
-        const lonDiff = posA[1] - posB[1]
-        const dist = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
-
-        // Adjacent gates within a terminal area can be closer than MIN_GATE_SEPARATION_DEG
-        // but must still satisfy MIN_TAXI_SEPARATION_DEG (aircraft don't overlap)
-        if (dist < MIN_TAXI_SEPARATION_DEG) {
-          violations.push(
-            `${nameA} ↔ ${nameB}: ${dist.toFixed(6)} deg < ${MIN_TAXI_SEPARATION_DEG} deg`,
-          )
-        }
-      }
-    }
-
-    expect(violations).toEqual([])
-  })
-
-  it('gates across different terminal areas have MIN_GATE_SEPARATION_DEG', () => {
-    // Cross-terminal pairs: G-area vs B-area, G-area vs C-area, etc.
-    const terminalPairs = [
-      ['G1', 'B1'],
-      ['G1', 'C1'],
-      ['A1', 'B1'],
-      ['A1', 'C1'],
-      ['B1', 'C1'],
-    ]
-
-    for (const [nameA, nameB] of terminalPairs) {
-      const posA = SFO_GATE_POSITIONS[nameA]
-      const posB = SFO_GATE_POSITIONS[nameB]
-      if (!posA || !posB) continue
-
-      const latDiff = posA[0] - posB[0]
-      const lonDiff = posA[1] - posB[1]
-      const dist = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff)
-
-      expect(dist).toBeGreaterThanOrEqual(MIN_GATE_SEPARATION_DEG)
-    }
-  })
-
-  it('gates within the same terminal area have reasonable spacing', () => {
-    // G1, G2, G3 in same area; should each be spaced
-    const g1 = SFO_GATE_POSITIONS['G1']
-    const g2 = SFO_GATE_POSITIONS['G2']
-    const g3 = SFO_GATE_POSITIONS['G3']
-
-    expect(distanceNM(g1, g2)).toBeGreaterThan(0)
-    expect(distanceNM(g2, g3)).toBeGreaterThan(0)
-  })
-})
-
-// ============================================================================
-// 12. 3D constants are consistent with 2D constants
+// 11. 3D constants are consistent with 2D constants
 // ============================================================================
 describe('3D ↔ 2D separation consistency', () => {
   it('SCENE_SCALE is 10000', () => {

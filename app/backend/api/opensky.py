@@ -497,6 +497,89 @@ async def list_recordings() -> dict:
     return {"recordings": recordings, "count": len(recordings)}
 
 
+def _weather_snapshots_to_scenario_events(weather_snapshots: list[dict]) -> list[dict]:
+    """Convert METAR weather snapshots into scenario_events for PlaybackBar.
+
+    Only emits an event when conditions *change* from the previous snapshot,
+    avoiding duplicate events for sustained weather. Noteworthy conditions:
+    - Flight category transitions (IFR, LIFR, MVFR)
+    - High wind or gusts (>= 25 kts)
+    - Low visibility (< 3 SM)
+    - Low ceiling (< 1000 ft)
+    """
+    events: list[dict] = []
+    prev_category: str | None = None
+
+    for snap in weather_snapshots:
+        category = snap.get("flight_category", "VFR")
+        time_str = snap.get("time", "")
+
+        # Only emit when category changes
+        if category == prev_category:
+            continue
+        prev_category = category
+
+        # VFR with no noteworthy conditions — skip
+        if category == "VFR":
+            wind = snap.get("wind_speed_kts") or 0
+            gust = snap.get("wind_gust_kts") or 0
+            if wind < 25 and gust < 25:
+                # Emit a "return to VFR" event if we had a prior non-VFR event
+                if events:
+                    events.append({
+                        "time": time_str,
+                        "event_type": "weather",
+                        "description": "VFR conditions restored",
+                    })
+                continue
+
+        # Build description from available data
+        parts: list[str] = []
+        vis = snap.get("visibility_sm")
+        if vis is not None and vis < 3:
+            parts.append(f"visibility {vis} SM")
+
+        raw = snap.get("raw_metar", "")
+        # Extract ceiling from raw METAR (BKN/OVC/VV followed by 3-digit hundreds of feet)
+        import re
+        ceiling_match = re.search(r"(BKN|OVC|VV)(\d{3})", raw)
+        ceiling_ft: int | None = None
+        if ceiling_match:
+            ceiling_ft = int(ceiling_match.group(2)) * 100
+            if ceiling_ft < 1000:
+                parts.append(f"ceiling {ceiling_ft} ft")
+
+        wind = snap.get("wind_speed_kts") or 0
+        gust = snap.get("wind_gust_kts") or 0
+        if gust >= 25:
+            parts.append(f"wind {wind} G{gust} kts")
+        elif wind >= 25:
+            parts.append(f"wind {wind} kts")
+
+        detail = f": {', '.join(parts)}" if parts else ""
+        description = f"{category} conditions{detail}"
+
+        event: dict = {
+            "time": time_str,
+            "event_type": "weather",
+            "description": description,
+        }
+        # Add structured details for consistency with simulation events
+        if vis is not None:
+            event["visibility_sm"] = vis
+        if ceiling_ft is not None:
+            event["ceiling_ft"] = ceiling_ft
+        if wind:
+            event["wind_speed_kts"] = wind
+        if gust:
+            event["wind_gust_kts"] = gust
+        event["flight_category"] = category
+
+        events.append(event)
+
+    return events
+
+
 @opensky_router.get("/recordings/{airport_icao}/{date}")
 async def get_recording_data(airport_icao: str, date: str) -> dict:
     """Load a recorded OpenSky session as frame-based replay data.
@@ -762,7 +845,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         "phase_transitions": enrichment["phase_transitions"],
         "gate_events": enrichment["gate_events"],
         "weather_snapshots": weather_snapshots,
-        "scenario_events": [],
+        "scenario_events": _weather_snapshots_to_scenario_events(weather_snapshots),
         "time_window": {
             "start_time": sorted_timestamps[0] if sorted_timestamps else None,
             "end_time": sorted_timestamps[-1] if sorted_timestamps else None,

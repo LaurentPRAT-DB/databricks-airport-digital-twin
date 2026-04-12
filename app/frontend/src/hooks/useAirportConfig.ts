@@ -19,7 +19,7 @@ import {
   OSMApron,
   OSMRunway,
 } from '../types/airportFormats';
-import { AIRPORT_3D_CONFIG, RunwayConfig, TaxiwayConfig } from '../constants/airport3D';
+import { RunwayConfig, TaxiwayConfig } from '../constants/airport3D';
 import { BuildingPlacement } from '../config/buildingModels';
 import { DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON } from '../constants/defaults';
 import { getCachedConfig, setCachedConfig } from '../utils/airportConfigCache';
@@ -123,31 +123,11 @@ interface OSMImportOptions {
 function createDefaultConfig(): AirportConfig {
   return {
     sources: ['default'],
-    runways: AIRPORT_3D_CONFIG.runways.map((r) => ({
-      id: r.id,
-      start: r.start,
-      end: r.end,
-      width: r.width,
-      color: r.color,
-    })),
-    taxiways: AIRPORT_3D_CONFIG.taxiways.map((t) => ({
-      id: t.id,
-      points: t.points,
-      width: t.width,
-      color: t.color,
-    })),
+    runways: [],
+    taxiways: [],
     aprons: [],
     navaids: [],
-    buildings: AIRPORT_3D_CONFIG.buildings.map((b) => ({
-      id: b.id,
-      name: b.id,
-      type: b.type,
-      position: b.position,
-      dimensions: { width: 50, height: 20, depth: 50 },
-      rotation: b.rotation,
-      storeys: [],
-      sourceGlobalId: '',
-    })),
+    buildings: [],
   };
 }
 
@@ -677,12 +657,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
       rotation: b.rotation,
     }));
 
-    // Merge with default buildings if no imports
-    if (config.sources.includes('default')) {
-      return AIRPORT_3D_CONFIG.buildings;
-    }
-
-    return ifcBuildings.length > 0 ? ifcBuildings : AIRPORT_3D_CONFIG.buildings;
+    return ifcBuildings;
   }, [config.buildings, config.sources]);
 
   /**

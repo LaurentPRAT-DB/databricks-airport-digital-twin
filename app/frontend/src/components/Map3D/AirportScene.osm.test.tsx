@@ -18,15 +18,6 @@ vi.mock('./Trajectory3D', () => ({
   Trajectory3D: () => null,
 }));
 
-vi.mock('./Building3D', () => ({
-  Building3D: ({ placement }: { placement: { id: string } }) => (
-    <mesh name={`building-${placement.id}`}>
-      <boxGeometry args={[5, 3, 5]} />
-      <meshStandardMaterial />
-    </mesh>
-  ),
-}));
-
 vi.mock('./Terminal3D', () => ({
   TerminalGroup: ({ terminals }: { terminals: OSMTerminal[] }) => (
     <group name="terminal-group">
@@ -139,71 +130,10 @@ describe('AirportScene — OSM data behavior', () => {
     vi.clearAllMocks();
   });
 
-  describe('hasOSMData detection', () => {
-    it('shows hardcoded buildings when no OSM data', async () => {
+  describe('No hardcoded fallback', () => {
+    it('renders no buildings when no OSM data provided', async () => {
       const renderer = await ReactThreeTestRenderer.create(
         <AirportScene />
-      );
-      const group = renderer.scene.children[0];
-      // Default scene has hardcoded buildings (from AIRPORT_3D_CONFIG)
-      const buildingMeshes = group.children.filter(
-        (c: { props?: Record<string, unknown> }) =>
-          (c.props?.name as string)?.startsWith('building-')
-      );
-      expect(buildingMeshes.length).toBeGreaterThan(0);
-    });
-
-    it('hides hardcoded buildings when terminals are present', async () => {
-      const renderer = await ReactThreeTestRenderer.create(
-        <AirportScene
-          terminals={[createTerminal('t1', 37.62, -122.38)]}
-          airportCenter={sfoCenter}
-        />
-      );
-      const group = renderer.scene.children[0];
-      const buildingMeshes = group.children.filter(
-        (c: { props?: Record<string, unknown> }) =>
-          (c.props?.name as string)?.startsWith('building-')
-      );
-      expect(buildingMeshes.length).toBe(0);
-    });
-
-    it('hides hardcoded buildings when only runways are present', async () => {
-      const renderer = await ReactThreeTestRenderer.create(
-        <AirportScene
-          osmRunways={[createRunway('28L')]}
-          airportCenter={sfoCenter}
-        />
-      );
-      const group = renderer.scene.children[0];
-      const buildingMeshes = group.children.filter(
-        (c: { props?: Record<string, unknown> }) =>
-          (c.props?.name as string)?.startsWith('building-')
-      );
-      expect(buildingMeshes.length).toBe(0);
-    });
-
-    it('hides hardcoded buildings when only taxiways are present', async () => {
-      const renderer = await ReactThreeTestRenderer.create(
-        <AirportScene
-          osmTaxiways={[createTaxiway('A')]}
-          airportCenter={sfoCenter}
-        />
-      );
-      const group = renderer.scene.children[0];
-      const buildingMeshes = group.children.filter(
-        (c: { props?: Record<string, unknown> }) =>
-          (c.props?.name as string)?.startsWith('building-')
-      );
-      expect(buildingMeshes.length).toBe(0);
-    });
-
-    it('hides hardcoded buildings when only aprons are present', async () => {
-      const renderer = await ReactThreeTestRenderer.create(
-        <AirportScene
-          osmAprons={[createApron('A1')]}
-          airportCenter={sfoCenter}
-        />
       );
       const group = renderer.scene.children[0];
       const buildingMeshes = group.children.filter(
@@ -246,7 +176,7 @@ describe('AirportScene — OSM data behavior', () => {
       expect(osmRunwayGroup!.children.length).toBe(2);
     });
 
-    it('does not render hardcoded runways when OSM runways present', async () => {
+    it('only renders OSM runways (no hardcoded fallback)', async () => {
       const renderer = await ReactThreeTestRenderer.create(
         <AirportScene
           osmRunways={[createRunway('28L')]}
@@ -254,8 +184,6 @@ describe('AirportScene — OSM data behavior', () => {
         />
       );
       const group = renderer.scene.children[0];
-      // No hardcoded runway groups (hasOSMData = true)
-      // The key check: osm-runways IS present
       const osmRunwayGroup = group.children.find(
         (c: { props?: Record<string, unknown> }) => c.props?.name === 'osm-runways'
       );

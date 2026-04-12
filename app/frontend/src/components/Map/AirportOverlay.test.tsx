@@ -63,11 +63,6 @@ vi.mock('../../context/AirportConfigContext', () => ({
   useAirportConfigContext: () => mockContextValue,
 }))
 
-vi.mock('../../constants/airportLayout', () => ({
-  SFO_FALLBACK_LAYOUT: { type: 'FeatureCollection', features: [] },
-  getFeaturesByType: () => [],
-}))
-
 vi.mock('../../hooks/usePredictions', () => ({
   useCongestion: () => ({ congestion: [], bottlenecks: [], isLoading: false, error: null }),
 }))
@@ -128,29 +123,17 @@ describe('AirportOverlay', () => {
     })
   })
 
-  describe('Fallback behavior', () => {
-    it('does not render hardcoded GeoJSON when OSM terminals present', () => {
-      mockContextValue.getTerminals.mockReturnValue([{
-        id: 't1', name: 'T1', geoPolygon: [
-          { latitude: 37.615, longitude: -122.391, altitude: 0 },
-          { latitude: 37.616, longitude: -122.391, altitude: 0 },
-          { latitude: 37.616, longitude: -122.392, altitude: 0 },
-        ],
-      }] as Partial<OSMTerminal>[] as OSMTerminal[])
-      const { queryByTestId } = render(<AirportOverlay />)
-      expect(queryByTestId('geojson')).not.toBeInTheDocument()
-    })
-
-    it('renders hardcoded GeoJSON when no OSM data at all', () => {
-      mockContextValue.getGates.mockReturnValue([])
-      const { getByTestId } = render(<AirportOverlay />)
-      expect(getByTestId('geojson')).toBeInTheDocument()
-    })
-
+  describe('Empty data behavior', () => {
     it('does not render gate markers when no gates available', () => {
       mockContextValue.getGates.mockReturnValue([])
       const { queryAllByTestId } = render(<AirportOverlay />)
       expect(queryAllByTestId('circle-marker')).toHaveLength(0)
+    })
+
+    it('does not render GeoJSON fallback (no hardcoded data)', () => {
+      mockContextValue.getGates.mockReturnValue([])
+      const { queryByTestId } = render(<AirportOverlay />)
+      expect(queryByTestId('geojson')).not.toBeInTheDocument()
     })
   })
 
@@ -168,14 +151,6 @@ describe('AirportOverlay', () => {
     })
 
     it('renders taxiways as polylines', () => {
-      // Need terminals too so hasOSMData is true and hardcoded is hidden
-      mockContextValue.getTerminals.mockReturnValue([{
-        id: 't1', name: 'T1', geoPolygon: [
-          { latitude: 37.615, longitude: -122.391, altitude: 0 },
-          { latitude: 37.616, longitude: -122.391, altitude: 0 },
-          { latitude: 37.616, longitude: -122.392, altitude: 0 },
-        ],
-      }] as Partial<OSMTerminal>[] as OSMTerminal[])
       mockContextValue.getTaxiways.mockReturnValue([{
         id: 'tw1', name: 'A', geoPoints: [
           { latitude: 37.615, longitude: -122.391, altitude: 0 },

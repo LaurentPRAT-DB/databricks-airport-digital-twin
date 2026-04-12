@@ -935,11 +935,11 @@ export function SimulationControls({
         )
       )}
 
-      {/* Playback bar — active demo/sim in simulation mode */}
-      {dataMode === 'simulation' && sim.isActive && !sim.switchPaused && <PlaybackBar sim={sim} />}
+      {/* Playback bar — active replay in simulation or recorded mode */}
+      {dataMode !== 'live' && sim.isActive && !sim.switchPaused && <PlaybackBar sim={sim} isRecorded={dataMode === 'recorded'} />}
 
       {/* Simulation paused bar */}
-      {dataMode === 'simulation' && sim.switchPaused && (
+      {dataMode !== 'live' && sim.switchPaused && (
         <PausedBar sim={sim} pendingAirport={pendingAirport} onRestart={handleDemoRestart} />
       )}
 
@@ -976,10 +976,6 @@ export function SimulationControls({
             </button>
           )}
 
-          {/* Playback bar reused for recorded data — with recorded badge integrated */}
-          {sim.isActive && !sim.switchPaused && (
-            <PlaybackBar sim={sim} isRecorded />
-          )}
         </>
       )}
 

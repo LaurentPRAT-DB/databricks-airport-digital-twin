@@ -22,15 +22,6 @@ vi.mock('./Trajectory3D', () => ({
   ),
 }));
 
-vi.mock('./Building3D', () => ({
-  Building3D: ({ placement }: { placement: { id: string } }) => (
-    <mesh name={`building-${placement.id}`}>
-      <boxGeometry args={[20, 10, 20]} />
-      <meshStandardMaterial color={0x888888} />
-    </mesh>
-  ),
-}));
-
 // Mock useFrame to avoid animation loop issues
 vi.mock('@react-three/fiber', async () => {
   const actual = await vi.importActual('@react-three/fiber');
@@ -117,15 +108,16 @@ describe('AirportScene', () => {
   });
 
   describe('Runways', () => {
-    it('renders runway groups', async () => {
+    it('renders no runways when no OSM data provided', async () => {
       const renderer = await ReactThreeTestRenderer.create(<AirportScene />);
       const group = renderer.scene.children[0];
 
-      // Runways are rendered as groups containing plane + markings
-      const groups = group.children.filter(
-        (child: { type: string }) => child.type === 'Group'
+      // No hardcoded runways — OSM data must be provided
+      const namedGroups = group.children.filter(
+        (child: { props?: Record<string, unknown> }) =>
+          (child.props?.name as string) === 'osm-runways'
       );
-      expect(groups.length).toBeGreaterThan(0);
+      expect(namedGroups.length).toBe(0);
     });
   });
 
@@ -250,22 +242,15 @@ describe('AirportScene', () => {
 
       // Should contain:
       // - Ground (Mesh)
-      // - Terminal (Mesh)
-      // - Buildings (Mesh x N)
-      // - Runways (Group x N)
-      // - Taxiways (Group x N)
+      // - TerminalGroup (Group, empty without OSM data)
       // - Trajectory (Mesh)
       // - Aircraft (Mesh x N)
 
       const meshes = group.children.filter(
         (child: { type: string }) => child.type === 'Mesh'
       );
-      const groups = group.children.filter(
-        (child: { type: string }) => child.type === 'Group'
-      );
 
-      expect(meshes.length).toBeGreaterThan(3); // Ground + Terminal + Trajectory + Buildings + Aircraft
-      expect(groups.length).toBeGreaterThan(0); // Runways + Taxiways
+      expect(meshes.length).toBeGreaterThanOrEqual(3); // Ground + Trajectory + Aircraft
     });
 
     it('renders correctly with large flight count', async () => {
