@@ -236,8 +236,27 @@ export function useAirportConfig(): UseAirportConfigReturn {
       }
     };
 
+    // Fallback poll: detect demo_ready via /api/ready in case WS misses it
+    // (e.g. WS not connected yet during startup, or message lost).
+    // Runs until demo_ready is detected, then stops. WS handles resets on switch.
+    const demoPoll = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/ready`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.demo_ready) {
+            setDemoReady(true);
+            clearInterval(demoPoll);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }, 2000);
+
     return () => {
       ws.close();
+      clearInterval(demoPoll);
       if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
       if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
     };

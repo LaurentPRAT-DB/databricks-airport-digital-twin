@@ -302,6 +302,7 @@ async def _background_init(app: FastAPI):
         # ── Phase 4: Generate demo simulation (background, non-blocking) ──
         async def _generate_demo_background():
             from app.backend.services.demo_simulation_service import get_demo_simulation_service
+            from app.backend.api.websocket import broadcaster
             try:
                 app.state.startup_status = "Generating demo simulation..."
                 demo_svc = get_demo_simulation_service()
@@ -311,6 +312,11 @@ async def _background_init(app: FastAPI):
                 logger.info(f"INIT | Demo simulation generated in {demo_ms:.0f}ms")
                 app.state.init_timings["phase4_demo_sim"] = round(demo_ms / 1000, 2)
                 app.state.startup_status = "Ready"
+                # Signal frontend that demo is ready (same WS message as activate flow)
+                await broadcaster.broadcast({
+                    "type": "demo_ready",
+                    "data": {"icao": airport_icao},
+                })
             except Exception as e:
                 logger.error(f"INIT | Demo simulation generation FAILED: {e}", exc_info=True)
                 app.state.init_timings["phase4_demo_sim"] = f"FAILED: {type(e).__name__}: {e}"
