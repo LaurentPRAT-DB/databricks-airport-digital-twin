@@ -1632,7 +1632,7 @@ def _get_star_name(origin_iata: Optional[str] = None) -> str:
     coords = _get_airport_coordinates()
     if origin_iata not in coords:
         return _STAR_CORRIDORS["EAST"]["name"]  # Unknown origin default
-    rwy_heading = _get_runway_heading() or 280.0
+    rwy_heading = _get_runway_heading() or _get_fallback_runway()[2]
     approach_course = (rwy_heading + 180) % 360
     bearing_to_apt = _bearing_from_airport(origin_iata)
     entry_dir = (bearing_to_apt + 180) % 360
@@ -1652,17 +1652,15 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     final approach fix on the ILS.
 
     When no OSM runway data is available, generates fallback waypoints using the
-    airport center with a default heading of 280 (westbound approach, typical for
-    most US airports).
+    airport center with a latitude-derived heading from _get_fallback_runway().
     """
     rwy_threshold = _get_runway_threshold()  # (lon, lat) or None
     rwy_heading = _get_runway_heading()       # float or None
     if rwy_threshold is None or rwy_heading is None:
-        # Fallback: generate approach waypoints from airport center with default heading
-        center = get_airport_center()
-        rwy_lat, rwy_lon = center[0], center[1]
-        rwy_heading = 280.0  # Default westbound approach
-        rwy_threshold = (rwy_lon, rwy_lat)  # (lon, lat)
+        # Fallback: use latitude-derived heading from _get_fallback_runway()
+        fb_thr, _, fb_hdg, _ = _get_fallback_runway()
+        rwy_threshold = fb_thr  # (lon, lat)
+        rwy_heading = fb_hdg
 
     rwy_lat, rwy_lon = rwy_threshold[1], rwy_threshold[0]
     approach_course = (rwy_heading + 180) % 360
@@ -1750,7 +1748,7 @@ def _get_sid_name(destination_iata: Optional[str] = None) -> str:
     coords = _get_airport_coordinates()
     if destination_iata not in coords:
         return _SID_CORRIDORS["EAST"]["name"]  # Unknown destination default
-    rwy_heading = _get_runway_heading() or 280.0
+    rwy_heading = _get_runway_heading() or _get_fallback_runway()[2]
     exit_dir = _bearing_to_airport(destination_iata)
     quadrant = _entry_direction_quadrant(exit_dir)
     return _SID_CORRIDORS[quadrant]["name"]
@@ -1776,10 +1774,10 @@ def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
     rwy_threshold = _get_runway_threshold()  # (lon, lat) — approach end
     rwy_heading = _get_runway_heading()  # float or None
     if rwy_threshold is None or rwy_heading is None:
-        # Fallback: use airport center with default heading
-        center = get_airport_center()
-        rwy_threshold = (center[1], center[0])  # (lon, lat)
-        rwy_heading = 280.0
+        # Fallback: use latitude-derived heading from _get_fallback_runway()
+        fb_thr, _, fb_hdg, _ = _get_fallback_runway()
+        rwy_threshold = fb_thr  # (lon, lat)
+        rwy_heading = fb_hdg
 
     # Departure climb-out starts at the threshold (liftoff point) and extends
     # in the same direction as the runway heading.
@@ -1836,7 +1834,8 @@ def _get_osm_primary_runway() -> Optional[dict]:
         if len(best.get("geoPoints", [])) < 2:
             return None
         return best
-    except Exception:
+    except Exception as e:
+        logger.warning("_get_osm_primary_runway failed: %s", e)
         return None
 
 
@@ -5150,7 +5149,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         end_lat = _app_wps[-1][1]
         end_lon = _app_wps[-1][0]
         end_alt = _app_wps[-1][2]
-        current_heading = 284  # Runway 28L heading
+        current_heading = _get_runway_heading() or _get_fallback_runway()[2]
         current_phase = "descending"
 
     # Parked aircraft don't need a synthetic trajectory trail — they're
