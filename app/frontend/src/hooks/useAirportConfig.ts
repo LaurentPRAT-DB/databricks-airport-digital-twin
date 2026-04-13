@@ -68,6 +68,9 @@ interface UseAirportConfigReturn {
   /** Load airport from lakehouse */
   loadAirport: (icaoCode: string) => Promise<void>;
 
+  /** Fetch default airport from backend config and load it */
+  initializeDefaultAirport: () => Promise<void>;
+
   /** Reload configuration from API */
   refresh: () => Promise<void>;
 
@@ -139,14 +142,14 @@ const configCache = new Map<string, ConfigResponse>();
 
 export function useAirportConfig(): UseAirportConfigReturn {
   const [config, setConfig] = useState<AirportConfig>(createDefaultConfig);
-  const [currentAirport, setCurrentAirport] = useState<string | null>('KSFO');
+  const [currentAirport, setCurrentAirport] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [switchProgress, setSwitchProgress] = useState<SwitchProgress | null>(null);
   const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track previous airport for rollback on error
-  const prevAirportRef = useRef<string | null>('KSFO');
+  const prevAirportRef = useRef<string | null>(null);
 
   // Listen for airport_switch_progress and airport_switch_complete on the existing WS connection
   useEffect(() => {
@@ -383,6 +386,28 @@ export function useAirportConfig(): UseAirportConfigReturn {
       throw err;
     }
   }, [currentAirport]);
+
+  /**
+   * Fetch default airport from backend config and load it.
+   * Called once when the backend becomes ready.
+   */
+  const initializeDefaultAirport = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/config`);
+      if (res.ok) {
+        const data = await res.json();
+        const defaultIcao = data.default_airport_icao;
+        if (defaultIcao) {
+          await loadAirport(defaultIcao);
+          return;
+        }
+      }
+    } catch {
+      // Fall through to fallback
+    }
+    // Fallback if /api/config is unavailable or missing the field
+    await loadAirport('KSFO');
+  }, [loadAirport]);
 
   /**
    * Import AIXM data
@@ -738,6 +763,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
     importOSM,
     importFAA,
     loadAirport,
+    initializeDefaultAirport,
     refresh,
     reset,
     getRunwayConfigs,

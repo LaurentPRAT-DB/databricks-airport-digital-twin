@@ -527,7 +527,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
     return () => clearTimeout(timer);
   }, []);
   const { flights, filteredFlights, selectedFlight, setSelectedFlight, dataMode, setDataMode } = useFlightContext();
-  const { currentAirport, refresh: refreshConfig, loadAirport } = useAirportConfigContext();
+  const { currentAirport, loadAirport, initializeDefaultAirport } = useAirportConfigContext();
 
   // Turn off clean tiles (inpainting) when switching to recorded data mode
   // to avoid tile processing competing with recording loading
@@ -599,7 +599,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
           setStatusMessage(data.status || 'Initializing');
           if (data.ready && !backendReady) {
             setBackendReady(true);
-            refreshConfig();
+            initializeDefaultAirport();
           }
           if (data.demo_ready && !demoReady) {
             setDemoReady(true);
@@ -626,7 +626,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
           setStatusMessage(data.status || 'Initializing');
           if (data.ready) {
             setBackendReady(true);
-            refreshConfig();
+            initializeDefaultAirport();
           }
           if (data.demo_ready) {
             setDemoReady(true);
@@ -641,7 +641,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
     })();
 
     return () => clearInterval(poll);
-  }, [backendReady, demoReady, refreshConfig]);
+  }, [backendReady, demoReady, initializeDefaultAirport]);
 
   // Handler for 3D map flight selection (uses icao24 string)
   const handleFlightSelect = (icao24: string) => {

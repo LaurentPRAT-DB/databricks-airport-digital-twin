@@ -19,6 +19,7 @@ interface AirportConfigContextValue {
   error: string | null;
   switchProgress: SwitchProgress | null;
   loadAirport: (icaoCode: string) => Promise<void>;
+  initializeDefaultAirport: () => Promise<void>;
   refresh: () => Promise<void>;
   getRunwayConfigs: () => RunwayConfig[];
   getTaxiwayConfigs: () => TaxiwayConfig[];

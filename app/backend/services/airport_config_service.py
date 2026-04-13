@@ -13,11 +13,9 @@ from typing import Any, Optional
 import logging
 
 from src.formats.base import CoordinateConverter, ParseError, ValidationError
+from app.backend.demo_config import DEFAULT_AIRPORT_ICAO as DEFAULT_AIRPORT
 
 logger = logging.getLogger(__name__)
-
-# Default airport to load on startup
-DEFAULT_AIRPORT = "KSFO"
 
 
 class AirportConfigService:
