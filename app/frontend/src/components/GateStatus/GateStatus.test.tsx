@@ -1,13 +1,36 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen, waitFor, within } from '../../test/test-utils'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { render, screen, waitFor, within, cleanup, act } from '../../test/test-utils'
 import userEvent from '@testing-library/user-event'
 import GateStatus from './GateStatus'
+import { _resetConfigCache } from '../../hooks/useAirportConfig'
 
-// Helper: wait for flights to load and gate statuses to update
+// Ensure clean state between tests — the useAirportConfig hook opens a
+// secondary WebSocket that can leak across tests if not fully flushed.
+beforeEach(() => {
+  _resetConfigCache()
+})
+afterEach(async () => {
+  cleanup()
+  // Flush pending microtasks / WebSocket close events
+  await act(async () => {
+    await new Promise(r => setTimeout(r, 50))
+  })
+})
+
+// Skip pointer-events CSS check: after cleanup jsdom returns stale computed
+// styles that make userEvent think elements have pointer-events:none.
+function setupUser() {
+  return userEvent.setup({ pointerEventsCheck: 0 })
+}
+
+// Helper: wait for flights AND OSM gate config to load, then select Terminal A.
+// Both the WebSocket (flights) and /api/airport/config (gates) must complete
+// before the full gate grid is available.
 async function waitForFlightsAndSelectTerminalA(user: ReturnType<typeof userEvent.setup>) {
-  // Wait for occupied count to reflect flight data (2 gates occupied: A3 + A5)
+  // Wait for both flights and OSM gates to load (2 occupied + 18 available = 20 total)
   await waitFor(() => {
     expect(screen.getByText(/2 Occupied/i)).toBeInTheDocument()
+    expect(screen.getByText(/18 Available/i)).toBeInTheDocument()
   })
   // Click Terminal A tab
   await user.click(screen.getByText('Terminal A'))
@@ -44,7 +67,7 @@ describe('GateStatus — real flight occupancy', () => {
   })
 
   it('shows gate cells with correct colors when terminal selected', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<GateStatus />)
     await waitForFlightsAndSelectTerminalA(user)
 
@@ -62,80 +85,94 @@ describe('GateStatus — real flight occupancy', () => {
   })
 
   it('clicking an occupied gate shows detail card with flight info', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<GateStatus />)
     await waitForFlightsAndSelectTerminalA(user)
 
     // Click gate A5 (SWA789 — ON STAND)
     await user.click(screen.getByTitle(/A5: ON STAND/))
 
-    expect(screen.getByText('Gate A5')).toBeInTheDocument()
-    expect(screen.getByText('ON STAND')).toBeInTheDocument()
-    expect(screen.getByText('SWA789')).toBeInTheDocument()
-    expect(screen.getByText('B738')).toBeInTheDocument()
-    expect(screen.getByText(/DEN.*→.*SFO/)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Gate A5')).toBeInTheDocument()
+      expect(screen.getByText('ON STAND')).toBeInTheDocument()
+      expect(screen.getByText('SWA789')).toBeInTheDocument()
+      expect(screen.getByText('B738')).toBeInTheDocument()
+      expect(screen.getByText(/DEN.*→.*SFO/)).toBeInTheDocument()
+    })
   })
 
   it('clicking an inbound gate shows INBOUND status and flight info', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<GateStatus />)
     await waitForFlightsAndSelectTerminalA(user)
 
     // Click gate A3 (UAL123 — INBOUND)
     await user.click(screen.getByTitle(/A3: INBOUND/))
 
-    expect(screen.getByText('Gate A3')).toBeInTheDocument()
-    expect(screen.getByText('INBOUND')).toBeInTheDocument()
-    expect(screen.getByText('UAL123')).toBeInTheDocument()
-    expect(screen.getByText('B737')).toBeInTheDocument()
-    expect(screen.getByText(/LAX.*→.*SFO/)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Gate A3')).toBeInTheDocument()
+      expect(screen.getByText('INBOUND')).toBeInTheDocument()
+      expect(screen.getByText('UAL123')).toBeInTheDocument()
+      expect(screen.getByText('B737')).toBeInTheDocument()
+      expect(screen.getByText(/LAX.*→.*SFO/)).toBeInTheDocument()
+    })
   })
 
   it('clicking a vacant gate shows VACANT with no flight info', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<GateStatus />)
     await waitForFlightsAndSelectTerminalA(user)
 
     // Click gate A1 (vacant)
     await user.click(screen.getByTitle(/A1: VACANT/))
 
-    expect(screen.getByText('Gate A1')).toBeInTheDocument()
-    expect(screen.getByText('VACANT')).toBeInTheDocument()
-    expect(screen.getByText('No flight assigned')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Gate A1')).toBeInTheDocument()
+      expect(screen.getByText('VACANT')).toBeInTheDocument()
+      expect(screen.getByText('No flight assigned')).toBeInTheDocument()
+    })
   })
 
   it('clicking same gate again dismisses detail card', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<GateStatus />)
     await waitForFlightsAndSelectTerminalA(user)
 
     // Open detail
     await user.click(screen.getByTitle(/A5: ON STAND/))
-    expect(screen.getByText('Gate A5')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Gate A5')).toBeInTheDocument()
+    })
 
     // Click same gate again → dismiss
     await user.click(screen.getByTitle(/A5: ON STAND/))
-    expect(screen.queryByText('Gate A5')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText('Gate A5')).not.toBeInTheDocument()
+    })
   })
 
   it('switching terminal clears selected gate', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<GateStatus />)
     await waitForFlightsAndSelectTerminalA(user)
 
     // Select a gate
     await user.click(screen.getByTitle(/A5: ON STAND/))
-    expect(screen.getByText('Gate A5')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Gate A5')).toBeInTheDocument()
+    })
 
     // Switch to "All" view
     await user.click(screen.getByRole('tab', { name: 'All' }))
 
     // Gate detail should be gone (summary view has no gate grid)
-    expect(screen.queryByText('Gate A5')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText('Gate A5')).not.toBeInTheDocument()
+    })
   })
 
   it('clicking callsign in detail card selects flight in context', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<GateStatus />)
     await waitForFlightsAndSelectTerminalA(user)
 
@@ -143,6 +180,9 @@ describe('GateStatus — real flight occupancy', () => {
     await user.click(screen.getByTitle(/A5: ON STAND/))
 
     // The callsign should be a clickable button
+    await waitFor(() => {
+      expect(screen.getByText('SWA789')).toBeInTheDocument()
+    })
     const callsignBtn = screen.getByText('SWA789')
     expect(callsignBtn.tagName).toBe('BUTTON')
 
@@ -159,7 +199,7 @@ describe('GateStatus — real flight occupancy', () => {
   })
 
   it('selected gate cell has a ring highlight', async () => {
-    const user = userEvent.setup()
+    const user = setupUser()
     render(<GateStatus />)
     await waitForFlightsAndSelectTerminalA(user)
 
@@ -167,6 +207,9 @@ describe('GateStatus — real flight occupancy', () => {
     expect(a5.className).not.toMatch(/ring-2/)
 
     await user.click(a5)
-    expect(a5.className).toMatch(/ring-2/)
+    await waitFor(() => {
+      const updated = screen.getByTitle(/A5: ON STAND/)
+      expect(updated.className).toMatch(/ring-2/)
+    })
   })
 })

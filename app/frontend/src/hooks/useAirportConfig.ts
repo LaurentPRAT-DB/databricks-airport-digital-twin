@@ -140,6 +140,11 @@ function createDefaultConfig(): AirportConfig {
 // Per-airport config cache (shared across hook instances via module scope)
 const configCache = new Map<string, ConfigResponse>();
 
+/** Clear the module-level config cache (for test isolation). */
+export function _resetConfigCache() {
+  configCache.clear();
+}
+
 export function useAirportConfig(): UseAirportConfigReturn {
   const [config, setConfig] = useState<AirportConfig>(createDefaultConfig);
   const [currentAirport, setCurrentAirport] = useState<string | null>(null);
