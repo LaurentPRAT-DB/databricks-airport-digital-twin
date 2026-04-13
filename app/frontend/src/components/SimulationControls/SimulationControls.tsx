@@ -677,6 +677,10 @@ export function SimulationControls({
   const [pendingAirport, setPendingAirport] = useState<string | null>(null);
   const [demoAutoStarted, setDemoAutoStarted] = useState(false);
   const [showRecordingPicker, setShowRecordingPicker] = useState(false);
+  // Track airport-switching so we push [] (empty) instead of null (WS fallback) to the parent
+  const airportSwitchingRef = useRef(false);
+  // Track previous airport to detect actual changes (not initial mount)
+  const prevAirportRef = useRef(currentAirport);
 
   // Fetch available files on mount (for manual simulation picker)
   useEffect(() => {
@@ -697,22 +701,16 @@ export function SimulationControls({
     setDemoAutoStarted(false);
   }, [currentAirport]);
 
-  // Pause demo on airport switch
+  // Stop simulation on airport switch — clears old flights and allows auto-start for new airport
   useEffect(() => {
     if (!currentAirport) return;
-    // Only pause for airport switch in simulation mode — recordings handle their own airport
+    // Only trigger on actual airport changes, not initial mount
+    if (prevAirportRef.current === currentAirport) return;
+    prevAirportRef.current = currentAirport;
     if (dataMode !== 'simulation') return;
-    // If demo is active and airport changed, pause and set pending airport
-    if (sim.isActive && currentAirport !== pendingAirport) {
-      // Check if the sim airport matches currentAirport (IATA vs ICAO)
-      // The sim.airport is IATA (e.g. "SFO"), currentAirport is ICAO (e.g. "KSFO")
-      const simAirportIcao = sim.airport && sim.airport.length === 3
-        ? `K${sim.airport}`
-        : sim.airport;
-      if (simAirportIcao !== currentAirport) {
-        sim.pauseForSwitch();
-        setPendingAirport(currentAirport);
-      }
+    if (sim.isActive) {
+      airportSwitchingRef.current = true;
+      sim.stop();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentAirport]);
@@ -738,8 +736,13 @@ export function SimulationControls({
   // Push simulation flights to parent
   useEffect(() => {
     if (sim.isActive && !sim.switchPaused) {
+      airportSwitchingRef.current = false;
       onFlightsChange(sim.flights);
       onActiveChange(true);
+    } else if (airportSwitchingRef.current) {
+      // Airport switching: push empty array so stale WS flights don't show
+      onFlightsChange([]);
+      onActiveChange(false);
     } else {
       onFlightsChange(null);
       onActiveChange(false);
