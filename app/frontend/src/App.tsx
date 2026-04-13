@@ -641,7 +641,8 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
     })();
 
     return () => clearInterval(poll);
-  }, [backendReady, demoReady, initializeDefaultAirport]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendReady, initializeDefaultAirport]);
 
   // Sync WS-driven demoReady signal (for airport switches) into local state
   useEffect(() => {

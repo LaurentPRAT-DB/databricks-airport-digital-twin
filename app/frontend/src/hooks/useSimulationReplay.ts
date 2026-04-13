@@ -338,10 +338,19 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setSwitchPaused(false);
     dataSourceRef.current = 'simulation';
     try {
-      const res = await fetch(`/api/simulation/demo/${encodeURIComponent(airportIcao)}`);
-      if (res.status === 202) {
-        // Still generating — caller should retry
-        console.log('Demo simulation still generating for', airportIcao);
+      // Retry loop: demo may still be generating (202) after airport switch
+      const maxRetries = 5;
+      const retryDelayMs = 2000;
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        res = await fetch(`/api/simulation/demo/${encodeURIComponent(airportIcao)}`);
+        if (res.status !== 202) break;
+        if (attempt < maxRetries - 1) {
+          await new Promise((r) => setTimeout(r, retryDelayMs));
+        }
+      }
+      if (!res || res.status === 202) {
+        console.warn('Demo simulation still generating after retries for', airportIcao);
         return;
       }
       if (!res.ok) throw new Error(`Failed to load demo: ${res.statusText}`);
