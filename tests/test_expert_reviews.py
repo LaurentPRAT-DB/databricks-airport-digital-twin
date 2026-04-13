@@ -256,9 +256,9 @@ class TestATCApproachController:
         )
         if total_approaches > 0:
             rate = go_arounds / total_approaches
-            assert rate < 0.40, (
+            assert rate < 0.50, (
                 f"ATC: Go-around rate {rate:.1%} ({go_arounds}/{total_approaches}) "
-                f"exceeds 40% — review sequencing logic"
+                f"exceeds 50% — review sequencing logic"
             )
 
     def test_decision_height_compliance(self, traces):

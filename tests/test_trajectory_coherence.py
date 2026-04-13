@@ -204,13 +204,16 @@ class TestT02ApproachAltitude:
             checked += 1
 
             # Find the last descent segment (after any go-around climbs).
-            # A go-around shows as a >500ft altitude increase; use the last
-            # monotonic descent run for the trend check.
-            last_descent_start = 0
+            # Go-arounds produce altitude increases that may be gradual (not
+            # a single >500ft jump). Use the last peak altitude as the start
+            # of the final descent segment.
+            peak_idx = 0
+            peak_alt = approach[0]["altitude"]
             for i in range(1, len(approach)):
-                if approach[i]["altitude"] - approach[i - 1]["altitude"] > 500:
-                    last_descent_start = i
-            descent = approach[last_descent_start:]
+                if approach[i]["altitude"] >= peak_alt:
+                    peak_alt = approach[i]["altitude"]
+                    peak_idx = i
+            descent = approach[peak_idx:]
             if len(descent) < 6:
                 continue
             # Skip flat segments (separation hold or level-off)
@@ -235,15 +238,20 @@ class TestT02ApproachAltitude:
         if checked == 0:
             pytest.skip("No flights with sufficient approach data")
 
-    def test_approach_ends_below_3000ft(self, traces):
-        """Approach phase reaches below 5000 ft before transitioning to landing.
+    def test_approach_ends_below_3000ft(self, traces, sim):
+        """Approach phase reaches below a reasonable altitude before landing.
 
         Uses minimum altitude rather than last position because go-arounds
         (P2 missed approach) can restart the approach at higher altitude.
-        Threshold is 5000 ft to accommodate airports with higher runway
-        elevations (e.g. DEN at 5431 ft) and varied approach geometries
-        (e.g. HND crossing patterns with higher intercept altitudes).
+        Threshold is 5000 ft for sea-level airports, but high-elevation
+        airports (e.g. DEN at 5431 ft) need a higher ceiling.
         """
+        _, config = sim
+        # DEN is at 5431ft; approaches there never go below 5000ft
+        airport_elevations = {"DEN": 5431}
+        field_elev = airport_elevations.get(config.airport, 0)
+        ceiling = max(5000, field_elev + 600)
+
         checked = 0
         for icao24, trace in traces.items():
             approach = _phase_positions(trace, "approaching")
@@ -256,8 +264,8 @@ class TestT02ApproachAltitude:
                 continue
             checked += 1
             min_alt = min(p["altitude"] for p in approach)
-            assert min_alt < 5000, (
-                f"T02 FAIL: {icao24} min approach alt {min_alt:.0f} ft (expected < 5000)"
+            assert min_alt < ceiling, (
+                f"T02 FAIL: {icao24} min approach alt {min_alt:.0f} ft (expected < {ceiling:.0f})"
             )
         if checked == 0:
             pytest.skip("No flights with approach data")

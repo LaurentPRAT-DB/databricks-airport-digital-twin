@@ -1240,26 +1240,27 @@ def _generate_taxi_spine(
 def _get_arrival_runway_endpoints() -> tuple:
     """Get arrival runway (threshold, far_end) as (lon, lat) tuples.
 
-    Uses OSM data when available, falls back to module-level constants
-    (which may have been shifted by apply_airport_offset).
+    Uses OSM data when available, falls back to airport-center-based runway.
     """
     rwy = _get_osm_primary_runway()
     if rwy:
         threshold, far_end, _ = _osm_runway_endpoints(rwy)
         return threshold, far_end
-    return RUNWAY_28L_THRESHOLD, RUNWAY_10R_THRESHOLD
+    fb = _get_fallback_runway()
+    return fb[0], fb[1]
 
 
 def _get_departure_runway_endpoints() -> tuple:
     """Get departure runway (threshold, far_end) as (lon, lat) tuples.
 
-    Uses OSM data when available, falls back to module-level constants.
+    Uses OSM data when available, falls back to airport-center-based runway.
     """
     rwy = _get_osm_primary_runway()
     if rwy:
         threshold, far_end, _ = _osm_runway_endpoints(rwy)
         return threshold, far_end
-    return RUNWAY_28R_THRESHOLD, RUNWAY_10L_THRESHOLD
+    fb = _get_fallback_runway()
+    return fb[0], fb[1]
 
 
 def get_terminal_center() -> tuple:
@@ -1885,6 +1886,36 @@ def _osm_runway_endpoints(runway: dict) -> tuple:
         return (p0_lon, p0_lat), (pN_lon, pN_lat), raw_heading
 
 
+def _get_fallback_runway() -> tuple:
+    """Synthesize a fallback runway from the airport center when no OSM data.
+
+    Returns ((threshold_lon, threshold_lat), (far_lon, far_lat), heading, length_ft).
+    Places a ~3000m runway centered on the active airport with a heading
+    derived from prevailing wind patterns based on latitude.
+    Used by all fallback paths so non-SFO airports don't revert to SFO coords.
+    """
+    center = get_airport_center()
+    lat, lon = center[0], center[1]
+    # Prevailing wind → typical runway orientation by latitude band
+    abs_lat = abs(lat)
+    if abs_lat < 15:
+        heading = 90.0   # Trade winds (easterlies) near equator
+    elif abs_lat < 30:
+        heading = 60.0   # Subtropical transition
+    else:
+        heading = 270.0  # Mid-latitude westerlies (most airports)
+    half_len_deg = 0.015  # ~1500m in each direction
+    rad = math.radians(heading)
+    cos_lat = max(math.cos(math.radians(lat)), 0.01)
+    # Threshold = approach end (east side for heading 280)
+    thr_lat = lat - half_len_deg * math.cos(rad)
+    thr_lon = lon - half_len_deg * math.sin(rad) / cos_lat
+    # Far end = west side
+    far_lat = lat + half_len_deg * math.cos(rad)
+    far_lon = lon + half_len_deg * math.sin(rad) / cos_lat
+    return (thr_lon, thr_lat), (far_lon, far_lat), heading, 9843.0  # ~3000m
+
+
 def _get_runway_threshold() -> Optional[tuple]:
     """Get the approach runway threshold (lon, lat) from OSM data.
 
@@ -1963,11 +1994,11 @@ def _get_takeoff_runway_geometry() -> tuple:
         length_ft = dist_m / 0.3048
         return start, end, dep_heading, max(length_ft, 3000)
 
-    # Fallback: SFO Runway 28L — same-direction ops, heading ~284 (west)
-    # Start at east end (10R threshold), roll toward west end (28L threshold)
-    start = (RUNWAY_10R_THRESHOLD[1], RUNWAY_10R_THRESHOLD[0])
-    end = (RUNWAY_28L_THRESHOLD[1], RUNWAY_28L_THRESHOLD[0])
-    return start, end, 284.0, 11381.0
+    # Fallback: synthesize from airport center
+    fb_thr, fb_far, fb_hdg, fb_len = _get_fallback_runway()
+    start = (fb_thr[1], fb_thr[0])  # (lat, lon)
+    end = (fb_far[1], fb_far[0])    # (lat, lon)
+    return start, end, fb_hdg, fb_len
 
 
 
@@ -3892,7 +3923,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         # Final touchdown sequence - land on active arrival runway
         # Runway should already be marked as occupied
         thr = _get_runway_threshold()
-        runway_touchdown = (thr[1], thr[0]) if thr else (RUNWAY_28L_EAST[1], RUNWAY_28L_EAST[0])  # lat, lon
+        if thr:
+            runway_touchdown = (thr[1], thr[0])  # lat, lon
+        else:
+            fb = _get_fallback_runway()
+            runway_touchdown = (fb[0][1], fb[0][0])  # lat, lon
 
         # Get runway far end for rollout direction (aircraft rolls past threshold)
         rwy_data = _get_osm_primary_runway()
@@ -3900,8 +3935,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             _, far_end_lonlat, rwy_hdg = _osm_runway_endpoints(rwy_data)
             runway_far_end = (far_end_lonlat[1], far_end_lonlat[0])  # lat, lon
         else:
-            runway_far_end = (RUNWAY_28L_WEST[1], RUNWAY_28L_WEST[0])
-            rwy_hdg = 284.0
+            fb = _get_fallback_runway()
+            runway_far_end = (fb[1][1], fb[1][0])  # far end (lat, lon)
+            rwy_hdg = fb[2]
 
         # Aircraft moves along the runway heading during landing.
         # Use heading-based movement (not _move_toward) so the aircraft
