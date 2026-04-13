@@ -156,6 +156,8 @@ export function useAirportConfig(): UseAirportConfigReturn {
   const [switchProgress, setSwitchProgress] = useState<SwitchProgress | null>(null);
   const [demoReady, setDemoReady] = useState(false);
   const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Safety timeout to clear isLoading if WS airport_switch_complete is missed
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track previous airport for rollback on error
   const prevAirportRef = useRef<string | null>(null);
@@ -174,7 +176,12 @@ export function useAirportConfig(): UseAirportConfigReturn {
 
         // Handle async activation completion (config payload delivered via WS)
         if (msg.type === 'airport_switch_complete') {
-          const data = msg.data;
+          // Clear safety timeout — WS message arrived
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+            loadingTimeoutRef.current = null;
+          }
+          const data = msg.data ?? {};
           if (data.config && Object.keys(data.config).length > 0) {
             setConfig((prev) => ({
               ...prev,
@@ -208,6 +215,10 @@ export function useAirportConfig(): UseAirportConfigReturn {
           if (data.error && data.message) {
             setError(data.message);
             setIsLoading(false);
+            if (loadingTimeoutRef.current) {
+              clearTimeout(loadingTimeoutRef.current);
+              loadingTimeoutRef.current = null;
+            }
             // Revert to previous airport on error (backend rolls back too)
             if (prevAirportRef.current) {
               setCurrentAirport(prevAirportRef.current);
@@ -227,6 +238,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
     return () => {
       ws.close();
       if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
     };
   }, []);
 
@@ -305,6 +317,9 @@ export function useAirportConfig(): UseAirportConfigReturn {
    * Load airport (lakehouse first, OSM fallback, auto-persists)
    */
   const loadAirport = useCallback(async (icaoCode: string) => {
+    // Reset demo state — new airport needs its own demo
+    setDemoReady(false);
+
     // Check L1 in-memory cache first
     if (configCache.has(icaoCode)) {
       const cached = configCache.get(icaoCode)!;
@@ -318,6 +333,8 @@ export function useAirportConfig(): UseAirportConfigReturn {
         }));
         setCurrentAirport(icaoCode);
         prevAirportRef.current = icaoCode;
+        // Always activate backend so flights/gates/demo switch too
+        fetch(`${API_BASE}/api/airports/${icaoCode}/activate`, { method: 'POST' }).catch(() => {});
         return;
       }
     }
@@ -366,6 +383,12 @@ export function useAirportConfig(): UseAirportConfigReturn {
         // Config will arrive via WS `airport_switch_complete` message.
         // Keep isLoading=true; WS handler will clear it.
         setCurrentAirport(icaoCode);
+        // Safety timeout: clear isLoading if WS message is missed (e.g. connection race)
+        if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = setTimeout(() => {
+          setIsLoading(false);
+          loadingTimeoutRef.current = null;
+        }, 20_000);
         return;
       }
 

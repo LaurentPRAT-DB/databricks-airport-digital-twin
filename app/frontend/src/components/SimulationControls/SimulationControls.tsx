@@ -720,6 +720,8 @@ export function SimulationControls({
   // Switch airport when simulation loads a different one (manual file load)
   useEffect(() => {
     if (sim.airport && onAirportChange && currentAirport) {
+      // Skip for demo/recording loads — these are always for the current airport
+      if (sim.loadedFile?.startsWith('demo_') || sim.loadedFile?.startsWith('recording_')) return;
       // Only switch if the sim airport differs from the current airport
       const simAirportIcao = sim.airport.length === 3
         ? `K${sim.airport}`
