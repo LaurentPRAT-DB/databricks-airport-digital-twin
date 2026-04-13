@@ -221,12 +221,11 @@ def get_gate_last_delay(gate_id: str) -> float:
 def get_airport_load_ratio() -> float:
     """Return current airport load ratio: active flights / nominal capacity.
 
-    Uses the target flight count as nominal capacity (the count parameter
-    from generate_synthetic_flights, typically 50).
+    Derives capacity from gate count (same logic as generate_synthetic_flights).
     """
     active = len(_flight_states)
-    # Default capacity is the target flight count (50)
-    capacity = max(1, 50)
+    gate_count = len(get_gates())
+    capacity = max(15, int(gate_count * 1.5)) if gate_count > 0 else 50
     return active / capacity
 
 
@@ -4840,12 +4839,48 @@ def generate_synthetic_flights(
                 _release_gate(icao24, state.assigned_gate)
             del _flight_states[icao24]
 
+    # Compute airport-appropriate target flight count:
+    # 1) Scale to gate count (small airports get fewer flights)
+    # 2) Modulate by hourly traffic profile (quiet hours = fewer flights)
+    gate_count = len(get_gates())
+    if gate_count > 0:
+        target = max(15, min(count, int(gate_count * 1.5)))
+    else:
+        target = count  # No gates loaded yet — use default
+
+    profile = _get_current_airport_profile()
+    if profile and profile.hourly_profile and len(profile.hourly_profile) == 24:
+        hour_utc = datetime.now(timezone.utc).hour
+        hour_weight = profile.hourly_profile[hour_utc]
+        peak_weight = max(profile.hourly_profile)
+        if peak_weight > 0:
+            hourly_factor = max(0.15, hour_weight / peak_weight)  # floor at 15%
+            target = max(5, int(target * hourly_factor))
+
+    # Soft-cull excess flights (max 2 per tick to avoid visual pop)
+    if len(_flight_states) > target + 5:
+        _cull_candidates = [
+            k for k, s in _flight_states.items()
+            if s.phase == FlightPhase.ENROUTE and s.phase_progress == -1.0
+        ]
+        if not _cull_candidates:
+            # Fall back to any enroute flight (departing outbound)
+            _cull_candidates = [
+                k for k, s in _flight_states.items()
+                if s.phase == FlightPhase.ENROUTE
+            ]
+        for _cull_id in _cull_candidates[:2]:
+            _cs = _flight_states.get(_cull_id)
+            if _cs and _cs.assigned_gate:
+                _release_gate(_cull_id, _cs.assigned_gate)
+            _flight_states.pop(_cull_id, None)
+
     # Initialize flights if needed (fill up to target count)
-    if len(_flight_states) < count:
+    if len(_flight_states) < target:
         local_iata = get_current_airport_iata()
 
         # Generate random flights
-        while len(_flight_states) < count:
+        while len(_flight_states) < target:
             icao24 = fake.hexify(text="^^^^^^", upper=False)
             if icao24 in _flight_states:
                 continue
@@ -4930,11 +4965,22 @@ def generate_synthetic_flights(
                          _count_aircraft_in_phase(FlightPhase.TAXI_TO_RUNWAY))
 
             max_parked = int(len(get_gates()) * 0.8)  # 80% cap — buffer for arrivals
-            approach_weight = 0.10 if approach_count < MAX_APPROACH_AIRCRAFT else 0.0
-            parked_weight = 0.12 if parked_count < max_parked else 0.0
-            taxi_in_weight = 0.05 if taxi_count < 6 else 0.0
-            taxi_out_weight = 0.08 if taxi_count < 6 else 0.0
-            departing_weight = 0.15
+
+            # Adjust phase bias based on hourly traffic intensity:
+            # Quiet hours → more parked, fewer active movements
+            # Busy hours  → more approach/departing activity
+            _activity_boost = 1.0
+            if profile and profile.hourly_profile and len(profile.hourly_profile) == 24:
+                _avg_weight = sum(profile.hourly_profile) / 24
+                _cur_weight = profile.hourly_profile[datetime.now(timezone.utc).hour]
+                if _avg_weight > 0:
+                    _activity_boost = max(0.3, min(1.5, _cur_weight / _avg_weight))
+
+            approach_weight = (0.10 * _activity_boost) if approach_count < MAX_APPROACH_AIRCRAFT else 0.0
+            parked_weight = (0.12 / max(0.5, _activity_boost)) if parked_count < max_parked else 0.0
+            taxi_in_weight = (0.05 * _activity_boost) if taxi_count < 6 else 0.0
+            taxi_out_weight = (0.08 * _activity_boost) if taxi_count < 6 else 0.0
+            departing_weight = 0.15 * _activity_boost
 
             total_assigned = approach_weight + parked_weight + taxi_in_weight + taxi_out_weight + departing_weight
             enroute_weight = max(0.0, 1.0 - total_assigned)
@@ -5010,7 +5056,7 @@ def generate_synthetic_flights(
     # Build response in OpenSky format
     states: List[List[Any]] = []
 
-    for icao24, state in list(_flight_states.items())[:count]:
+    for icao24, state in list(_flight_states.items())[:target]:
         # Sanitize numeric fields to prevent NaN/Inf propagation to frontend
         _alt = _sanitize_float(state.altitude, 0.0)
         _vel = _sanitize_float(state.velocity, 0.0)

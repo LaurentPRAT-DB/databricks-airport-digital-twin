@@ -831,7 +831,7 @@ class TestFlightLifecycle:
         """Multiple generate calls should maintain valid state with origins/destinations."""
         for _ in range(5):
             result = generate_synthetic_flights(count=20)
-            assert len(result["states"]) == 20
+            assert len(result["states"]) >= 5  # Adaptive target based on gates + hourly
 
         # Check that flights have valid positions
         for state in _flight_states.values():
