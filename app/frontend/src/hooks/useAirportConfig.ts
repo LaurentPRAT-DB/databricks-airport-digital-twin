@@ -219,6 +219,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
    */
   // Instance-level guard to deduplicate concurrent refresh() calls
   const inflightRef = useRef<Promise<void> | null>(null);
+  const defaultInitializedRef = useRef(false);
 
   const refresh = useCallback(async () => {
     // Deduplicate: if a refresh is already in-flight, reuse it
@@ -392,6 +393,8 @@ export function useAirportConfig(): UseAirportConfigReturn {
    * Called once when the backend becomes ready.
    */
   const initializeDefaultAirport = useCallback(async () => {
+    if (defaultInitializedRef.current) return;
+    defaultInitializedRef.current = true;
     try {
       const res = await fetch(`${API_BASE}/api/config`);
       if (res.ok) {
