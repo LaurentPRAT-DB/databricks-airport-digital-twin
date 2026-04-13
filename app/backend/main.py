@@ -448,10 +448,13 @@ async def readiness():
     """Readiness endpoint — returns background init progress."""
     from app.backend.services.demo_simulation_service import get_demo_simulation_service
     demo_svc = get_demo_simulation_service()
+    # Check demo readiness for current airport (not just the default)
+    config_service = get_airport_config_service()
+    current_icao = config_service.get_config().get("icaoCode", DEFAULT_AIRPORT_ICAO)
     return {
         "ready": getattr(app.state, "ready", False),
         "status": getattr(app.state, "startup_status", "Initializing..."),
-        "demo_ready": demo_svc.has_demo(DEFAULT_AIRPORT_ICAO),
+        "demo_ready": demo_svc.has_demo(current_icao),
         "opensky_available": getattr(app.state, "opensky_available", None),
     }
 

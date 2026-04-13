@@ -18,6 +18,7 @@ interface AirportConfigContextValue {
   isLoading: boolean;
   error: string | null;
   switchProgress: SwitchProgress | null;
+  demoReady: boolean;
   loadAirport: (icaoCode: string) => Promise<void>;
   initializeDefaultAirport: () => Promise<void>;
   refresh: () => Promise<void>;

@@ -50,6 +50,9 @@ interface UseAirportConfigReturn {
   /** Airport switch progress from WebSocket */
   switchProgress: SwitchProgress | null;
 
+  /** Whether the demo simulation is ready for the current airport */
+  demoReady: boolean;
+
   /** Import AIXM data */
   importAIXM: (file: File, options?: ImportOptions) => Promise<ImportResponse>;
 
@@ -151,6 +154,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [switchProgress, setSwitchProgress] = useState<SwitchProgress | null>(null);
+  const [demoReady, setDemoReady] = useState(false);
   const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track previous airport for rollback on error
@@ -187,6 +191,13 @@ export function useAirportConfig(): UseAirportConfigReturn {
             }
           }
           setIsLoading(false);
+          setDemoReady(false);  // Reset — new airport needs its own demo
+          return;
+        }
+
+        // Handle demo_ready signal — backend finished generating demo for this airport
+        if (msg.type === 'demo_ready') {
+          setDemoReady(true);
           return;
         }
 
@@ -765,6 +776,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
     isLoading,
     error,
     switchProgress,
+    demoReady,
     importAIXM,
     importIFC,
     importAIDM,

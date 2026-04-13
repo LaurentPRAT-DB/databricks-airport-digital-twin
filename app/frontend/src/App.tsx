@@ -527,7 +527,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
     return () => clearTimeout(timer);
   }, []);
   const { flights, filteredFlights, selectedFlight, setSelectedFlight, dataMode, setDataMode } = useFlightContext();
-  const { currentAirport, loadAirport, initializeDefaultAirport } = useAirportConfigContext();
+  const { currentAirport, loadAirport, initializeDefaultAirport, demoReady: wsDemoReady } = useAirportConfigContext();
 
   // Turn off clean tiles (inpainting) when switching to recorded data mode
   // to avoid tile processing competing with recording loading
@@ -642,6 +642,16 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
 
     return () => clearInterval(poll);
   }, [backendReady, demoReady, initializeDefaultAirport]);
+
+  // Sync WS-driven demoReady signal (for airport switches) into local state
+  useEffect(() => {
+    if (wsDemoReady && !demoReady) {
+      setDemoReady(true);
+    }
+    if (!wsDemoReady && demoReady) {
+      setDemoReady(false);  // Reset when airport switches
+    }
+  }, [wsDemoReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handler for 3D map flight selection (uses icao24 string)
   const handleFlightSelect = (icao24: string) => {

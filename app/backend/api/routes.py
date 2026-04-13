@@ -1357,7 +1357,7 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
 
             asyncio.create_task(_generate_data_background())
 
-        # Generate demo simulation for new airport (background)
+        # Generate demo simulation for new airport (background) and auto-start
         async def _generate_demo_background():
             from app.backend.services.demo_simulation_service import get_demo_simulation_service
             try:
@@ -1365,6 +1365,11 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
                 if not demo_svc.has_demo(icao_code):
                     await asyncio.to_thread(demo_svc.generate_demo, icao_code)
                     logger.info(f"[DIAG] Background demo generation for {icao_code} complete")
+                # Signal frontend that demo is ready for auto-start
+                await broadcaster.broadcast({
+                    "type": "demo_ready",
+                    "data": {"icao": icao_code},
+                })
             except Exception as e:
                 logger.error(f"Background demo generation failed for {icao_code}: {e}")
 
