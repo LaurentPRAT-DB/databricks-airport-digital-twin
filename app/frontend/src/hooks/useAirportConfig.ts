@@ -198,7 +198,8 @@ export function useAirportConfig(): UseAirportConfigReturn {
             }
           }
           setIsLoading(false);
-          setDemoReady(false);  // Reset — new airport needs its own demo
+          // demoReady is already reset by loadAirport() — don't reset here
+          // to avoid batching with the subsequent demo_ready WS message
           return;
         }
 

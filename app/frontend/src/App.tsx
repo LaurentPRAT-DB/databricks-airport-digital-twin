@@ -498,7 +498,6 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [statusMessage, setStatusMessage] = useState('Initializing');
   const [, setSimulationActive] = useState(false);
   const [simTime, setSimTime] = useState<string | null>(null);
-  const [demoReady, setDemoReady] = useState(false);
   const [openskyAvailable, setOpenskyAvailable] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>('map');
   const [showChat, setShowChat] = useState(false);
@@ -589,7 +588,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
     setLastSource('3d');
   }, [setViewport, setLastSource]);
 
-  // Poll /api/ready until backend signals readiness (and demo_ready)
+  // Poll /api/ready until backend signals readiness
   useEffect(() => {
     const poll = setInterval(async () => {
       try {
@@ -601,14 +600,10 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
             setBackendReady(true);
             initializeDefaultAirport();
           }
-          if (data.demo_ready && !demoReady) {
-            setDemoReady(true);
-          }
           if (data.opensky_available === true) {
             setOpenskyAvailable(true);
           }
-          // Stop polling once both are ready
-          if (data.ready && data.demo_ready) {
+          if (data.ready) {
             clearInterval(poll);
           }
         }
@@ -628,9 +623,6 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
             setBackendReady(true);
             initializeDefaultAirport();
           }
-          if (data.demo_ready) {
-            setDemoReady(true);
-          }
           if (data.opensky_available === true) {
             setOpenskyAvailable(true);
           }
@@ -643,16 +635,6 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
     return () => clearInterval(poll);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendReady, initializeDefaultAirport]);
-
-  // Sync WS-driven demoReady signal (for airport switches) into local state
-  useEffect(() => {
-    if (wsDemoReady && !demoReady) {
-      setDemoReady(true);
-    }
-    if (!wsDemoReady && demoReady) {
-      setDemoReady(false);  // Reset when airport switches
-    }
-  }, [wsDemoReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handler for 3D map flight selection (uses icao24 string)
   const handleFlightSelect = (icao24: string) => {
@@ -683,7 +665,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
       onSimTimeChange={setSimTime}
       backendReady={backendReady}
       currentAirport={currentAirport}
-      demoReady={demoReady}
+      demoReady={wsDemoReady}
     />
   );
 
