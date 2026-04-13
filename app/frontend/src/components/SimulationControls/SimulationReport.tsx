@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { UseSimulationReplayResult } from '../../hooks/useSimulationReplay';
+import { useFlightContext } from '../../context/FlightContext';
 import { captureCurrentView, downloadDataUrl } from '../../utils/sceneCapture';
 import { EVENT_COLORS, EVENT_LABELS } from './SimulationControls';
 
@@ -54,7 +55,34 @@ interface CapturedImage {
   label: string;
 }
 
+/** Extract a callsign from an event description (e.g. "KLM214 diverted to alternate" → "KLM214"). */
+function extractCallsign(description: string): string | null {
+  const match = description.match(/^([A-Z]{2,4}\d{1,5})\b/);
+  return match ? match[1] : null;
+}
+
 export function SimulationReport({ sim, onClose }: SimulationReportProps) {
+  const { filteredFlights, setSelectedFlight } = useFlightContext();
+
+  // Handle clicking an event row — seek to event time, select matching flight, close report
+  const handleEventClick = useCallback((eventTime: string, description: string) => {
+    // Seek simulation to event time
+    sim.seekToTime(eventTime);
+
+    // Try to find and select the matching flight by callsign
+    const callsign = extractCallsign(description);
+    if (callsign) {
+      const flight = filteredFlights.find(
+        f => f.callsign?.replace(/\s+/g, '') === callsign
+      );
+      if (flight) {
+        setSelectedFlight(flight);
+      }
+    }
+
+    onClose();
+  }, [sim, filteredFlights, setSelectedFlight, onClose]);
+
   // All unique event types present in the data
   const allEventTypes = useMemo(() => {
     const types = new Set(sim.scenarioEvents.map(e => e.event_type));
@@ -248,8 +276,8 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   }, [sim, summary, filteredEvents, captures, fromHour, toHour]);
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm" style={{ paddingBottom: 'var(--playbar-h, 0px)' }}>
-      <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-700 w-[900px] max-w-[95vw] max-h-[85vh] flex flex-col">
+    <div className="fixed inset-0 z-[2000] flex items-start justify-center bg-black/60 backdrop-blur-sm pt-8" style={{ paddingBottom: 'var(--playbar-h, 0px)' }}>
+      <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-700 w-[900px] max-w-[95vw] max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
           <div>
@@ -364,7 +392,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </div>
 
           {/* Event table */}
-          <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-700">
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-slate-700">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-800">
                 <tr>
@@ -377,7 +405,12 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
                 {filteredEvents.length === 0 ? (
                   <tr><td colSpan={3} className="text-center py-6 text-slate-500">No events match filters</td></tr>
                 ) : filteredEvents.map((event, i) => (
-                  <tr key={`${event.time}-${i}`} className="hover:bg-slate-800/50">
+                  <tr
+                    key={`${event.time}-${i}`}
+                    onClick={() => handleEventClick(event.time, event.description)}
+                    className="hover:bg-slate-700/60 cursor-pointer transition-colors"
+                    title="Click to jump to this event"
+                  >
                     <td className="px-3 py-1.5 text-slate-400 font-mono text-xs">{fmtTime(event.time)}</td>
                     <td className="px-3 py-1.5">
                       <span className="flex items-center gap-1.5">
