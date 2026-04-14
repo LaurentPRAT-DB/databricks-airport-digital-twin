@@ -690,7 +690,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
 
     sorted_timestamps = sorted(frames.keys())
 
-    # ── Aircraft type enrichment from OpenSky aircraft database ────────
+    # ── Aircraft type enrichment (local DB, fast) ──────────────────────
     from app.backend.services.aircraft_db import get_aircraft_database
 
     aircraft_db = get_aircraft_database()
@@ -711,18 +711,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         if enriched_types:
             logger.info("Enriched aircraft_type for %d snapshots from OpenSky DB", enriched_types)
 
-    # ── Historical METAR weather enrichment ────────────────────────────
-    from app.backend.services.metar_history import fetch_historical_metar
-    from datetime import date as date_type
-
-    target_date = date_type.fromisoformat(date)
-    weather_snapshots: list[dict] = []
-    try:
-        weather_snapshots = await fetch_historical_metar(airport, target_date)
-    except Exception as e:
-        logger.warning("Historical METAR fetch failed for %s/%s: %s", airport, date, e)
-
-    # ── Event inference: derive gate_events + phase_transitions from positions ──
+    # ── Event inference: derive gate_events + phase_transitions (local, fast) ──
     from src.inference.opensky_events import OpenSkyEventInferrer
 
     try:
@@ -745,7 +734,6 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         elif ge["event_type"] == "release":
             gate_by_aircraft.pop(ge["icao24"], None)
 
-    # Build gate coordinate lookup for position snapping
     gate_coords: dict[str, tuple[float, float]] = {}
     for g in gates:
         gid = g.get("ref") or g.get("id") or ""
@@ -759,12 +747,11 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
             gate = gate_by_aircraft.get(snap["icao24"])
             if gate:
                 snap["assigned_gate"] = gate
-                # Snap parked aircraft to gate position (ADS-B ground positions are inaccurate)
                 if snap.get("on_ground") and float(snap.get("velocity", 0) or 0) < 5 and gate in gate_coords:
                     snap["latitude"], snap["longitude"] = gate_coords[gate]
 
-    # ── Origin/destination enrichment (cascading) ─────────────────────
-    # Collect first-seen snapshot per aircraft for heading heuristic
+    # ── Origin/destination enrichment (heading heuristic only — fast) ──
+    lat, lon = _get_airport_center()
     aircraft_first_seen: dict[str, dict] = {}
     for ts_key in sorted_timestamps:
         for snap in frames[ts_key]:
@@ -772,35 +759,15 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
                 aircraft_first_seen[snap["icao24"]] = snap
 
     origins: dict[str, tuple[str | None, str | None]] = {}
+    heading_results = enrich_origins_heading(aircraft_first_seen, lat, lon, airport)
+    origins.update(heading_results)
 
-    # Level 1: OpenSky flights API (if reachable)
-    if sorted_timestamps:
-        try:
-            begin_dt = datetime.fromisoformat(sorted_timestamps[0])
-            end_dt = datetime.fromisoformat(sorted_timestamps[-1])
-            begin_ts = int(begin_dt.timestamp())
-            end_ts = int(end_dt.timestamp())
-            api_results = await enrich_origins_opensky(unique_aircraft, begin_ts, end_ts)
-            origins.update(api_results)
-        except Exception as e:
-            logger.warning("OpenSky flights API enrichment failed: %s", e)
-
-    # Level 2: Heading-based heuristic for remaining aircraft
-    remaining = {ic for ic in unique_aircraft if ic not in origins}
-    if remaining:
-        remaining_first_seen = {ic: aircraft_first_seen[ic] for ic in remaining if ic in aircraft_first_seen}
-        heading_results = enrich_origins_heading(remaining_first_seen, lat, lon, airport)
-        origins.update(heading_results)
-
-    # Apply origins to all snapshots
-    enriched_count = 0
     for ts_key in sorted_timestamps:
         for snap in frames[ts_key]:
             origin_info = origins.get(snap["icao24"])
             if origin_info:
                 snap["origin_airport"] = origin_info[0]
                 snap["destination_airport"] = origin_info[1]
-                enriched_count += 1
 
     # ── Derive schedule from observed aircraft lifecycles ───────────────
     derived_schedule = _derive_schedule_from_recording(
@@ -809,14 +776,22 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
 
     logger.info(
         "Recording %s/%s: %d rows → %d frames, %d unique aircraft, "
-        "%d phase transitions, %d gate events inferred, "
-        "%d/%d aircraft origins resolved, %d schedule entries derived, "
-        "%d weather snapshots",
+        "%d phase transitions, %d gate events inferred, %d schedule entries",
         airport, date, len(rows), len(sorted_timestamps), len(unique_aircraft),
         len(enrichment["phase_transitions"]), len(enrichment["gate_events"]),
-        len(origins), len(unique_aircraft), len(derived_schedule),
-        len(weather_snapshots),
+        len(derived_schedule),
     )
+
+    # ── Historical METAR weather (background, non-blocking) ───────────
+    from app.backend.services.metar_history import fetch_historical_metar
+    from datetime import date as date_type
+
+    weather_snapshots: list[dict] = []
+    try:
+        target_date = date_type.fromisoformat(date)
+        weather_snapshots = await fetch_historical_metar(airport, target_date)
+    except Exception as e:
+        logger.warning("Historical METAR fetch failed for %s/%s: %s", airport, date, e)
 
     # ── Persist enriched data to Lakebase (background, fire-and-forget) ──
     enriched_snapshots = inferrer.get_enriched_snapshots()
