@@ -584,21 +584,213 @@ def _weather_snapshots_to_scenario_events(weather_snapshots: list[dict]) -> list
 async def get_recording_data(airport_icao: str, date: str) -> dict:
     """Load a recorded OpenSky session as frame-based replay data.
 
-    Returns data in the same format as /api/simulation/data/ so the frontend
-    replay engine can play it back unchanged. Each frame is a collection_time
-    snapshot with all aircraft positions at that moment.
-
-    This is real ADS-B data from the OpenSky Network, not simulated.
+    Reads pre-enriched data from Delta tables (populated by the
+    enrich_opensky_events Databricks job). Falls back to raw table
+    with on-the-fly processing only if enriched data is not yet available.
     """
     import threading
 
-    # Validate date format
     try:
         datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {date} (expected YYYY-MM-DD)")
 
     airport = airport_icao.upper()
+
+    # ── Try enriched table first (fast path) ─────────────────────────
+    enriched_table = f"{_UC_CATALOG}.{_UC_SCHEMA}.opensky_enriched_snapshots"
+    phase_table = f"{_UC_CATALOG}.{_UC_SCHEMA}.opensky_phase_transitions"
+    gate_events_table = f"{_UC_CATALOG}.{_UC_SCHEMA}.opensky_gate_events"
+
+    snap_result: list = []
+    phase_result: list = []
+    gate_result: list = []
+    errors: list = []
+
+    def _query_enriched():
+        try:
+            conn = _get_delta_connection()
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT icao24, callsign, latitude, longitude,
+                           altitude, velocity, heading, vertical_rate,
+                           phase, on_ground, aircraft_type, assigned_gate, time
+                    FROM {enriched_table}
+                    WHERE airport_icao = '{airport}'
+                      AND collection_date = '{date}'
+                    ORDER BY time, icao24
+                """)
+                rows = cur.fetchall()
+                cols = [d[0] for d in cur.description]
+                snap_result.append([dict(zip(cols, row)) for row in rows])
+
+                cur.execute(f"""
+                    SELECT time, icao24, callsign, from_phase, to_phase,
+                           latitude, longitude, altitude, aircraft_type, assigned_gate
+                    FROM {phase_table}
+                    WHERE airport_icao = '{airport}'
+                      AND collection_date = '{date}'
+                    ORDER BY time
+                """)
+                rows = cur.fetchall()
+                cols = [d[0] for d in cur.description]
+                phase_result.append([dict(zip(cols, row)) for row in rows])
+
+                cur.execute(f"""
+                    SELECT time, icao24, callsign, gate, event_type,
+                           aircraft_type, gate_distance_m
+                    FROM {gate_events_table}
+                    WHERE airport_icao = '{airport}'
+                      AND collection_date = '{date}'
+                    ORDER BY time
+                """)
+                rows = cur.fetchall()
+                cols = [d[0] for d in cur.description]
+                gate_result.append([dict(zip(cols, row)) for row in rows])
+            conn.close()
+        except Exception as e:
+            errors.append(e)
+
+    thread = threading.Thread(target=_query_enriched, daemon=True)
+    thread.start()
+    thread.join(timeout=30)
+
+    if errors:
+        logger.warning("Enriched table query failed: %s — falling back to raw", errors[0])
+    elif snap_result and snap_result[0]:
+        return _build_recording_response_from_enriched(
+            airport, date, snap_result[0], phase_result[0] if phase_result else [],
+            gate_result[0] if gate_result else [],
+        )
+
+    # ── Fallback: raw table (unenriched data) ────────────────────────
+    logger.info("No enriched data for %s/%s, falling back to raw table", airport, date)
+    return await _load_recording_from_raw(airport, date)
+
+
+def _build_recording_response_from_enriched(
+    airport: str,
+    date: str,
+    snapshots: list[dict],
+    phase_transitions: list[dict],
+    gate_events: list[dict],
+) -> dict:
+    """Build replay response directly from pre-enriched Delta tables — no processing."""
+    frames: dict[str, list] = {}
+    unique_aircraft: set[str] = set()
+    seen_in_frame: dict[str, set[str]] = {}
+
+    for row in snapshots:
+        ts = row["time"]
+        if isinstance(ts, datetime):
+            ts = ts.isoformat()
+        icao24 = row["icao24"]
+
+        if ts not in seen_in_frame:
+            seen_in_frame[ts] = set()
+        if icao24 in seen_in_frame[ts]:
+            continue
+        seen_in_frame[ts].add(icao24)
+        unique_aircraft.add(icao24)
+
+        snap = {
+            "time": ts,
+            "icao24": icao24,
+            "callsign": (row["callsign"] or icao24).strip(),
+            "latitude": row["latitude"],
+            "longitude": row["longitude"],
+            "altitude": row["altitude"] or 0.0,
+            "velocity": row["velocity"] or 0.0,
+            "heading": row["heading"],
+            "phase": row["phase"] or "unknown",
+            "on_ground": bool(row["on_ground"]),
+            "aircraft_type": row.get("aircraft_type") or "",
+            "assigned_gate": row.get("assigned_gate"),
+            "vertical_rate": row.get("vertical_rate") or 0.0,
+        }
+
+        if ts not in frames:
+            frames[ts] = []
+        frames[ts].append(snap)
+
+    sorted_timestamps = sorted(frames.keys())
+
+    # Normalize timestamps in phase_transitions and gate_events
+    for pt in phase_transitions:
+        if isinstance(pt.get("time"), datetime):
+            pt["time"] = pt["time"].isoformat()
+    for ge in gate_events:
+        if isinstance(ge.get("time"), datetime):
+            ge["time"] = ge["time"].isoformat()
+
+    # Origin enrichment (heading heuristic — fast, local)
+    lat, lon = _get_airport_center()
+    aircraft_first_seen: dict[str, dict] = {}
+    for ts in sorted_timestamps:
+        for snap in frames[ts]:
+            if snap["icao24"] not in aircraft_first_seen:
+                aircraft_first_seen[snap["icao24"]] = snap
+
+    origins: dict[str, tuple[str | None, str | None]] = {}
+    heading_results = enrich_origins_heading(aircraft_first_seen, lat, lon, airport)
+    origins.update(heading_results)
+
+    for ts_key in sorted_timestamps:
+        for snap in frames[ts_key]:
+            origin_info = origins.get(snap["icao24"])
+            if origin_info:
+                snap["origin_airport"] = origin_info[0]
+                snap["destination_airport"] = origin_info[1]
+
+    # Derive schedule from enriched events
+    enrichment = {"gate_events": gate_events, "phase_transitions": phase_transitions}
+
+    # Build inferrer trackers from enriched data for schedule derivation
+    from src.inference.opensky_events import OpenSkyEventInferrer, AircraftTracker
+    inferrer = OpenSkyEventInferrer([])
+    for icao24 in unique_aircraft:
+        first_snap = aircraft_first_seen.get(icao24)
+        if first_snap:
+            inferrer._trackers[icao24] = AircraftTracker(
+                icao24=icao24, callsign=first_snap.get("callsign", icao24),
+            )
+
+    derived_schedule = _derive_schedule_from_recording(
+        inferrer, enrichment, origins, airport, sorted_timestamps, frames,
+    )
+
+    logger.info(
+        "Recording %s/%s (enriched): %d snapshots → %d frames, %d aircraft, %d schedule entries",
+        airport, date, len(snapshots), len(sorted_timestamps),
+        len(unique_aircraft), len(derived_schedule),
+    )
+
+    return {
+        "config": {"airport": airport, "source": "opensky_recorded", "date": date},
+        "summary": {
+            "total_flights": len(unique_aircraft),
+            "data_source": "opensky_live",
+            "scenario_name": f"Recorded ADS-B — {airport} {date}",
+        },
+        "schedule": derived_schedule,
+        "frames": {t: frames[t] for t in sorted_timestamps},
+        "frame_timestamps": sorted_timestamps,
+        "frame_count": len(sorted_timestamps),
+        "phase_transitions": phase_transitions,
+        "gate_events": gate_events,
+        "weather_snapshots": [],
+        "scenario_events": [],
+        "time_window": {
+            "start_time": sorted_timestamps[0] if sorted_timestamps else None,
+            "end_time": sorted_timestamps[-1] if sorted_timestamps else None,
+        },
+    }
+
+
+async def _load_recording_from_raw(airport: str, date: str) -> dict:
+    """Fallback: load from raw opensky_states_raw and enrich on the fly."""
+    import threading
+
     result: list = []
     error: list = []
 
@@ -607,13 +799,12 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
             conn = _get_delta_connection()
             with conn.cursor() as cur:
                 cur.execute(f"""
-                    SELECT
-                        icao24, callsign, origin_country,
-                        latitude, longitude,
-                        baro_altitude, geo_altitude,
-                        velocity, true_track, vertical_rate,
-                        on_ground, collection_time,
-                        aircraft_type, airline_icao
+                    SELECT icao24, callsign, origin_country,
+                           latitude, longitude,
+                           baro_altitude, geo_altitude,
+                           velocity, true_track, vertical_rate,
+                           on_ground, collection_time,
+                           aircraft_type, airline_icao
                     FROM {_RECORDINGS_TABLE}
                     WHERE airport_icao = '{airport}'
                       AND collection_date = '{date}'
@@ -639,8 +830,6 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
 
     rows = result[0]
 
-    # Group by collection_time into frames, converting to simulation snapshot format
-    # Deduplicate per (collection_time, icao24) — APPEND-only ingestion can create dupes
     frames: dict[str, list] = {}
     unique_aircraft: set[str] = set()
     seen_in_frame: dict[str, set[str]] = {}
@@ -648,12 +837,11 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
     for row in rows:
         ct = row["collection_time"]
         ts = ct.isoformat() if isinstance(ct, datetime) else str(ct)
-
         icao24 = row["icao24"]
         if ts not in seen_in_frame:
             seen_in_frame[ts] = set()
         if icao24 in seen_in_frame[ts]:
-            continue  # skip duplicate icao24 within same frame
+            continue
         seen_in_frame[ts].add(icao24)
         unique_aircraft.add(icao24)
 
@@ -662,26 +850,20 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         vrate_ms = row["vertical_rate"] or 0.0
         on_ground = bool(row["on_ground"])
 
-        altitude_ft = baro_alt_m * M_TO_FT
-        velocity_kts = velocity_ms * MS_TO_KTS
-        vrate_ftmin = vrate_ms * MS_TO_FTMIN
-
-        phase = determine_flight_phase(altitude_ft, vrate_ftmin, on_ground)
-
         snap = {
             "time": ts,
             "icao24": icao24,
             "callsign": (row["callsign"] or icao24).strip(),
             "latitude": row["latitude"],
             "longitude": row["longitude"],
-            "altitude": altitude_ft,
-            "velocity": velocity_kts,
+            "altitude": baro_alt_m * M_TO_FT,
+            "velocity": velocity_ms * MS_TO_KTS,
             "heading": row["true_track"],
-            "phase": phase,
+            "phase": determine_flight_phase(baro_alt_m * M_TO_FT, vrate_ms * MS_TO_FTMIN, on_ground),
             "on_ground": on_ground,
             "aircraft_type": row.get("aircraft_type") or "",
             "assigned_gate": None,
-            "vertical_rate": vrate_ftmin,
+            "vertical_rate": vrate_ms * MS_TO_FTMIN,
         }
 
         if ts not in frames:
@@ -690,30 +872,8 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
 
     sorted_timestamps = sorted(frames.keys())
 
-    # ── Aircraft type enrichment (local DB, fast) ──────────────────────
-    from app.backend.services.aircraft_db import get_aircraft_database
-
-    aircraft_db = get_aircraft_database()
-    try:
-        await aircraft_db.ensure_loaded()
-    except Exception as e:
-        logger.warning("Aircraft database load failed: %s", e)
-
-    if aircraft_db.loaded:
-        enriched_types = 0
-        for ts_key in sorted_timestamps:
-            for snap in frames[ts_key]:
-                if not snap.get("aircraft_type"):
-                    typecode, _ = aircraft_db.lookup(snap["icao24"])
-                    if typecode:
-                        snap["aircraft_type"] = typecode
-                        enriched_types += 1
-        if enriched_types:
-            logger.info("Enriched aircraft_type for %d snapshots from OpenSky DB", enriched_types)
-
-    # ── Event inference: derive gate_events + phase_transitions (local, fast) ──
+    # Event inference (local, fast)
     from src.inference.opensky_events import OpenSkyEventInferrer
-
     try:
         service = get_airport_config_service()
         config = service.get_config()
@@ -726,7 +886,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         inferrer.process_frame(ts, frames[ts])
     enrichment = inferrer.get_results()
 
-    # Update snapshots with inferred gate assignments + snap parked positions
+    # Gate assignment + snapping
     gate_by_aircraft: dict[str, str] = {}
     for ge in enrichment["gate_events"]:
         if ge["event_type"] in ("assign", "occupy"):
@@ -750,7 +910,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
                 if snap.get("on_ground") and float(snap.get("velocity", 0) or 0) < 5 and gate in gate_coords:
                     snap["latitude"], snap["longitude"] = gate_coords[gate]
 
-    # ── Origin/destination enrichment (heading heuristic only — fast) ──
+    # Origin enrichment (heading heuristic)
     lat, lon = _get_airport_center()
     aircraft_first_seen: dict[str, dict] = {}
     for ts_key in sorted_timestamps:
@@ -769,45 +929,17 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
                 snap["origin_airport"] = origin_info[0]
                 snap["destination_airport"] = origin_info[1]
 
-    # ── Derive schedule from observed aircraft lifecycles ───────────────
     derived_schedule = _derive_schedule_from_recording(
         inferrer, enrichment, origins, airport, sorted_timestamps, frames,
     )
 
     logger.info(
-        "Recording %s/%s: %d rows → %d frames, %d unique aircraft, "
-        "%d phase transitions, %d gate events inferred, %d schedule entries",
+        "Recording %s/%s (raw fallback): %d rows → %d frames, %d aircraft",
         airport, date, len(rows), len(sorted_timestamps), len(unique_aircraft),
-        len(enrichment["phase_transitions"]), len(enrichment["gate_events"]),
-        len(derived_schedule),
     )
-
-    # ── Historical METAR weather (background, non-blocking) ───────────
-    from app.backend.services.metar_history import fetch_historical_metar
-    from datetime import date as date_type
-
-    weather_snapshots: list[dict] = []
-    try:
-        target_date = date_type.fromisoformat(date)
-        weather_snapshots = await fetch_historical_metar(airport, target_date)
-    except Exception as e:
-        logger.warning("Historical METAR fetch failed for %s/%s: %s", airport, date, e)
-
-    # ── Persist enriched data to Lakebase (background, fire-and-forget) ──
-    enriched_snapshots = inferrer.get_enriched_snapshots()
-    persist_thread = threading.Thread(
-        target=_persist_recording_to_lakebase,
-        args=(enrichment, enriched_snapshots, derived_schedule, origins, airport, date),
-        daemon=True,
-    )
-    persist_thread.start()
 
     return {
-        "config": {
-            "airport": airport,
-            "source": "opensky_recorded",
-            "date": date,
-        },
+        "config": {"airport": airport, "source": "opensky_recorded", "date": date},
         "summary": {
             "total_flights": len(unique_aircraft),
             "data_source": "opensky_live",
@@ -819,8 +951,8 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         "frame_count": len(sorted_timestamps),
         "phase_transitions": enrichment["phase_transitions"],
         "gate_events": enrichment["gate_events"],
-        "weather_snapshots": weather_snapshots,
-        "scenario_events": _weather_snapshots_to_scenario_events(weather_snapshots),
+        "weather_snapshots": [],
+        "scenario_events": [],
         "time_window": {
             "start_time": sorted_timestamps[0] if sorted_timestamps else None,
             "end_time": sorted_timestamps[-1] if sorted_timestamps else None,
