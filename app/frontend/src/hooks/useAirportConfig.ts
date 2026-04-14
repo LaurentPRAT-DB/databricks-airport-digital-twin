@@ -155,6 +155,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
   const [error, setError] = useState<string | null>(null);
   const [switchProgress, setSwitchProgress] = useState<SwitchProgress | null>(null);
   const [demoReady, setDemoReady] = useState(false);
+  const demoReadyRef = useRef(false);
   const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Safety timeout to clear isLoading if WS airport_switch_complete is missed
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -205,6 +206,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
 
         // Handle demo_ready signal — backend finished generating demo for this airport
         if (msg.type === 'demo_ready') {
+          demoReadyRef.current = true;
           setDemoReady(true);
           return;
         }
@@ -236,17 +238,18 @@ export function useAirportConfig(): UseAirportConfigReturn {
       }
     };
 
-    // Fallback poll: detect demo_ready via /api/ready in case WS misses it
-    // (e.g. WS not connected yet during startup, or message lost).
-    // Runs until demo_ready is detected, then stops. WS handles resets on switch.
+    // Fallback poll: detect demo_ready via /api/ready in case WS misses it.
+    // Keeps running (gated by ref) so loadAirport resetting demoReady doesn't
+    // leave the UI stuck — the next poll tick re-detects demo_ready.
     const demoPoll = setInterval(async () => {
+      if (demoReadyRef.current) return;
       try {
         const res = await fetch(`${API_BASE}/api/ready`);
         if (res.ok) {
           const data = await res.json();
           if (data.demo_ready) {
+            demoReadyRef.current = true;
             setDemoReady(true);
-            clearInterval(demoPoll);
           }
         }
       } catch {
@@ -338,6 +341,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
    */
   const loadAirport = useCallback(async (icaoCode: string) => {
     // Reset demo state — new airport needs its own demo
+    demoReadyRef.current = false;
     setDemoReady(false);
 
     // Check L1 in-memory cache first
