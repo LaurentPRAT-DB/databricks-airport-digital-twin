@@ -1001,6 +1001,36 @@ MIN_GATES_FOR_OPERATIONS = 15
 MAX_OVERFLOW_STANDS = 10  # Maximum dynamically generated remote parking positions
 
 
+def _generate_default_gates_around_center(center: tuple, count: int = 20) -> Dict[str, tuple]:
+    """Generate default gate positions around the airport center.
+
+    Creates a realistic terminal-like layout with gates arranged in two
+    concourses north of the airport center, each with gates on both sides.
+    """
+    lat, lon = center[0], center[1]
+    gates: Dict[str, tuple] = {}
+    cos_lat = max(math.cos(math.radians(lat)), 0.01)
+
+    # Two concourses: A (northwest of center) and B (northeast of center)
+    concourse_offset_lat = 0.002  # ~220m north of center
+    concourse_spacing_lon = 0.002 / cos_lat  # ~220m between concourses
+
+    prefixes = ["A", "B"]
+    for ci, prefix in enumerate(prefixes):
+        base_lat = lat + concourse_offset_lat
+        base_lon = lon + (ci - 0.5) * concourse_spacing_lon
+        gates_per_concourse = count // len(prefixes)
+
+        for gi in range(gates_per_concourse):
+            ref = f"{prefix}{gi + 1}"
+            side = 1 if gi % 2 == 0 else -1
+            gate_lat = base_lat + (gi // 2) * 0.0004
+            gate_lon = base_lon + side * 0.0003 / cos_lat
+            gates[ref] = (gate_lat, gate_lon)
+
+    return gates
+
+
 def _generate_overflow_stands(existing_gates: Dict[str, tuple], count: int) -> Dict[str, tuple]:
     """Generate overflow remote parking positions near the airport apron.
 
@@ -1074,7 +1104,11 @@ def get_gates() -> Dict[str, tuple]:
         pass
 
     if gates is None:
-        gates = dict(_DEFAULT_GATES)
+        iata = get_current_airport_iata()
+        if iata == "SFO":
+            gates = dict(_DEFAULT_GATES)
+        else:
+            gates = _generate_default_gates_around_center(get_airport_center())
 
     # Add overflow stands if total gates are below the minimum
     if len(gates) < MIN_GATES_FOR_OPERATIONS:
@@ -5616,7 +5650,7 @@ def reset_synthetic_state() -> dict:
     Returns:
         dict with count of cleared items.
     """
-    global _flight_states, _last_update, _runway_states, _runway_28L, _runway_28R, _gate_states
+    global _flight_states, _last_update, _runway_states, _runway_28L, _runway_28R, _gate_states, _loaded_gates
 
     cleared_flights = len(_flight_states)
     cleared_gates = len(_gate_states)
@@ -5625,11 +5659,16 @@ def reset_synthetic_state() -> dict:
     _flight_states.clear()
     _last_update = 0.0
     _runway_states.clear()
+    # Re-populate with current airport's runway names (dynamic, not hardcoded SFO)
+    arr_rwy = _get_arrival_runway_name()
     _runway_28L = RunwayState()
     _runway_28R = RunwayState()
-    _runway_states["28L"] = _runway_28L
-    _runway_states["28R"] = _runway_28R
+    _runway_states[arr_rwy] = _runway_28L
+    recip = _get_reciprocal_designator(arr_rwy)
+    if recip:
+        _runway_states[recip] = _runway_28R
     _gate_states.clear()
+    _loaded_gates = None  # Force gate reload with current airport center
     global _occupied_gate_count
     _occupied_gate_count = 0
 

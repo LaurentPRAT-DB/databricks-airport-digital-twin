@@ -15,6 +15,7 @@ import GenieChat from './components/GenieChat/GenieChat';
 import MobileTabBar, { type MobileTab } from './components/MobileTabBar/MobileTabBar';
 import { useIsMobile } from './hooks/useIsMobile';
 import { useViewportState, SharedViewport } from './hooks/useViewportState';
+import { debugLogger } from './utils/debugLogger';
 import SimulationControls, { DataModeToggle } from './components/SimulationControls/SimulationControls';
 import { Flight } from './types/flight';
 
@@ -599,6 +600,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
           if (data.ready && !backendReady) {
             setBackendReady(true);
             initializeDefaultAirport();
+            if (data.debug_client_logs) debugLogger.enable();
           }
           if (data.opensky_available === true) {
             setOpenskyAvailable(true);
@@ -622,6 +624,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
           if (data.ready) {
             setBackendReady(true);
             initializeDefaultAirport();
+            if (data.debug_client_logs) debugLogger.enable();
           }
           if (data.opensky_available === true) {
             setOpenskyAvailable(true);

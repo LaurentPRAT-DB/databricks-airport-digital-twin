@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Flight } from '../types/flight';
+import { debugLog } from '../utils/debugLogger';
 
 export type PlaybackSpeed = 0.25 | 0.5 | 1 | 2 | 4 | 10 | 30 | 60;
 
@@ -379,12 +380,16 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setIsFetchingRecordings(true);
     try {
       const res = await fetch('/api/opensky/recordings');
-      if (res.ok) {
-        const data = await res.json();
-        setAvailableRecordings(data.recordings || []);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        debugLog('error', 'fetchRecordings', `${res.status} ${res.statusText}: ${body}`);
+        return;
       }
-    } catch {
-      // Silently fail — recordings might not be available
+      const data = await res.json();
+      debugLog('info', 'fetchRecordings', `${(data.recordings || []).length} recordings found`);
+      setAvailableRecordings(data.recordings || []);
+    } catch (err) {
+      debugLog('error', 'fetchRecordings', `network error: ${err}`);
     } finally {
       setIsFetchingRecordings(false);
     }
@@ -397,9 +402,14 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setSwitchPaused(false);
     dataSourceRef.current = 'opensky_recorded';
     try {
+      debugLog('info', 'loadRecording', `fetching ${airport}/${date}...`);
       const res = await fetch(`/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`);
-      if (!res.ok) throw new Error(`Failed to load recording: ${res.statusText}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`${res.status} ${res.statusText}: ${body}`);
+      }
       const data: SimulationData = await res.json();
+      debugLog('info', 'loadRecording', `loaded ${data.frame_timestamps.length} frames, ${data.frame_count} frame_count`);
       setSimData(data);
       setSwitchPaused(false);
       setLoadedFile(`recording_${airport}_${date}`);
@@ -415,7 +425,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       // Auto-play recording
       setIsPlaying(true);
     } catch (err) {
-      console.error('Failed to load recorded data:', err);
+      debugLog('error', 'loadRecording', `failed: ${err}`);
     } finally {
       setIsLoading(false);
     }

@@ -2020,6 +2020,135 @@ class LakebaseService:
             logger.warning(f"Tile cache stats query failed: {e}")
             return None
 
+    # ── Client debug logs ─────────────────────────────────────────────
+
+    _client_logs_table_ensured = False
+
+    def _ensure_client_logs_table(self) -> bool:
+        """Create client_debug_logs table if it doesn't exist."""
+        if not self.is_available or self._client_logs_table_ensured:
+            return self._client_logs_table_ensured
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS client_debug_logs (
+                            id BIGSERIAL PRIMARY KEY,
+                            logged_at TIMESTAMPTZ DEFAULT NOW(),
+                            level VARCHAR(10) NOT NULL,
+                            source VARCHAR(100) NOT NULL,
+                            message TEXT NOT NULL,
+                            metadata JSONB,
+                            session_id VARCHAR(50)
+                        )
+                        """
+                    )
+                    conn.commit()
+                    self.__class__._client_logs_table_ensured = True
+                    return True
+
+        except Exception as e:
+            logger.warning("Failed to create client_debug_logs table: %s", e)
+            self._invalidate_credentials_if_auth_error(e)
+            return False
+
+    def insert_client_logs(self, entries: list[dict]) -> int:
+        """Batch-insert client log entries into Lakebase.
+
+        Args:
+            entries: List of dicts with keys: level, source, message, metadata,
+                     timestamp, sessionId.
+
+        Returns:
+            Number of rows inserted.
+        """
+        if not entries or not self.is_available:
+            return 0
+
+        self._ensure_client_logs_table()
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    values = []
+                    for e in entries:
+                        import json as _json
+                        meta = e.get("metadata")
+                        values.append((
+                            e.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+                            e.get("level", "info"),
+                            e.get("source", "unknown"),
+                            e.get("message", ""),
+                            _json.dumps(meta) if meta else None,
+                            e.get("sessionId"),
+                        ))
+                    execute_values(
+                        cur,
+                        """INSERT INTO client_debug_logs
+                           (logged_at, level, source, message, metadata, session_id)
+                           VALUES %s""",
+                        values,
+                        template="(%s, %s, %s, %s, %s::jsonb, %s)",
+                    )
+                    conn.commit()
+                    return len(values)
+
+        except Exception as e:
+            logger.warning("Failed to insert client logs: %s", e)
+            self._invalidate_credentials_if_auth_error(e)
+            return 0
+
+    def query_client_logs(
+        self,
+        source: str | None = None,
+        level: str | None = None,
+        limit: int = 100,
+        since_minutes: int = 60,
+    ) -> list[dict]:
+        """Query persisted client debug logs from Lakebase.
+
+        Returns:
+            List of log entry dicts, newest first.
+        """
+        if not self.is_available:
+            return []
+
+        self._ensure_client_logs_table()
+
+        try:
+            with self._get_read_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    conditions = ["logged_at > NOW() - INTERVAL '%s minutes'"]
+                    params: list = [since_minutes]
+
+                    if source:
+                        conditions.append("source = %s")
+                        params.append(source)
+                    if level:
+                        conditions.append("level = %s")
+                        params.append(level)
+
+                    where = " AND ".join(conditions)
+                    params.append(limit)
+
+                    cur.execute(
+                        f"""SELECT logged_at, level, source, message,
+                                   metadata, session_id
+                            FROM client_debug_logs
+                            WHERE {where}
+                            ORDER BY logged_at DESC
+                            LIMIT %s""",
+                        params,
+                    )
+                    return [dict(row) for row in cur.fetchall()]
+
+        except Exception as e:
+            logger.warning("Failed to query client logs: %s", e)
+            self._invalidate_credentials_if_auth_error(e)
+            return []
+
 
 # Singleton instance
 _lakebase_service: Optional[LakebaseService] = None

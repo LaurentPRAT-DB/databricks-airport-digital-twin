@@ -30,7 +30,7 @@ from app.backend.demo_config import (
 from app.backend.services.data_generator_service import get_data_generator_service
 from app.backend.services.airport_config_service import get_airport_config_service, AirportConfigService
 from app.backend.services.prediction_service import get_prediction_service
-from src.ingestion.fallback import reload_gates, set_airport_center
+from src.ingestion.fallback import apply_airport_offset, reload_gates, reset_airport_offset, set_airport_center
 from src.ingestion.schedule_generator import AIRPORT_COORDINATES
 from src.ml.gate_model import reload_gate_recommender
 from src.ml.registry import get_model_registry
@@ -232,6 +232,10 @@ async def _background_init(app: FastAPI):
                 from src.ingestion.fallback import AIRPORT_CENTER
                 _lat, _lon = AIRPORT_CENTER[0], AIRPORT_CENTER[1]
             set_airport_center(_lat, _lon, airport_iata)
+            if airport_iata != "SFO":
+                apply_airport_offset(_lat, _lon)
+            else:
+                reset_airport_offset()
             gates = reload_gates()
             logger.info(f"INIT |   Reloaded {len(gates)} gates for synthetic data generation")
 
@@ -462,6 +466,7 @@ async def readiness():
         "status": getattr(app.state, "startup_status", "Initializing..."),
         "demo_ready": demo_svc.has_demo(current_icao),
         "opensky_available": getattr(app.state, "opensky_available", None),
+        "debug_client_logs": os.environ.get("DEBUG_MODE", "false").lower() == "true",
     }
 
 

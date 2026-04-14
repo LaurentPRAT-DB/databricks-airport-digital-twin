@@ -107,7 +107,7 @@ from app.backend.models.airport_config import (
     FAAImportResponse,
     MSFSImportResponse,
 )
-from src.ingestion.fallback import generate_synthetic_trajectory, get_airport_center, get_current_airport_iata, reload_gates, reset_synthetic_state, set_airport_center
+from src.ingestion.fallback import apply_airport_offset, generate_synthetic_trajectory, get_airport_center, get_current_airport_iata, reload_gates, reset_airport_offset, reset_synthetic_state, set_airport_center
 from src.ml.gate_model import reload_gate_recommender
 from src.ml.registry import get_model_registry
 from app.backend.services.prediction_service import get_prediction_service
@@ -1219,6 +1219,10 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
                     raise ValueError(f"No coordinates available for {icao_code}")
 
             set_airport_center(lat, lon, iata_code)
+            if iata_code != "SFO":
+                apply_airport_offset(lat, lon)
+            else:
+                reset_airport_offset()
             logger.info(f"[DIAG] Step 2 (set center) done in {_time.monotonic() - _t_step:.3f}s")
 
             # Step 3: Reload gates and reset state (ML retrain deferred to background)
@@ -1260,6 +1264,10 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
                 )
                 reload_gates()
                 set_airport_center(prev_center[0], prev_center[1], prev_iata)
+                if prev_iata != "SFO":
+                    apply_airport_offset(prev_center[0], prev_center[1])
+                else:
+                    reset_airport_offset()
                 # Restore ML models and schedule service to previous airport
                 registry = get_model_registry()
                 registry.retrain(prev_icao)
@@ -1713,3 +1721,55 @@ async def get_debug_logs(
         "matched": len(lines),
         "lines": lines[-limit:],
     }
+
+
+_CLIENT_LOG_LEVELS = {"error": logging.ERROR, "warn": logging.WARNING, "info": logging.INFO, "debug": logging.DEBUG}
+
+
+@router.post("/debug/client-logs", tags=["debug"])
+async def post_client_logs(request: Request) -> dict:
+    """Receive frontend log entries — persist to ring buffer + Lakebase."""
+    body = await request.json()
+    entries = body.get("entries", [])
+    if not entries:
+        return {"accepted": 0}
+
+    # Mirror to ring buffer so GET /debug/logs?pattern=CLIENT sees them
+    for entry in entries:
+        lvl = _CLIENT_LOG_LEVELS.get(entry.get("level", "info"), logging.INFO)
+        logger.log(lvl, "[CLIENT:%s] %s", entry.get("source", "?"), entry.get("message", ""))
+
+    # Persist to Lakebase
+    from app.backend.services.lakebase_service import get_lakebase_service
+    lakebase = get_lakebase_service()
+    if lakebase.is_available:
+        lakebase.insert_client_logs(entries)
+
+    return {"accepted": len(entries)}
+
+
+@router.get("/debug/client-logs", tags=["debug"])
+async def get_client_logs(
+    source: Optional[str] = Query(default=None, description="Filter by source tag"),
+    level: Optional[str] = Query(default=None, description="Filter by level (error, warn, info, debug)"),
+    limit: int = Query(default=100, ge=1, le=500),
+    since_minutes: int = Query(default=60, ge=1, le=1440),
+) -> dict:
+    """Query persisted client debug logs from Lakebase.
+
+    Only available when DEBUG_MODE=true.
+    """
+    if os.environ.get("DEBUG_MODE", "false").lower() != "true":
+        raise HTTPException(status_code=403, detail="Debug endpoints are disabled in production")
+
+    from app.backend.services.lakebase_service import get_lakebase_service
+    lakebase = get_lakebase_service()
+    if not lakebase.is_available:
+        raise HTTPException(status_code=503, detail="Lakebase not available")
+
+    rows = lakebase.query_client_logs(source=source, level=level, limit=limit, since_minutes=since_minutes)
+    # Serialize datetimes
+    for row in rows:
+        if hasattr(row.get("logged_at"), "isoformat"):
+            row["logged_at"] = row["logged_at"].isoformat()
+    return {"entries": rows, "count": len(rows)}

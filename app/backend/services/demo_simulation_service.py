@@ -56,18 +56,15 @@ class DemoSimulationService:
             iata = icao_to_iata(airport_icao)
             logger.info("Generating demo simulation for %s (%s)...", airport_icao, iata)
 
-            # 12h peak window (06:00–18:00) with proportional flight count.
-            # A typical airport does ~70% of daily traffic in these 12 hours,
-            # so 100+100 flights in 12h ≈ similar density to 150+150 in 24h.
-            arrivals = 100
-            departures = 100
+            arrivals = 60
+            departures = 60
 
             config = SimulationConfig(
                 airport=iata,
                 arrivals=arrivals,
                 departures=departures,
                 duration_hours=12.0,
-                time_step_seconds=5.0,
+                time_step_seconds=10.0,
                 seed=42,
                 start_time=datetime.now(timezone.utc).replace(
                     hour=6, minute=0, second=0, microsecond=0
@@ -104,7 +101,6 @@ class DemoSimulationService:
 
     def is_generating(self, airport_icao: str) -> bool:
         return airport_icao in self._generating
-
 
 def get_demo_simulation_service() -> DemoSimulationService:
     """Get the singleton DemoSimulationService."""

@@ -276,19 +276,19 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   }, [sim, summary, filteredEvents, captures, fromHour, toHour]);
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-start justify-center bg-black/60 backdrop-blur-sm pt-8" style={{ paddingBottom: 'var(--playbar-h, 0px)' }}>
-      <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-700 w-[900px] max-w-[95vw] max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-[900px] max-w-[95vw] max-h-[85vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 rounded-t-xl">
           <div>
-            <h2 className="text-lg font-bold text-white">
+            <h2 className="text-lg font-bold text-slate-900">
               {sim.scenarioName || `${sim.airport} Simulation Report`}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               {sim.airport} &middot; {fmtDateTime(sim.simStartTime)} — {fmtDateTime(sim.simEndTime)}
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -300,16 +300,16 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           {/* KPI Cards */}
           <div className="grid grid-cols-4 gap-3">
             {[
-              { label: 'On-Time', value: summary?.on_time_pct != null ? `${summary.on_time_pct}%` : '--', color: (summary?.on_time_pct as number) >= 70 ? 'text-green-400' : 'text-red-400' },
-              { label: 'Avg Delay', value: summary?.schedule_delay_min != null ? `${summary.schedule_delay_min}m` : '--', color: 'text-amber-400' },
-              { label: 'Cancellations', value: `${summary?.total_cancellations ?? '--'}`, color: 'text-rose-400' },
-              { label: 'Go-Arounds', value: `${summary?.total_go_arounds ?? '--'}`, color: 'text-yellow-400' },
-              { label: 'Diversions', value: `${summary?.total_diversions ?? '--'}`, color: 'text-cyan-400' },
-              { label: 'Peak Flights', value: `${summary?.peak_simultaneous_flights ?? '--'}`, color: 'text-blue-400' },
-              { label: 'Avg Hold', value: summary?.avg_capacity_hold_min != null ? `${summary.avg_capacity_hold_min}m` : '--', color: 'text-purple-400' },
-              { label: 'Total Flights', value: `${summary?.total_flights ?? '--'}`, color: 'text-white' },
+              { label: 'On-Time', value: summary?.on_time_pct != null ? `${summary.on_time_pct}%` : '--', color: (summary?.on_time_pct as number) >= 70 ? 'text-green-600' : 'text-red-600' },
+              { label: 'Avg Delay', value: summary?.schedule_delay_min != null ? `${summary.schedule_delay_min}m` : '--', color: 'text-amber-600' },
+              { label: 'Cancellations', value: `${summary?.total_cancellations ?? '--'}`, color: 'text-rose-600' },
+              { label: 'Go-Arounds', value: `${summary?.total_go_arounds ?? '--'}`, color: 'text-yellow-600' },
+              { label: 'Diversions', value: `${summary?.total_diversions ?? '--'}`, color: 'text-cyan-600' },
+              { label: 'Peak Flights', value: `${summary?.peak_simultaneous_flights ?? '--'}`, color: 'text-blue-600' },
+              { label: 'Avg Hold', value: summary?.avg_capacity_hold_min != null ? `${summary.avg_capacity_hold_min}m` : '--', color: 'text-purple-600' },
+              { label: 'Total Flights', value: `${summary?.total_flights ?? '--'}`, color: 'text-slate-900' },
             ].map(kpi => (
-              <div key={kpi.label} className="bg-slate-800 rounded-lg px-3 py-2 text-center">
+              <div key={kpi.label} className="bg-slate-100 rounded-lg px-3 py-2 text-center">
                 <div className={`text-xl font-bold ${kpi.color}`}>{kpi.value}</div>
                 <div className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">{kpi.label}</div>
               </div>
@@ -321,9 +321,9 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
             {/* Event type filter */}
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Event Types</span>
-                <button onClick={selectAll} className="text-[10px] text-blue-400 hover:text-blue-300">All</button>
-                <button onClick={clearAll} className="text-[10px] text-blue-400 hover:text-blue-300">Clear</button>
+                <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Event Types</span>
+                <button onClick={selectAll} className="text-[10px] text-blue-600 hover:text-blue-500">All</button>
+                <button onClick={clearAll} className="text-[10px] text-blue-600 hover:text-blue-500">Clear</button>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {allEventTypes.map(type => (
@@ -332,13 +332,13 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
                     onClick={() => toggleType(type)}
                     className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-all ${
                       selectedTypes.has(type)
-                        ? 'bg-slate-700 text-white ring-1 ring-slate-500'
-                        : 'bg-slate-800 text-slate-500'
+                        ? 'bg-slate-200 text-slate-800 ring-1 ring-slate-300'
+                        : 'bg-slate-100 text-slate-400'
                     }`}
                   >
                     <div className={`w-2 h-2 rounded-sm ${EVENT_COLORS[type] || 'bg-gray-400'}`} />
                     {EVENT_LABELS[type] || type}
-                    <span className="text-[10px] text-slate-500 ml-0.5">
+                    <span className="text-[10px] text-slate-400 ml-0.5">
                       ({sim.scenarioEvents.filter(e => e.event_type === type).length})
                     </span>
                   </button>
@@ -348,7 +348,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
 
             {/* Time range filter */}
             <div className="flex-shrink-0 w-48">
-              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider block mb-2">Time Range</span>
+              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block mb-2">Time Range</span>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -356,34 +356,34 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
                   max={toHour - 1}
                   value={fromHour}
                   onChange={e => setFromHour(Number(e.target.value))}
-                  className="w-14 bg-slate-800 text-white text-sm rounded px-2 py-1 border border-slate-600"
+                  className="w-14 bg-white text-slate-800 text-sm rounded px-2 py-1 border border-slate-300"
                 />
-                <span className="text-slate-500 text-xs">to</span>
+                <span className="text-slate-400 text-xs">to</span>
                 <input
                   type="number"
                   min={fromHour + 1}
                   max={24}
                   value={toHour}
                   onChange={e => setToHour(Number(e.target.value))}
-                  className="w-14 bg-slate-800 text-white text-sm rounded px-2 py-1 border border-slate-600"
+                  className="w-14 bg-white text-slate-800 text-sm rounded px-2 py-1 border border-slate-300"
                 />
-                <span className="text-[10px] text-slate-500">h</span>
+                <span className="text-[10px] text-slate-400">h</span>
               </div>
             </div>
 
             {/* Group by toggle */}
             <div className="flex-shrink-0">
-              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider block mb-2">Group By</span>
-              <div className="flex rounded overflow-hidden border border-slate-600">
+              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block mb-2">Group By</span>
+              <div className="flex rounded overflow-hidden border border-slate-300">
                 <button
                   onClick={() => setGroupBy('time')}
-                  className={`px-2 py-1 text-xs ${groupBy === 'time' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+                  className={`px-2 py-1 text-xs ${groupBy === 'time' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500'}`}
                 >
                   Time
                 </button>
                 <button
                   onClick={() => setGroupBy('category')}
-                  className={`px-2 py-1 text-xs ${groupBy === 'category' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+                  className={`px-2 py-1 text-xs ${groupBy === 'category' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500'}`}
                 >
                   Category
                 </button>
@@ -392,9 +392,9 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </div>
 
           {/* Event table */}
-          <div className="max-h-96 overflow-y-auto rounded-lg border border-slate-700">
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-slate-200">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-slate-800">
+              <thead className="sticky top-0 bg-slate-100">
                 <tr>
                   <th className="text-left px-3 py-2 text-[10px] text-slate-500 uppercase tracking-wider w-24">Time</th>
                   <th className="text-left px-3 py-2 text-[10px] text-slate-500 uppercase tracking-wider w-32">Category</th>
@@ -403,35 +403,35 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
               </thead>
               <tbody>
                 {filteredEvents.length === 0 ? (
-                  <tr><td colSpan={3} className="text-center py-6 text-slate-500">No events match filters</td></tr>
+                  <tr><td colSpan={3} className="text-center py-6 text-slate-400">No events match filters</td></tr>
                 ) : filteredEvents.map((event, i) => (
                   <tr
                     key={`${event.time}-${i}`}
                     onClick={() => handleEventClick(event.time, event.description)}
-                    className="hover:bg-slate-700/60 cursor-pointer transition-colors"
+                    className="hover:bg-blue-50 cursor-pointer transition-colors border-b border-slate-100"
                     title="Click to jump to this event"
                   >
-                    <td className="px-3 py-1.5 text-slate-400 font-mono text-xs">{fmtTime(event.time)}</td>
+                    <td className="px-3 py-1.5 text-slate-500 font-mono text-xs">{fmtTime(event.time)}</td>
                     <td className="px-3 py-1.5">
                       <span className="flex items-center gap-1.5">
                         <span className={`w-2 h-2 rounded-sm flex-shrink-0 ${EVENT_COLORS[event.event_type] || 'bg-gray-400'}`} />
-                        <span className="text-slate-300 text-xs">{EVENT_LABELS[event.event_type] || event.event_type}</span>
+                        <span className="text-slate-700 text-xs">{EVENT_LABELS[event.event_type] || event.event_type}</span>
                       </span>
                     </td>
-                    <td className="px-3 py-1.5 text-slate-200 text-xs">{event.description}</td>
+                    <td className="px-3 py-1.5 text-slate-800 text-xs">{event.description}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="text-[10px] text-slate-500 text-right -mt-3">
+          <div className="text-[10px] text-slate-400 text-right -mt-3">
             {filteredEvents.length} events shown
           </div>
 
           {/* Scene captures */}
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Scene Captures</span>
+              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Scene Captures</span>
               <button
                 onClick={handleCapture}
                 disabled={capturing}
@@ -443,7 +443,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
                 </svg>
                 {capturing ? 'Capturing...' : 'Capture Current View'}
               </button>
-              <span className="text-[10px] text-slate-500">
+              <span className="text-[10px] text-slate-400">
                 Scrub the simulation timeline, then capture at key moments
               </span>
             </div>
@@ -454,7 +454,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
                     <img
                       src={cap.dataUrl}
                       alt={cap.label}
-                      className="w-full h-24 object-cover rounded-lg border border-slate-700"
+                      className="w-full h-24 object-cover rounded-lg border border-slate-200"
                     />
                     <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[10px] text-white px-2 py-0.5 rounded-b-lg">
                       {cap.label}
@@ -471,7 +471,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-4 text-slate-600 text-xs border border-dashed border-slate-700 rounded-lg">
+              <div className="text-center py-4 text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
                 No captures yet — scrub to a key moment and click "Capture Current View"
               </div>
             )}
@@ -479,10 +479,10 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-700">
+        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200 bg-slate-50 rounded-b-xl">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-slate-300 transition-colors"
+            className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-sm text-slate-700 transition-colors"
           >
             Close
           </button>
