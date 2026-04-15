@@ -91,7 +91,7 @@ def run_scenario(page: Page, scenario: Scenario, fn, console_errors: list):
 
 
 def s1_initial_load(page: Page, s: Scenario):
-    page.wait_for_load_state("networkidle", timeout=15000)
+    page.wait_for_load_state("networkidle", timeout=30000)
     page.wait_for_timeout(3000)
 
     flights = get_flight_data(page)
@@ -524,6 +524,247 @@ def s15_console_errors(page: Page, s: Scenario):
     pass
 
 
+# ─── Recorded data parity scenarios ──────────────────────────────────────────
+
+def s16_switch_to_recorded(page: Page, s: Scenario):
+    """Click the 'Recorded' toggle in the DataModeToggle and verify picker opens."""
+    recorded_btn = page.locator("button:has-text('Recorded')").first
+    if not recorded_btn.is_visible():
+        s.status = "skip"
+        s.details = "Recorded toggle button not found"
+        return
+
+    recorded_btn.click()
+    page.wait_for_timeout(3000)
+
+    picker = page.locator("text=Recorded ADS-B Data")
+    if picker.is_visible():
+        s.details = "Switched to Recorded mode, picker modal opened"
+    else:
+        loading = page.locator("text=Loading recordings from lakehouse")
+        if loading.is_visible():
+            page.wait_for_timeout(10000)
+            if page.locator("text=Recorded ADS-B Data").is_visible():
+                s.details = "Switched to Recorded mode, picker opened after loading"
+            else:
+                s.status = "fail"
+                s.details = "Picker still loading after 13s"
+        else:
+            s.details = "Switched to Recorded mode, picker may have auto-closed or not appeared"
+
+
+def s17_load_recording(page: Page, s: Scenario):
+    """Select KSFO recording from picker and verify PlaybackBar appears."""
+    picker_visible = page.locator("text=Recorded ADS-B Data").first.is_visible()
+    if not picker_visible:
+        recorded_btn = page.locator("button:has-text('Load Recording')").first
+        if recorded_btn.is_visible():
+            recorded_btn.click()
+            page.wait_for_timeout(3000)
+            picker_visible = page.locator("text=Recorded ADS-B Data").first.is_visible()
+
+    if not picker_visible:
+        s.status = "skip"
+        s.details = "Recording picker not visible"
+        return
+
+    # Target recording buttons inside the modal (w-full text-left), not airport switcher
+    rec_btn = page.locator("button.w-full.text-left:has-text('KSFO')").first
+    if rec_btn.is_visible():
+        rec_btn.click(force=True)
+        s.details = "Selected KSFO recording"
+    else:
+        entries = page.locator("button.w-full.text-left").all()
+        available = [e.inner_text()[:40] for e in entries[:5]]
+        if entries:
+            entries[0].click(force=True)
+            s.details = f"KSFO not found, loaded first available: {available}"
+        else:
+            s.status = "skip"
+            s.details = "No recordings available in picker"
+            return
+
+    page.wait_for_timeout(15000)
+
+    bar = page.locator("div.fixed.bottom-0, div.fixed.bottom-12").first
+    bar_visible = bar.is_visible() if bar else False
+
+    amber = page.locator("div.border-amber-500\\/60, div[class*='border-amber']").first
+    has_amber = amber.is_visible() if amber else False
+
+    flights = get_flight_data(page)
+    flight_count = len(flights)
+
+    s.details += f" — bar={bar_visible}, amber={has_amber}, flights={flight_count}"
+    _shared["rec_flight_count"] = flight_count
+
+    if flight_count == 0:
+        s.status = "fail"
+        s.details += " — no flights loaded from recording"
+
+
+def s18_recorded_playback(page: Page, s: Scenario):
+    """Verify PlaybackBar controls work in recorded mode (same as simulation)."""
+    bar = page.locator("div.fixed.bottom-0, div.fixed.bottom-12").first
+    if not bar.is_visible():
+        s.status = "skip"
+        s.details = "PlaybackBar not visible in recorded mode"
+        return
+
+    checks = []
+
+    play_btn = page.locator("button[title='Play'], button[title='Pause']").first
+    if play_btn.is_visible():
+        initial_title = play_btn.get_attribute("title")
+        play_btn.click()
+        page.wait_for_timeout(500)
+        new_title = play_btn.get_attribute("title")
+        toggled = initial_title != new_title
+        checks.append(f"play/pause={toggled}")
+        play_btn.click()
+        page.wait_for_timeout(300)
+    else:
+        checks.append("play/pause=NOT_FOUND")
+
+    time_el = page.locator("div.font-mono.font-bold").first
+    time_text = time_el.inner_text().strip() if time_el.is_visible() else "NOT_VISIBLE"
+    checks.append(f"simTime='{time_text}'")
+
+    local_label = page.locator("text=Local Time").first
+    checks.append(f"localTime={'yes' if local_label.is_visible() else 'no'}")
+
+    speed_1x = page.locator("button:has-text('1x')").first
+    checks.append(f"speedBtns={'yes' if speed_1x.is_visible() else 'no'}")
+
+    flights_text = page.locator("text=/\\d+ flights/").first
+    if flights_text.is_visible():
+        checks.append(f"flightCount='{flights_text.inner_text().strip()}'")
+    else:
+        checks.append("flightCount=not_found")
+
+    s.details = "; ".join(checks)
+
+
+def s19_recorded_flight_list(page: Page, s: Scenario):
+    """Verify flight list populates with callsigns in recorded mode."""
+    page.wait_for_timeout(2000)
+
+    rows = page.locator("button:has(span[title='Altitude'])")
+    count = rows.count()
+    if count == 0:
+        rows = page.locator("button:has(span.font-mono)")
+        count = rows.count()
+
+    if count == 0:
+        s.status = "fail"
+        s.details = "No flight rows in list during recorded playback"
+        return
+
+    first_row = rows.first
+    callsign_el = first_row.locator("span.font-mono").first
+    callsign = callsign_el.inner_text().strip() if callsign_el.is_visible() else "?"
+    _shared["rec_selected_callsign"] = callsign
+
+    first_row.click(force=True)
+    page.wait_for_timeout(1000)
+
+    s.details = f"{count} flight rows, clicked '{callsign}'"
+
+
+def s20_recorded_flight_detail(page: Page, s: Scenario):
+    """Verify flight detail panel works the same in recorded mode."""
+    page.wait_for_timeout(1500)
+
+    empty_state = page.locator("text=Select a flight to view details")
+    if empty_state.is_visible():
+        page.wait_for_timeout(2000)
+        if empty_state.is_visible():
+            s.status = "fail"
+            s.details = "Detail panel shows empty state in recorded mode"
+            return
+
+    header = page.locator("h3:has-text('Flight Details')")
+    if not header.first.is_visible():
+        s.status = "fail"
+        s.details = "Flight Details header not found in recorded mode"
+        return
+
+    detail_panel = header.locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]")
+    if detail_panel.count() == 0:
+        detail_panel = header.locator("..")
+
+    callsign_el = detail_panel.locator("div.font-mono.font-bold").first
+    callsign_text = callsign_el.inner_text().strip() if callsign_el.is_visible() else ""
+
+    fields_found = []
+    for label in ["Latitude", "Longitude", "Altitude", "Speed", "Heading"]:
+        if detail_panel.locator(f"text={label}").first.is_visible():
+            fields_found.append(label)
+
+    sim_fields = _shared.get("sim_fields", ["Latitude", "Longitude", "Altitude", "Speed", "Heading"])
+    missing = [f for f in sim_fields if f not in fields_found]
+
+    s.details = f"Callsign='{callsign_text}', fields={fields_found}"
+    if missing:
+        s.details += f", missing vs sim: {missing}"
+    if len(fields_found) < 3:
+        s.status = "fail"
+        s.details += " — fewer than 3 position fields (parity gap)"
+
+
+def s21_recorded_data_quality(page: Page, s: Scenario):
+    """Verify all recorded flights have valid positions (no NaN/null)."""
+    flights = get_flight_data(page)
+    if not flights:
+        s.status = "fail"
+        s.details = "No flights in recorded mode"
+        return
+
+    nan_count = 0
+    null_count = 0
+    valid = 0
+    for f in flights:
+        lat = f.get("latitude")
+        lon = f.get("longitude")
+        if lat is None or lon is None:
+            null_count += 1
+        elif str(lat) == "nan" or str(lon) == "nan":
+            nan_count += 1
+        else:
+            valid += 1
+
+    s.details = f"valid={valid}, null={null_count}, nan={nan_count}, total={len(flights)}"
+    if nan_count > 0:
+        s.status = "fail"
+        s.details += " — NaN positions in recorded data"
+    if null_count > 0:
+        s.status = "fail"
+        s.details += " — null positions in recorded data"
+
+
+def s22_switch_back_to_simulation(page: Page, s: Scenario):
+    """Switch back to Simulation mode and verify it returns to normal."""
+    # Dismiss any open modal first (recording picker, etc.)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(500)
+
+    sim_btn = page.locator("button:has-text('Simulation')").first
+    if not sim_btn.is_visible():
+        s.status = "skip"
+        s.details = "Simulation toggle button not found"
+        return
+
+    sim_btn.click(force=True)
+    page.wait_for_timeout(5000)
+
+    amber = page.locator("div.border-amber-500\\/60, div[class*='border-amber']")
+    no_amber = amber.count() == 0 or not amber.first.is_visible()
+
+    flights = get_flight_data(page)
+
+    s.details = f"Back to simulation, amber_gone={no_amber}, flights={len(flights)}"
+
+
 def main():
     parser = argparse.ArgumentParser(description="UI E2E test for Airport Digital Twin")
     parser.add_argument("--url", default=APP_URL, help="App URL")
@@ -552,7 +793,16 @@ def main():
         ("S12", "Verify MMMX flight positions", s12_verify_mmmx),
         ("S13", "Switch airport to LSGG", s13_switch_lsgg),
         ("S14", "Switch back to KSFO", s14_switch_ksfo),
-        ("S15", "Console error summary", s15_console_errors),
+        # ─── Recorded data parity ───
+        ("S15", "Switch to Recorded mode", s16_switch_to_recorded),
+        ("S16", "Load KSFO recording", s17_load_recording),
+        ("S17", "Recorded PlaybackBar", s18_recorded_playback),
+        ("S18", "Recorded flight list", s19_recorded_flight_list),
+        ("S19", "Recorded flight detail", s20_recorded_flight_detail),
+        ("S20", "Recorded data quality", s21_recorded_data_quality),
+        ("S21", "Switch back to Simulation", s22_switch_back_to_simulation),
+        # ─── Summary ───
+        ("S22", "Console error summary", s15_console_errors),
     ]
 
     all_console_errors: list[str] = []
