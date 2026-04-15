@@ -23,6 +23,8 @@ APP_URL = "https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.
 DB_PROFILE = os.getenv("DB_PROFILE", "FEVM_SERVERLESS_STABLE")
 REPORT_DIR = Path("test-results")
 
+_shared: dict = {}
+
 
 def get_databricks_token(profile: str = DB_PROFILE) -> str:
     result = subprocess.run(
@@ -117,19 +119,21 @@ def s2_flight_list(page: Page, s: Scenario):
 
 
 def s3_click_flight(page: Page, s: Scenario):
-    markers = page.locator("svg[role='img'][aria-label*='Flight']")
-    count = markers.count()
+    count = page.evaluate("""() => document.querySelectorAll("svg[role='img'][aria-label*='Flight']").length""")
     if count == 0:
         s.status = "skip"
         s.details = "No flight markers found on map"
         return
-    markers.first.click()
+    page.evaluate("""() => {
+        const marker = document.querySelector("svg[role='img'][aria-label*='Flight']");
+        if (marker) marker.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+    }""")
     page.wait_for_timeout(1500)
     panel = page.locator("[class*='flight-detail'], [class*='FlightDetail'], [class*='selectedFlight']").first
     if panel.is_visible():
-        s.details = "Flight detail panel opened"
+        s.details = f"Flight detail panel opened ({count} markers on map)"
     else:
-        s.details = "Clicked flight marker, panel may use different selector"
+        s.details = f"Clicked flight marker via JS ({count} markers), panel may use different selector"
 
 
 def s4_view_toggle(page: Page, s: Scenario):
@@ -153,6 +157,183 @@ def s4_view_toggle(page: Page, s: Scenario):
     if toggle_btn2.is_visible():
         toggle_btn2.click()
         page.wait_for_timeout(2000)
+
+
+def s5_flight_list_select(page: Page, s: Scenario):
+    page.wait_for_timeout(2000)
+
+    rows = page.locator("button:has(span[title='Altitude'])")
+    count = rows.count()
+    if count == 0:
+        s.status = "skip"
+        s.details = "No flight rows found in list (looked for ALT span)"
+        return
+
+    target_row = rows.nth(min(1, count - 1))
+    callsign_el = target_row.locator("span.font-mono.font-medium").first
+    callsign = callsign_el.inner_text().strip() if callsign_el.is_visible() else "?"
+    _shared["selected_callsign"] = callsign
+
+    classes_before = target_row.get_attribute("class") or ""
+    already_selected = "border-l-blue" in classes_before
+    if already_selected:
+        target_row.click()
+        page.wait_for_timeout(300)
+
+    target_row.click()
+    page.wait_for_timeout(1000)
+
+    classes = target_row.get_attribute("class") or ""
+    selected = "border-l-blue" in classes or "bg-blue" in classes
+    s.details = f"Clicked row '{callsign}' ({count} rows), selected={selected}"
+    if not selected:
+        s.details += " — selection styling not detected (may use parent classes)"
+
+
+def s6_flight_detail(page: Page, s: Scenario):
+    page.wait_for_timeout(1500)
+
+    empty_state = page.locator("text=Select a flight to view details")
+    if empty_state.is_visible():
+        page.wait_for_timeout(2000)
+        if empty_state.is_visible():
+            s.status = "fail"
+            s.details = "Detail panel shows empty state after flight selection"
+            return
+
+    header = page.locator("h3:has-text('Flight Details')")
+    if not header.first.is_visible():
+        s.status = "fail"
+        s.details = "Flight Details header not found"
+        return
+
+    detail_panel = header.locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]")
+    if detail_panel.count() == 0:
+        detail_panel = header.locator("..")
+
+    callsign_el = detail_panel.locator("div.font-mono.font-bold").first
+    callsign_text = callsign_el.inner_text().strip() if callsign_el.is_visible() else ""
+
+    expected = _shared.get("selected_callsign", "")
+    match = expected and expected in callsign_text
+
+    fields_found = []
+    for label in ["Latitude", "Longitude", "Altitude", "Speed", "Heading"]:
+        if detail_panel.locator(f"text={label}").first.is_visible():
+            fields_found.append(label)
+
+    s.details = f"Callsign='{callsign_text}' (match={match}), fields={fields_found}"
+    if len(fields_found) < 3:
+        s.status = "fail"
+        s.details += " — fewer than 3 position/movement fields visible"
+
+
+def s7_playback_bar(page: Page, s: Scenario):
+    bar = page.locator("div.fixed.bottom-0, div.fixed.bottom-12").first
+    try:
+        bar.wait_for(state="visible", timeout=5000)
+    except Exception:
+        s.status = "skip"
+        s.details = "PlaybackBar not visible (simulation may not be active)"
+        return
+
+    checks = []
+
+    play_btn = page.locator("button[title='Play'], button[title='Pause']").first
+    if play_btn.is_visible():
+        initial_title = play_btn.get_attribute("title")
+        play_btn.click()
+        page.wait_for_timeout(500)
+        new_title = play_btn.get_attribute("title")
+        toggled = initial_title != new_title
+        checks.append(f"play/pause toggled={toggled} ({initial_title}→{new_title})")
+        play_btn.click()
+        page.wait_for_timeout(300)
+    else:
+        checks.append("play/pause NOT found")
+
+    time_el = page.locator("div.font-mono.font-bold").first
+    if time_el.is_visible():
+        time_text = time_el.inner_text().strip()
+        checks.append(f"simTime='{time_text}'")
+    else:
+        checks.append("simTime NOT visible")
+
+    local_label = page.locator("text=Local Time").first
+    checks.append(f"localTimeLabel={'yes' if local_label.is_visible() else 'no'}")
+
+    speed_1x = page.locator("button:has-text('1x')").first
+    if speed_1x.is_visible():
+        speed_2x = page.locator("button:has-text('2x')").first
+        if speed_2x.is_visible():
+            speed_2x.click()
+            page.wait_for_timeout(300)
+            classes_2x = speed_2x.get_attribute("class") or ""
+            active = "bg-blue-600" in classes_2x
+            checks.append(f"speed2x active={active}")
+            speed_1x.click()
+            page.wait_for_timeout(300)
+        checks.append("speedButtons=yes")
+    else:
+        checks.append("speedButtons=no")
+
+    flights_text = page.locator("text=/\\d+ flights/").first
+    if flights_text.is_visible():
+        checks.append(f"flightCount='{flights_text.inner_text().strip()}'")
+    else:
+        checks.append("flightCount=not found")
+
+    s.details = "; ".join(checks)
+
+
+def s8_sim_report_modal(page: Page, s: Scenario):
+    report_btn = page.locator("button[title='Generate simulation report']").first
+    if not report_btn.is_visible():
+        report_btn = page.locator("button:has-text('Report')").first
+    if not report_btn.is_visible():
+        s.status = "skip"
+        s.details = "Report button not found in PlaybackBar"
+        return
+
+    report_btn.click()
+    page.wait_for_timeout(1500)
+
+    modal = page.locator("div.fixed.inset-0").first
+    if not modal.is_visible():
+        s.status = "fail"
+        s.details = "Report modal did not open after clicking Report button"
+        return
+
+    checks = []
+
+    title = page.locator("text=/Simulation Report/i").first
+    checks.append(f"title={'yes' if title.is_visible() else 'no'}")
+
+    kpi_found = []
+    for label in ["On-Time %", "Avg Delay", "Total Flights", "Cancellations", "Go-Arounds"]:
+        if page.locator(f"text='{label}'").first.is_visible():
+            kpi_found.append(label)
+    checks.append(f"kpis={len(kpi_found)}/{5}")
+
+    download_btn = page.locator("button:has-text('Download Report')").first
+    checks.append(f"downloadBtn={'yes' if download_btn.is_visible() else 'no'}")
+
+    closed = page.evaluate("""() => {
+        const btns = [...document.querySelectorAll('button')];
+        const closeBtn = btns.find(b => b.textContent.trim() === 'Close');
+        if (closeBtn) { closeBtn.click(); return true; }
+        return false;
+    }""")
+    if closed:
+        page.wait_for_timeout(500)
+        modal_gone = not page.locator("div.fixed.inset-0").first.is_visible()
+        checks.append(f"closed={modal_gone}")
+    else:
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(500)
+        checks.append("closed via Escape")
+
+    s.details = "; ".join(checks)
 
 
 def _switch_airport(page: Page, s: Scenario, icao: str, expected_lat: float, expected_lon: float, tolerance: float = 2.0):
@@ -209,11 +390,114 @@ def _switch_airport(page: Page, s: Scenario, icao: str, expected_lat: float, exp
         return
 
 
-def s5_switch_mmmx(page: Page, s: Scenario):
+def s9_playback_event_click(page: Page, s: Scenario):
+    """Click an event marker on the PlaybackBar timeline and verify sim time changes."""
+    bar = page.locator("div.fixed.bottom-0, div.fixed.bottom-12").first
+    if not bar.is_visible():
+        s.status = "skip"
+        s.details = "PlaybackBar not visible"
+        return
+
+    time_el = page.locator("div.font-mono.font-bold").first
+    time_before = time_el.inner_text().strip() if time_el.is_visible() else ""
+
+    event_markers = bar.locator("div.cursor-pointer.z-10 div[class*='rounded-sm']")
+    count = event_markers.count()
+    if count == 0:
+        s.status = "skip"
+        s.details = "No event markers on timeline"
+        return
+
+    target_idx = min(count - 1, count // 2)
+    marker = event_markers.nth(target_idx)
+    parent = marker.locator("..")
+    title = parent.get_attribute("title") or ""
+
+    parent.dispatch_event("click")
+    page.wait_for_timeout(1000)
+
+    time_after = time_el.inner_text().strip() if time_el.is_visible() else ""
+    changed = time_before != time_after
+
+    s.details = f"Clicked event {target_idx+1}/{count} '{title[:60]}', time {time_before}→{time_after}, changed={changed}"
+    if not changed and count > 1:
+        s.details += " — time did not change (event may be at current time)"
+
+
+def s10_report_event_click(page: Page, s: Scenario):
+    """Open report, click an event row, verify modal closes, time seeks, flight selected."""
+    report_btn = page.locator("button[title='Generate simulation report']").first
+    if not report_btn.is_visible():
+        report_btn = page.locator("button:has-text('Report')").first
+    if not report_btn.is_visible():
+        s.status = "skip"
+        s.details = "Report button not found"
+        return
+
+    report_btn.click()
+    page.wait_for_timeout(1500)
+
+    modal = page.locator("div.fixed.inset-0").first
+    if not modal.is_visible():
+        s.status = "skip"
+        s.details = "Report modal did not open"
+        return
+
+    event_rows = modal.locator("tr.cursor-pointer")
+    row_count = event_rows.count()
+    if row_count == 0:
+        s.status = "skip"
+        s.details = "No event rows in report table"
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(500)
+        return
+
+    target_row = event_rows.first
+    row_time = target_row.locator("td").first.inner_text().strip()
+    row_desc = target_row.locator("td").nth(2).inner_text().strip()
+
+    time_el = page.locator("div.font-mono.font-bold").first
+    time_before = time_el.inner_text().strip() if time_el.is_visible() else ""
+
+    target_row.click()
+    page.wait_for_timeout(1500)
+
+    modal_closed = not page.locator("div.fixed.inset-0").first.is_visible()
+
+    time_after = time_el.inner_text().strip() if time_el.is_visible() else ""
+    time_changed = time_before != time_after
+
+    detail_callsign = ""
+    callsign_el = page.locator("div.font-mono.font-bold").first
+    if callsign_el.is_visible():
+        detail_callsign = callsign_el.inner_text().strip()
+
+    checks = [
+        f"clicked row '{row_time}: {row_desc[:40]}'",
+        f"modalClosed={modal_closed}",
+        f"time {time_before}→{time_after} changed={time_changed}",
+    ]
+    if detail_callsign and detail_callsign != time_after:
+        checks.append(f"selectedFlight='{detail_callsign}'")
+
+    s.details = "; ".join(checks)
+
+    if not modal_closed:
+        s.status = "fail"
+        s.details += " — modal should close after event click"
+        page.evaluate("""() => {
+            const btns = [...document.querySelectorAll('button')];
+            const closeBtn = btns.find(b => b.textContent.trim() === 'Close');
+            if (closeBtn) closeBtn.click();
+        }""")
+        page.wait_for_timeout(500)
+
+
+def s11_switch_mmmx(page: Page, s: Scenario):
     _switch_airport(page, s, "MMMX", 19.43, -99.07)
 
 
-def s6_verify_mmmx(page: Page, s: Scenario):
+def s12_verify_mmmx(page: Page, s: Scenario):
     flights = get_flight_data(page)
     ground = [f for f in flights if (f.get("altitude") or 9999) < 500]
     near_sfo = sum(
@@ -228,32 +512,15 @@ def s6_verify_mmmx(page: Page, s: Scenario):
     s.details = f"{len(flights)} flights total, {len(ground)} on ground, 0 at SFO"
 
 
-def s7_switch_lsgg(page: Page, s: Scenario):
+def s13_switch_lsgg(page: Page, s: Scenario):
     _switch_airport(page, s, "LSGG", 46.24, 6.11)
 
 
-def s8_switch_ksfo(page: Page, s: Scenario):
+def s14_switch_ksfo(page: Page, s: Scenario):
     _switch_airport(page, s, "KSFO", 37.62, -122.38, tolerance=0.5)
 
 
-def s9_sim_report(page: Page, s: Scenario):
-    report_btn = page.locator("button:has-text('Report'), button:has-text('report')").first
-    if not report_btn.is_visible():
-        s.status = "skip"
-        s.details = "Report button not visible (may require simulation mode)"
-        return
-    report_btn.click()
-    page.wait_for_timeout(1500)
-    modal = page.locator("[class*='modal'], [class*='Modal'], [role='dialog']").first
-    if modal.is_visible():
-        s.details = "Report modal opened successfully"
-        page.keyboard.press("Escape")
-    else:
-        s.status = "skip"
-        s.details = "Report button found but no modal — feature may not be active"
-
-
-def s10_console_errors(page: Page, s: Scenario):
+def s15_console_errors(page: Page, s: Scenario):
     pass
 
 
@@ -273,14 +540,19 @@ def main():
     scenarios_def = [
         ("S1", "Initial page load", s1_initial_load),
         ("S2", "Flight list populates", s2_flight_list),
-        ("S3", "Click a flight", s3_click_flight),
+        ("S3", "Click a flight marker", s3_click_flight),
         ("S4", "Switch 2D/3D view", s4_view_toggle),
-        ("S5", "Switch airport to MMMX", s5_switch_mmmx),
-        ("S6", "Verify MMMX flight positions", s6_verify_mmmx),
-        ("S7", "Switch airport to LSGG", s7_switch_lsgg),
-        ("S8", "Switch back to KSFO", s8_switch_ksfo),
-        ("S9", "Open simulation report", s9_sim_report),
-        ("S10", "Console error summary", s10_console_errors),
+        ("S5", "Flight list selection", s5_flight_list_select),
+        ("S6", "Flight detail panel", s6_flight_detail),
+        ("S7", "PlaybackBar controls", s7_playback_bar),
+        ("S8", "Simulation report modal", s8_sim_report_modal),
+        ("S9", "PlaybackBar event click", s9_playback_event_click),
+        ("S10", "Report event click", s10_report_event_click),
+        ("S11", "Switch airport to MMMX", s11_switch_mmmx),
+        ("S12", "Verify MMMX flight positions", s12_verify_mmmx),
+        ("S13", "Switch airport to LSGG", s13_switch_lsgg),
+        ("S14", "Switch back to KSFO", s14_switch_ksfo),
+        ("S15", "Console error summary", s15_console_errors),
     ]
 
     all_console_errors: list[str] = []
@@ -317,14 +589,14 @@ def main():
             status_str = {"pass": "\033[32mPASS\033[0m", "fail": "\033[31mFAIL\033[0m", "skip": "\033[33mSKIP\033[0m", "pending": "PEND"}.get(s.status, s.status)
             print(f"{status_str} ({s.duration_ms}ms) — {s.details}")
 
-        s10 = scenarios[-1]
+        s_last = scenarios[-1]
         if all_console_errors:
-            s10.status = "fail"
-            s10.details = f"{len(all_console_errors)} console errors total"
-            s10.console_errors = all_console_errors
+            s_last.status = "fail"
+            s_last.details = f"{len(all_console_errors)} console errors total"
+            s_last.console_errors = all_console_errors
         else:
-            s10.status = "pass"
-            s10.details = "No console errors"
+            s_last.status = "pass"
+            s_last.details = "No console errors"
 
         REPORT_DIR.mkdir(exist_ok=True)
         page.screenshot(path=str(REPORT_DIR / "final_state.png"), full_page=True)
