@@ -18,12 +18,12 @@ The Airport Digital Twin brings airport operations to life in a browser. Track 5
 |---|---|
 | **Real-time tracking** | 50+ simultaneous flights with 2D (Leaflet) and 3D (Three.js) views |
 | **Multi-airport** | 12 presets (SFO, JFK, LAX, ORD, ATL, LHR, CDG, AUH, DXB, HND, HKG, SIN) + any ICAO code |
-| **ML predictions** | Delay forecasting, gate recommendations, congestion alerts |
+| **ML predictions** | Delay forecasting, gate recommendations, congestion alerts, turnaround duration, off-block time |
 | **Live weather** | METAR/TAF — temperature, wind, visibility, flight category |
 | **FIDS** | Arrivals & departures board, just like a real terminal |
 | **Platform integration** | Lakeview dashboards, Genie NL queries, Unity Catalog, MLflow, Data Lineage |
 | **Data formats** | AIXM, OSM, IFC, AIDM, FAA NASR, MSFS BGL |
-| **Calibration** | 33 real-world airport profiles from BTS, OpenSky, and OurAirports data |
+| **Calibration** | 43 real-world airport profiles from BTS, OpenSky, and OurAirports data |
 
 ---
 
@@ -87,13 +87,15 @@ The platform tracks and visualizes the KPIs that matter most to airport leadersh
 
 | KPI | What It Measures | How the Twin Helps |
 |---|---|---|
-| **On-Time Performance** | % flights departing/arriving within 15 min of schedule | Real-time delay predictions with cause attribution |
-| **Gate Utilization** | % of gates occupied vs. available | Live gate status board with ML-optimized assignments |
-| **Runway Throughput** | Operations per hour per runway | Congestion heatmap with capacity threshold alerts |
-| **Taxi Time** | Minutes from gate to runway (and back) | Origin-aware trajectory visualization |
-| **Turnaround Efficiency** | Total ground time per aircraft | Turnaround timeline with phase breakdown |
-| **Baggage Processing** | Bags handled per hour, mishandled rate | Bronze/Silver/Gold pipeline tracking bag events |
-| **Passenger Experience** | Walking distance, connection times | Gate recommendations minimize passenger transit |
+| **On-Time Performance** | % flights within 15 min of schedule | Real-time delay predictions + ML-forecasted departure offset |
+| **Average Delay** | Mean schedule delay in minutes | Delay predictor with confidence scoring and cause attribution |
+| **Gate Utilization** | Gates occupied vs. available | Live gate status board with ML-optimized assignments |
+| **Avg Capacity Hold** | Minutes held due to runway/airspace congestion | Congestion heatmap with capacity threshold alerts |
+| **Peak Simultaneous Flights** | Max concurrent active flights | Capacity planning and peak-hour staffing |
+| **Turnaround Duration** | Gate occupancy time (AIBT to AOBT) | ML turnaround model (GBT) with P10/P90 prediction intervals |
+| **Off-Block Time** | Predicted pushback time vs. schedule (AOBT - SOBT) | OBT model predicts departure offset incorporating arrival delay, turnaround prediction, and operational context |
+| **Cancellations & Disruptions** | Go-arounds, diversions, holdings, cancellations | Scenario event tracking with disruption timeline |
+| **Baggage Processing** | Bags handled per hour, mishandled rate | Bronze/Silver/Gold DLT pipeline tracking bag lifecycle |
 
 ### Decision Support Scenarios
 
@@ -240,12 +242,14 @@ graph TB
     end
 
     subgraph "ML Layer"
-        FE["Feature Engineering<br/>(14 features)"]
+        FE["Feature Engineering"]
         REG["AirportModelRegistry<br/>(per-ICAO cache)"]
         DM["Delay Predictor"]
         GM["Gate Recommender"]
         CM["Congestion Predictor"]
-        OBT["OBT Model<br/>(On-Block Time)"]
+        TM["Turnaround Model<br/>(gate duration)"]
+        OBT["OBT Model<br/>(pushback time)"]
+        TM -->|predicted duration| OBT
     end
 
     subgraph "Application"
@@ -259,7 +263,7 @@ graph TB
     BTS & OA --> CAL --> SYN
     DLT_B --> DLT_S --> DLT_G --> UC
     UC --> LB
-    UC --> FE --> REG --> DM & GM & CM & OBT
+    UC --> FE --> REG --> DM & GM & CM & TM & OBT
     METAR --> API
     OSM --> API
     LB --> API
@@ -311,10 +315,25 @@ The backend cascades through data sources automatically:
 | **Delay Prediction** | `src/ml/delay_model.py` | Rule-based heuristic | 14-feature vector (time, altitude, velocity, heading) | `delay_minutes`, `confidence`, `category` |
 | **Gate Recommendation** | `src/ml/gate_model.py` | Scoring optimization | Flight + gate status | Top-K gates with `score`, `reasons`, `taxi_time` |
 | **Congestion Prediction** | `src/ml/congestion_model.py` | Capacity threshold | All flight positions | Area congestion `level`, `wait_minutes` |
-| **On-Block Time** | `src/ml/obt_model.py` | Regression | OBT features | Predicted on-block time |
+| **Turnaround Duration** | `src/ml/turnaround_model.py` | HistGradientBoosting / CatBoost | 19 features (aircraft, gate, weather, schedule) | `turnaround_minutes` with P10/P90 intervals |
+| **Off-Block Time** | `src/ml/obt_model.py` | HistGradientBoosting / CatBoost | 19 features (schedule, delay, turnaround pred, ops) | `departure_offset_min` (AOBT - SOBT) with P10/P90 |
 | **GSE Allocation** | `src/ml/gse_model.py` | Optimization | Turnaround phase | Equipment assignments |
 
 All models are wrapped in `AirportModelRegistry` (`src/ml/registry.py`) which caches per-ICAO instances — switching airports hot-swaps models.
+
+#### Turnaround + OBT Two-Stage Pipeline
+
+The turnaround and OBT models form a two-stage prediction pipeline:
+
+1. **Turnaround model** predicts gate occupancy duration (AOBT - AIBT) from aircraft category, gate, weather, and schedule features. Trained on simulation phase transitions. Three horizons: T-90 (coarse, pre-arrival), T-park (refined, at gate), T-board (boarding stage).
+
+2. **OBT model** predicts departure offset from schedule (AOBT - SOBT). Uses the turnaround model's prediction as an input feature alongside schedule context, arrival delay propagation, and operational factors. Two horizons: T-schedule (hours before, planning) and T-park (at gate, operational).
+
+At inference: `predicted_AOBT = SOBT + predicted_offset_minutes`.
+
+Both models support CatBoost (native categoricals) with sklearn HistGradientBoosting fallback, P10/P90 quantile regression for prediction intervals, and Conformalized Quantile Regression (CQR) calibration.
+
+#### Delay Model Features
 
 **Feature engineering** (`src/ml/features.py`): Extracts 14 features from raw flight data:
 - 4 numeric: `hour_of_day`, `day_of_week`, `is_weekend`, `velocity_normalized`
@@ -324,14 +343,14 @@ All models are wrapped in `AirportModelRegistry` (`src/ml/registry.py`) which ca
 
 ### Calibration System
 
-The calibration pipeline generates realistic synthetic data based on real airport statistics from 33 airports:
+The calibration pipeline generates realistic synthetic data based on real airport statistics from 43 airports:
 
 ```mermaid
 graph LR
     BTS["BTS T-100<br/>& On-Time CSVs"] --> PB["ProfileBuilder"]
     OSK["OpenSky API<br/>(intl airports)"] --> PB
     OA["OurAirports<br/>CSVs"] --> PB
-    KP["Known Profiles<br/>(33 hand-researched)"] --> PB
+    KP["Known Profiles<br/>(43 hand-researched)"] --> PB
     PB --> AP["AirportProfile<br/>- flights_per_day<br/>- airline_mix<br/>- delay_distribution<br/>- peak_hours<br/>- aircraft_types"]
     AP --> SG["Schedule Generator<br/>& Fallback"]
 ```
@@ -340,7 +359,7 @@ graph LR
 |---|---|---|
 | `AirportProfile` | `src/calibration/profile.py` | Dataclass holding all airport stats |
 | `AirportProfileLoader` | `src/calibration/profile.py` | Loads profiles from known stats or data sources |
-| `known_profiles` | `src/calibration/known_profiles.py` | 33 hand-researched airport profiles (US + intl) |
+| `known_profiles` | `src/calibration/known_profiles.py` | 43 hand-researched airport profiles (US + intl) |
 | `bts_ingest` | `src/calibration/bts_ingest.py` | Parse BTS T-100/On-Time CSVs |
 | `opensky_ingest` | `src/calibration/opensky_ingest.py` | Query OpenSky API for international airports |
 | `ourairports_ingest` | `src/calibration/ourairports_ingest.py` | Parse OurAirports CSV data |
@@ -387,12 +406,12 @@ Outputs structured JSON event logs with flight state transitions, gate assignmen
 | **Data Ops** | `GET /api/data-ops/dashboard`, `/data-ops/stats`, `/data-ops/sync-status` | Pipeline monitoring |
 | **System** | `GET /health`, `/api/ready`, `/api/debug/logs` | Health checks and diagnostics |
 
-### Test Suite (~2,000 tests)
+### Test Suite (~4,600 tests)
 
 | Layer | Count | Framework | Command |
 |---|---|---|---|
-| Backend (Python) | ~1,365 | pytest | `uv run pytest tests/ -v` |
-| Frontend (TypeScript) | ~635 | Vitest | `cd app/frontend && npm test -- --run` |
+| Backend (Python) | ~3,826 | pytest | `uv run pytest tests/ -v` |
+| Frontend (TypeScript) | ~822 | Vitest | `cd app/frontend && npm test -- --run` |
 | Integration (Databricks) | 3 jobs | DABs | `databricks bundle run baggage_pipeline_integration_test --target dev` |
 
 ---
@@ -579,8 +598,8 @@ databricks bundle deploy --target dev
 ### Run Tests
 
 ```bash
-uv run pytest tests/ -v                    # ~1,365 backend tests
-cd app/frontend && npm test -- --run       # ~635 frontend tests
+uv run pytest tests/ -v                    # ~3,826 backend tests
+cd app/frontend && npm test -- --run       # ~822 frontend tests
 ```
 
 ---
