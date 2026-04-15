@@ -1,7 +1,7 @@
 """A-CDM (Airport Collaborative Decision Making) data adapter.
 
 Maps A-CDM milestones (AIBT, AOBT, SOBT, TOBT, EOBT, etc.) to the
-OBT feature set used by the simulation-trained model.  This adapter
+turnaround feature set used by the simulation-trained model.  This adapter
 is the first step toward fine-tuning the synthetic model on real
 operational data.
 
@@ -21,8 +21,8 @@ import math
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from src.ml.obt_features import (
-    OBTFeatureSet,
+from src.ml.turnaround_features import (
+    TurnaroundFeatureSet,
     classify_aircraft,
     _gate_prefix,
     _is_remote_stand,
@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 def acdm_record_to_features(
     record: Dict[str, Any],
     airport_iata: str,
-) -> Optional[tuple[OBTFeatureSet, float]]:
-    """Convert a single A-CDM record to (OBTFeatureSet, target_turnaround_min).
+) -> Optional[tuple[TurnaroundFeatureSet, float]]:
+    """Convert a single A-CDM record to (TurnaroundFeatureSet, target_turnaround_min).
 
     Expected record keys (all timestamps as ISO strings or datetime):
         - aibt: Actual In-Block Time (required)
@@ -55,7 +55,7 @@ def acdm_record_to_features(
         - has_ground_stop: Whether a GDP/GS was active (optional)
 
     Returns:
-        Tuple of (OBTFeatureSet, turnaround_minutes) or None if invalid.
+        Tuple of (TurnaroundFeatureSet, turnaround_minutes) or None if invalid.
     """
     try:
         aibt = _to_datetime(record["aibt"])
@@ -82,7 +82,7 @@ def acdm_record_to_features(
 
     h_sin, h_cos = _cyclical_hour(aibt.hour)
 
-    features = OBTFeatureSet(
+    features = TurnaroundFeatureSet(
         aircraft_category=classify_aircraft(aircraft_type),
         airline_code=airline_code,
         hour_of_day=aibt.hour,
@@ -108,9 +108,9 @@ def acdm_record_to_features(
 def convert_acdm_dataset(
     records: List[Dict[str, Any]],
     airport_iata: str,
-) -> tuple[List[OBTFeatureSet], List[float]]:
+) -> tuple[List[TurnaroundFeatureSet], List[float]]:
     """Convert a batch of A-CDM records to training-ready features + targets."""
-    features: List[OBTFeatureSet] = []
+    features: List[TurnaroundFeatureSet] = []
     targets: List[float] = []
     skipped = 0
 
@@ -124,7 +124,7 @@ def convert_acdm_dataset(
         targets.append(target)
 
     logger.info(
-        "Converted %d A-CDM records to OBT features (%d skipped)",
+        "Converted %d A-CDM records to turnaround features (%d skipped)",
         len(features), skipped,
     )
     return features, targets

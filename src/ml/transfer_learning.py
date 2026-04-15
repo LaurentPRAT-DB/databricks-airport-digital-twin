@@ -1,14 +1,14 @@
-"""Transfer learning pipeline: fine-tune OBT model on real A-CDM data.
+"""Transfer learning pipeline: fine-tune turnaround model on real A-CDM data.
 
 Uses the simulation-trained model as a starting point and fine-tunes on
 real operational data with a lower learning rate.  CatBoost supports
 ``init_model`` for warm-starting from a previous model.
 
 Usage:
-    from src.ml.transfer_learning import fine_tune_obt
+    from src.ml.transfer_learning import fine_tune_turnaround
 
-    result = fine_tune_obt(
-        base_model_path="models/obt_tpark.pkl",
+    result = fine_tune_turnaround(
+        base_model_path="models/turnaround_tpark.pkl",
         acdm_records=records,
         airport_iata="LHR",
         output_path="models/obt_tpark_finetuned.pkl",
@@ -22,12 +22,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.ml.acdm_adapter import convert_acdm_dataset
-from src.ml.obt_model import OBTPredictor
+from src.ml.turnaround_model import TurnaroundPredictor
 
 logger = logging.getLogger(__name__)
 
 
-def fine_tune_obt(
+def fine_tune_turnaround(
     base_model_path: str | Path,
     acdm_records: List[Dict[str, Any]],
     airport_iata: str,
@@ -36,7 +36,7 @@ def fine_tune_obt(
     learning_rate: float = 0.01,
     n_estimators: int = 100,
 ) -> Dict[str, Any]:
-    """Fine-tune a simulation-trained OBT model on real A-CDM data.
+    """Fine-tune a simulation-trained Turnaround model on real A-CDM data.
 
     Args:
         base_model_path: Path to the simulation-trained model pickle.
@@ -50,7 +50,7 @@ def fine_tune_obt(
         Dict with fine-tuning metadata.
     """
     # Load base model
-    base_predictor = OBTPredictor(airport_code=airport_iata)
+    base_predictor = TurnaroundPredictor(airport_code=airport_iata)
     if not base_predictor.load(base_model_path):
         logger.error("Failed to load base model from %s", base_model_path)
         return {"status": "error", "reason": "base_model_not_found"}
@@ -64,7 +64,7 @@ def fine_tune_obt(
     # Fine-tune: train a new model from scratch with the real data
     # (CatBoost init_model warm-start is handled inside train() if catboost is
     # available; for sklearn we simply retrain on the real data)
-    ft_predictor = OBTPredictor(airport_code=airport_iata)
+    ft_predictor = TurnaroundPredictor(airport_code=airport_iata)
     result = ft_predictor.train(
         features,
         targets,
@@ -81,7 +81,7 @@ def fine_tune_obt(
     result["fine_tuned"] = True
     result["base_model"] = str(base_model_path)
     logger.info(
-        "Fine-tuned OBT model for %s: %d A-CDM samples, status=%s",
+        "Fine-tuned Turnaround model for %s: %d A-CDM samples, status=%s",
         airport_iata, len(features), result.get("status"),
     )
     return result

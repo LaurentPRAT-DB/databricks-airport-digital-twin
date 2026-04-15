@@ -18,10 +18,25 @@ from src.calibration.profile import AirportProfileLoader
 
 logger = logging.getLogger(__name__)
 
-# Lazy import — OBTPredictor requires scikit-learn which may not be
+# Lazy import — TurnaroundPredictor requires scikit-learn which may not be
 # installed in the lightweight Databricks App runtime.
+_turnaround_import_attempted = False
+_TurnaroundPredictor = None
+
 _obt_import_attempted = False
 _OBTPredictor = None
+
+
+def _get_turnaround_predictor_class():
+    global _turnaround_import_attempted, _TurnaroundPredictor
+    if not _turnaround_import_attempted:
+        _turnaround_import_attempted = True
+        try:
+            from src.ml.turnaround_model import TurnaroundPredictor
+            _TurnaroundPredictor = TurnaroundPredictor
+        except ImportError:
+            logger.warning("scikit-learn not available — Turnaround model disabled")
+    return _TurnaroundPredictor
 
 
 def _get_obt_predictor_class():
@@ -48,7 +63,7 @@ class AirportModelRegistry:
     """Cache of ML model instances keyed by airport ICAO code."""
 
     def __init__(self):
-        # {icao: {"delay": DelayPredictor, "gate": GateRecommender, "congestion": CongestionPredictor, "obt": OBTPredictor}}
+        # {icao: {"delay": DelayPredictor, "gate": GateRecommender, "congestion": CongestionPredictor, "turnaround": TurnaroundPredictor}}
         self._instances: Dict[str, Dict[str, Any]] = {}
         self._profile_loader = AirportProfileLoader()
 
@@ -72,6 +87,9 @@ class AirportModelRegistry:
                 "gate": GateRecommender(airport_code=airport_code, airport_profile=profile),
                 "congestion": CongestionPredictor(airport_code=airport_code, airport_profile=profile),
             }
+            TA = _get_turnaround_predictor_class()
+            if TA is not None:
+                models["turnaround"] = TA(airport_code=airport_code, airport_profile=profile)
             OBT = _get_obt_predictor_class()
             if OBT is not None:
                 models["obt"] = OBT(airport_code=airport_code, airport_profile=profile)
@@ -85,7 +103,7 @@ class AirportModelRegistry:
         OSM config (runway coords, gate layout, etc.) and calibration profile.
 
         Returns:
-            Dict with keys "delay", "gate", "congestion" and optionally "obt" (fresh instances).
+            Dict with keys "delay", "gate", "congestion" and optionally "turnaround", "obt" (fresh instances).
         """
         logger.info(f"Retraining models for {airport_code}")
         profile = self._profile_loader.get_profile(airport_code)
@@ -94,6 +112,9 @@ class AirportModelRegistry:
             "gate": GateRecommender(airport_code=airport_code, airport_profile=profile),
             "congestion": CongestionPredictor(airport_code=airport_code, airport_profile=profile),
         }
+        TA = _get_turnaround_predictor_class()
+        if TA is not None:
+            models["turnaround"] = TA(airport_code=airport_code, airport_profile=profile)
         OBT = _get_obt_predictor_class()
         if OBT is not None:
             models["obt"] = OBT(airport_code=airport_code, airport_profile=profile)
@@ -105,7 +126,7 @@ class AirportModelRegistry:
     ) -> Dict[str, str]:
         """Deprecated — UC registration is handled by the training notebook.
 
-        See databricks/notebooks/train_obt_model.py which registers models
+        See databricks/notebooks/train_turnaround_model.py which registers models
         via mlflow.pyfunc.log_model with registered_model_name.
         """
         return {"status": "deprecated_use_training_notebook"}

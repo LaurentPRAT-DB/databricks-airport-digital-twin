@@ -3,7 +3,7 @@
 # MAGIC # Evaluate OBT Model Against Real OpenSky Turnaround Data
 # MAGIC
 # MAGIC Reads enriched phase transitions from `opensky_phase_transitions` Delta table,
-# MAGIC extracts complete turnarounds (parked → pushback), loads the trained OBT model
+# MAGIC extracts complete turnarounds (parked → pushback), loads the trained Turnaround model
 # MAGIC from Unity Catalog, and compares predictions vs observed durations.
 # MAGIC
 # MAGIC **Inputs:**
@@ -52,7 +52,7 @@ os.chdir(bundle_root)
 # COMMAND ----------
 
 dbutils.widgets.text("airport_icao", "EDDF", "Airport ICAO code")
-dbutils.widgets.text("airport_iata", "FRA", "Airport IATA code (for OBT model)")
+dbutils.widgets.text("airport_iata", "FRA", "Airport IATA code (for Turnaround model)")
 dbutils.widgets.text("days", "7", "Days of data to evaluate")
 
 airport_icao = dbutils.widgets.get("airport_icao")
@@ -177,14 +177,14 @@ if not turnarounds:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 3. Load OBT model from Unity Catalog
+# MAGIC ## 3. Load Turnaround model from Unity Catalog
 
 # COMMAND ----------
 
-from src.ml.obt_model import OBTPredictor
-from src.ml.obt_features import OBTFeatureSet, classify_aircraft
+from src.ml.turnaround_model import TurnaroundPredictor
+from src.ml.turnaround_features import TurnaroundFeatureSet, classify_aircraft
 
-predictor = OBTPredictor()
+predictor = TurnaroundPredictor()
 model_source = "fallback"
 
 # Try UC Model Registry first
@@ -221,7 +221,7 @@ print(f"Model trained: {predictor.is_trained}")
 # COMMAND ----------
 
 def build_feature_set(callsign, gate_id, aircraft_type, parked_hour, parked_weekday, airport_iata):
-    """Build an OBTFeatureSet from observed turnaround context."""
+    """Build an TurnaroundFeatureSet from observed turnaround context."""
     h_sin = round(math.sin(2.0 * math.pi * parked_hour / 24.0), 6)
     h_cos = round(math.cos(2.0 * math.pi * parked_hour / 24.0), 6)
 
@@ -234,7 +234,7 @@ def build_feature_set(callsign, gate_id, aircraft_type, parked_hour, parked_week
             break
     gate_prefix = gate_prefix or "UNK"
 
-    return OBTFeatureSet(
+    return TurnaroundFeatureSet(
         aircraft_category=classify_aircraft(aircraft_type) if aircraft_type else "narrow",
         airline_code=airline_code,
         hour_of_day=parked_hour,

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Evaluate OBT model predictions against real OpenSky ADS-B turnaround data.
+"""Evaluate Turnaround model predictions against real OpenSky ADS-B turnaround data.
 
 Loads collected EDDF JSONL files, runs the OpenSkyEventInferrer to detect
 gate occupy/release events, then compares observed turnaround durations
-against the current OBT model predictions.
+against the current Turnaround model predictions.
 
 Usage:
     uv run python scripts/evaluate_obt_eddf.py
@@ -36,8 +36,8 @@ from src.formats.osm.parser import OSMParser
 from src.formats.osm.converter import OSMConverter
 from src.formats.base import CoordinateConverter
 from src.inference.opensky_events import OpenSkyEventInferrer
-from src.ml.obt_model import OBTPredictor
-from src.ml.obt_features import OBTFeatureSet, classify_aircraft
+from src.ml.turnaround_model import TurnaroundPredictor
+from src.ml.turnaround_features import TurnaroundFeatureSet, classify_aircraft
 
 # m/s to knots conversion factor
 MS_TO_KTS = 1.94384
@@ -317,8 +317,8 @@ def build_feature_set(
     parked_hour: int,
     parked_weekday: int,
     airport_iata: str,
-) -> OBTFeatureSet:
-    """Build an OBTFeatureSet from observed turnaround context."""
+) -> TurnaroundFeatureSet:
+    """Build an TurnaroundFeatureSet from observed turnaround context."""
     h_sin = round(math.sin(2.0 * math.pi * parked_hour / 24.0), 6)
     h_cos = round(math.cos(2.0 * math.pi * parked_hour / 24.0), 6)
 
@@ -331,7 +331,7 @@ def build_feature_set(
             break
     gate_prefix = gate_prefix or "UNK"
 
-    return OBTFeatureSet(
+    return TurnaroundFeatureSet(
         aircraft_category=classify_aircraft(aircraft_type) if aircraft_type else "narrow",
         airline_code=airline_code,
         hour_of_day=parked_hour,
@@ -466,11 +466,11 @@ def evaluate(
                       f"parked at {pt['time'][:19]}  ({elapsed:.0f} min so far)")
         return
 
-    # 5. Compare against OBT model predictions (load calibration profile)
+    # 5. Compare against Turnaround model predictions (load calibration profile)
     from src.calibration.profile import AirportProfileLoader
     profile_loader = AirportProfileLoader()
     profile = profile_loader.get_profile(airport_iata)
-    predictor = OBTPredictor(airport_code=airport, airport_profile=profile)
+    predictor = TurnaroundPredictor(airport_code=airport, airport_profile=profile)
     if profile and profile.turnaround_median_min > 0:
         logger.info("Using calibrated turnaround median: %.1f min (from %s)",
                      profile.turnaround_median_min, profile.data_source)
@@ -516,10 +516,10 @@ def evaluate(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate OBT model against OpenSky data")
+    parser = argparse.ArgumentParser(description="Evaluate Turnaround model against OpenSky data")
     parser.add_argument("--data-dir", default="data/opensky_raw", help="Directory with JSONL files")
     parser.add_argument("--airport", default="EDDF", help="ICAO code (default: EDDF)")
-    parser.add_argument("--iata", default="FRA", help="IATA code for OBT model (default: FRA)")
+    parser.add_argument("--iata", default="FRA", help="IATA code for Turnaround model (default: FRA)")
     parser.add_argument("--include-synced", action="store_true",
                         help="Also include data from data_dir/synced/")
     parser.add_argument("--from-lakebase", action="store_true",

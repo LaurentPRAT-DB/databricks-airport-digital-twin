@@ -3,7 +3,7 @@
 import pytest
 from datetime import datetime, timezone
 
-from src.ml.obt_features import (
+from src.ml.turnaround_features import (
     extract_training_data_from_recording,
     _sample_calibrated_delay,
 )
@@ -126,7 +126,7 @@ class TestExtractTrainingDataFromRecording:
         results = extract_training_data_from_recording(data)
         features = results[0]["features"]
 
-        # All OBTFeatureSet fields present
+        # All TurnaroundFeatureSet fields present
         expected_keys = {
             "aircraft_category", "airline_code", "hour_of_day",
             "is_international", "arrival_delay_min", "gate_id_prefix",

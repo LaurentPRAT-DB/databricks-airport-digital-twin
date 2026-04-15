@@ -16,9 +16,9 @@ resources:
               - mlflow
 
       tasks:
-        - task_key: train_obt_model
+        - task_key: train_turnaround_model
           notebook_task:
-            notebook_path: ../databricks/notebooks/train_obt_model.py
+            notebook_path: ../databricks/notebooks/train_turnaround_model.py
           environment_key: ml_env
 
       tags:

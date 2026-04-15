@@ -350,11 +350,11 @@ class TestLoadTrainingDataFromFile:
 
 
 # ---------------------------------------------------------------------------
-# train_obt_model
+# train_turnaround_model
 # ---------------------------------------------------------------------------
 
 class TestTrainObtModel:
-    """Test train_obt_model (lines 218-285)."""
+    """Test train_turnaround_model (lines 218-285)."""
 
     @staticmethod
     def _make_sample_training_data(n: int = 10) -> list[dict]:
@@ -387,8 +387,8 @@ class TestTrainObtModel:
             })
         return samples
 
-    def test_train_obt_model_basic(self, tmp_path: Path):
-        from src.ml.training import train_obt_model
+    def test_train_turnaround_model_basic(self, tmp_path: Path):
+        from src.ml.training import train_turnaround_model
 
         sim_path = str(tmp_path / "sim.json")
         # The file itself won't be read because we mock extract_training_data
@@ -397,8 +397,8 @@ class TestTrainObtModel:
         samples = self._make_sample_training_data(15)
 
         with patch("src.ml.training.MLFLOW_AVAILABLE", False), \
-             patch("src.ml.obt_features.extract_training_data", return_value=samples):
-            result = train_obt_model(
+             patch("src.ml.turnaround_features.extract_training_data", return_value=samples):
+            result = train_turnaround_model(
                 sim_json_path=sim_path,
                 airport_code="KJFK",
                 model_output_path=str(tmp_path / "obt.pkl"),
@@ -408,36 +408,36 @@ class TestTrainObtModel:
         assert result["n_samples"] == 15
         assert os.path.exists(result["model_path"])
 
-    def test_train_obt_model_no_data(self, tmp_path: Path):
-        from src.ml.training import train_obt_model
+    def test_train_turnaround_model_no_data(self, tmp_path: Path):
+        from src.ml.training import train_turnaround_model
 
         sim_path = str(tmp_path / "empty_sim.json")
         Path(sim_path).write_text("{}")
 
         with patch("src.ml.training.MLFLOW_AVAILABLE", False), \
-             patch("src.ml.obt_features.extract_training_data", return_value=[]):
-            result = train_obt_model(sim_json_path=sim_path)
+             patch("src.ml.turnaround_features.extract_training_data", return_value=[]):
+            result = train_turnaround_model(sim_json_path=sim_path)
 
         assert result["status"] == "no_data"
         assert result["n_samples"] == 0
 
-    def test_train_obt_model_auto_path(self, tmp_path: Path):
-        from src.ml.training import train_obt_model
+    def test_train_turnaround_model_auto_path(self, tmp_path: Path):
+        from src.ml.training import train_turnaround_model
 
         sim_path = str(tmp_path / "sim.json")
         Path(sim_path).write_text("{}")
         samples = self._make_sample_training_data(10)
 
         with patch("src.ml.training.MLFLOW_AVAILABLE", False), \
-             patch("src.ml.obt_features.extract_training_data", return_value=samples):
-            result = train_obt_model(sim_json_path=sim_path, airport_code="KLAX")
+             patch("src.ml.turnaround_features.extract_training_data", return_value=samples):
+            result = train_turnaround_model(sim_json_path=sim_path, airport_code="KLAX")
 
         assert result["model_path"] is not None
         assert os.path.exists(result["model_path"])
 
-    def test_train_obt_model_with_mlflow(self, tmp_path: Path):
+    def test_train_turnaround_model_with_mlflow(self, tmp_path: Path):
         import src.ml.training as training_mod
-        from src.ml.training import train_obt_model
+        from src.ml.training import train_turnaround_model
 
         sim_path = str(tmp_path / "sim.json")
         Path(sim_path).write_text("{}")
@@ -454,8 +454,8 @@ class TestTrainObtModel:
         training_mod.mlflow = mock_mlflow
         try:
             with patch.object(training_mod, "MLFLOW_AVAILABLE", True), \
-                 patch("src.ml.obt_features.extract_training_data", return_value=samples):
-                result = train_obt_model(
+                 patch("src.ml.turnaround_features.extract_training_data", return_value=samples):
+                result = train_turnaround_model(
                     sim_json_path=sim_path,
                     airport_code="KSFO",
                     model_output_path=str(tmp_path / "obt.pkl"),

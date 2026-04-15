@@ -1,17 +1,10 @@
-"""Off-Block Time (OBT) prediction model.
+"""Turnaround duration forecasting model.
 
-Predicts AOBT — the actual timestamp when an aircraft pushes back from
-the gate.  The target is departure_offset_min = AOBT - SOBT, i.e. how
-many minutes early (negative) or late (positive) the pushback occurs
-relative to the scheduled off-block time.
-
-This is distinct from the turnaround model which predicts the duration
-of the gate stay (AOBT - AIBT).  The OBT model incorporates schedule
-context, arrival delay propagation, and operational factors to predict
-the absolute pushback time.
-
-Two-stage pipeline: the turnaround model's predicted duration can feed
-into this model as an input feature (turnaround_predicted_min).
+Predicts gate occupancy time (minutes from AIBT to AOBT) — the time
+an aircraft spends at the gate from parking to pushback.  Uses a
+gradient-boosted tree trained on simulation data, falling back to GSE
+model constants (45 min narrow-body, 90 min wide-body) when no trained
+model exists.
 """
 
 from __future__ import annotations
@@ -35,32 +28,25 @@ try:
 except ImportError:
     _HAS_CATBOOST = False
 
-from src.ml.obt_features import (
-    OBTCoarseFeatureSet,
-    OBTFeatureSet,
-    DEPARTURE_OFFSET_MAX_BOUND,
-    DEPARTURE_OFFSET_MIN_BOUND,
-)
+from src.ml.turnaround_features import TurnaroundBoardFeatureSet, TurnaroundCoarseFeatureSet, TurnaroundFeatureSet, classify_aircraft
 
 if TYPE_CHECKING:
     from src.calibration.profile import AirportProfile
 
 logger = logging.getLogger(__name__)
 
-# ── Feature column ordering (must match _features_to_row) ────────────────
-
+# Feature column ordering — must match _features_to_row()
 NUMERIC_FEATURES = [
-    "scheduled_departure_hour",
-    "scheduled_turnaround_min",
+    "hour_of_day",
     "arrival_delay_min",
     "concurrent_gate_ops",
-    "hour_of_day",
+    "wind_speed_kt",
+    "visibility_sm",
+    "scheduled_departure_hour",
     "day_of_week",
     "hour_sin",
     "hour_cos",
-    "wind_speed_kt",
-    "visibility_sm",
-    "turnaround_predicted_min",
+    "scheduled_buffer_min",
 ]
 CATEGORICAL_FEATURES = [
     "aircraft_category",
@@ -70,21 +56,24 @@ CATEGORICAL_FEATURES = [
 ]
 BINARY_FEATURES = [
     "is_international",
-    "is_hub_connecting",
     "is_remote_stand",
     "has_active_ground_stop",
+    "is_weather_scenario",
+    "is_hub_connecting",
 ]
 
 ALL_FEATURE_NAMES = NUMERIC_FEATURES + CATEGORICAL_FEATURES + BINARY_FEATURES
 
-# T-schedule coarse features (hours before departure — no gate info)
+# T-90 coarse features — pre-arrival only (no gate-side info)
 COARSE_NUMERIC_FEATURES = [
+    "arrival_delay_min",
+    "wind_speed_kt",
+    "visibility_sm",
     "scheduled_departure_hour",
     "day_of_week",
     "hour_sin",
     "hour_cos",
-    "wind_speed_kt",
-    "visibility_sm",
+    "scheduled_buffer_min",
 ]
 COARSE_CATEGORICAL_FEATURES = [
     "aircraft_category",
@@ -93,115 +82,126 @@ COARSE_CATEGORICAL_FEATURES = [
 ]
 COARSE_BINARY_FEATURES = [
     "is_international",
-    "is_hub_connecting",
     "has_active_ground_stop",
+    "is_weather_scenario",
+    "is_hub_connecting",
 ]
 ALL_COARSE_FEATURE_NAMES = (
     COARSE_NUMERIC_FEATURES + COARSE_CATEGORICAL_FEATURES + COARSE_BINARY_FEATURES
 )
 
+# T-board features — T-park features plus elapsed gate time
+BOARD_EXTRA_NUMERIC = [
+    "elapsed_gate_time_min",
+    "remaining_predicted_min",
+    "turnaround_progress_pct",
+]
+ALL_BOARD_FEATURE_NAMES = ALL_FEATURE_NAMES + BOARD_EXTRA_NUMERIC
+
 
 @dataclass
-class OBTPrediction:
-    """Result of an Off-Block Time prediction."""
+class TurnaroundPrediction:
+    """Result of a turnaround duration prediction."""
 
-    departure_offset_min: float
-    lower_bound_min: float = 0.0   # P10 quantile
-    upper_bound_min: float = 0.0   # P90 quantile
+    turnaround_minutes: float
+    lower_bound_minutes: float = 0.0   # P10 quantile
+    upper_bound_minutes: float = 0.0   # P90 quantile
     confidence: float = 0.5
     is_fallback: bool = False
-    horizon: str = "t_park"  # "t_schedule" or "t_park"
+    horizon: str = "t_park"  # "t90" or "t_park"
 
 
-# ── Feature conversion helpers ───────────────────────────────────────────
-
-def _features_to_row(f: OBTFeatureSet) -> List[Any]:
-    """Convert OBTFeatureSet to a flat row matching ALL_FEATURE_NAMES order."""
+def _features_to_row(f: TurnaroundFeatureSet) -> List[Any]:
+    """Convert TurnaroundFeatureSet to a flat row matching ALL_FEATURE_NAMES order."""
     return [
-        f.scheduled_departure_hour,
-        f.scheduled_turnaround_min,
+        f.hour_of_day,
         f.arrival_delay_min,
         f.concurrent_gate_ops,
-        f.hour_of_day,
+        f.wind_speed_kt,
+        f.visibility_sm,
+        f.scheduled_departure_hour,
         f.day_of_week,
         f.hour_sin,
         f.hour_cos,
-        f.wind_speed_kt,
-        f.visibility_sm,
-        f.turnaround_predicted_min,
+        f.scheduled_buffer_min,
         f.aircraft_category,
         f.airline_code,
         f.gate_id_prefix,
         f.airport_code,
         int(f.is_international),
-        int(f.is_hub_connecting),
         int(f.is_remote_stand),
         int(f.has_active_ground_stop),
+        int(f.is_weather_scenario),
+        int(f.is_hub_connecting),
     ]
 
 
-def _coarse_features_to_row(f: OBTCoarseFeatureSet) -> List[Any]:
-    """Convert OBTCoarseFeatureSet to a flat row matching ALL_COARSE_FEATURE_NAMES."""
+def _coarse_features_to_row(f: TurnaroundCoarseFeatureSet) -> List[Any]:
+    """Convert TurnaroundCoarseFeatureSet to a flat row matching ALL_COARSE_FEATURE_NAMES."""
     return [
+        f.arrival_delay_min,
+        f.wind_speed_kt,
+        f.visibility_sm,
         f.scheduled_departure_hour,
         f.day_of_week,
         f.hour_sin,
         f.hour_cos,
-        f.wind_speed_kt,
-        f.visibility_sm,
+        f.scheduled_buffer_min,
         f.aircraft_category,
         f.airline_code,
         f.airport_code,
         int(f.is_international),
-        int(f.is_hub_connecting),
         int(f.has_active_ground_stop),
+        int(f.is_weather_scenario),
+        int(f.is_hub_connecting),
     ]
 
 
-def _dict_to_feature_set(d: Dict[str, Any]) -> OBTFeatureSet:
-    """Reconstruct OBTFeatureSet from a dict (e.g. from training data)."""
-    return OBTFeatureSet(
-        scheduled_departure_hour=int(d["scheduled_departure_hour"]),
-        scheduled_turnaround_min=float(d.get("scheduled_turnaround_min", 0.0)),
-        arrival_delay_min=float(d.get("arrival_delay_min", 0.0)),
+def _dict_to_coarse_feature_set(d: Dict[str, Any]) -> TurnaroundCoarseFeatureSet:
+    """Reconstruct TurnaroundCoarseFeatureSet from a dict."""
+    return TurnaroundCoarseFeatureSet(
         aircraft_category=d["aircraft_category"],
         airline_code=d["airline_code"],
-        is_international=bool(d.get("is_international", False)),
-        is_hub_connecting=bool(d.get("is_hub_connecting", False)),
-        gate_id_prefix=d.get("gate_id_prefix", ""),
-        is_remote_stand=bool(d.get("is_remote_stand", False)),
-        concurrent_gate_ops=int(d.get("concurrent_gate_ops", 0)),
-        airport_code=d.get("airport_code", ""),
-        hour_of_day=int(d.get("hour_of_day", 0)),
-        day_of_week=int(d.get("day_of_week", 0)),
-        hour_sin=float(d.get("hour_sin", 0.0)),
-        hour_cos=float(d.get("hour_cos", 1.0)),
-        wind_speed_kt=float(d.get("wind_speed_kt", 0.0)),
-        visibility_sm=float(d.get("visibility_sm", 10.0)),
-        has_active_ground_stop=bool(d.get("has_active_ground_stop", False)),
-        turnaround_predicted_min=float(d.get("turnaround_predicted_min", 0.0)),
-    )
-
-
-def _dict_to_coarse_feature_set(d: Dict[str, Any]) -> OBTCoarseFeatureSet:
-    """Reconstruct OBTCoarseFeatureSet from a dict."""
-    return OBTCoarseFeatureSet(
         scheduled_departure_hour=int(d["scheduled_departure_hour"]),
-        aircraft_category=d["aircraft_category"],
-        airline_code=d["airline_code"],
-        is_international=bool(d.get("is_international", False)),
-        is_hub_connecting=bool(d.get("is_hub_connecting", False)),
+        is_international=bool(d["is_international"]),
+        arrival_delay_min=float(d["arrival_delay_min"]),
+        wind_speed_kt=float(d["wind_speed_kt"]),
+        visibility_sm=float(d["visibility_sm"]),
+        has_active_ground_stop=bool(d["has_active_ground_stop"]),
         airport_code=d.get("airport_code", ""),
         day_of_week=int(d.get("day_of_week", 0)),
         hour_sin=float(d.get("hour_sin", 0.0)),
         hour_cos=float(d.get("hour_cos", 1.0)),
-        wind_speed_kt=float(d.get("wind_speed_kt", 0.0)),
-        visibility_sm=float(d.get("visibility_sm", 10.0)),
-        has_active_ground_stop=bool(d.get("has_active_ground_stop", False)),
+        is_weather_scenario=bool(d.get("is_weather_scenario", False)),
+        scheduled_buffer_min=float(d.get("scheduled_buffer_min", 0.0)),
+        is_hub_connecting=bool(d.get("is_hub_connecting", False)),
     )
 
 
-# ── Model building helpers ───────────────────────────────────────────────
+def _dict_to_feature_set(d: Dict[str, Any]) -> TurnaroundFeatureSet:
+    """Reconstruct TurnaroundFeatureSet from a dict (e.g. from training data)."""
+    return TurnaroundFeatureSet(
+        aircraft_category=d["aircraft_category"],
+        airline_code=d["airline_code"],
+        hour_of_day=int(d["hour_of_day"]),
+        is_international=bool(d["is_international"]),
+        arrival_delay_min=float(d["arrival_delay_min"]),
+        gate_id_prefix=d["gate_id_prefix"],
+        is_remote_stand=bool(d["is_remote_stand"]),
+        concurrent_gate_ops=int(d["concurrent_gate_ops"]),
+        wind_speed_kt=float(d["wind_speed_kt"]),
+        visibility_sm=float(d["visibility_sm"]),
+        has_active_ground_stop=bool(d["has_active_ground_stop"]),
+        scheduled_departure_hour=int(d["scheduled_departure_hour"]),
+        airport_code=d.get("airport_code", ""),
+        day_of_week=int(d.get("day_of_week", 0)),
+        hour_sin=float(d.get("hour_sin", 0.0)),
+        hour_cos=float(d.get("hour_cos", 1.0)),
+        is_weather_scenario=bool(d.get("is_weather_scenario", False)),
+        scheduled_buffer_min=float(d.get("scheduled_buffer_min", 0.0)),
+        is_hub_connecting=bool(d.get("is_hub_connecting", False)),
+    )
+
 
 def _build_catboost(
     feature_names: List[str],
@@ -212,7 +212,7 @@ def _build_catboost(
     learning_rate: float = 0.05,
     quantile: Optional[float] = None,
 ) -> "CatBoostRegressor":
-    """Build a CatBoostRegressor with native categorical handling."""
+    """Build a CatBoostRegressor (no sklearn pipeline needed — native categoricals)."""
     cat_indices = [feature_names.index(c) for c in categorical_features]
     kwargs: dict[str, Any] = dict(
         depth=depth,
@@ -236,6 +236,7 @@ def _build_pipeline(
     max_depth: int = 6,
     n_estimators: int = 200,
     learning_rate: float = 0.05,
+    loss: str = "squared_error",
     quantile: Optional[float] = None,
 ) -> Pipeline:
     """Build a preprocessing + GBT pipeline (sklearn fallback)."""
@@ -263,37 +264,77 @@ def _build_pipeline(
         model_kwargs["loss"] = "quantile"
         model_kwargs["quantile"] = quantile
     else:
-        model_kwargs["loss"] = "squared_error"
+        model_kwargs["loss"] = loss
 
     model = HistGradientBoostingRegressor(**model_kwargs)
-    return Pipeline([("preprocessor", preprocessor), ("model", model)])
+
+    return Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", model),
+    ])
 
 
-# ── OBT Predictor (T-park horizon) ──────────────────────────────────────
+def _extract_feature_importances(
+    pipeline: Pipeline,
+    feature_names: List[str],
+    categorical_features: List[str],
+    X: np.ndarray,
+    y: np.ndarray,
+) -> Dict[str, float]:
+    """Extract feature importances from a trained pipeline."""
+    cat_indices = [feature_names.index(c) for c in categorical_features]
+    num_indices = [i for i in range(len(feature_names)) if i not in cat_indices]
+    reordered_names = [feature_names[i] for i in cat_indices] + [
+        feature_names[i] for i in num_indices
+    ]
 
-class OBTPredictor:
-    """Predicts departure offset (minutes from SOBT) at T-park horizon.
+    fitted_model = pipeline.named_steps["model"]
+    try:
+        raw_importances = fitted_model.feature_importances_
+        return {
+            name: float(imp)
+            for name, imp in zip(reordered_names, raw_importances)
+        }
+    except AttributeError:
+        from sklearn.inspection import permutation_importance
+        X_transformed = pipeline.named_steps["preprocessor"].transform(X)
+        result = permutation_importance(
+            fitted_model, X_transformed, y, n_repeats=5, random_state=42,
+        )
+        return {
+            name: float(imp)
+            for name, imp in zip(reordered_names, result.importances_mean)
+        }
 
-    When trained, uses a gradient-boosted tree.  When untrained, falls
-    back to 0 minutes offset (pushback at scheduled time) or uses the
-    arrival delay as a simple propagation heuristic.
+
+class TurnaroundPredictor:
+    """Predicts turnaround duration (minutes) for Off-Block Time forecasting.
+
+    When trained, uses a HistGradientBoostingRegressor on simulation-derived
+    features. When untrained, falls back to the GSE model constants so there
+    is zero regression from current behavior.
+
+    Optionally trains P10/P90 quantile models for prediction intervals.
     """
 
     def __init__(
         self,
         airport_code: str = "KSFO",
-        airport_profile: Optional["AirportProfile"] = None,
+        airport_profile: Optional[AirportProfile] = None,
     ):
         self.airport_code = airport_code
         self._profile = airport_profile
         self._pipeline: Optional[Pipeline] = None
         self._pipeline_p10: Optional[Pipeline] = None
         self._pipeline_p90: Optional[Pipeline] = None
+        # CatBoost models (used when catboost is available)
         self._catboost = None
         self._catboost_p10 = None
         self._catboost_p90 = None
         self._use_catboost: bool = False
         self._feature_importances: Optional[Dict[str, float]] = None
+        self._fallback_durations = {"narrow": 45.0, "wide": 90.0, "regional": 35.0}
+        # Conformal calibration offset for prediction intervals
         self._calibration_offset: float = 0.0
 
     @property
@@ -302,7 +343,7 @@ class OBTPredictor:
 
     def train(
         self,
-        features: List[OBTFeatureSet],
+        features: List[TurnaroundFeatureSet],
         targets: List[float],
         *,
         max_depth: int = 6,
@@ -315,13 +356,22 @@ class OBTPredictor:
         """Train the GBT model on feature/target pairs.
 
         Args:
-            features: List of OBTFeatureSet instances.
-            targets: List of departure_offset_min values.
+            features: List of TurnaroundFeatureSet instances.
+            targets: List of turnaround durations in minutes.
+            max_depth: Tree depth.
+            n_estimators: Number of boosting rounds.
+            learning_rate: Step size shrinkage.
+            train_quantiles: If True, also train P10/P90 quantile models.
+            use_catboost: Force CatBoost (True), sklearn (False), or auto (None).
+            calibrate_intervals: If True, apply CQR conformal calibration.
+
+        Returns:
+            Dict with training metadata (n_samples, feature_importances).
         """
         if len(features) < 10:
             logger.warning(
-                "Only %d samples for OBT %s; skipping training, using fallback.",
-                len(features), self.airport_code,
+                f"Only {len(features)} samples for {self.airport_code}; "
+                "skipping training, using fallback."
             )
             return {"n_samples": len(features), "status": "insufficient_data"}
 
@@ -329,6 +379,7 @@ class OBTPredictor:
         X = np.array(X_raw, dtype=object)
         y = np.array(targets, dtype=np.float64)
 
+        # Split calibration set for CQR
         cal_X, cal_y = None, None
         if calibrate_intervals and train_quantiles and len(features) >= 40:
             n_cal = max(10, int(len(features) * 0.15))
@@ -343,13 +394,13 @@ class OBTPredictor:
         else:
             self._train_sklearn(X, y, max_depth, n_estimators, learning_rate, train_quantiles)
 
+        # CQR calibration
         if cal_X is not None and cal_y is not None and train_quantiles:
             self._calibrate_cqr(cal_X, cal_y)
 
         logger.info(
-            "OBT model trained for %s on %d samples (engine=%s)",
-            self.airport_code, len(features),
-            "catboost" if self._use_catboost else "sklearn",
+            f"Turnaround model trained for {self.airport_code} on {len(features)} samples "
+            f"(engine={'catboost' if self._use_catboost else 'sklearn'})"
         )
 
         return {
@@ -365,6 +416,7 @@ class OBTPredictor:
         max_depth: int, n_estimators: int, learning_rate: float,
         train_quantiles: bool,
     ) -> None:
+        """Train using CatBoost (native categorical handling)."""
         import pandas as pd
 
         df = pd.DataFrame(X, columns=ALL_FEATURE_NAMES)
@@ -392,6 +444,7 @@ class OBTPredictor:
             )
             self._catboost_p90.fit(df, y)
 
+        # Feature importances from CatBoost
         raw_imp = self._catboost.get_feature_importance()
         self._feature_importances = {
             name: float(imp) for name, imp in zip(ALL_FEATURE_NAMES, raw_imp)
@@ -402,6 +455,7 @@ class OBTPredictor:
         max_depth: int, n_estimators: int, learning_rate: float,
         train_quantiles: bool,
     ) -> None:
+        """Train using sklearn HistGradientBoosting (fallback)."""
         self._pipeline = _build_pipeline(
             ALL_FEATURE_NAMES, CATEGORICAL_FEATURES,
             max_depth=max_depth, n_estimators=n_estimators,
@@ -424,38 +478,21 @@ class OBTPredictor:
             )
             self._pipeline_p90.fit(X, y)
 
-        self._feature_importances = self._extract_importances(X, y)
-
-    def _extract_importances(self, X: np.ndarray, y: np.ndarray) -> Dict[str, float]:
-        cat_indices = [ALL_FEATURE_NAMES.index(c) for c in CATEGORICAL_FEATURES]
-        num_indices = [i for i in range(len(ALL_FEATURE_NAMES)) if i not in cat_indices]
-        reordered_names = [ALL_FEATURE_NAMES[i] for i in cat_indices] + [
-            ALL_FEATURE_NAMES[i] for i in num_indices
-        ]
-        fitted_model = self._pipeline.named_steps["model"]
-        try:
-            raw_importances = fitted_model.feature_importances_
-            return {
-                name: float(imp)
-                for name, imp in zip(reordered_names, raw_importances)
-            }
-        except AttributeError:
-            from sklearn.inspection import permutation_importance
-            X_transformed = self._pipeline.named_steps["preprocessor"].transform(X)
-            result = permutation_importance(
-                fitted_model, X_transformed, y, n_repeats=5, random_state=42,
-            )
-            return {
-                name: float(imp)
-                for name, imp in zip(reordered_names, result.importances_mean)
-            }
+        self._feature_importances = _extract_feature_importances(
+            self._pipeline, ALL_FEATURE_NAMES, CATEGORICAL_FEATURES, X, y,
+        )
 
     def _calibrate_cqr(self, X_cal: np.ndarray, y_cal: np.ndarray) -> None:
-        """CQR conformal calibration for prediction intervals."""
+        """Apply Conformalized Quantile Regression (CQR) calibration.
+
+        Computes a conformal offset from a held-out calibration set so that
+        the adjusted [P10-offset, P90+offset] interval achieves ≥80% coverage.
+        """
         n = len(y_cal)
         if n < 5:
             return
 
+        # Get raw quantile predictions on calibration set
         lowers, uppers = [], []
         for i in range(n):
             row = X_cal[i : i + 1]
@@ -463,42 +500,68 @@ class OBTPredictor:
             lowers.append(lo)
             uppers.append(hi)
 
-        lowers_arr = np.array(lowers)
-        uppers_arr = np.array(uppers)
-        scores = np.maximum(lowers_arr - y_cal, y_cal - uppers_arr)
+        lowers = np.array(lowers)
+        uppers = np.array(uppers)
 
+        # Nonconformity scores: how much the true value exceeds the interval
+        scores = np.maximum(lowers - y_cal, y_cal - uppers)
+
+        # (1-alpha)(1 + 1/n)-quantile of scores (alpha=0.2 for 80% coverage)
         alpha = 0.2
         q_level = min(1.0, (1 - alpha) * (1 + 1 / n))
-        self._calibration_offset = max(0.0, float(np.quantile(scores, q_level)))
+        self._calibration_offset = float(np.quantile(scores, q_level))
+        self._calibration_offset = max(0.0, self._calibration_offset)
 
         logger.info(
-            "OBT CQR calibration: offset=%.2f min (n=%d)",
+            "CQR calibration: offset=%.2f min (calibration set n=%d)",
             self._calibration_offset, n,
         )
 
     def _raw_quantile_predict(self, row: np.ndarray) -> tuple[float, float]:
+        """Get raw P10/P90 predictions (before conformal correction)."""
         if self._use_catboost and self._catboost_p10 and self._catboost_p90:
             import pandas as pd
             df = pd.DataFrame(row, columns=ALL_FEATURE_NAMES)
             for col in CATEGORICAL_FEATURES:
                 df[col] = df[col].astype(str)
-            return float(self._catboost_p10.predict(df)[0]), float(self._catboost_p90.predict(df)[0])
+            p10 = float(self._catboost_p10.predict(df)[0])
+            p90 = float(self._catboost_p90.predict(df)[0])
         elif self._pipeline_p10 is not None and self._pipeline_p90 is not None:
-            return float(self._pipeline_p10.predict(row)[0]), float(self._pipeline_p90.predict(row)[0])
-        return 0.0, 0.0
+            p10 = float(self._pipeline_p10.predict(row)[0])
+            p90 = float(self._pipeline_p90.predict(row)[0])
+        else:
+            return 0.0, 0.0
+        return p10, p90
 
-    def predict(self, features: OBTFeatureSet) -> OBTPrediction:
-        """Predict departure offset (minutes from SOBT).
+    def predict(self, features: TurnaroundFeatureSet) -> TurnaroundPrediction:
+        """Predict turnaround duration in minutes.
 
-        Positive = late pushback, negative = early pushback.
+        Falls back to calibration profile turnaround median when available,
+        then to GSE constants if no profile data exists.
         """
         if not self.is_trained:
-            offset = self._fallback_offset(features)
-            return OBTPrediction(
-                departure_offset_min=offset,
-                lower_bound_min=offset - 10.0,
-                upper_bound_min=offset + 15.0,
-                confidence=0.3,
+            # Prefer calibrated turnaround median from airport profile
+            if self._profile and self._profile.turnaround_median_min > 0:
+                duration = self._profile.turnaround_median_min
+                # Scale by aircraft category relative to narrow-body baseline
+                if features.aircraft_category == "wide":
+                    duration *= 90.0 / 45.0  # 2x for wide-body
+                elif features.aircraft_category == "regional":
+                    duration *= 35.0 / 45.0  # 0.78x for regional
+                confidence = 0.4  # better than blind fallback
+            else:
+                duration = self._fallback_durations.get(
+                    features.aircraft_category, 45.0
+                )
+                confidence = 0.3
+            # Hub connecting flights get 5-10% faster turnaround
+            if features.is_hub_connecting:
+                duration *= 0.925  # ~7.5% reduction
+            return TurnaroundPrediction(
+                turnaround_minutes=duration,
+                lower_bound_minutes=duration * 0.8,
+                upper_bound_minutes=duration * 1.2,
+                confidence=confidence,
                 is_fallback=True,
             )
 
@@ -513,58 +576,54 @@ class OBTPredictor:
         else:
             pred = float(self._pipeline.predict(row)[0])
 
-        pred = max(DEPARTURE_OFFSET_MIN_BOUND, min(DEPARTURE_OFFSET_MAX_BOUND, pred))
+        pred = max(10.0, min(180.0, pred))
 
+        # Quantile bounds
         has_quantiles = (
             (self._use_catboost and self._catboost_p10 and self._catboost_p90)
             or (self._pipeline_p10 is not None and self._pipeline_p90 is not None)
         )
         if has_quantiles:
             p10_raw, p90_raw = self._raw_quantile_predict(row)
-            p10 = max(DEPARTURE_OFFSET_MIN_BOUND, p10_raw - self._calibration_offset)
-            p90 = min(DEPARTURE_OFFSET_MAX_BOUND, p90_raw + self._calibration_offset)
+            p10 = max(10.0, p10_raw - self._calibration_offset)
+            p90 = min(180.0, p90_raw + self._calibration_offset)
+            # Ensure ordering
             p10 = min(p10, pred)
             p90 = max(p90, pred)
             interval_width = max(p90 - p10, 1.0)
-            confidence = round(min(1.0, 15.0 / interval_width), 2)
+            confidence = round(min(1.0, 30.0 / interval_width), 2)
         else:
-            p10 = pred - 10.0
-            p90 = pred + 15.0
-            confidence = 0.65
+            p10 = pred * 0.8
+            p90 = pred * 1.2
+            confidence = 0.75
 
-        return OBTPrediction(
-            departure_offset_min=round(pred, 1),
-            lower_bound_min=round(p10, 1),
-            upper_bound_min=round(p90, 1),
+        return TurnaroundPrediction(
+            turnaround_minutes=round(pred, 1),
+            lower_bound_minutes=round(p10, 1),
+            upper_bound_minutes=round(p90, 1),
             confidence=confidence,
             is_fallback=False,
         )
 
-    def predict_aobt(self, sobt_unix: float, features: OBTFeatureSet) -> float:
-        """Predict actual off-block time as Unix timestamp.
-
-        predicted_AOBT = SOBT + predicted_offset_minutes * 60
+    def predict_pushback_time(self, parked_time: float, features: TurnaroundFeatureSet) -> float:
+        """Predict actual pushback timestamp = parked_time + predicted_turnaround.
 
         Args:
-            sobt_unix: Scheduled off-block time as Unix timestamp.
-            features: OBTFeatureSet for the flight.
+            parked_time: Unix timestamp when aircraft parked.
+            features: TurnaroundFeatureSet for the flight.
 
         Returns:
-            Predicted AOBT as Unix timestamp.
+            Predicted pushback as Unix timestamp.
         """
         prediction = self.predict(features)
-        return sobt_unix + prediction.departure_offset_min * 60.0
-
-    def _fallback_offset(self, features: OBTFeatureSet) -> float:
-        """Heuristic fallback: propagate arrival delay with damping."""
-        if features.arrival_delay_min > 5.0:
-            return round(features.arrival_delay_min * 0.6, 1)
-        return 0.0
+        return parked_time + prediction.turnaround_minutes * 60.0
 
     def get_feature_importances(self) -> Optional[Dict[str, float]]:
+        """Return feature importances if model is trained."""
         return self._feature_importances
 
     def save(self, path: str | Path) -> None:
+        """Save model to pickle file."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
@@ -579,13 +638,19 @@ class OBTPredictor:
                     "catboost_p90": self._catboost_p90,
                     "use_catboost": self._use_catboost,
                     "feature_importances": self._feature_importances,
+                    "fallback_durations": self._fallback_durations,
                     "calibration_offset": self._calibration_offset,
                 },
                 f,
             )
-        logger.info("OBT model saved to %s", path)
+        logger.info(f"Turnaround model saved to {path}")
 
     def load(self, path: str | Path) -> bool:
+        """Load model from pickle file.
+
+        Returns:
+            True if loaded successfully.
+        """
         path = Path(path)
         if not path.exists():
             return False
@@ -600,21 +665,23 @@ class OBTPredictor:
             self._catboost_p90 = state.get("catboost_p90")
             self._use_catboost = state.get("use_catboost", False)
             self._feature_importances = state.get("feature_importances")
+            self._fallback_durations = state.get(
+                "fallback_durations", self._fallback_durations
+            )
             self._calibration_offset = state.get("calibration_offset", 0.0)
-            logger.info("OBT model loaded from %s", path)
+            logger.info(f"Turnaround model loaded from {path}")
             return True
         except Exception as e:
-            logger.warning("Failed to load OBT model from %s: %s", path, e)
+            logger.warning(f"Failed to load Turnaround model from {path}: {e}")
             return False
 
 
-# ── OBT Coarse Predictor (T-schedule horizon) ───────────────────────────
+class TurnaroundCoarsePredictor:
+    """T-90 coarse predictor using only pre-arrival features.
 
-class OBTCoarsePredictor:
-    """Predicts departure offset at T-schedule horizon (hours before departure).
-
-    Only schedule + historical patterns available — no gate-side info,
-    no arrival delay, no turnaround prediction.
+    Uses schedule, inbound delay, weather, and ops status — no gate-side
+    information. Lower accuracy than the refined T-park model, but
+    available 90 minutes before departure for planning purposes.
     """
 
     def __init__(
@@ -632,6 +699,7 @@ class OBTCoarsePredictor:
         self._catboost_p90 = None
         self._use_catboost: bool = False
         self._feature_importances: Optional[Dict[str, float]] = None
+        self._fallback_durations = {"narrow": 45.0, "wide": 90.0, "regional": 35.0}
         self._calibration_offset: float = 0.0
 
     @property
@@ -640,7 +708,7 @@ class OBTCoarsePredictor:
 
     def train(
         self,
-        features: List[OBTCoarseFeatureSet],
+        features: List[TurnaroundCoarseFeatureSet],
         targets: List[float],
         *,
         max_depth: int = 5,
@@ -650,11 +718,11 @@ class OBTCoarsePredictor:
         use_catboost: Optional[bool] = None,
         calibrate_intervals: bool = True,
     ) -> Dict[str, Any]:
-        """Train the coarse OBT model on T-schedule features."""
+        """Train the coarse GBT model on T-90 features."""
         if len(features) < 10:
             logger.warning(
-                "Only %d samples for OBT coarse %s; skipping training.",
-                len(features), self.airport_code,
+                f"Only {len(features)} samples for coarse model {self.airport_code}; "
+                "skipping training, using fallback."
             )
             return {"n_samples": len(features), "status": "insufficient_data"}
 
@@ -662,6 +730,7 @@ class OBTCoarsePredictor:
         X = np.array(X_raw, dtype=object)
         y = np.array(targets, dtype=np.float64)
 
+        # Split calibration set for CQR
         cal_X, cal_y = None, None
         if calibrate_intervals and train_quantiles and len(features) >= 40:
             n_cal = max(10, int(len(features) * 0.15))
@@ -676,13 +745,13 @@ class OBTCoarsePredictor:
         else:
             self._train_sklearn(X, y, max_depth, n_estimators, learning_rate, train_quantiles)
 
+        # CQR calibration
         if cal_X is not None and cal_y is not None and train_quantiles:
             self._calibrate_cqr(cal_X, cal_y)
 
         logger.info(
-            "OBT coarse (T-schedule) model trained for %s on %d samples (engine=%s)",
-            self.airport_code, len(features),
-            "catboost" if self._use_catboost else "sklearn",
+            f"Turnaround coarse (T-90) model trained for {self.airport_code} "
+            f"on {len(features)} samples (engine={'catboost' if self._use_catboost else 'sklearn'})"
         )
 
         return {
@@ -757,21 +826,12 @@ class OBTCoarsePredictor:
             )
             self._pipeline_p90.fit(X, y)
 
-        cat_indices = [ALL_COARSE_FEATURE_NAMES.index(c) for c in COARSE_CATEGORICAL_FEATURES]
-        num_indices = [i for i in range(len(ALL_COARSE_FEATURE_NAMES)) if i not in cat_indices]
-        reordered = [ALL_COARSE_FEATURE_NAMES[i] for i in cat_indices] + [
-            ALL_COARSE_FEATURE_NAMES[i] for i in num_indices
-        ]
-        fitted_model = self._pipeline.named_steps["model"]
-        try:
-            raw_imp = fitted_model.feature_importances_
-            self._feature_importances = {
-                name: float(imp) for name, imp in zip(reordered, raw_imp)
-            }
-        except AttributeError:
-            self._feature_importances = {}
+        self._feature_importances = _extract_feature_importances(
+            self._pipeline, ALL_COARSE_FEATURE_NAMES, COARSE_CATEGORICAL_FEATURES, X, y,
+        )
 
     def _calibrate_cqr(self, X_cal: np.ndarray, y_cal: np.ndarray) -> None:
+        """CQR calibration for the coarse model."""
         n = len(y_cal)
         if n < 5:
             return
@@ -783,9 +843,9 @@ class OBTCoarsePredictor:
             lowers.append(lo)
             uppers.append(hi)
 
-        lowers_arr = np.array(lowers)
-        uppers_arr = np.array(uppers)
-        scores = np.maximum(lowers_arr - y_cal, y_cal - uppers_arr)
+        lowers = np.array(lowers)
+        uppers = np.array(uppers)
+        scores = np.maximum(lowers - y_cal, y_cal - uppers)
 
         alpha = 0.2
         q_level = min(1.0, (1 - alpha) * (1 + 1 / n))
@@ -802,16 +862,22 @@ class OBTCoarsePredictor:
             return float(self._pipeline_p10.predict(row)[0]), float(self._pipeline_p90.predict(row)[0])
         return 0.0, 0.0
 
-    def predict(self, features: OBTCoarseFeatureSet) -> OBTPrediction:
-        """Predict departure offset using T-schedule features only."""
+    def predict(self, features: TurnaroundCoarseFeatureSet) -> TurnaroundPrediction:
+        """Predict turnaround duration using T-90 features only."""
         if not self.is_trained:
-            return OBTPrediction(
-                departure_offset_min=0.0,
-                lower_bound_min=-10.0,
-                upper_bound_min=20.0,
+            duration = self._fallback_durations.get(
+                features.aircraft_category, 45.0
+            )
+            # Hub connecting flights get 5-10% faster turnaround
+            if features.is_hub_connecting:
+                duration *= 0.925  # ~7.5% reduction
+            return TurnaroundPrediction(
+                turnaround_minutes=duration,
+                lower_bound_minutes=duration * 0.8,
+                upper_bound_minutes=duration * 1.2,
                 confidence=0.2,
                 is_fallback=True,
-                horizon="t_schedule",
+                horizon="t90",
             )
 
         row = np.array([_coarse_features_to_row(features)], dtype=object)
@@ -825,7 +891,7 @@ class OBTCoarsePredictor:
         else:
             pred = float(self._pipeline.predict(row)[0])
 
-        pred = max(DEPARTURE_OFFSET_MIN_BOUND, min(DEPARTURE_OFFSET_MAX_BOUND, pred))
+        pred = max(10.0, min(180.0, pred))
 
         has_quantiles = (
             (self._use_catboost and self._catboost_p10 and self._catboost_p90)
@@ -833,30 +899,25 @@ class OBTCoarsePredictor:
         )
         if has_quantiles:
             p10_raw, p90_raw = self._raw_quantile_predict(row)
-            p10 = max(DEPARTURE_OFFSET_MIN_BOUND, p10_raw - self._calibration_offset)
-            p90 = min(DEPARTURE_OFFSET_MAX_BOUND, p90_raw + self._calibration_offset)
+            p10 = max(10.0, p10_raw - self._calibration_offset)
+            p90 = min(180.0, p90_raw + self._calibration_offset)
             p10 = min(p10, pred)
             p90 = max(p90, pred)
             interval_width = max(p90 - p10, 1.0)
-            confidence = round(min(1.0, 15.0 / interval_width), 2)
+            confidence = round(min(1.0, 30.0 / interval_width), 2)
         else:
-            p10 = pred - 15.0
-            p90 = pred + 20.0
-            confidence = 0.45
+            p10 = pred * 0.75
+            p90 = pred * 1.25
+            confidence = 0.55
 
-        return OBTPrediction(
-            departure_offset_min=round(pred, 1),
-            lower_bound_min=round(p10, 1),
-            upper_bound_min=round(p90, 1),
+        return TurnaroundPrediction(
+            turnaround_minutes=round(pred, 1),
+            lower_bound_minutes=round(p10, 1),
+            upper_bound_minutes=round(p90, 1),
             confidence=confidence,
             is_fallback=False,
-            horizon="t_schedule",
+            horizon="t90",
         )
-
-    def predict_aobt(self, sobt_unix: float, features: OBTCoarseFeatureSet) -> float:
-        """Predict AOBT as Unix timestamp at T-schedule horizon."""
-        prediction = self.predict(features)
-        return sobt_unix + prediction.departure_offset_min * 60.0
 
     def get_feature_importances(self) -> Optional[Dict[str, float]]:
         return self._feature_importances
@@ -876,11 +937,12 @@ class OBTCoarsePredictor:
                     "catboost_p90": self._catboost_p90,
                     "use_catboost": self._use_catboost,
                     "feature_importances": self._feature_importances,
+                    "fallback_durations": self._fallback_durations,
                     "calibration_offset": self._calibration_offset,
                 },
                 f,
             )
-        logger.info("OBT coarse model saved to %s", path)
+        logger.info(f"Turnaround coarse model saved to {path}")
 
     def load(self, path: str | Path) -> bool:
         path = Path(path)
@@ -897,24 +959,35 @@ class OBTCoarsePredictor:
             self._catboost_p90 = state.get("catboost_p90")
             self._use_catboost = state.get("use_catboost", False)
             self._feature_importances = state.get("feature_importances")
+            self._fallback_durations = state.get(
+                "fallback_durations", self._fallback_durations
+            )
             self._calibration_offset = state.get("calibration_offset", 0.0)
-            logger.info("OBT coarse model loaded from %s", path)
+            logger.info(f"Turnaround coarse model loaded from {path}")
             return True
         except Exception as e:
-            logger.warning("Failed to load OBT coarse model from %s: %s", path, e)
+            logger.warning(f"Failed to load Turnaround coarse model from {path}: {e}")
             return False
 
 
-# ── Two-stage OBT predictor ─────────────────────────────────────────────
+class TwoStageTurnaroundPredictor:
+    """Two-stage turnaround predictor: coarse at T-90, refined at T-park.
 
-class TwoStageOBTPredictor:
-    """Two-stage OBT predictor: coarse at T-schedule, refined at T-park.
+    At T-90 (90 min before scheduled departure), only schedule and
+    weather data is available — the coarse model gives a planning estimate.
 
-    At T-schedule (hours before departure), only schedule data is
-    available — the coarse model gives a planning estimate of EOBT.
+    At T-park (aircraft parks at gate), full gate-side features become
+    available — the refined model gives an operational estimate.
 
-    At T-park (aircraft parked at gate), full operational features
-    including arrival delay and turnaround prediction are available.
+    Usage:
+        predictor = TwoStageTurnaroundPredictor(airport_code="KSFO")
+        predictor.train(full_features, coarse_features, targets)
+
+        # Pre-arrival planning
+        t90_pred = predictor.predict_t90(coarse_features)
+
+        # After parking — refined
+        tpark_pred = predictor.predict_tpark(full_features)
     """
 
     def __init__(
@@ -923,10 +996,10 @@ class TwoStageOBTPredictor:
         airport_profile: Optional["AirportProfile"] = None,
     ):
         self.airport_code = airport_code
-        self.coarse = OBTCoarsePredictor(
+        self.coarse = TurnaroundCoarsePredictor(
             airport_code=airport_code, airport_profile=airport_profile,
         )
-        self.refined = OBTPredictor(
+        self.refined = TurnaroundPredictor(
             airport_code=airport_code, airport_profile=airport_profile,
         )
 
@@ -936,62 +1009,235 @@ class TwoStageOBTPredictor:
 
     def train(
         self,
-        full_features: List[OBTFeatureSet],
+        full_features: List[TurnaroundFeatureSet],
         targets: List[float],
     ) -> Dict[str, Any]:
         """Train both stages from the same labeled data.
 
-        Coarse features are derived by projecting full features down to
-        the T-schedule subset.
+        Coarse features are derived automatically by projecting the full
+        feature set down to the T-90 subset.
         """
-        coarse_features = [
-            OBTCoarseFeatureSet(
-                scheduled_departure_hour=f.scheduled_departure_hour,
-                aircraft_category=f.aircraft_category,
-                airline_code=f.airline_code,
-                is_international=f.is_international,
-                is_hub_connecting=f.is_hub_connecting,
-                airport_code=f.airport_code,
-                day_of_week=f.day_of_week,
-                hour_sin=f.hour_sin,
-                hour_cos=f.hour_cos,
-                wind_speed_kt=f.wind_speed_kt,
-                visibility_sm=f.visibility_sm,
-                has_active_ground_stop=f.has_active_ground_stop,
-            )
-            for f in full_features
-        ]
+        coarse_features = [f.to_coarse() for f in full_features]
 
         coarse_result = self.coarse.train(coarse_features, targets)
         refined_result = self.refined.train(full_features, targets)
 
-        return {"coarse": coarse_result, "refined": refined_result}
+        return {
+            "coarse": coarse_result,
+            "refined": refined_result,
+        }
 
-    def predict_t_schedule(self, features: OBTCoarseFeatureSet) -> OBTPrediction:
-        """Predict at T-schedule horizon (hours before departure)."""
+    def predict_t90(self, features: TurnaroundCoarseFeatureSet) -> TurnaroundPrediction:
+        """Predict at T-90 horizon (pre-arrival)."""
         return self.coarse.predict(features)
 
-    def predict_t_park(self, features: OBTFeatureSet) -> OBTPrediction:
+    def predict_tpark(self, features: TurnaroundFeatureSet) -> TurnaroundPrediction:
         """Predict at T-park horizon (aircraft parked, full features)."""
         return self.refined.predict(features)
 
-    def predict_aobt_t_schedule(
-        self, sobt_unix: float, features: OBTCoarseFeatureSet,
+    def predict_pushback_time_t90(
+        self, scheduled_departure: float, features: TurnaroundCoarseFeatureSet,
     ) -> float:
-        """Predict AOBT timestamp at T-schedule horizon."""
-        return self.coarse.predict_aobt(sobt_unix, features)
+        """Predict pushback timestamp at T-90 horizon.
 
-    def predict_aobt_t_park(
-        self, sobt_unix: float, features: OBTFeatureSet,
+        At T-90 we don't know the actual parking time, so we estimate:
+        Pushback = scheduled_departure - taxi_out_buffer (typically ~15 min).
+
+        Args:
+            scheduled_departure: Unix timestamp of scheduled departure.
+            features: Coarse feature set.
+
+        Returns:
+            Predicted pushback as Unix timestamp (pushback time).
+        """
+        taxi_out_buffer_sec = 15.0 * 60.0  # 15 min typical taxi-out
+        return scheduled_departure - taxi_out_buffer_sec
+
+    def predict_pushback_time_tpark(
+        self, parked_time: float, features: TurnaroundFeatureSet,
     ) -> float:
-        """Predict AOBT timestamp at T-park horizon."""
-        return self.refined.predict_aobt(sobt_unix, features)
+        """Predict pushback timestamp at T-park horizon.
+
+        Args:
+            parked_time: Unix timestamp when aircraft parked.
+            features: Full feature set.
+
+        Returns:
+            Predicted pushback as Unix timestamp.
+        """
+        return self.refined.predict_pushback_time(parked_time, features)
 
     def save(self, coarse_path: str | Path, refined_path: str | Path) -> None:
+        """Save both models."""
         self.coarse.save(coarse_path)
         self.refined.save(refined_path)
 
     def load(self, coarse_path: str | Path, refined_path: str | Path) -> bool:
+        """Load both models. Returns True only if both loaded."""
         c = self.coarse.load(coarse_path)
         r = self.refined.load(refined_path)
         return c and r
+
+
+# ---------------------------------------------------------------------------
+# T-board predictor (third stage: at boarding start, ~70% through turnaround)
+# ---------------------------------------------------------------------------
+
+def _board_features_to_row(f: TurnaroundBoardFeatureSet) -> List[Any]:
+    """Convert TurnaroundBoardFeatureSet to a flat row matching ALL_BOARD_FEATURE_NAMES."""
+    base = _features_to_row(f)
+    return base + [
+        f.elapsed_gate_time_min,
+        f.remaining_predicted_min,
+        f.turnaround_progress_pct,
+    ]
+
+
+class TurnaroundBoardPredictor:
+    """T-board predictor: triggered when ~70% of predicted turnaround has elapsed.
+
+    At this point we know actual elapsed gate time and can refine the
+    remaining-time estimate much more accurately than T-park alone.
+    """
+
+    BOARDING_THRESHOLD = 0.70  # trigger when progress >= 70%
+
+    def __init__(
+        self,
+        airport_code: str = "KSFO",
+        airport_profile: Optional["AirportProfile"] = None,
+    ):
+        self.airport_code = airport_code
+        self._profile = airport_profile
+        self._pipeline: Optional[Pipeline] = None
+        self._catboost = None
+        self._use_catboost: bool = False
+        self._feature_importances: Optional[Dict[str, float]] = None
+        self._fallback_durations = {"narrow": 45.0, "wide": 90.0, "regional": 35.0}
+
+    @property
+    def is_trained(self) -> bool:
+        return self._pipeline is not None or self._catboost is not None
+
+    def train(
+        self,
+        features: List[TurnaroundBoardFeatureSet],
+        targets: List[float],
+        *,
+        max_depth: int = 6,
+        n_estimators: int = 200,
+        learning_rate: float = 0.05,
+        use_catboost: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Train the T-board model on boarding-stage features."""
+        if len(features) < 10:
+            return {"n_samples": len(features), "status": "insufficient_data"}
+
+        X_raw = [_board_features_to_row(f) for f in features]
+        X = np.array(X_raw, dtype=object)
+        y = np.array(targets, dtype=np.float64)
+
+        want_catboost = use_catboost if use_catboost is not None else _HAS_CATBOOST
+        self._use_catboost = want_catboost and _HAS_CATBOOST
+
+        if self._use_catboost:
+            import pandas as pd
+            df = pd.DataFrame(X, columns=ALL_BOARD_FEATURE_NAMES)
+            for col in CATEGORICAL_FEATURES:
+                df[col] = df[col].astype(str)
+            self._catboost = _build_catboost(
+                ALL_BOARD_FEATURE_NAMES, CATEGORICAL_FEATURES,
+                depth=max_depth, iterations=n_estimators, learning_rate=learning_rate,
+            )
+            self._catboost.fit(df, y)
+            raw_imp = self._catboost.get_feature_importance()
+            self._feature_importances = {
+                name: float(imp) for name, imp in zip(ALL_BOARD_FEATURE_NAMES, raw_imp)
+            }
+        else:
+            self._pipeline = _build_pipeline(
+                ALL_BOARD_FEATURE_NAMES, CATEGORICAL_FEATURES,
+                max_depth=max_depth, n_estimators=n_estimators,
+                learning_rate=learning_rate,
+            )
+            self._pipeline.fit(X, y)
+            self._feature_importances = _extract_feature_importances(
+                self._pipeline, ALL_BOARD_FEATURE_NAMES, CATEGORICAL_FEATURES, X, y,
+            )
+
+        logger.info(
+            f"Turnaround board (T-board) model trained for {self.airport_code} "
+            f"on {len(features)} samples"
+        )
+        return {
+            "n_samples": len(features),
+            "status": "trained",
+            "feature_importances": self._feature_importances,
+        }
+
+    def predict(self, features: TurnaroundBoardFeatureSet) -> TurnaroundPrediction:
+        """Predict remaining turnaround time from boarding start."""
+        if not self.is_trained:
+            # Fallback: remaining = predicted - elapsed
+            remaining = max(5.0, features.remaining_predicted_min)
+            return TurnaroundPrediction(
+                turnaround_minutes=remaining,
+                lower_bound_minutes=remaining * 0.8,
+                upper_bound_minutes=remaining * 1.2,
+                confidence=0.4,
+                is_fallback=True,
+                horizon="t_board",
+            )
+
+        row = np.array([_board_features_to_row(features)], dtype=object)
+
+        if self._use_catboost and self._catboost is not None:
+            import pandas as pd
+            df = pd.DataFrame(row, columns=ALL_BOARD_FEATURE_NAMES)
+            for col in CATEGORICAL_FEATURES:
+                df[col] = df[col].astype(str)
+            pred = float(self._catboost.predict(df)[0])
+        else:
+            pred = float(self._pipeline.predict(row)[0])
+
+        pred = max(5.0, min(60.0, pred))
+        return TurnaroundPrediction(
+            turnaround_minutes=round(pred, 1),
+            lower_bound_minutes=round(pred * 0.85, 1),
+            upper_bound_minutes=round(pred * 1.15, 1),
+            confidence=0.85,
+            is_fallback=False,
+            horizon="t_board",
+        )
+
+    def get_feature_importances(self) -> Optional[Dict[str, float]]:
+        """Return feature importances if model is trained."""
+        return self._feature_importances
+
+    def save(self, path: str | Path) -> None:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            pickle.dump({
+                "airport_code": self.airport_code,
+                "pipeline": self._pipeline,
+                "catboost": self._catboost,
+                "use_catboost": self._use_catboost,
+                "feature_importances": self._feature_importances,
+            }, f)
+
+    def load(self, path: str | Path) -> bool:
+        path = Path(path)
+        if not path.exists():
+            return False
+        try:
+            with open(path, "rb") as f:
+                state = pickle.load(f)
+            self._pipeline = state.get("pipeline")
+            self._catboost = state.get("catboost")
+            self._use_catboost = state.get("use_catboost", False)
+            self._feature_importances = state.get("feature_importances")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load T-board model: {e}")
+            return False

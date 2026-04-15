@@ -6,7 +6,7 @@ Processes time-ordered ADS-B frames and produces simulation-compatible events
 2. Tracking per-aircraft state machines to detect parked/taxi/takeoff/landing
 
 Output format matches src/simulation/recorder.py so enriched recordings can
-feed directly into the ML training pipeline (src/ml/obt_features.py).
+feed directly into the ML training pipeline (src/ml/turnaround_features.py).
 """
 
 from __future__ import annotations

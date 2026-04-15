@@ -31,7 +31,7 @@ dbutils.library.restartPython()
 import os, sys, json, time
 import numpy as np
 
-# Bundle root (notebook is at .../files/databricks/notebooks/train_obt_model.py)
+# Bundle root (notebook is at .../files/databricks/notebooks/train_turnaround_model.py)
 nb_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 ws_path = "/Workspace" + nb_path
 bundle_root = os.path.dirname(os.path.dirname(os.path.dirname(ws_path)))
@@ -116,7 +116,7 @@ for f in sim_files:
 
 # COMMAND ----------
 
-from src.ml.obt_features import extract_training_data
+from src.ml.turnaround_features import extract_training_data
 
 all_data = []
 for fname in sim_files:
@@ -183,11 +183,11 @@ print(f"Train: {len(train_data)}, Test: {len(test_data)}")
 # COMMAND ----------
 
 from sklearn.model_selection import StratifiedKFold
-from src.ml.obt_model import (
-    TwoStageOBTPredictor,
-    OBTPredictor,
-    OBTCoarsePredictor,
-    OBTBoardPredictor,
+from src.ml.turnaround_model import (
+    TwoStageTurnaroundPredictor,
+    TurnaroundPredictor,
+    TurnaroundCoarsePredictor,
+    TurnaroundBoardPredictor,
     _dict_to_feature_set,
     _dict_to_coarse_feature_set,
     _HAS_CATBOOST,
@@ -214,7 +214,7 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(range(len(all_data)), all_
     fold_train_f = [all_features_list[i] for i in train_idx]
     fold_train_t = all_targets_arr[train_idx].tolist()
 
-    fold_predictor = TwoStageOBTPredictor(airport_code="CV")
+    fold_predictor = TwoStageTurnaroundPredictor(airport_code="CV")
     fold_predictor.train(fold_train_f, fold_train_t)
 
     # T-park MAE
@@ -248,7 +248,7 @@ print(f"CV T-90 MAE:   {cv_t90_mean:.2f} +/- {cv_t90_std:.2f}")
 
 # COMMAND ----------
 
-two_stage = TwoStageOBTPredictor(airport_code="GLOBAL")
+two_stage = TwoStageTurnaroundPredictor(airport_code="GLOBAL")
 train_features = [_dict_to_feature_set(d["features"]) for d in train_data]
 train_targets = [d["target"] for d in train_data]
 
@@ -283,7 +283,7 @@ for d in train_data:
     board_features.append(board_fs)
     board_targets.append(target)
 
-board_predictor = OBTBoardPredictor(airport_code="GLOBAL")
+board_predictor = TurnaroundBoardPredictor(airport_code="GLOBAL")
 board_start = time.time()
 board_result = board_predictor.train(board_features, board_targets)
 board_elapsed = time.time() - board_start

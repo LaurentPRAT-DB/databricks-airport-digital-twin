@@ -2,7 +2,7 @@
 """Training pipeline for the two-stage OBT (Off-Block Time) forecasting model.
 
 Usage:
-    uv run python scripts/train_obt_model.py [--sim-dir simulation_output] [--output-dir data/ml_models]
+    uv run python scripts/train_turnaround_model.py [--sim-dir simulation_output] [--output-dir data/ml_models]
 
 Trains two models:
     1. T-90 coarse model  — pre-arrival features only (schedule + weather)
@@ -31,11 +31,11 @@ import numpy as np
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.ml.obt_features import extract_training_data
-from src.ml.obt_model import (
-    OBTPredictor,
-    OBTCoarsePredictor,
-    TwoStageOBTPredictor,
+from src.ml.turnaround_features import extract_training_data
+from src.ml.turnaround_model import (
+    TurnaroundPredictor,
+    TurnaroundCoarsePredictor,
+    TwoStageTurnaroundPredictor,
     _dict_to_feature_set,
     _dict_to_coarse_feature_set,
 )
@@ -121,7 +121,7 @@ def _compute_metrics(
     }
 
 
-def evaluate_refined(predictor: OBTPredictor, test_data: list[dict]) -> dict:
+def evaluate_refined(predictor: TurnaroundPredictor, test_data: list[dict]) -> dict:
     """Evaluate refined (T-park) model."""
     targets, preds = [], []
     for sample in test_data:
@@ -132,7 +132,7 @@ def evaluate_refined(predictor: OBTPredictor, test_data: list[dict]) -> dict:
     return _compute_metrics(targets, preds, test_data)
 
 
-def evaluate_coarse(predictor: OBTCoarsePredictor, test_data: list[dict]) -> dict:
+def evaluate_coarse(predictor: TurnaroundCoarsePredictor, test_data: list[dict]) -> dict:
     """Evaluate coarse (T-90) model."""
     targets, preds = [], []
     for sample in test_data:
@@ -211,7 +211,7 @@ def main():
 
     # 3. Train both models
     print("\n[3/6] Training two-stage model")
-    two_stage = TwoStageOBTPredictor(airport_code="GLOBAL")
+    two_stage = TwoStageTurnaroundPredictor(airport_code="GLOBAL")
     train_features = [_dict_to_feature_set(d["features"]) for d in train_data]
     train_targets = [d["target"] for d in train_data]
     train_result = two_stage.train(train_features, train_targets)
@@ -250,8 +250,8 @@ def main():
     print(f"\n  T-park refines T-90 by {improvement:.2f} min MAE")
 
     # 6. Save
-    coarse_path = args.output_dir / "obt_coarse_model.pkl"
-    refined_path = args.output_dir / "obt_model.pkl"
+    coarse_path = args.output_dir / "turnaround_coarse_model.pkl"
+    refined_path = args.output_dir / "turnaround_model.pkl"
     print(f"\n[5/6] Saving models")
     print(f"  Coarse:  {coarse_path}")
     print(f"  Refined: {refined_path}")
