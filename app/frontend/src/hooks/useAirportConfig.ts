@@ -156,12 +156,18 @@ export function useAirportConfig(): UseAirportConfigReturn {
   const [switchProgress, setSwitchProgress] = useState<SwitchProgress | null>(null);
   const [demoReady, setDemoReady] = useState(false);
   const demoReadyRef = useRef(false);
+  const currentAirportRef = useRef<string | null>(null);
   const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Safety timeout to clear isLoading if WS airport_switch_complete is missed
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track previous airport for rollback on error
   const prevAirportRef = useRef<string | null>(null);
+
+  // Keep currentAirportRef in sync (for use inside useEffect closures)
+  useEffect(() => {
+    currentAirportRef.current = currentAirport;
+  }, [currentAirport]);
 
   // Listen for airport_switch_progress and airport_switch_complete on the existing WS connection
   useEffect(() => {
@@ -206,8 +212,11 @@ export function useAirportConfig(): UseAirportConfigReturn {
 
         // Handle demo_ready signal — backend finished generating demo for this airport
         if (msg.type === 'demo_ready') {
-          demoReadyRef.current = true;
-          setDemoReady(true);
+          const icao = msg.data?.icao;
+          if (!icao || icao === currentAirportRef.current) {
+            demoReadyRef.current = true;
+            setDemoReady(true);
+          }
           return;
         }
 
@@ -247,7 +256,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
         const res = await fetch(`${API_BASE}/api/ready`);
         if (res.ok) {
           const data = await res.json();
-          if (data.demo_ready) {
+          if (data.demo_ready && data.demo_ready_icao === currentAirportRef.current) {
             demoReadyRef.current = true;
             setDemoReady(true);
           }

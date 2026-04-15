@@ -465,6 +465,7 @@ async def readiness():
         "ready": getattr(app.state, "ready", False),
         "status": getattr(app.state, "startup_status", "Initializing..."),
         "demo_ready": demo_svc.has_demo(current_icao),
+        "demo_ready_icao": current_icao,
         "opensky_available": getattr(app.state, "opensky_available", None),
         "debug_client_logs": os.environ.get("DEBUG_MODE", "false").lower() == "true",
     }
