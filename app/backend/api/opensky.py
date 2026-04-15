@@ -497,6 +497,92 @@ async def list_recordings() -> dict:
     return {"recordings": recordings, "count": len(recordings)}
 
 
+def _derive_scenario_events_from_enriched(
+    phase_transitions: list[dict],
+    gate_events: list[dict],
+    frames: dict[str, list],
+) -> list[dict]:
+    """Derive scenario_events from enriched recording data.
+
+    Only derives what's observable from ADS-B: go-arounds (from phase
+    transitions) and ground ops (from gate events). Weather, runway,
+    cancellation, and diversion events cannot be inferred from position data.
+    """
+    events: list[dict] = []
+
+    # Note: go-around detection from phase transitions is unreliable — the
+    # phase classifier oscillates at altitude boundaries, producing false
+    # positives (e.g. 108 "go-arounds" at EDDF). Proper go-around detection
+    # requires raw altitude profile analysis near the runway threshold, which
+    # is a separate feature.
+
+    # Gate events → ground ops
+    for ge in gate_events:
+        callsign = (ge.get("callsign") or ge.get("icao24", "")).strip()
+        gate = ge.get("gate", "?")
+        event_type_raw = ge.get("event_type", "")
+
+        if event_type_raw == "assign":
+            desc = f"Gate {gate} assigned to {callsign}"
+        elif event_type_raw == "occupy":
+            desc = f"{callsign} arrived at gate {gate}"
+        elif event_type_raw == "release":
+            desc = f"{callsign} departed gate {gate}"
+        else:
+            desc = f"Gate {gate}: {event_type_raw} ({callsign})"
+
+        events.append({
+            "time": ge.get("time", ""),
+            "event_type": "ground",
+            "description": desc,
+            "callsign": callsign,
+            "gate": gate,
+        })
+
+    events.sort(key=lambda e: e.get("time", ""))
+    return events
+
+
+def _compute_recording_summary(
+    unique_aircraft: set[str],
+    schedule: list[dict],
+    scenario_events: list[dict],
+    gate_events: list[dict],
+    frames: dict[str, list],
+    airport: str,
+    date: str,
+) -> dict:
+    """Compute summary KPIs for recorded data, mirroring simulation summary structure."""
+    total_flights = len(unique_aircraft)
+    arrivals = sum(1 for f in schedule if f.get("flight_type") == "arrival")
+    departures = sum(1 for f in schedule if f.get("flight_type") == "departure")
+
+    total_go_arounds = sum(1 for e in scenario_events if e.get("event_type") == "go_around")
+    total_diversions = 0
+    total_cancellations = 0
+
+    peak_simultaneous = max((len(v) for v in frames.values()), default=0)
+
+    gates_used = {ge["gate"] for ge in gate_events if ge.get("event_type") in ("assign", "occupy")}
+
+    return {
+        "total_flights": total_flights,
+        "arrivals": arrivals,
+        "departures": departures,
+        "on_time_pct": None,
+        "schedule_delay_min": None,
+        "avg_capacity_hold_min": None,
+        "peak_simultaneous_flights": peak_simultaneous,
+        "gate_utilization_gates_used": len(gates_used),
+        "total_go_arounds": total_go_arounds,
+        "total_diversions": total_diversions,
+        "total_cancellations": total_cancellations,
+        "total_scenario_events": len(scenario_events),
+        "data_source": "opensky_live",
+        "scenario_name": f"Recorded ADS-B — {airport} {date}",
+    }
+
+
 def _weather_snapshots_to_scenario_events(weather_snapshots: list[dict]) -> list[dict]:
     """Convert METAR weather snapshots into scenario_events for PlaybackBar.
 
@@ -759,19 +845,24 @@ def _build_recording_response_from_enriched(
         inferrer, enrichment, origins, airport, sorted_timestamps, frames,
     )
 
+    derived_events = _derive_scenario_events_from_enriched(
+        phase_transitions, gate_events, frames,
+    )
+
+    summary = _compute_recording_summary(
+        unique_aircraft, derived_schedule, derived_events, gate_events,
+        frames, airport, date,
+    )
+
     logger.info(
-        "Recording %s/%s (enriched): %d snapshots → %d frames, %d aircraft, %d schedule entries",
+        "Recording %s/%s (enriched): %d snapshots → %d frames, %d aircraft, %d schedule, %d events",
         airport, date, len(snapshots), len(sorted_timestamps),
-        len(unique_aircraft), len(derived_schedule),
+        len(unique_aircraft), len(derived_schedule), len(derived_events),
     )
 
     return {
         "config": {"airport": airport, "source": "opensky_recorded", "date": date},
-        "summary": {
-            "total_flights": len(unique_aircraft),
-            "data_source": "opensky_live",
-            "scenario_name": f"Recorded ADS-B — {airport} {date}",
-        },
+        "summary": summary,
         "schedule": derived_schedule,
         "frames": {t: frames[t] for t in sorted_timestamps},
         "frame_timestamps": sorted_timestamps,
@@ -779,7 +870,7 @@ def _build_recording_response_from_enriched(
         "phase_transitions": phase_transitions,
         "gate_events": gate_events,
         "weather_snapshots": [],
-        "scenario_events": [],
+        "scenario_events": derived_events,
         "time_window": {
             "start_time": sorted_timestamps[0] if sorted_timestamps else None,
             "end_time": sorted_timestamps[-1] if sorted_timestamps else None,
@@ -933,26 +1024,31 @@ async def _load_recording_from_raw(airport: str, date: str) -> dict:
         inferrer, enrichment, origins, airport, sorted_timestamps, frames,
     )
 
+    raw_phase = enrichment["phase_transitions"]
+    raw_gate = enrichment["gate_events"]
+    derived_events = _derive_scenario_events_from_enriched(raw_phase, raw_gate, frames)
+    summary = _compute_recording_summary(
+        unique_aircraft, derived_schedule, derived_events, raw_gate,
+        frames, airport, date,
+    )
+
     logger.info(
-        "Recording %s/%s (raw fallback): %d rows → %d frames, %d aircraft",
+        "Recording %s/%s (raw fallback): %d rows → %d frames, %d aircraft, %d events",
         airport, date, len(rows), len(sorted_timestamps), len(unique_aircraft),
+        len(derived_events),
     )
 
     return {
         "config": {"airport": airport, "source": "opensky_recorded", "date": date},
-        "summary": {
-            "total_flights": len(unique_aircraft),
-            "data_source": "opensky_live",
-            "scenario_name": f"Recorded ADS-B — {airport} {date}",
-        },
+        "summary": summary,
         "schedule": derived_schedule,
         "frames": {t: frames[t] for t in sorted_timestamps},
         "frame_timestamps": sorted_timestamps,
         "frame_count": len(sorted_timestamps),
-        "phase_transitions": enrichment["phase_transitions"],
-        "gate_events": enrichment["gate_events"],
+        "phase_transitions": raw_phase,
+        "gate_events": raw_gate,
         "weather_snapshots": [],
-        "scenario_events": [],
+        "scenario_events": derived_events,
         "time_window": {
             "start_time": sorted_timestamps[0] if sorted_timestamps else None,
             "end_time": sorted_timestamps[-1] if sorted_timestamps else None,
