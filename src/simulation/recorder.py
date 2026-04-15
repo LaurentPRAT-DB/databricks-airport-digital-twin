@@ -123,8 +123,13 @@ class SimulationRecorder:
         description: str,
         details: dict[str, Any] | None = None,
     ) -> None:
+        # Add sub-second offset to disambiguate events in the same time step
+        same_time_count = sum(
+            1 for e in self.scenario_events if e["time"].startswith(sim_time.isoformat()[:19])
+        )
+        offset_time = sim_time + timedelta(milliseconds=same_time_count * 100)
         self.scenario_events.append({
-            "time": sim_time.isoformat(),
+            "time": offset_time.isoformat(),
             "event_type": event_type,
             "description": description,
             **(details or {}),
