@@ -174,7 +174,7 @@ def parse_summary_from_stdout(stdout: str) -> dict:
         for label, key in mapping.items():
             # Match "  Label:  value" pattern (indented summary lines)
             if label + ":" in line and line.strip().startswith(label):
-                val = line.split(":", 1)[1].strip().rstrip("%").replace(",", "")
+                val = line.split(":", 1)[1].strip().rstrip("%").replace(",", "").removesuffix(" min")
                 if key == "scenario_name":
                     result[key] = val
                 elif "/" in val:  # "450/500" for spawned
