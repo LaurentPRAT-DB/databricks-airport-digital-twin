@@ -12,7 +12,7 @@ AIDM messages typically come from:
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Union
 import logging
@@ -168,7 +168,7 @@ class AIDMParser(AirportFormatParser[AIDMDocument]):
             # Multiple flights
             doc = AIDMDocument(
                 airport=AIDMAirport(code=self.local_airport),
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
             for item in data:
                 if "flightId" in item or "FlightId" in item:
@@ -185,7 +185,7 @@ class AIDMParser(AirportFormatParser[AIDMDocument]):
             if "flightId" in data or "FlightId" in data:
                 doc = AIDMDocument(
                     airport=AIDMAirport(code=self.local_airport),
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                 )
                 flight = self._parse_json_flight(data)
                 if flight:
@@ -253,7 +253,7 @@ class AIDMParser(AirportFormatParser[AIDMDocument]):
                 suffix=fid_data.get("suffix"),
                 operationalDate=self._parse_datetime(
                     fid_data.get("operationalDate", fid_data.get("OperationalDate"))
-                ) or datetime.utcnow(),
+                ) or datetime.now(timezone.utc),
             )
 
             flight = AIDMFlight(flightId=flight_id)
@@ -407,7 +407,7 @@ class AIDMParser(AirportFormatParser[AIDMDocument]):
             return AIDMEvent(
                 eventId=data.get("eventId", data.get("EventId", "")),
                 eventType=AIDMEventType(event_type),
-                timestamp=self._parse_datetime(data.get("timestamp")) or datetime.utcnow(),
+                timestamp=self._parse_datetime(data.get("timestamp")) or datetime.now(timezone.utc),
                 description=data.get("description"),
                 source=data.get("source"),
             )
@@ -421,7 +421,7 @@ class AIDMParser(AirportFormatParser[AIDMDocument]):
 
         doc = AIDMDocument(
             airport=AIDMAirport(code=self.local_airport),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         # Parse flights (AIDX format)
@@ -457,7 +457,7 @@ class AIDMParser(AirportFormatParser[AIDMDocument]):
             flight_id = AIDMFlightId(
                 airline=AIDMAirline(code=airline_code),
                 flightNumber=flight_number,
-                operationalDate=datetime.utcnow(),
+                operationalDate=datetime.now(timezone.utc),
             )
 
             flight = AIDMFlight(flightId=flight_id)

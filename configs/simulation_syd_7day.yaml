@@ -7,3 +7,4 @@ time_step_seconds: 10.0
 seed: 42
 output_file: simulation_output/simulation_syd_7day.json
 scenario_file: scenarios/syd_bushfire_smoke.yaml
+skip_positions: true

@@ -8,7 +8,8 @@ from typing import Any
 class SimulationRecorder:
     """Collects simulation events and writes structured output."""
 
-    def __init__(self) -> None:
+    def __init__(self, skip_positions: bool = False) -> None:
+        self._skip_positions = skip_positions
         self.position_snapshots: list[dict[str, Any]] = []
         self.phase_transitions: list[dict[str, Any]] = []
         self.gate_events: list[dict[str, Any]] = []
@@ -38,6 +39,8 @@ class SimulationRecorder:
         origin_airport: str | None = None,
         destination_airport: str | None = None,
     ) -> None:
+        if self._skip_positions:
+            return
         self.position_snapshots.append({
             "time": sim_time.isoformat(),
             "icao24": icao24,

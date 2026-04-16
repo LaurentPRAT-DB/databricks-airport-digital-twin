@@ -38,6 +38,10 @@ class SimulationConfig(BaseModel):
         default=None,
         description="Path to calibration profile JSON (auto-loaded by airport code if not set)",
     )
+    skip_positions: bool = Field(
+        default=False,
+        description="Skip recording position snapshots to save memory (batch/ML training mode)",
+    )
     diagnostics: bool = Field(
         default=True, description="Enable diagnostic event logging"
     )

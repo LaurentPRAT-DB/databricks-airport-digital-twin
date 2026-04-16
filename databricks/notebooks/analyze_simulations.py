@@ -36,7 +36,7 @@ os.makedirs(os.path.join(sim_output, "report"), exist_ok=True)
 # Copy simulation JSONs from UC Volume to local workspace directory
 # The simulation tasks upload to UC Volume and delete the local copy,
 # so analysis must read from the Volume.
-volume_files = sorted(glob.glob(os.path.join(VOLUME_PATH, "simulation_*_1000_*.json")))
+volume_files = sorted(glob.glob(os.path.join(VOLUME_PATH, "simulation_*_7day_*.json")))
 print(f"Found {len(volume_files)} simulation files in UC Volume:")
 for f in volume_files:
     size_mb = os.path.getsize(f) / (1024 * 1024)
@@ -44,9 +44,9 @@ for f in volume_files:
     shutil.copy2(f, dest)
     print(f"  {os.path.basename(f)}: {size_mb:.1f} MB -> copied to simulation_output/")
 
-output_files = sorted(glob.glob(os.path.join(sim_output, "simulation_*_1000_*.json")))
+output_files = sorted(glob.glob(os.path.join(sim_output, "simulation_*_7day_*.json")))
 print(f"\n{len(output_files)} files ready for analysis")
-assert len(output_files) >= 10, f"Expected >=10 simulation files in UC Volume, found {len(volume_files)}"
+assert len(output_files) >= 3, f"Expected >=3 simulation files in UC Volume, found {len(volume_files)}"
 
 # COMMAND ----------
 

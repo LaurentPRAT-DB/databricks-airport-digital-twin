@@ -5,7 +5,7 @@ Converts parsed AIDM documents to the internal flight models
 used by the Airport Digital Twin.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from src.formats.base import CoordinateConverter, GeoPosition
@@ -137,7 +137,7 @@ class AIDMConverter:
             "heading": position.get("heading", 0),
             "vertical_rate": position.get("vertical_rate", 0),
             "on_ground": position.get("on_ground", False),
-            "timestamp": int(datetime.utcnow().timestamp()),
+            "timestamp": int(datetime.now(timezone.utc).timestamp()),
             "origin": leg.departure_airport.code,
             "destination": leg.arrival_airport.code,
             "aircraft_type": flight.aircraft.aircraft_type if flight.aircraft else "A320",

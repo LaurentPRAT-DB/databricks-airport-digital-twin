@@ -77,8 +77,8 @@ else:
 
 # Write to local /tmp first (reliable), then copy to UC Volume
 # Add timestamp to filename so re-runs don't overwrite previous results
-from datetime import datetime
-timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+from datetime import datetime, timezone
+timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
 original_output = config.get("output_file", f"simulation_output/sim_{airport.lower()}.json")
 base, ext = os.path.splitext(os.path.basename(original_output))
 output_basename = f"{base}_{timestamp}{ext}"

@@ -6,12 +6,12 @@ resources:
   jobs:
     opensky_evaluation:
       name: "[${bundle.target}] Airport Digital Twin - OBT Model Evaluation"
-      description: "Evaluates OBT turnaround model against real OpenSky ADS-B data"
+      description: "Evaluates turnaround model against real OpenSky ADS-B data"
 
       tasks:
-        - task_key: evaluate_obt_model
+        - task_key: evaluate_turnaround_model
           notebook_task:
-            notebook_path: ../databricks/notebooks/evaluate_obt_model.py
+            notebook_path: ../databricks/notebooks/evaluate_turnaround_model.py
             base_parameters:
               airport_icao: "EDDF"
               airport_iata: "FRA"

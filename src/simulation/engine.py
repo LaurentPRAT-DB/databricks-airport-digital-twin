@@ -148,7 +148,7 @@ class SimulationEngine:
 
     def __init__(self, config: SimulationConfig) -> None:
         self.config = config
-        self.recorder = SimulationRecorder()
+        self.recorder = SimulationRecorder(skip_positions=config.skip_positions)
 
         # Diagnostic logger
         if config.diagnostics:

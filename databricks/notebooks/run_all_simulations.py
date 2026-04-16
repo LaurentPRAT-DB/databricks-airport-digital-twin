@@ -14,8 +14,9 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
+import gc
 import os, sys, subprocess, json, time, shutil, re
-from datetime import datetime
+from datetime import datetime, timezone
 
 import yaml
 
@@ -46,10 +47,23 @@ os.makedirs(VOLUME_PATH, exist_ok=True)
 # COMMAND ----------
 
 configs_dir = os.path.join(bundle_root, "configs")
-config_files = sorted(
+all_config_files = sorted(
     f for f in os.listdir(configs_dir) if f.endswith("_7day.yaml")
 )
-print(f"Found {len(config_files)} 7-day configs:")
+
+# Support batching: split configs across parallel tasks to avoid OOM
+try:
+    batch_index = int(dbutils.widgets.get("batch_index"))
+    batch_count = int(dbutils.widgets.get("batch_count"))
+except Exception:
+    batch_index = 0
+    batch_count = 1
+
+chunk_size = -(-len(all_config_files) // batch_count)  # ceil division
+config_files = all_config_files[batch_index * chunk_size : (batch_index + 1) * chunk_size]
+
+print(f"Found {len(all_config_files)} total 7-day configs")
+print(f"Batch {batch_index + 1}/{batch_count}: running {len(config_files)} configs")
 for f in config_files:
     print(f"  {f}")
 
@@ -109,7 +123,7 @@ def run_single_sim(config_filename: str) -> dict:
         config = yaml.safe_load(f)
 
     airport = config["airport"]
-    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     original_output = config.get(
         "output_file", f"simulation_output/sim_{airport.lower()}.json"
     )
@@ -118,7 +132,8 @@ def run_single_sim(config_filename: str) -> dict:
     local_output = f"/tmp/{output_basename}"
     volume_output = f"{VOLUME_PATH}/{output_basename}"
 
-    # Write temp config with local output path
+    # Reduce memory: coarser time steps (training uses phase_transitions, not snapshots)
+    config["time_step_seconds"] = max(config.get("time_step_seconds", 10), 30.0)
     config["output_file"] = local_output
     tmp_config = os.path.join(bundle_root, f"configs/_run_{airport.lower()}.yaml")
     os.makedirs(os.path.dirname(tmp_config), exist_ok=True)
@@ -234,6 +249,7 @@ for i, config_file in enumerate(config_files):
     print(f"\n[{i+1}/{len(config_files)}] {config_file}")
     res = run_single_sim(config_file)
     results.append(res)
+    gc.collect()
 
 total_elapsed = time.time() - total_start
 

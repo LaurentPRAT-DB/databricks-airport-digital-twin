@@ -5,7 +5,7 @@ in Databricks, with proper logging and result formatting.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src.config.settings import settings
@@ -32,7 +32,7 @@ def run_poll_job() -> Dict[str, Any]:
             - status: "success" or "error"
             - error: Error message if status is "error"
     """
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
     logger.info(f"Starting poll job at {start_time.isoformat()}")
 
     result: Dict[str, Any] = {
@@ -55,7 +55,7 @@ def run_poll_job() -> Dict[str, Any]:
         result["error"] = str(e)
         logger.error(f"Poll job failed: {e}")
 
-    end_time = datetime.utcnow()
+    end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
     result["duration"] = duration
 

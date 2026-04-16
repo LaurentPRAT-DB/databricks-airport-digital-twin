@@ -2,7 +2,7 @@ resources:
   jobs:
     simulation_batch:
       name: "[${bundle.target}] Airport DT - Multi-Airport Simulation Batch"
-      description: "Runs 33 airport simulations sequentially in a single task, then analyzes results and trains OBT v3 model"
+      description: "Runs 33 airport simulations (each on own compute), analyzes results, trains turnaround + OBT departure models"
 
       environments:
         - environment_key: sim_env
@@ -15,23 +15,47 @@ resources:
               - pydantic
 
       tasks:
-        # ── Single task runs all 33 simulations sequentially ──────────────
-        - task_key: run_all_sims
+        # ── List all 7-day configs ───────────────────────────────────────
+        - task_key: list_configs
           notebook_task:
-            notebook_path: ../databricks/notebooks/run_all_simulations.py
+            notebook_path: ../databricks/notebooks/list_simulation_configs.py
 
-        # ── Analysis task ──────────────
+        # ── For-each: run one simulation per config on its own compute ──
+        - task_key: run_simulations
+          for_each_task:
+            inputs: "{{tasks.list_configs.values.configs}}"
+            task:
+              task_key: run_single_sim
+              notebook_task:
+                notebook_path: ../databricks/notebooks/run_simulation_airport.py
+                base_parameters:
+                  config_file: "{{input}}"
+          depends_on:
+            - task_key: list_configs
+
+        # ── Analysis (after sims, tolerates partial failures) ────────────
         - task_key: analyze_results
           notebook_task:
             notebook_path: ../databricks/notebooks/analyze_simulations.py
+          run_if: ALL_DONE
           depends_on:
-            - task_key: run_all_sims
+            - task_key: run_simulations
 
-        # ── OBT model training ──────────────
+        # ── Turnaround model training ────────────────────────────────────
+        - task_key: train_turnaround_model
+          notebook_task:
+            notebook_path: ../databricks/notebooks/train_turnaround_model.py
+          environment_key: sim_env
+          run_if: ALL_DONE
+          depends_on:
+            - task_key: analyze_results
+
+        # ── OBT departure model training ─────────────────────────────────
         - task_key: train_obt_model
           notebook_task:
             notebook_path: ../databricks/notebooks/train_obt_model.py
           environment_key: sim_env
+          run_if: ALL_DONE
           depends_on:
             - task_key: analyze_results
 
@@ -40,4 +64,4 @@ resources:
         component: simulation
         target: ${bundle.target}
 
-      timeout_seconds: 43200  # 12 hours for 33 sequential sims + analysis + training
+      timeout_seconds: 43200  # 12 hours

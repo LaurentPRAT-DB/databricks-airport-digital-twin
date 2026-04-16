@@ -18,7 +18,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Derive bundle root from notebook path in workspace
 nb_path = (
@@ -111,7 +111,7 @@ def _score_color(score: float) -> str:
     else:
         return "#ef4444"  # red
 
-today = datetime.utcnow().strftime("%Y-%m-%d")
+today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 html = f"""
 <style>

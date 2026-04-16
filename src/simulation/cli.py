@@ -29,6 +29,10 @@ def main() -> None:
     parser.add_argument("--output", type=str, help="Output file path")
     parser.add_argument("--scenario", type=str, help="Path to scenario YAML file")
     parser.add_argument("--debug", action="store_true", help="Debug mode (4h, verbose)")
+    parser.add_argument(
+        "--skip-positions", action="store_true",
+        help="Skip position snapshots to save memory (batch/ML training mode)",
+    )
 
     args = parser.parse_args()
 
@@ -57,6 +61,8 @@ def main() -> None:
         config.scenario_file = args.scenario
     if args.debug:
         config.debug = True
+    if args.skip_positions:
+        config.skip_positions = True
 
     # Configure logging
     level = logging.DEBUG if config.debug else logging.INFO

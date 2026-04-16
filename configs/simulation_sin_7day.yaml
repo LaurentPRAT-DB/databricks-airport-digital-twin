@@ -7,3 +7,4 @@ time_step_seconds: 10.0
 seed: 42
 output_file: simulation_output/simulation_sin_7day.json
 scenario_file: scenarios/sin_monsoon.yaml
+skip_positions: true
