@@ -215,38 +215,38 @@ if os.path.isfile(local_output):
 
     merge_sql = f"""
     MERGE INTO {UC_CATALOG}.{UC_SCHEMA}.simulation_runs AS target
-    USING (SELECT '{fname}' AS filename) AS source
-    ON target.filename = source.filename
+    USING (SELECT '{fname}' AS `filename`) AS source
+    ON target.`filename` = source.`filename`
     WHEN MATCHED THEN UPDATE SET
-        airport = '{airport}',
-        scenario_name = '{scenario_name}',
-        total_flights = {summary.get('total_flights', 0)},
-        arrivals = {summary.get('arrivals', 0)},
-        departures = {summary.get('departures', 0)},
-        duration_hours = {config.get('duration_hours', 0)},
-        on_time_pct = {summary.get('on_time_pct', 0)},
-        cancellation_rate_pct = {summary.get('cancellation_rate_pct', 0)},
-        peak_simultaneous_flights = {summary.get('peak_simultaneous_flights', 0)},
-        total_go_arounds = {summary.get('total_go_arounds', 0)},
-        total_diversions = {summary.get('total_diversions', 0)},
-        avg_turnaround_min = {summary.get('avg_turnaround_min', 0)},
-        schedule_delay_min = {summary.get('schedule_delay_min', 0)},
-        avg_capacity_hold_min = {summary.get('avg_capacity_hold_min', 0)},
-        max_capacity_hold_min = {summary.get('max_capacity_hold_min', 0)},
-        gate_utilization_gates_used = {summary.get('gate_utilization_gates_used', 0)},
-        total_holdings = {summary.get('total_holdings', 0)},
-        total_cancellations = {summary.get('total_cancellations', 0)},
-        size_bytes = {size_bytes},
-        created_at = CURRENT_TIMESTAMP(),
-        volume_path = '{volume_output}'
+        `airport` = '{airport}',
+        `scenario_name` = '{scenario_name}',
+        `total_flights` = {summary.get('total_flights', 0)},
+        `arrivals` = {summary.get('arrivals', 0)},
+        `departures` = {summary.get('departures', 0)},
+        `duration_hours` = {config.get('duration_hours', 0)},
+        `on_time_pct` = {summary.get('on_time_pct', 0)},
+        `cancellation_rate_pct` = {summary.get('cancellation_rate_pct', 0)},
+        `peak_simultaneous_flights` = {summary.get('peak_simultaneous_flights', 0)},
+        `total_go_arounds` = {summary.get('total_go_arounds', 0)},
+        `total_diversions` = {summary.get('total_diversions', 0)},
+        `avg_turnaround_min` = {summary.get('avg_turnaround_min', 0)},
+        `schedule_delay_min` = {summary.get('schedule_delay_min', 0)},
+        `avg_capacity_hold_min` = {summary.get('avg_capacity_hold_min', 0)},
+        `max_capacity_hold_min` = {summary.get('max_capacity_hold_min', 0)},
+        `gate_utilization_gates_used` = {summary.get('gate_utilization_gates_used', 0)},
+        `total_holdings` = {summary.get('total_holdings', 0)},
+        `total_cancellations` = {summary.get('total_cancellations', 0)},
+        `size_bytes` = {size_bytes},
+        `created_at` = CURRENT_TIMESTAMP(),
+        `volume_path` = '{volume_output}'
     WHEN NOT MATCHED THEN INSERT (
-        filename, airport, scenario_name, total_flights, arrivals, departures,
-        duration_hours, on_time_pct, cancellation_rate_pct, peak_simultaneous_flights,
-        total_go_arounds, total_diversions,
-        avg_turnaround_min, schedule_delay_min, avg_capacity_hold_min,
-        max_capacity_hold_min, gate_utilization_gates_used,
-        total_holdings, total_cancellations,
-        size_bytes, created_at, volume_path
+        `filename`, `airport`, `scenario_name`, `total_flights`, `arrivals`, `departures`,
+        `duration_hours`, `on_time_pct`, `cancellation_rate_pct`, `peak_simultaneous_flights`,
+        `total_go_arounds`, `total_diversions`,
+        `avg_turnaround_min`, `schedule_delay_min`, `avg_capacity_hold_min`,
+        `max_capacity_hold_min`, `gate_utilization_gates_used`,
+        `total_holdings`, `total_cancellations`,
+        `size_bytes`, `created_at`, `volume_path`
     ) VALUES (
         '{fname}', '{airport}', '{scenario_name}',
         {summary.get('total_flights', 0)}, {summary.get('arrivals', 0)},
