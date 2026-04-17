@@ -33,16 +33,27 @@ VOLUME_PATH = f"/Volumes/{UC_CATALOG}/{UC_SCHEMA}/{UC_VOLUME}"
 sim_output = os.path.join(bundle_root, "simulation_output")
 os.makedirs(os.path.join(sim_output, "report"), exist_ok=True)
 
-# Copy simulation JSONs from UC Volume to local workspace directory
-# The simulation tasks upload to UC Volume and delete the local copy,
-# so analysis must read from the Volume.
-volume_files = sorted(glob.glob(os.path.join(VOLUME_PATH, "simulation_*_7day_*.json")))
-print(f"Found {len(volume_files)} simulation files in UC Volume:")
+# Pick only the latest file per airport (avoid old/duplicate runs)
+volume_files_all = sorted(glob.glob(os.path.join(VOLUME_PATH, "simulation_*_7day_*.json")))
+print(f"Found {len(volume_files_all)} total simulation files in UC Volume")
+
+latest_by_airport = {}
+for f in volume_files_all:
+    # Filename: simulation_{airport}_7day_{timestamp}.json
+    basename = os.path.basename(f)
+    parts = basename.split("_")
+    if len(parts) >= 3:
+        airport = parts[1]  # e.g. "ams"
+        latest_by_airport[airport] = f  # sorted asc, so last wins = newest
+
+volume_files = sorted(latest_by_airport.values())
+print(f"Selected {len(volume_files)} latest files (1 per airport):")
+
 for f in volume_files:
     size_mb = os.path.getsize(f) / (1024 * 1024)
     dest = os.path.join(sim_output, os.path.basename(f))
     shutil.copy2(f, dest)
-    print(f"  {os.path.basename(f)}: {size_mb:.1f} MB -> copied to simulation_output/")
+    print(f"  {os.path.basename(f)}: {size_mb:.1f} MB")
 
 output_files = sorted(glob.glob(os.path.join(sim_output, "simulation_*_7day_*.json")))
 print(f"\n{len(output_files)} files ready for analysis")
