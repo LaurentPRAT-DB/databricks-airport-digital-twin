@@ -52,8 +52,11 @@ print(f"Selected {len(volume_files)} latest files (1 per airport):")
 for f in volume_files:
     size_mb = os.path.getsize(f) / (1024 * 1024)
     dest = os.path.join(sim_output, os.path.basename(f))
-    shutil.copy2(f, dest)
-    print(f"  {os.path.basename(f)}: {size_mb:.1f} MB")
+    # Symlink to FUSE-mounted Volume to avoid copying 100+ MB files to local disk
+    if os.path.exists(dest):
+        os.remove(dest)
+    os.symlink(f, dest)
+    print(f"  {os.path.basename(f)}: {size_mb:.1f} MB (symlinked)")
 
 output_files = sorted(glob.glob(os.path.join(sim_output, "simulation_*_7day_*.json")))
 print(f"\n{len(output_files)} files ready for analysis")

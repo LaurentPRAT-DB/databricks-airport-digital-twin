@@ -71,7 +71,7 @@ def load_simulation(filepath: Path) -> dict:
 
 def load_all_simulations() -> dict[str, dict]:
     sims = {}
-    for fp in sorted(SIMULATION_DIR.glob("simulation_*_1000_*.json")):
+    for fp in sorted(SIMULATION_DIR.glob("simulation_*_*.json")):
         data = load_simulation(fp)
         airport = data.get("config", {}).get("airport", fp.stem.split("_")[1].upper())
         sims[airport] = data
