@@ -13,7 +13,6 @@ the absolute pushback time.
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 from dataclasses import dataclass, asdict
@@ -22,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.ml.turnaround_features import (
+    _load_sim_json_lightweight,
     classify_aircraft,
     is_hub_connection,
     _gate_prefix,
@@ -103,8 +103,7 @@ def extract_obt_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]
     transition are included.
     """
     path = Path(sim_json_path)
-    with open(path) as f:
-        data = json.load(f)
+    data = _load_sim_json_lightweight(path)
 
     schedule = data.get("schedule", [])
     phase_transitions = data.get("phase_transitions", [])

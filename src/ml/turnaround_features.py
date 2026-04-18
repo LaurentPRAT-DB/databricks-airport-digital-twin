@@ -8,6 +8,7 @@ feature vectors for turnaround duration prediction (AIBT → AOBT).
 
 from __future__ import annotations
 
+import gc
 import json
 import logging
 import math
@@ -18,6 +19,63 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _load_sim_json_lightweight(path: Path) -> Dict[str, Any]:
+    """Load simulation JSON skipping position_snapshots to save memory.
+
+    Simulation files can be 200MB+ where ~90% is position_snapshots.
+    This function reads the file text, excises the position_snapshots
+    array before JSON parsing to avoid ~1GB peak memory from expanding
+    millions of position dicts.
+    """
+    raw = path.read_text()
+
+    # Find the "position_snapshots" key and skip its array value
+    key = '"position_snapshots"'
+    idx = raw.find(key)
+    if idx == -1:
+        # No position_snapshots — parse normally
+        data = json.loads(raw)
+        del raw
+        return data
+
+    # Find the '[' that starts the array value after the key
+    colon_idx = raw.index(":", idx + len(key))
+    bracket_start = raw.index("[", colon_idx)
+
+    # Count brackets to find matching ']'
+    depth = 0
+    i = bracket_start
+    while i < len(raw):
+        ch = raw[i]
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0:
+                break
+        elif ch == '"':
+            # Skip string contents (may contain brackets)
+            i += 1
+            while i < len(raw) and raw[i] != '"':
+                if raw[i] == "\\":
+                    i += 1  # skip escaped char
+                i += 1
+        i += 1
+
+    bracket_end = i  # index of closing ']'
+
+    # Replace the huge array with empty array
+    trimmed = raw[:bracket_start] + "[]" + raw[bracket_end + 1:]
+    del raw
+    gc.collect()
+
+    data = json.loads(trimmed)
+    del trimmed
+    gc.collect()
+
+    return data
 
 # ---------------------------------------------------------------------------
 # OurAirports-based IATA → country lookup (lazy-loaded singleton)
@@ -415,8 +473,7 @@ def extract_training_data(sim_json_path: str | Path) -> List[Dict[str, Any]]:
         'target' (turnaround_duration_min as float).
     """
     path = Path(sim_json_path)
-    with open(path) as f:
-        data = json.load(f)
+    data = _load_sim_json_lightweight(path)
 
     schedule = data.get("schedule", [])
     phase_transitions = data.get("phase_transitions", [])
