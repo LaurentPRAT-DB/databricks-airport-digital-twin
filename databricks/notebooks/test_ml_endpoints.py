@@ -34,7 +34,6 @@ dbutils.library.restartPython()
 
 # ── Setup & Authentication ──────────────────────────────────────────────────
 
-import base64
 import io
 import json
 import math
@@ -57,28 +56,14 @@ dbutils.widgets.text("airport_iata", "SFO", "Airport IATA (inpainting tile)")
 APP_URL = dbutils.widgets.get("app_url").rstrip("/")
 AIRPORT_IATA = dbutils.widgets.get("airport_iata").upper()
 
-# Databricks host (for direct serving endpoint calls)
-DATABRICKS_HOST = "fevm-serverless-stable-3n0ihb.cloud.databricks.com"
-INPAINTING_ENDPOINT = "airport-dt-aircraft-inpainting-dev"
-
-# Auth: WorkspaceClient provides a Bearer token for direct serving endpoint calls.
-# App API endpoints (delays, gates, congestion) don't need explicit auth — the
-# Databricks Apps proxy handles auth when notebooks run on the same workspace.
-from databricks.sdk import WorkspaceClient
-w = WorkspaceClient()
-TOKEN = w.config.authenticate()["Authorization"].removeprefix("Bearer ")
-
-# Only used for the inpainting serving endpoint (direct call, not through the app)
-SERVING_HEADERS = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+# All endpoints are called through the app — the Databricks Apps proxy handles
+# auth for notebooks running on the same workspace. No explicit tokens needed.
 
 # Collect results for final summary
 results = {}
 
 print(f"App URL:    {APP_URL}")
 print(f"Airport:    {AIRPORT_IATA}")
-print(f"Host:       {DATABRICKS_HOST}")
-print(f"Endpoint:   {INPAINTING_ENDPOINT}")
-print(f"Auth:       Bearer token ({len(TOKEN)} chars)")
 print(f"Timestamp:  {datetime.now(timezone.utc).isoformat()}")
 
 # COMMAND ----------
@@ -200,36 +185,26 @@ plt.show()
 
 # COMMAND ----------
 
-# ── Inpainting: Call Serving Endpoint ────────────────────────────────────────
+# ── Inpainting: Call App Endpoint ────────────────────────────────────────────
 #
-# Sends the satellite tile (base64-encoded) to the Databricks Model Serving
-# endpoint.  The payload follows the MLflow pyfunc serving convention:
+# Calls the app's /api/inpainting/clean-tile endpoint, which handles the full
+# pipeline: fetch tile → call serving endpoint → cache result.
 #
-#   {"dataframe_split": {"columns": ["image_b64"], "data": [["<b64>"]]}}
+# The response is the cleaned PNG image with metadata in response headers:
+#   X-Aircraft-Count: number of aircraft detected and removed
+#   X-Detections: JSON array of bounding boxes [{x1, y1, x2, y2, confidence, class_name}]
+#   X-Cache: HIT or MISS
+#   X-Processing-Ms: serving endpoint latency (on cache miss)
 #
-# Note: if the endpoint is scaled to zero, this call may take 2-5 minutes
-# on the first invocation while the GPU instance starts up.
+# Note: if the serving endpoint is scaled to zero, this call may take 2-5 min
+# on the first invocation while the GPU instance cold-starts.
 
-image_b64 = base64.b64encode(original_bytes).decode("utf-8")
-serving_url = f"https://{DATABRICKS_HOST}/serving-endpoints/{INPAINTING_ENDPOINT}/invocations"
-payload = {
-    "dataframe_split": {
-        "columns": ["image_b64"],
-        "data": [[image_b64]],
-    }
-}
-
-print(f"POST {serving_url}")
-print(f"Payload: {len(json.dumps(payload)):,} bytes (image: {len(original_bytes):,} bytes)")
+inpainting_url = f"{APP_URL}/api/inpainting/clean-tile?url={tile_url}&airport_icao={icao}"
+print(f"POST {inpainting_url}")
 
 t0 = time.monotonic()
 try:
-    resp = httpx.post(
-        serving_url,
-        json=payload,
-        headers=SERVING_HEADERS,
-        timeout=300,
-    )
+    resp = httpx.post(inpainting_url, timeout=300)
     inpainting_latency_ms = int((time.monotonic() - t0) * 1000)
 
     if resp.status_code != 200:
@@ -240,31 +215,18 @@ try:
         detections = []
         aircraft_count = 0
     else:
-        result = resp.json()
-        predictions = result.get("predictions", result.get("dataframe_split", {}))
+        clean_bytes = resp.content
+        aircraft_count = int(resp.headers.get("X-Aircraft-Count", 0))
+        detections_raw = resp.headers.get("X-Detections", "[]")
+        detections = json.loads(detections_raw) if isinstance(detections_raw, str) else (detections_raw or [])
+        cache_status = resp.headers.get("X-Cache", "?")
 
-        if isinstance(predictions, dict):
-            data = predictions.get("data", [[]])[0]
-            clean_b64 = data[0] if data else ""
-            aircraft_count = data[1] if len(data) > 1 else 0
-            detections_json = data[2] if len(data) > 2 else "[]"
-        elif isinstance(predictions, list):
-            pred = predictions[0]
-            clean_b64 = pred.get("clean_image_b64", "")
-            aircraft_count = pred.get("aircraft_count", 0)
-            detections_json = pred.get("detections", "[]")
-        else:
-            clean_b64, aircraft_count, detections_json = "", 0, "[]"
-
-        clean_bytes = base64.b64decode(clean_b64) if clean_b64 else None
-        detections = json.loads(detections_json) if isinstance(detections_json, str) else (detections_json or [])
-
-        print(f"OK: {resp.status_code} ({inpainting_latency_ms}ms)")
+        print(f"OK: {resp.status_code} ({inpainting_latency_ms}ms) [cache: {cache_status}]")
         print(f"Aircraft detected: {aircraft_count}")
-        print(f"Clean tile size:   {len(clean_bytes):,} bytes" if clean_bytes else "No clean tile returned")
+        print(f"Clean tile size:   {len(clean_bytes):,} bytes")
         results["inpainting"] = {
             "status": "PASS",
-            "aircraft_count": int(aircraft_count),
+            "aircraft_count": aircraft_count,
             "latency_ms": inpainting_latency_ms,
             "detections": len(detections),
         }

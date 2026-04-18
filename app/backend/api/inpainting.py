@@ -243,13 +243,19 @@ async def clean_tile(
             cached = lakebase.get_cached_tile(z, tx, ty, source_etag=source_etag)
             if cached:
                 logger.debug("Lakebase cache hit for tile %d/%d/%d", z, tx, ty)
+                resp_headers = {
+                    "X-Cache": "HIT",
+                    "X-Aircraft-Count": str(cached["aircraft_count"]),
+                }
+                if cached.get("detections"):
+                    resp_headers["X-Detections"] = (
+                        cached["detections"] if isinstance(cached["detections"], str)
+                        else json.dumps(cached["detections"])
+                    )
                 return Response(
                     content=cached["image_bytes"],
                     media_type="image/png",
-                    headers={
-                        "X-Cache": "HIT",
-                        "X-Aircraft-Count": str(cached["aircraft_count"]),
-                    },
+                    headers=resp_headers,
                 )
 
         # --- Step 2: Fetch the full tile ---
@@ -341,6 +347,7 @@ async def clean_tile(
             processing_time_ms=processing_ms,
         )
 
+    det_str = detections_json if isinstance(detections_json, str) else json.dumps(detections_json)
     return Response(
         content=clean_bytes,
         media_type="image/png",
@@ -348,5 +355,6 @@ async def clean_tile(
             "X-Cache": "MISS",
             "X-Aircraft-Count": str(aircraft_count),
             "X-Processing-Ms": str(processing_ms),
+            "X-Detections": det_str,
         },
     )
