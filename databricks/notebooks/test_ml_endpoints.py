@@ -97,6 +97,72 @@ print(f"Timestamp:  {datetime.now(timezone.utc).isoformat()}")
 
 # MAGIC %md
 # MAGIC ---
+# MAGIC # Authentication Guide for Developers
+# MAGIC
+# MAGIC ## The Problem
+# MAGIC
+# MAGIC Databricks Apps are served through an **OAuth proxy** (`*.aws.databricksapps.com`). This proxy
+# MAGIC requires a full **OAuth JWT token** (800+ chars, `scope: all-apis`) — the kind your browser
+# MAGIC gets after the interactive OAuth flow.
+# MAGIC
+# MAGIC When this notebook runs on **serverless compute**, the available tokens are:
+# MAGIC
+# MAGIC | Method | Token Type | Length | Works for App Proxy? | Works for Serving Endpoints? |
+# MAGIC |--------|-----------|--------|---------------------|---------------------------|
+# MAGIC | `WorkspaceClient().config.authenticate()` | Service UUID | 36 chars | **No** (401) | **Yes** |
+# MAGIC | `dbutils.notebook...apiToken().get()` | Service UUID | 36 chars | **No** (401) | **Yes** |
+# MAGIC | Personal Access Token (`dapi...`) | PAT | 40 chars | **No** (302 → OAuth login) | **Yes** |
+# MAGIC | Browser OAuth flow | JWT | 800+ chars | **Yes** | **Yes** |
+# MAGIC
+# MAGIC There is **no programmatic way** to get an App-proxy-compatible token from serverless compute.
+# MAGIC The OIDC endpoint (`/oidc/v1/token`) only supports `client_credentials`, `authorization_code`,
+# MAGIC and `refresh_token` grants — no token exchange.
+# MAGIC
+# MAGIC ## Strategy Used Here
+# MAGIC
+# MAGIC This notebook uses a **hybrid approach** for each model:
+# MAGIC
+# MAGIC 1. **Serving endpoints** (inpainting) — called **directly** at
+# MAGIC    `https://{host}/serving-endpoints/{name}/invocations`. The 36-char service token works.
+# MAGIC
+# MAGIC 2. **Prediction models** (delay, gate, congestion) — **try the app proxy first**. If it
+# MAGIC    returns 401 (expected on serverless), fall back to **importing the model Python code
+# MAGIC    directly** from the deployed bundle path and running it in-process.
+# MAGIC
+# MAGIC ```
+# MAGIC                      ┌─ serving endpoint URL ─── 36-char token ✓ ── response
+# MAGIC                      │   (inpainting)
+# MAGIC  notebook (serverless)
+# MAGIC                      │   (delay/gate/congestion)
+# MAGIC                      └─ app proxy URL ── 401? ── import src.ml.* ── run locally ✓
+# MAGIC ```
+# MAGIC
+# MAGIC ## Bundle Source Path
+# MAGIC
+# MAGIC The direct import fallback adds the bundle files to `sys.path`:
+# MAGIC ```python
+# MAGIC _bundle_path = "/Workspace/Users/{user}/.bundle/{project}/{target}/files"
+# MAGIC sys.path.insert(0, _bundle_path)
+# MAGIC from src.ml.delay_model import DelayPredictionModel
+# MAGIC ```
+# MAGIC This works because the prediction models are **pure Python** — they don't need catboost,
+# MAGIC sklearn, or any ML framework. They use rule-based heuristics with the same feature engineering
+# MAGIC as a future trained model would use.
+# MAGIC
+# MAGIC ## If You Need Full App Proxy Access
+# MAGIC
+# MAGIC For interactive testing against the live app from a notebook:
+# MAGIC 1. Open the app in a browser → authenticate via OAuth
+# MAGIC 2. Copy the Bearer token from browser DevTools (Network tab → any request → Authorization header)
+# MAGIC 3. Paste it as a widget/secret value
+# MAGIC
+# MAGIC For CI/CD, use the **direct import** approach shown here — it tests the same model code
+# MAGIC without needing the app proxy.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ---
 # MAGIC # Model 1 — Aircraft Inpainting (YOLO + LaMa)
 # MAGIC
 # MAGIC ## What does this do?
@@ -490,8 +556,8 @@ if not delays:
     print("Using direct model import (app proxy not reachable)")
     t0 = time.monotonic()
     try:
-        from src.ml.delay_model import DelayPredictionModel
-        model = DelayPredictionModel()
+        from src.ml.delay_model import DelayPredictor
+        model = DelayPredictor()
         # Generate realistic test flights (same structure as the app's /api/flights response)
         import random
         test_flights = []
@@ -505,11 +571,11 @@ if not delays:
                 "velocity": random.uniform(0, 250),
                 "on_ground": random.random() < 0.3,
             })
-        preds = model.predict_all(test_flights)
+        preds = model.predict_batch(test_flights)
         delays = [
-            {"icao24": p.icao24, "delay_minutes": p.delay_minutes,
-             "confidence": p.confidence, "category": p.category}
-            for p in preds
+            {"icao24": test_flights[i]["icao24"], "delay_minutes": p.delay_minutes,
+             "confidence": p.confidence, "category": p.delay_category}
+            for i, p in enumerate(preds)
         ]
         delay_latency_ms = int((time.monotonic() - t0) * 1000)
         print(f"Direct model: {len(delays)} predictions ({delay_latency_ms}ms)")
@@ -675,8 +741,8 @@ if not recommendations:
     print("Using direct model import for gate recommendations")
     t0 = time.monotonic()
     try:
-        from src.ml.gate_model import GateRecommendationModel
-        model = GateRecommendationModel()
+        from src.ml.gate_model import GateRecommender
+        model = GateRecommender()
         test_flight = {
             "icao24": selected_icao24,
             "callsign": "UAL123",
@@ -686,7 +752,7 @@ if not recommendations:
         }
         recs = model.recommend(test_flight, top_k=5)
         recommendations = [
-            {"gate_id": r.gate_id, "score": r.score, "reasons": r.reasons, "taxi_time": r.taxi_time}
+            {"gate_id": r.gate_id, "score": r.score, "reasons": r.reasons, "taxi_time": r.estimated_taxi_time}
             for r in recs
         ]
         gate_latency_ms = int((time.monotonic() - t0) * 1000)
