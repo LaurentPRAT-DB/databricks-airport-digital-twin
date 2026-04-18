@@ -1,0 +1,30 @@
+resources:
+  jobs:
+    ml_endpoint_test:
+      name: "[${bundle.target}] Airport DT - ML Endpoint Tests"
+      description: "Validates all ML model endpoints (inpainting, delay, gate, congestion) against the deployed app with realistic data and visual output"
+
+      environments:
+        - environment_key: ml_test_env
+          spec:
+            client: "1"
+            dependencies:
+              - httpx
+              - matplotlib
+              - pillow
+
+      tasks:
+        - task_key: test_ml_endpoints
+          notebook_task:
+            notebook_path: ../databricks/notebooks/test_ml_endpoints.py
+            base_parameters:
+              app_url: "https://airport-digital-twin-${bundle.target}-7474645572615955.aws.databricksapps.com"
+              airport_iata: "SFO"
+          environment_key: ml_test_env
+
+      tags:
+        project: airport-digital-twin
+        component: ml-endpoint-test
+        target: ${bundle.target}
+
+      timeout_seconds: 600
