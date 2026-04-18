@@ -276,24 +276,39 @@ except Exception as e:
 
 # COMMAND ----------
 
-# ── Inpainting: Display Before / After ──────────────────────────────────────
+# ── Inpainting: Visual Comparison (Before / After / Diff) ────────────────────
 #
-# Left panel:  original satellite tile with red bounding boxes around detected aircraft
-# Right panel: inpainted tile with aircraft removed
+# Three large panels for human review:
+#   1. BEFORE  — original satellite tile with red detection boxes
+#   2. AFTER   — inpainted tile (aircraft removed)
+#   3. DIFF    — pixel difference heatmap highlighting exactly what changed
+#
+# Then: zoomed crops around each detected aircraft so a reviewer can judge
+# inpainting quality at pixel level (texture continuity, edge artifacts).
 #
 # What to look for:
-#   - Ops:  are the red boxes around actual aircraft? Is the cleaned tile realistic?
-#   - ML:   are confidence scores reasonable (>0.3 for clear aircraft)?
-#           Are there false positives (boxes on vehicles, shadows)?
+#   - Ops:  are the red boxes around actual aircraft (not vehicles/shadows)?
+#           Does the cleaned tile look natural — no smearing, no missing taxiway lines?
+#   - ML:   are confidence scores > 0.3 for clearly visible aircraft?
+#           Is the diff confined to aircraft regions or bleeding into surroundings?
+
+import numpy as np
 
 if clean_bytes:
     clean_image = Image.open(io.BytesIO(clean_bytes))
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+    # ── Panel 1: Before / After / Diff (full tile, large) ────────────────
+    orig_arr = np.array(original_image.convert("RGB"))
+    clean_arr = np.array(clean_image.convert("RGB"))
+    # Absolute pixel difference — amplified for visibility
+    diff_arr = np.abs(orig_arr.astype(int) - clean_arr.astype(int)).astype(np.uint8)
+    diff_amplified = np.clip(diff_arr * 4, 0, 255).astype(np.uint8)
 
-    # Original with detection boxes
-    axes[0].imshow(original_image)
-    axes[0].set_title(f"Original — {aircraft_count} aircraft detected", fontsize=11)
+    fig, axes = plt.subplots(1, 3, figsize=(20, 8), dpi=150)
+
+    # BEFORE with detection boxes
+    axes[0].imshow(original_image, interpolation="nearest")
+    axes[0].set_title(f"BEFORE — {aircraft_count} aircraft detected", fontsize=12, fontweight="bold")
     for det in detections:
         x1, y1 = det["x1"], det["y1"]
         x2, y2 = det["x2"], det["y2"]
@@ -304,30 +319,77 @@ if clean_bytes:
         )
         axes[0].add_patch(rect)
         axes[0].text(
-            x1, max(0, y1 - 3), f"{conf:.2f}",
-            color="white", fontsize=8, fontweight="bold",
-            bbox=dict(boxstyle="round,pad=0.15", facecolor="red", alpha=0.8),
+            x1, max(0, y1 - 4), f"{conf:.2f}",
+            color="white", fontsize=7, fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.15", facecolor="red", alpha=0.85),
         )
     axes[0].axis("off")
 
-    # Cleaned tile
-    axes[1].imshow(clean_image)
-    axes[1].set_title(f"Inpainted — aircraft removed ({inpainting_latency_ms:,}ms)", fontsize=11)
+    # AFTER
+    axes[1].imshow(clean_image, interpolation="nearest")
+    axes[1].set_title(f"AFTER — aircraft removed ({inpainting_latency_ms:,}ms)", fontsize=12, fontweight="bold")
     axes[1].axis("off")
+
+    # DIFF heatmap
+    axes[2].imshow(diff_amplified, interpolation="nearest")
+    axes[2].set_title("DIFFERENCE (4x amplified)", fontsize=12, fontweight="bold")
+    axes[2].axis("off")
 
     plt.suptitle(
         f"Aircraft Inpainting: {AIRPORT_IATA_RESOLVED} ({icao}) — {description}",
-        fontsize=12,
+        fontsize=13, fontweight="bold",
     )
     plt.tight_layout()
     plt.show()
+
+    # ── Panel 2: Zoomed crops around each detection ──────────────────────
+    # Shows before/after side by side for each detected aircraft so a human
+    # reviewer can judge inpainting quality at the pixel level.
+    if detections:
+        PAD = 20  # extra pixels around each detection for context
+        n_det = min(len(detections), 8)  # cap at 8 to avoid huge output
+        fig, axes = plt.subplots(n_det, 3, figsize=(15, 4 * n_det), dpi=150)
+        if n_det == 1:
+            axes = axes[np.newaxis, :]  # ensure 2D indexing
+
+        for i, det in enumerate(detections[:n_det]):
+            x1 = max(0, int(det["x1"]) - PAD)
+            y1 = max(0, int(det["y1"]) - PAD)
+            x2 = min(orig_arr.shape[1], int(det["x2"]) + PAD)
+            y2 = min(orig_arr.shape[0], int(det["y2"]) + PAD)
+            conf = det.get("confidence", 0)
+
+            crop_before = orig_arr[y1:y2, x1:x2]
+            crop_after = clean_arr[y1:y2, x1:x2]
+            crop_diff = diff_amplified[y1:y2, x1:x2]
+
+            axes[i, 0].imshow(crop_before, interpolation="nearest")
+            axes[i, 0].set_title(f"#{i+1} BEFORE  conf={conf:.2f}", fontsize=9)
+            axes[i, 0].axis("off")
+
+            axes[i, 1].imshow(crop_after, interpolation="nearest")
+            axes[i, 1].set_title(f"#{i+1} AFTER", fontsize=9)
+            axes[i, 1].axis("off")
+
+            axes[i, 2].imshow(crop_diff, interpolation="nearest")
+            axes[i, 2].set_title(f"#{i+1} DIFF", fontsize=9)
+            axes[i, 2].axis("off")
+
+        plt.suptitle(
+            f"Per-Aircraft Inpainting Quality — {n_det} detections (zoom {PAD}px padding)",
+            fontsize=12, fontweight="bold",
+        )
+        plt.tight_layout()
+        plt.show()
 
     # Detection details
     if detections:
         print("Detection details:")
         for i, d in enumerate(detections):
+            w = d["x2"] - d["x1"]
+            h = d["y2"] - d["y1"]
             print(f"  [{i+1}] ({d['x1']:.0f},{d['y1']:.0f})-({d['x2']:.0f},{d['y2']:.0f})  "
-                  f"conf={d.get('confidence', 0):.3f}  class={d.get('class_name', '?')}")
+                  f"{w:.0f}x{h:.0f}px  conf={d.get('confidence', 0):.3f}  class={d.get('class_name', '?')}")
 else:
     print("Inpainting endpoint did not return a clean tile — skipping visualization.")
     print("This may be due to a cold-start timeout or endpoint error.")
