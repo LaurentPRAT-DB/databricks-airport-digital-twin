@@ -56,14 +56,17 @@ dbutils.widgets.text("airport_iata", "SFO", "Airport IATA (inpainting tile)")
 APP_URL = dbutils.widgets.get("app_url").rstrip("/")
 AIRPORT_IATA = dbutils.widgets.get("airport_iata").upper()
 
-# All endpoints are called through the app — the Databricks Apps proxy handles
-# auth for notebooks running on the same workspace. No explicit tokens needed.
+# Auth: the Databricks Apps proxy requires a Bearer token. We use the notebook
+# context token which has the right scope for both app proxy and serving endpoints.
+TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
 # Collect results for final summary
 results = {}
 
 print(f"App URL:    {APP_URL}")
 print(f"Airport:    {AIRPORT_IATA}")
+print(f"Auth:       notebook context token ({len(TOKEN)} chars)")
 print(f"Timestamp:  {datetime.now(timezone.utc).isoformat()}")
 
 # COMMAND ----------
@@ -204,7 +207,7 @@ print(f"POST {inpainting_url}")
 
 t0 = time.monotonic()
 try:
-    resp = httpx.post(inpainting_url, timeout=300)
+    resp = httpx.post(inpainting_url, headers=HEADERS, timeout=300)
     inpainting_latency_ms = int((time.monotonic() - t0) * 1000)
 
     if resp.status_code != 200:
@@ -416,7 +419,7 @@ print(f"GET {url}")
 
 t0 = time.monotonic()
 try:
-    resp = httpx.get(url, timeout=30)
+    resp = httpx.get(url, headers=HEADERS, timeout=30)
     delay_latency_ms = int((time.monotonic() - t0) * 1000)
     print(f"Status: {resp.status_code} ({delay_latency_ms}ms)")
 
@@ -560,7 +563,7 @@ else:
 flights_url = f"{APP_URL}/api/flights"
 print(f"GET {flights_url}")
 
-flights_resp = httpx.get(flights_url, timeout=30)
+flights_resp = httpx.get(flights_url, headers=HEADERS, timeout=30)
 flights = []
 if flights_resp.status_code == 200:
     fdata = flights_resp.json()
@@ -585,7 +588,7 @@ if selected_icao24:
 
     t0 = time.monotonic()
     try:
-        resp = httpx.get(url, timeout=30)
+        resp = httpx.get(url, headers=HEADERS, timeout=30)
         gate_latency_ms = int((time.monotonic() - t0) * 1000)
         print(f"Status: {resp.status_code} ({gate_latency_ms}ms)")
 
@@ -696,7 +699,7 @@ print(f"GET {url}")
 
 t0 = time.monotonic()
 try:
-    resp = httpx.get(url, timeout=30)
+    resp = httpx.get(url, headers=HEADERS, timeout=30)
     congestion_latency_ms = int((time.monotonic() - t0) * 1000)
     print(f"Status: {resp.status_code} ({congestion_latency_ms}ms)")
 

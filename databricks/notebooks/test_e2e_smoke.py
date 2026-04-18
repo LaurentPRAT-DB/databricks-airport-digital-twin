@@ -8,7 +8,13 @@
 import requests, json, time
 
 APP_URL = dbutils.widgets.get("app_url").rstrip("/")
+
+# Databricks Apps proxy requires auth — use the notebook context token
+TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+
 print(f"Testing app at: {APP_URL}")
+print(f"Auth: notebook context token ({len(TOKEN)} chars)")
 
 results = {}
 
@@ -20,7 +26,7 @@ results = {}
 # COMMAND ----------
 
 try:
-    r = requests.get(f"{APP_URL}/health", timeout=10)
+    r = requests.get(f"{APP_URL}/health", headers=HEADERS, timeout=10)
     assert r.status_code == 200, f"Status {r.status_code}"
     assert r.json()["status"] == "healthy"
     results["health"] = "PASS"
@@ -39,7 +45,7 @@ except Exception as e:
 try:
     data = {}
     for _ in range(12):
-        r = requests.get(f"{APP_URL}/api/ready", timeout=10)
+        r = requests.get(f"{APP_URL}/api/ready", headers=HEADERS, timeout=10)
         data = r.json()
         if data.get("ready"):
             break
@@ -59,7 +65,7 @@ except Exception as e:
 # COMMAND ----------
 
 try:
-    r = requests.get(f"{APP_URL}/api/flights", timeout=10)
+    r = requests.get(f"{APP_URL}/api/flights", headers=HEADERS, timeout=10)
     assert r.status_code == 200, f"Status {r.status_code}"
     data = r.json()
     assert "flights" in data, "Missing 'flights' key"
@@ -81,14 +87,14 @@ except Exception as e:
 # COMMAND ----------
 
 try:
-    r = requests.get(f"{APP_URL}/api/flights", timeout=10)
+    r = requests.get(f"{APP_URL}/api/flights", headers=HEADERS, timeout=10)
     flights = r.json()["flights"]
     icao24 = flights[0]["icao24"]
 
-    r2 = requests.get(f"{APP_URL}/api/flights/{icao24}", timeout=10)
+    r2 = requests.get(f"{APP_URL}/api/flights/{icao24}", headers=HEADERS, timeout=10)
     assert r2.status_code == 200, f"Flight detail status {r2.status_code}"
 
-    r3 = requests.get(f"{APP_URL}/api/flights/{icao24}/trajectory", timeout=10)
+    r3 = requests.get(f"{APP_URL}/api/flights/{icao24}/trajectory", headers=HEADERS, timeout=10)
     assert r3.status_code == 200, f"Trajectory status {r3.status_code}"
     traj = r3.json()
     assert "points" in traj, "Missing 'points' in trajectory"
@@ -106,7 +112,7 @@ except Exception as e:
 # COMMAND ----------
 
 try:
-    r = requests.get(f"{APP_URL}/api/airport/config", timeout=10)
+    r = requests.get(f"{APP_URL}/api/airport/config", headers=HEADERS, timeout=10)
     assert r.status_code == 200, f"Status {r.status_code}"
     data = r.json()
     assert "config" in data, "Missing 'config' key"
@@ -124,9 +130,9 @@ except Exception as e:
 # COMMAND ----------
 
 try:
-    r1 = requests.get(f"{APP_URL}/api/schedule/arrivals", timeout=10)
+    r1 = requests.get(f"{APP_URL}/api/schedule/arrivals", headers=HEADERS, timeout=10)
     assert r1.status_code == 200, f"Arrivals status {r1.status_code}"
-    r2 = requests.get(f"{APP_URL}/api/schedule/departures", timeout=10)
+    r2 = requests.get(f"{APP_URL}/api/schedule/departures", headers=HEADERS, timeout=10)
     assert r2.status_code == 200, f"Departures status {r2.status_code}"
     results["schedule"] = "PASS"
     print("PASS: schedule")
@@ -142,7 +148,7 @@ except Exception as e:
 # COMMAND ----------
 
 try:
-    r = requests.get(f"{APP_URL}/api/weather/current", timeout=10)
+    r = requests.get(f"{APP_URL}/api/weather/current", headers=HEADERS, timeout=10)
     assert r.status_code == 200, f"Status {r.status_code}"
     results["weather"] = "PASS"
     print("PASS: weather")
@@ -158,7 +164,7 @@ except Exception as e:
 # COMMAND ----------
 
 try:
-    r = requests.get(f"{APP_URL}/api/gse/status", timeout=10)
+    r = requests.get(f"{APP_URL}/api/gse/status", headers=HEADERS, timeout=10)
     assert r.status_code == 200, f"Status {r.status_code}"
     results["gse_status"] = "PASS"
     print("PASS: gse_status")
@@ -174,7 +180,7 @@ except Exception as e:
 # COMMAND ----------
 
 try:
-    r = requests.get(f"{APP_URL}/api/baggage/stats", timeout=10)
+    r = requests.get(f"{APP_URL}/api/baggage/stats", headers=HEADERS, timeout=10)
     assert r.status_code == 200, f"Status {r.status_code}"
     results["baggage_stats"] = "PASS"
     print("PASS: baggage_stats")
@@ -190,13 +196,13 @@ except Exception as e:
 # COMMAND ----------
 
 try:
-    r = requests.post(f"{APP_URL}/api/airports/KJFK/activate", timeout=60)
+    r = requests.post(f"{APP_URL}/api/airports/KJFK/activate", headers=HEADERS, timeout=60)
     assert r.status_code == 200, f"KJFK activate failed: {r.status_code} {r.text[:200]}"
     data = r.json()
     assert "config" in data, "Missing 'config' in activate response"
 
     # Switch back to KSFO
-    r2 = requests.post(f"{APP_URL}/api/airports/KSFO/activate", timeout=60)
+    r2 = requests.post(f"{APP_URL}/api/airports/KSFO/activate", headers=HEADERS, timeout=60)
     assert r2.status_code == 200, f"KSFO activate failed: {r2.status_code}"
     results["airport_switch"] = "PASS"
     print("PASS: airport_switch")
@@ -212,7 +218,7 @@ except Exception as e:
 # COMMAND ----------
 
 try:
-    r = requests.get(f"{APP_URL}/", timeout=10)
+    r = requests.get(f"{APP_URL}/", headers=HEADERS, timeout=10)
     assert r.status_code == 200, f"Status {r.status_code}"
     assert "Airport Digital Twin" in r.text, "Title not found in HTML"
     results["frontend_served"] = "PASS"
