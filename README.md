@@ -1,6 +1,6 @@
 # Airport Digital Twin
 
-> A real-time airport operations visualization platform built on Databricks — interactive 2D/3D flight tracking, ML-powered predictions, and multi-airport support with OpenStreetMap integration.
+> A real-time airport operations platform built on Databricks — combining physics-based flight simulation with ML-powered predictions, served through interactive 2D/3D visualization across any airport worldwide.
 
 ![Application Overview](docs/screenshots/01-overview.png)
 
@@ -10,159 +10,294 @@
 
 ## What It Does
 
-The Airport Digital Twin brings airport operations to life in a browser. Track 50+ flights in real time across 2D maps and immersive 3D views, switch between 12+ airports worldwide, see ML-driven delay predictions and gate recommendations, and monitor congestion — all powered by Databricks.
+The Airport Digital Twin merges two complementary engines into a single platform: a **real-time flight simulation** that animates 50+ aircraft through realistic taxi, takeoff, cruise, approach, and landing phases, and an **analytics layer** that scores every flight with ML predictions, processes historical data through DLT pipelines, and serves operational dashboards.
 
 ### At a Glance
 
 | Capability | Details |
 |---|---|
-| **Real-time tracking** | 50+ simultaneous flights with 2D (Leaflet) and 3D (Three.js) views |
+| **Real-time simulation** | Physics-based flight state machine, 50+ concurrent aircraft, WebSocket delta streaming |
+| **2D + 3D visualization** | Leaflet maps with OSM overlays, Three.js 3D with extruded terminal buildings |
 | **Multi-airport** | 12 presets (SFO, JFK, LAX, ORD, ATL, LHR, CDG, AUH, DXB, HND, HKG, SIN) + any ICAO code |
-| **ML predictions** | Delay forecasting, gate recommendations, congestion alerts, turnaround duration, off-block time |
+| **7 ML models** | Delay, gate assignment, congestion, turnaround, off-block time, GSE allocation, aircraft inpainting |
+| **Calibrated synthetic data** | 1,183 airport profiles from BTS, OpenSky, and OurAirports — real distributions drive simulation |
+| **Two-tier serving** | Lakehouse (Unity Catalog) for governance + Lakebase (PostgreSQL) for <10ms real-time reads |
 | **Live weather** | METAR/TAF — temperature, wind, visibility, flight category |
 | **FIDS** | Arrivals & departures board, just like a real terminal |
 | **Platform integration** | Lakeview dashboards, Genie NL queries, Unity Catalog, MLflow, Data Lineage |
-| **Data formats** | AIXM, OSM, IFC, AIDM, FAA NASR, MSFS BGL |
-| **Calibration** | 43 real-world airport profiles from BTS, OpenSky, and OurAirports data |
+| **Data format importers** | AIXM, OSM, IFC, AIDM, FAA NASR, MSFS BGL |
+| **~3,900 tests** | ~3,089 Python + 822 frontend + 3 Databricks workspace jobs |
 
----
-
-## Who Is This For?
-
-This platform serves different roles with different levels of depth. Jump to the section that matches you:
+### Who Is This For?
 
 | Role | Section | What You'll Find |
 |---|---|---|
-| Airport Executives & Strategists | [Strategic Overview](#-for-airport-executives--strategists) | KPIs, value proposition, decision support |
-| Operational Staff | [Operations Guide](#-for-operational-staff) | Daily usage, dashboards, real-time monitoring |
-| IT / Data Scientists | [Technical Deep Dive](#-for-it--data-scientists) | ML models, data architecture, calibration pipeline |
-| IT Operations | [Infrastructure Guide](#-for-it-operations) | Deployment, monitoring, infrastructure |
+| Airport Operators | [Operations & Strategy](#for-airport-operators) | KPIs, dashboards, decision support, daily usage |
+| Data Scientists | [ML & Calibration](#for-data-scientists) | Models, features, calibration pipeline, training |
+| Developers | [Architecture & Deployment](#for-developers) | API, data flow, testing, deployment, infrastructure |
 
 ---
 
-## For Airport Executives & Strategists
+## The Dual Engine: Simulation & Analytics
 
-### The Challenge
+The platform isn't just a visualization — it's two engines working in tandem.
 
-Airport operators manage thousands of flights daily across interconnected systems — runways, gates, baggage, ground equipment — with cascading delays that cost the US aviation industry **$33 billion annually** (FAA). Traditional monitoring is fragmented: one screen for flights, another for gates, another for weather. Decision-makers lack a unified, real-time view.
+### Engine 1: Real-Time Flight Simulation
 
-### The Solution
+A physics-based **flight state machine** (`src/simulation/engine.py`) drives every aircraft through a complete lifecycle:
 
-The Airport Digital Twin provides a **single-pane-of-glass** for airport operations, combining live flight tracking, predictive analytics, and infrastructure visualization into one interactive platform.
+```
+Scheduled → Pushback → Taxi-Out → Takeoff → Climb → Cruise → Descent → Approach → Landing → Taxi-In → Parked
+```
+
+Each phase has realistic dynamics — acceleration curves, altitude profiles, turn radii, speed constraints — calibrated from real aviation data. The engine manages runway capacity (sequencing, separation), gate assignments (terminal matching, size compatibility), and generates cascading events (delays propagate through turnaround chains).
+
+On the backend, the simulation ticks at accelerated speed and the **WebSocket** (`app/backend/api/websocket.py`) pushes **delta-compressed updates** to the frontend — only fields that changed since the last frame are sent, keeping bandwidth under 2 KB/s for 100+ flights.
+
+### Engine 2: Analytics & ML
+
+Every flight in the simulation is simultaneously scored by 7 ML models:
+
+- **Delay Predictor** — how late will this flight arrive?
+- **Gate Recommender** — which gate minimizes taxi time and balances terminals?
+- **Congestion Predictor** — which runways/taxiways/aprons are approaching capacity?
+- **Turnaround Model** — how long until this aircraft pushes back?
+- **OBT Model** — when exactly will it depart (combining turnaround + delay + schedule)?
+- **GSE Allocator** — which ground equipment is needed and when?
+- **Aircraft Inpainting** — YOLO + LaMa removes real aircraft from satellite tiles for clean 3D views
+
+Meanwhile, **DLT pipelines** process flight events through Bronze/Silver/Gold layers into Unity Catalog, **Lakeview dashboards** aggregate KPIs, and **Genie** enables natural-language queries against the governed data.
+
+### The Bridge: How They Feed Each Other
 
 ```mermaid
 graph LR
-    subgraph "Data Sources"
-        A["ADS-B Feeds<br/>(OpenSky)"]
-        B["Weather<br/>(METAR/TAF)"]
-        C["Airport Infra<br/>(OpenStreetMap)"]
-        D["Historical<br/>(BTS/Eurocontrol)"]
+    subgraph "Real Data"
+        BTS["BTS T-100 &<br/>On-Time CSVs"]
+        OSK["OpenSky API"]
+        OA["OurAirports"]
     end
 
-    subgraph "Databricks Platform"
-        E["Ingestion &<br/>DLT Pipeline"]
-        F["Unity Catalog<br/>(Governed Data)"]
-        G["ML Models<br/>(MLflow)"]
-        H["Lakebase<br/>(<10ms serving)"]
+    subgraph "Calibration"
+        PB["Profile Builder<br/>(1,183 airports)"]
+        AP["AirportProfile<br/>airline shares, fleet mix,<br/>delays, hourly patterns"]
     end
 
-    subgraph "Digital Twin"
-        I["2D/3D<br/>Visualization"]
-        J["Delay<br/>Predictions"]
-        K["Gate<br/>Optimization"]
-        L["Congestion<br/>Alerts"]
+    subgraph "Simulation Engine"
+        SIM["Flight State Machine<br/>+ Capacity Manager"]
+        WS["WebSocket Push<br/>(delta compressed)"]
     end
 
-    A --> E --> F --> H --> I
-    B --> I
-    C --> I
-    D --> G
-    F --> G
-    G --> J & K & L
+    subgraph "Analytics Layer"
+        ML["7 ML Models"]
+        DLT["DLT Pipeline<br/>Bronze → Silver → Gold"]
+        LV["Lakeview<br/>Dashboards"]
+    end
+
+    BTS & OSK & OA --> PB --> AP --> SIM
+    SIM --> WS
+    SIM -->|training data| ML
+    SIM -->|events| DLT --> LV
+    ML -->|predictions displayed<br/>alongside simulation| WS
 ```
 
-### Key Performance Indicators
-
-The platform tracks and visualizes the KPIs that matter most to airport leadership:
-
-| KPI | What It Measures | How the Twin Helps |
-|---|---|---|
-| **On-Time Performance** | % flights within 15 min of schedule | Real-time delay predictions + ML-forecasted departure offset |
-| **Average Delay** | Mean schedule delay in minutes | Delay predictor with confidence scoring and cause attribution |
-| **Gate Utilization** | Gates occupied vs. available | Live gate status board with ML-optimized assignments |
-| **Avg Capacity Hold** | Minutes held due to runway/airspace congestion | Congestion heatmap with capacity threshold alerts |
-| **Peak Simultaneous Flights** | Max concurrent active flights | Capacity planning and peak-hour staffing |
-| **Turnaround Duration** | Gate occupancy time (AIBT to AOBT) | ML turnaround model (GBT) with P10/P90 prediction intervals |
-| **Off-Block Time** | Predicted pushback time vs. schedule (AOBT - SOBT) | OBT model predicts departure offset incorporating arrival delay, turnaround prediction, and operational context |
-| **Cancellations & Disruptions** | Go-arounds, diversions, holdings, cancellations | Scenario event tracking with disruption timeline |
-| **Baggage Processing** | Bags handled per hour, mishandled rate | Bronze/Silver/Gold DLT pipeline tracking bag lifecycle |
-
-### Decision Support Scenarios
-
-1. **"Should we open a new gate area?"** — Visualize congestion patterns across terminals, see which areas hit CRITICAL levels during peak hours, simulate different gate configurations.
-
-2. **"Which runway configuration handles weather best?"** — Overlay METAR conditions with flight phase data to see how wind shifts affect approach patterns and throughput.
-
-3. **"Where are delays propagating from?"** — Origin-aware trajectories show which inbound routes carry the most delay, enabling proactive ground handling adjustments.
-
-### Value Proposition
-
-| Before | After |
-|---|---|
-| Fragmented screens per system | Unified 2D/3D operational view |
-| Reactive delay management | Predictive delay alerts with cause attribution |
-| Manual gate assignment | ML-optimized gate recommendations |
-| No cross-airport visibility | Multi-airport switching with real infrastructure data |
-| Static reports, hours old | Real-time data refreshed every minute |
+Real airport statistics calibrate the simulation. The simulation generates training data for ML models. ML predictions enhance the simulation display. The loop closes.
 
 ---
 
-## For Operational Staff
+## Data Architecture: Lakehouse & Lakebase
+
+The platform uses a **two-tier serving architecture** that combines the governance and analytical power of the Databricks Lakehouse with the sub-10ms latency of Lakebase (managed PostgreSQL).
+
+### Why Two Tiers?
+
+| Tier | Technology | Latency | Purpose |
+|---|---|---|---|
+| **Lakehouse** | Unity Catalog + Delta Lake | ~100ms | Governed data lake — historical analytics, ML training, DLT processing, lineage, access control |
+| **Lakebase** | PostgreSQL (Autoscaling) | <10ms | Real-time serving — frontend API, WebSocket updates, low-latency queries |
+
+The Lakehouse is where data is **governed, processed, and analyzed**. Lakebase is where data is **served to users in real time**. Neither replaces the other — they're complementary.
+
+### Data Flow
+
+```mermaid
+graph TB
+    subgraph "Ingestion"
+        ADS["ADS-B / OpenSky"]
+        SYN["Simulation Engine"]
+        CB["Circuit Breaker<br/>(auto-fallback)"]
+    end
+
+    subgraph "Lakehouse (Unity Catalog)"
+        B["Bronze<br/>Raw JSON, Auto Loader"]
+        S["Silver<br/>Validated, deduplicated,<br/>data quality expectations"]
+        G["Gold<br/>Aggregated positions,<br/>computed flight_phase"]
+        UC["Unity Catalog<br/>Governed Delta tables"]
+    end
+
+    subgraph "Lakebase (PostgreSQL)"
+        LB["flight_status table<br/>+ tile_cache + inpainting"]
+    end
+
+    subgraph "Application"
+        API["FastAPI Backend"]
+        FE["React Frontend<br/>2D + 3D"]
+    end
+
+    ADS --> CB -->|live| B
+    CB -->|failure| SYN --> B
+    B --> S --> G --> UC
+    UC -->|sync ~1 min| LB
+    LB -->|"Tier 1: <10ms"| API
+    UC -->|"Tier 2: ~100ms"| API
+    SYN -->|"Tier 3: <5ms"| API
+    API --> FE
+```
+
+### Automatic Fallback Chain
+
+The backend cascades through data sources transparently — if Lakebase goes down, the API falls back to Delta tables; if those are unavailable, it falls back to synthetic generation. The app never goes dark.
+
+```
+1. Lakebase (PostgreSQL)    → <10ms   → data_source="live"
+2. Unity Catalog (Delta)    → ~100ms  → data_source="live"  
+3. Synthetic Generator      → <5ms    → data_source="synthetic"
+```
+
+### DLT Pipeline (Bronze / Silver / Gold)
+
+| Layer | Table | Key Transformations |
+|---|---|---|
+| **Bronze** | `flights_bronze` | Auto Loader JSON ingestion, `_ingested_at` metadata |
+| **Silver** | `flights_silver` | Explode state vectors, data quality expectations, deduplicate on `icao24 + position_time` |
+| **Gold** | `flight_status_gold` | Aggregate latest position per aircraft, compute `flight_phase` |
+| **Bronze** | `baggage_bronze` | Raw baggage events |
+| **Silver** | `baggage_silver` | Validated baggage chain |
+| **Gold** | `baggage_gold` | Aggregated baggage metrics |
+
+Data quality enforced at Silver layer:
+```sql
+valid_position:  latitude IS NOT NULL AND longitude IS NOT NULL
+valid_icao24:    icao24 IS NOT NULL AND LENGTH(icao24) = 6
+valid_altitude:  baro_altitude >= 0 OR baro_altitude IS NULL
+```
+
+---
+
+## Synthetic Data Calibrated with Real Data
+
+The simulation doesn't generate random flights — it generates **statistically accurate** flights whose distributions match real-world airport operations.
+
+### The Calibration Pipeline
+
+```mermaid
+graph LR
+    subgraph "Real Data Sources"
+        BTS1["BTS T-100<br/>Segment traffic<br/>(US domestic)"]
+        BTS2["BTS On-Time<br/>Delays, taxi times,<br/>turnarounds"]
+        OSK["OpenSky Network<br/>International<br/>traffic patterns"]
+        OA["OurAirports<br/>Infrastructure,<br/>runway counts"]
+        KP["43 Hand-Researched<br/>Known Profiles"]
+    end
+
+    subgraph "Profile Builder"
+        PB["profile_builder.py<br/>Merges & reconciles<br/>multiple sources"]
+    end
+
+    subgraph "Airport Profile"
+        AP["AirportProfile<br/>15+ statistical fields"]
+    end
+
+    subgraph "Consumers"
+        SG["Schedule Generator<br/>Realistic flight schedules"]
+        SE["Simulation Engine<br/>Calibrated dynamics"]
+        ML["ML Models<br/>Calibrated thresholds"]
+    end
+
+    BTS1 & BTS2 & OSK & OA & KP --> PB --> AP --> SG & SE & ML
+```
+
+### What's in a Profile?
+
+Each of the **1,183 airport profiles** in `data/calibration/profiles/` is a JSON file containing:
+
+| Field | Example (SFO) | What It Drives |
+|---|---|---|
+| `airline_shares` | `{"UAL": 0.46, "SWA": 0.12, ...}` | Which airlines appear in simulation |
+| `domestic_route_shares` | `{"LAX": 0.12, "ORD": 0.08, ...}` | Where flights come from / go to |
+| `fleet_mix` | `{"UAL": {"B738": 0.35, "A320": 0.25}}` | Aircraft type per airline |
+| `hourly_profile` | 24-element array of weights | Traffic peaks (6am rush, evening surge) |
+| `taxi_out_mean_min` | `16.2` | Realistic taxi durations |
+| `turnaround_median_min` | `52.0` | Gate occupancy time |
+| `delay_rate` | `0.21` | Fraction of flights delayed |
+| `mean_delay_minutes` | `18.5` | Severity of delays |
+
+### Why This Matters
+
+Without calibration, a simulation of JFK looks the same as a simulation of a regional airport — same airlines, same delays, same traffic patterns. With calibration:
+
+- **SFO** generates 46% United flights peaking at 8am and 5pm, with 16-minute average taxi-out
+- **ATL** generates Delta-heavy traffic with the busiest hourly profile in the US
+- **LHR** generates British Airways and Virgin Atlantic with international-heavy routes
+- **CDG** generates Air France with a European route network
+
+The synthetic data is realistic enough to train ML models whose predictions make operational sense.
+
+---
+
+## For Airport Operators
+
+### The Challenge
+
+Airport operators manage thousands of flights daily across interconnected systems — runways, gates, baggage, ground equipment — with cascading delays that cost the US aviation industry **$33 billion annually** (FAA). Traditional monitoring is fragmented: one screen for flights, another for gates, another for weather.
+
+### The Solution
+
+The Airport Digital Twin provides a **single-pane-of-glass** for airport operations: live flight tracking, predictive analytics, and infrastructure visualization in one interactive platform.
+
+### Key Performance Indicators
+
+| KPI | What It Measures | How the Twin Helps |
+|---|---|---|
+| **On-Time Performance** | % flights within 15 min of schedule | Real-time delay predictions with confidence scoring |
+| **Average Delay** | Mean schedule delay in minutes | Delay predictor with cause attribution |
+| **Gate Utilization** | Gates occupied vs. available | Live gate board with ML-optimized assignments |
+| **Runway Congestion** | Minutes held due to capacity | Congestion heatmap with threshold alerts |
+| **Turnaround Duration** | Gate occupancy (AIBT to AOBT) | ML turnaround model with P10/P90 intervals |
+| **Off-Block Time** | Predicted pushback vs. schedule | OBT model incorporating delay + turnaround |
+| **Baggage Processing** | Bags/hour, mishandled rate | Bronze/Silver/Gold DLT pipeline tracking bag lifecycle |
+
+### Decision Support Scenarios
+
+1. **"Should we open a new gate area?"** — Visualize congestion patterns across terminals, see which areas hit CRITICAL levels during peak hours.
+
+2. **"Which runway configuration handles weather best?"** — Overlay METAR conditions with flight phase data to see how wind shifts affect approach patterns.
+
+3. **"Where are delays propagating from?"** — Origin-aware trajectories show which inbound routes carry the most delay, enabling proactive ground handling.
 
 ### Your Daily Command Center
 
-The Airport Digital Twin is designed to be your go-to screen for situational awareness. Here's how to use it day to day.
-
 ![Main Dashboard](docs/screenshots/01-overview.png)
-*The main dashboard: flight list (left), map view (center), flight details and gate status (right)*
+*Flight list (left), map view (center), flight details and gate status (right)*
 
-### Quick Start: 5 Things You Can Do Right Now
+**Find any flight** — Type a callsign in the search box. Typing "UAL" filters to all United flights.
 
-**1. Find any flight instantly**
-Type a callsign in the search box (top-left). Typing "UAL" instantly filters to all United flights. Click any flight to see its full details.
-
-![Flight Search](docs/screenshots/05-flight-search.png)
-
-**2. Check the arrivals/departures board**
-Click **FIDS** in the header bar to open the Flight Information Display — the same board format you see in terminals, with real-time status (On Time, Delayed, Boarding, Landed).
+**Check arrivals/departures** — Click **FIDS** for the Flight Information Display with real-time status.
 
 ![FIDS Board](docs/screenshots/06-fids-modal.png)
 
-**3. See gate availability at a glance**
-The Gate Status panel (bottom-right) shows each terminal's gates color-coded green (available) or red (occupied), plus area congestion levels.
+**Gate availability** — The Gate Status panel shows each terminal's gates color-coded green (available) or red (occupied), plus area congestion levels.
 
-**4. Switch to any airport worldwide**
-Click the airport button (e.g., "KSFO") to open the selector. Choose from 12 presets or type any ICAO code (e.g., LFPG for Paris CDG).
+**Switch airports** — Click the airport button to choose from 12 presets or type any ICAO code.
 
 ![Airport Selector](docs/screenshots/02-airport-selector.png)
 
 ![CDG Airport](docs/screenshots/10-cdg-airport.png)
 *Paris CDG loaded with real terminal, gate, taxiway, and apron data from OpenStreetMap*
 
-**5. Get an immersive 3D view**
-Click **3D** above the map to switch to the Three.js 3D visualization. See aircraft at actual altitude with realistic 3D models, terminal buildings extruded from real footprints.
+**3D view** — Click **3D** for the Three.js visualization with aircraft at actual altitude and extruded terminal buildings.
 
 ![3D View](docs/screenshots/08-3d-view.png)
-
-### Understanding the Dashboard
-
-| Area | What It Shows | Key Actions |
-|---|---|---|
-| **Header bar** | Active airport, flight count, data source, weather, connection status | Switch airports, open FIDS, check weather, access Platform links |
-| **Flight list** (left) | All active flights with phase, altitude, speed | Search, sort, click to select |
-| **Map view** (center) | 2D or 3D visualization with OSM airport overlay | Zoom, pan, toggle 2D/3D, click flights |
-| **Flight details** (right) | Selected flight's position, movement, ML predictions | View delay prediction, gate recommendations, show trajectory |
-| **Gate status** (right) | Terminal gate occupancy + area congestion | Monitor gate availability |
 
 ### Flight Phase Color Codes
 
@@ -173,18 +308,12 @@ Click **3D** above the map to switch to the Three.js 3D visualization. See aircr
 | Red | Descending | On approach, losing altitude |
 | Blue | Cruising | At cruise altitude, en route |
 
-### Weather Monitoring
-
-Click the weather badge in the header to see METAR conditions:
-- **Temperature**, **wind** (direction + speed), **visibility**
-- **Flight category**: VFR (good), MVFR (marginal), IFR (low visibility), LIFR (very low)
-
 ### ML Predictions (Per Flight)
 
 When you select a flight, the details panel shows:
 - **Expected Delay**: Predicted minutes late, with confidence %
 - **Delay Category**: On Time / Slight / Moderate / Severe
-- **Gate Recommendations**: Top 3 gates ranked by score with reasons (availability, terminal match, proximity, taxi time)
+- **Gate Recommendations**: Top 3 gates ranked by score with reasons
 
 ### Platform Integration
 
@@ -195,7 +324,7 @@ Click **Platform** in the header to jump to Databricks tools:
 | Link | Use Case |
 |---|---|
 | **Flight Dashboard** | Lakeview dashboard with aggregated KPIs and trends |
-| **Ask Genie** | Query flight data in plain English — "Show me all delayed flights from JFK" |
+| **Ask Genie** | Query flight data in plain English |
 | **Data Lineage** | See where every data point comes from |
 | **ML Experiments** | Monitor model performance in MLflow |
 | **Unity Catalog** | Browse all tables and schemas |
@@ -213,7 +342,91 @@ Click **Platform** in the header to jump to Databricks tools:
 
 ---
 
-## For IT / Data Scientists
+## For Data Scientists
+
+### ML Model Suite (7 Models)
+
+| Model | Module | Type | Input | Output |
+|---|---|---|---|---|
+| **Delay Prediction** | `src/ml/delay_model.py` | Rule-based heuristic | 14-feature vector | `delay_minutes`, `confidence`, `delay_category` |
+| **Gate Recommendation** | `src/ml/gate_model.py` | Scoring optimization | Flight + gate status | Top-K gates with `score`, `reasons`, `estimated_taxi_time` |
+| **Congestion Prediction** | `src/ml/congestion_model.py` | Capacity threshold | All flight positions | Area `level` (low/moderate/high/critical), `wait_minutes` |
+| **Turnaround Duration** | `src/ml/turnaround_model.py` | HistGradientBoosting / CatBoost | 19 features | `turnaround_minutes` with P10/P90 intervals |
+| **Off-Block Time** | `src/ml/obt_model.py` | HistGradientBoosting / CatBoost | 19 features | `departure_offset_min` (AOBT - SOBT) with P10/P90 |
+| **GSE Allocation** | `src/ml/gse_model.py` | Optimization | Turnaround phase | Equipment assignments and timing |
+| **Aircraft Inpainting** | `src/ml/inpainting/` | YOLO OBB + LaMa | Satellite tile (256x256 PNG) | Clean tile with aircraft removed |
+
+All models are wrapped in `AirportModelRegistry` (`src/ml/registry.py`) which caches per-ICAO instances — switching airports hot-swaps all models with airport-specific calibration.
+
+### Two-Stage Prediction Pipeline: Turnaround + OBT
+
+The turnaround and OBT models form a chained pipeline:
+
+```
+                  Aircraft category
+                  Gate properties          Turnaround
+Schedule context  Weather          ──────► Prediction ──┐
+                  Historical patterns      (AOBT-AIBT)  │
+                                                        │
+                  Schedule offset                       │
+                  Arrival delay           ──────────────┼──► OBT Prediction
+                  Operational context                   │    (AOBT - SOBT)
+                  Turnaround prediction ◄───────────────┘
+```
+
+1. **Turnaround model** predicts gate occupancy duration from aircraft category, gate, weather, and schedule features. Three prediction horizons: T-90 (pre-arrival), T-park (at gate), T-board (boarding stage).
+
+2. **OBT model** predicts departure offset from schedule. Uses the turnaround prediction as an input feature alongside arrival delay propagation and operational context. Two horizons: T-schedule (planning) and T-park (operational).
+
+Both models support CatBoost (native categoricals) with sklearn HistGradientBoosting fallback, P10/P90 quantile regression for prediction intervals, and Conformalized Quantile Regression (CQR) calibration.
+
+### Aircraft Inpainting Pipeline
+
+Two-stage deep learning pipeline served on Databricks Model Serving (GPU_MEDIUM, scale-to-zero):
+
+1. **Detection** — YOLOv8s-OBB (trained on DOTA satellite dataset) detects aircraft using **oriented bounding boxes** at confidence threshold 0.15. OBB is critical because aircraft sit at arbitrary angles.
+
+2. **Inpainting** — LaMa (Large Mask Inpainting) fills each detected region with surrounding tarmac texture.
+
+Results are cached in Lakebase with source ETag tracking — when satellite imagery updates, the cache auto-invalidates.
+
+### Feature Engineering
+
+**Delay model features** (`src/ml/features.py`): 14 features from raw flight data:
+- 4 numeric: `hour_of_day`, `day_of_week`, `is_weekend`, `velocity_normalized`
+- 3 one-hot: `flight_distance_category` (short/medium/long)
+- 3 one-hot: `altitude_category` (ground/low/cruise)
+- 4 one-hot: `heading_quadrant` (N/E/S/W)
+
+**Turnaround/OBT features**: 19 features including aircraft size category, gate terminal, weather conditions (wind, visibility, flight category), schedule context (hour, day, peak flag), and operational state.
+
+### Calibration System Deep Dive
+
+The calibration system ensures synthetic data matches real-world statistics:
+
+| Component | Module | Purpose |
+|---|---|---|
+| `AirportProfile` | `src/calibration/profile.py` | Dataclass: 15+ fields of airport statistics |
+| `ProfileBuilder` | `src/calibration/profile_builder.py` | Orchestrates multi-source profile building |
+| `BTS ingest` | `src/calibration/bts_ingest.py` | Parse BTS T-100 segment data and On-Time performance |
+| `OpenSky ingest` | `src/calibration/opensky_ingest.py` | Query OpenSky API for international traffic patterns |
+| `OurAirports ingest` | `src/calibration/ourairports_ingest.py` | Parse infrastructure data (runways, terminals) |
+| `Known profiles` | `src/calibration/known_profiles.py` | 43 hand-researched US + international airports |
+| `Auto-calibrate` | `src/calibration/auto_calibrate.py` | Auto-detect and apply best available profile |
+
+**1,183 calibration profiles** in `data/calibration/profiles/` — each a JSON file with airline shares, route frequencies, fleet mix, hourly traffic patterns, taxi times, turnaround stats, and delay distributions learned from real data.
+
+### Experiment Tracking
+
+Models are tracked in MLflow. Training runs log:
+- Feature importance
+- Train/validation metrics
+- Prediction interval calibration (CQR)
+- Model artifacts (serialized model + feature config)
+
+---
+
+## For Developers
 
 ### Architecture
 
@@ -230,13 +443,13 @@ graph TB
     subgraph "Ingestion"
         CB["Circuit Breaker<br/>(5-failure threshold)"]
         SYN["Synthetic Generator<br/>(Fallback)"]
-        CAL["Calibration System<br/>(33 airport profiles)"]
+        CAL["Calibration System<br/>(1,183 profiles)"]
     end
 
     subgraph "Databricks Lakehouse"
-        DLT_B["Bronze<br/>Raw JSON ingestion"]
-        DLT_S["Silver<br/>Validated + deduplicated"]
-        DLT_G["Gold<br/>Aggregated positions"]
+        DLT_B["Bronze<br/>Raw JSON"]
+        DLT_S["Silver<br/>Validated + deduped"]
+        DLT_G["Gold<br/>Aggregated"]
         UC["Unity Catalog<br/>Governed tables"]
         LB["Lakebase<br/>PostgreSQL (<10ms)"]
     end
@@ -247,15 +460,18 @@ graph TB
         DM["Delay Predictor"]
         GM["Gate Recommender"]
         CM["Congestion Predictor"]
-        TM["Turnaround Model<br/>(gate duration)"]
-        OBT["OBT Model<br/>(pushback time)"]
+        TM["Turnaround Model"]
+        OBT["OBT Model"]
+        INP["Inpainting<br/>(YOLO + LaMa)"]
         TM -->|predicted duration| OBT
     end
 
     subgraph "Application"
-        API["FastAPI Backend<br/>(30+ API endpoints)"]
-        WS["WebSocket<br/>(Real-time updates)"]
+        API["FastAPI Backend<br/>(30+ endpoints)"]
+        WS["WebSocket<br/>(delta updates)"]
         UI["React Frontend<br/>(2D Leaflet + 3D Three.js)"]
+        MCP["MCP Server<br/>(13 tools)"]
+        AST["Unified Assistant<br/>(Genie + MCP routing)"]
     end
 
     OS --> CB --> DLT_B
@@ -269,117 +485,62 @@ graph TB
     LB --> API
     UC --> API
     REG --> API
+    INP --> API
     API --> WS --> UI
     API --> UI
+    API --> MCP
+    API --> AST
 ```
 
-### Data Pipeline (DLT — Bronze/Silver/Gold)
+### API Endpoints (30+)
 
-| Layer | Table | Module | Key Transformations |
-|---|---|---|---|
-| **Bronze** | `flights_bronze` | `src/pipelines/bronze.py` | Auto Loader JSON ingestion, add `_ingested_at` metadata |
-| **Silver** | `flights_silver` | `src/pipelines/silver.py` | Explode state vectors, data quality expectations, deduplicate on `icao24 + position_time` |
-| **Gold** | `flight_status_gold` | `src/pipelines/gold.py` | Aggregate latest position per aircraft, compute `flight_phase` |
-| **Bronze** | `baggage_bronze` | `src/pipelines/baggage_bronze.py` | Raw baggage events |
-| **Silver** | `baggage_silver` | `src/pipelines/baggage_silver.py` | Validated baggage chain |
-| **Gold** | `baggage_gold` | `src/pipelines/baggage_gold.py` | Aggregated baggage metrics |
-
-Data quality enforced at Silver layer:
-```sql
--- Expectations (rows failing are dropped)
-valid_position:  latitude IS NOT NULL AND longitude IS NOT NULL
-valid_icao24:    icao24 IS NOT NULL AND LENGTH(icao24) = 6
-valid_altitude:  baro_altitude >= 0 OR baro_altitude IS NULL
-```
-
-### Serving Architecture (Two-Tier)
-
-```mermaid
-graph LR
-    UC["Unity Catalog<br/>Delta Tables<br/>(~100ms)"] -->|Sync every 1 min| LB["Lakebase<br/>PostgreSQL<br/>(<10ms)"]
-    LB -->|Tier 1| API["FastAPI"]
-    UC -->|Tier 2 fallback| API
-    SYN["Synthetic<br/>Generator"] -->|Tier 3 fallback| API
-    API --> FE["React Frontend"]
-```
-
-The backend cascades through data sources automatically:
-1. **Lakebase** (PostgreSQL) — <10ms latency, primary for real-time serving
-2. **Unity Catalog** (Delta tables via SQL Warehouse) — ~100ms, analytics fallback
-3. **Synthetic generator** — <5ms, demo fallback when no live data
-
-### ML Models
-
-| Model | Module | Type | Input | Output |
-|---|---|---|---|---|
-| **Delay Prediction** | `src/ml/delay_model.py` | Rule-based heuristic | 14-feature vector (time, altitude, velocity, heading) | `delay_minutes`, `confidence`, `category` |
-| **Gate Recommendation** | `src/ml/gate_model.py` | Scoring optimization | Flight + gate status | Top-K gates with `score`, `reasons`, `taxi_time` |
-| **Congestion Prediction** | `src/ml/congestion_model.py` | Capacity threshold | All flight positions | Area congestion `level`, `wait_minutes` |
-| **Turnaround Duration** | `src/ml/turnaround_model.py` | HistGradientBoosting / CatBoost | 19 features (aircraft, gate, weather, schedule) | `turnaround_minutes` with P10/P90 intervals |
-| **Off-Block Time** | `src/ml/obt_model.py` | HistGradientBoosting / CatBoost | 19 features (schedule, delay, turnaround pred, ops) | `departure_offset_min` (AOBT - SOBT) with P10/P90 |
-| **GSE Allocation** | `src/ml/gse_model.py` | Optimization | Turnaround phase | Equipment assignments |
-
-All models are wrapped in `AirportModelRegistry` (`src/ml/registry.py`) which caches per-ICAO instances — switching airports hot-swaps models.
-
-#### Turnaround + OBT Two-Stage Pipeline
-
-The turnaround and OBT models form a two-stage prediction pipeline:
-
-1. **Turnaround model** predicts gate occupancy duration (AOBT - AIBT) from aircraft category, gate, weather, and schedule features. Trained on simulation phase transitions. Three horizons: T-90 (coarse, pre-arrival), T-park (refined, at gate), T-board (boarding stage).
-
-2. **OBT model** predicts departure offset from schedule (AOBT - SOBT). Uses the turnaround model's prediction as an input feature alongside schedule context, arrival delay propagation, and operational factors. Two horizons: T-schedule (hours before, planning) and T-park (at gate, operational).
-
-At inference: `predicted_AOBT = SOBT + predicted_offset_minutes`.
-
-Both models support CatBoost (native categoricals) with sklearn HistGradientBoosting fallback, P10/P90 quantile regression for prediction intervals, and Conformalized Quantile Regression (CQR) calibration.
-
-#### Delay Model Features
-
-**Feature engineering** (`src/ml/features.py`): Extracts 14 features from raw flight data:
-- 4 numeric: `hour_of_day`, `day_of_week`, `is_weekend`, `velocity_normalized`
-- 3 one-hot: `flight_distance_category` (short/medium/long)
-- 3 one-hot: `altitude_category` (ground/low/cruise)
-- 4 one-hot: `heading_quadrant` (N/E/S/W)
-
-### Calibration System
-
-The calibration pipeline generates realistic synthetic data based on real airport statistics from 43 airports:
-
-```mermaid
-graph LR
-    BTS["BTS T-100<br/>& On-Time CSVs"] --> PB["ProfileBuilder"]
-    OSK["OpenSky API<br/>(intl airports)"] --> PB
-    OA["OurAirports<br/>CSVs"] --> PB
-    KP["Known Profiles<br/>(43 hand-researched)"] --> PB
-    PB --> AP["AirportProfile<br/>- flights_per_day<br/>- airline_mix<br/>- delay_distribution<br/>- peak_hours<br/>- aircraft_types"]
-    AP --> SG["Schedule Generator<br/>& Fallback"]
-```
-
-| Component | Module | Purpose |
+| Category | Endpoints | Description |
 |---|---|---|
-| `AirportProfile` | `src/calibration/profile.py` | Dataclass holding all airport stats |
-| `AirportProfileLoader` | `src/calibration/profile.py` | Loads profiles from known stats or data sources |
-| `known_profiles` | `src/calibration/known_profiles.py` | 43 hand-researched airport profiles (US + intl) |
-| `bts_ingest` | `src/calibration/bts_ingest.py` | Parse BTS T-100/On-Time CSVs |
-| `opensky_ingest` | `src/calibration/opensky_ingest.py` | Query OpenSky API for international airports |
-| `ourairports_ingest` | `src/calibration/ourairports_ingest.py` | Parse OurAirports CSV data |
-| `profile_builder` | `src/calibration/profile_builder.py` | Orchestrates multi-source profile building |
-| `auto_calibrate` | `src/calibration/auto_calibrate.py` | Auto-detect and apply best available profile |
+| **Flights** | `GET /api/flights`, `/flights/{icao24}`, `/flights/{icao24}/trajectory` | Flight positions and trajectories |
+| **Schedule** | `GET /api/schedule/arrivals`, `/schedule/departures` | FIDS arrivals/departures |
+| **Weather** | `GET /api/weather/current` | METAR/TAF data |
+| **Predictions** | `GET /api/predictions/delays`, `/predictions/gates/{icao24}`, `/predictions/congestion`, `/predictions/bottlenecks`, `/predictions/congestion-summary` | ML model outputs |
+| **Airport** | `GET /api/airports`, `POST /airports/{icao}/activate`, `/airport/config` | Airport management, OSM import |
+| **Data Import** | `POST /api/airport/import/{aixm,osm,ifc,aidm,faa,msfs}` | Format-specific importers |
+| **Baggage** | `GET /api/baggage/stats`, `/baggage/flight/{id}`, `/baggage/alerts` | Baggage tracking |
+| **GSE** | `GET /api/gse/status`, `/turnaround/{icao24}` | Ground equipment and turnaround |
+| **Inpainting** | `POST /api/inpainting/clean-tile`, `/inpainting/status`, `/inpainting/wake` | Satellite tile aircraft removal |
+| **Simulation** | `GET /api/simulation/list`, `/simulation/load/{file}` | Simulation replay files |
+| **Data Ops** | `GET /api/data-ops/dashboard`, `/data-ops/stats`, `/data-ops/sync-status` | Pipeline monitoring |
+| **Assistant** | `POST /api/assistant/chat`, `POST /api/mcp/rpc` | Unified LLM assistant + MCP server |
+| **System** | `GET /health`, `/api/ready`, `/api/debug/logs` | Health checks and diagnostics |
 
-### Airport Data Format Importers
+### WebSocket Protocol
 
-| Format | Parser | Converter | Standard |
+The WebSocket at `/ws` pushes delta-compressed flight updates:
+
+```json
+{
+  "type": "update",
+  "flights": [
+    {"icao24": "a00001", "latitude": 37.621, "longitude": -122.379, "altitude": 150},
+    {"icao24": "a00002", "heading": 285}
+  ],
+  "removed": ["a00045"]
+}
+```
+
+Only changed fields are sent per flight (not the full object). New flights include all fields. Removed flights are listed by icao24. This keeps bandwidth under 2 KB/s for 100+ flights.
+
+### Data Format Importers
+
+| Format | Parser | Standard | Use Case |
 |---|---|---|---|
-| **AIXM** | `src/formats/aixm/parser.py` | `src/formats/aixm/converter.py` | ICAO/Eurocontrol aeronautical data exchange |
-| **OSM** | `src/formats/osm/parser.py` | `src/formats/osm/converter.py` | OpenStreetMap via Overpass API |
-| **IFC** | `src/formats/ifc/parser.py` | `src/formats/ifc/converter.py` | BIM 3D terminal building models |
-| **AIDM** | `src/formats/aidm/parser.py` | `src/formats/aidm/converter.py` | Eurocontrol airport operational data |
-| **FAA NASR** | `src/formats/faa/` | — | US FAA runway and facility database |
-| **MSFS BGL** | `src/formats/msfs/bgl_parser.py` | `src/formats/msfs/converter.py` | Microsoft Flight Simulator scenery data |
+| **AIXM** | `src/formats/aixm/` | ICAO/Eurocontrol | Aeronautical data exchange |
+| **OSM** | `src/formats/osm/` | OpenStreetMap | Primary source — runways, gates, taxiways, terminals |
+| **IFC** | `src/formats/ifc/` | BIM/IFC | 3D terminal building models |
+| **AIDM** | `src/formats/aidm/` | Eurocontrol | Airport operational data (A-CDM) |
+| **FAA NASR** | `src/formats/faa/` | US FAA | Runway and facility database |
+| **MSFS BGL** | `src/formats/msfs/` | Microsoft | Flight Simulator scenery data |
 
 ### Simulation Engine
 
-Run deterministic, accelerated simulations of airport operations:
+Run deterministic, accelerated simulations:
 
 ```bash
 # Quick debug run (4h, 20 flights)
@@ -389,38 +550,34 @@ python -m src.simulation.cli --config configs/simulation_sfo_50_debug.yaml
 python -m src.simulation.cli --airport SFO --arrivals 50 --departures 50 --seed 42
 ```
 
-Outputs structured JSON event logs with flight state transitions, gate assignments, turnaround events, and baggage flow.
+The engine manages the full flight lifecycle, runway capacity/sequencing, gate assignments, turnaround events, passenger flow, baggage generation, and weather events. Outputs structured JSON event logs compatible with the frontend replay player.
 
-### API Endpoints (30+)
-
-| Category | Endpoints | Description |
-|---|---|---|
-| **Flights** | `GET /api/flights`, `/flights/{icao24}`, `/flights/{icao24}/trajectory` | Flight positions and trajectories |
-| **Schedule** | `GET /api/schedule/arrivals`, `/schedule/departures` | FIDS arrivals/departures |
-| **Weather** | `GET /api/weather/current` | METAR/TAF data |
-| **Predictions** | `GET /api/predictions/delays`, `/predictions/gates/{icao24}`, `/predictions/congestion`, `/predictions/bottlenecks` | ML model outputs |
-| **Airport** | `GET /api/airports`, `POST /airports/{icao}/activate`, `/airport/config` | Airport management, OSM import |
-| **Data Import** | `POST /api/airport/import/{aixm,osm,ifc,aidm,faa,msfs}` | Format-specific importers |
-| **Baggage** | `GET /api/baggage/stats`, `/baggage/flight/{id}`, `/baggage/alerts` | Baggage tracking |
-| **GSE** | `GET /api/gse/status`, `/turnaround/{icao24}` | Ground equipment and turnaround |
-| **Data Ops** | `GET /api/data-ops/dashboard`, `/data-ops/stats`, `/data-ops/sync-status` | Pipeline monitoring |
-| **System** | `GET /health`, `/api/ready`, `/api/debug/logs` | Health checks and diagnostics |
-
-### Test Suite (~4,600 tests)
+### Test Suite
 
 | Layer | Count | Framework | Command |
 |---|---|---|---|
-| Backend (Python) | ~3,826 | pytest | `uv run pytest tests/ -v` |
+| Backend (Python) | ~3,089 | pytest | `uv run pytest tests/ -v` |
 | Frontend (TypeScript) | ~822 | Vitest | `cd app/frontend && npm test -- --run` |
-| Integration (Databricks) | 3 jobs | DABs | `databricks bundle run baggage_pipeline_integration_test --target dev` |
+| E2E Smoke (Databricks) | 11 endpoints | DABs job | `databricks bundle run e2e_smoke_test --target dev` |
+| ML Endpoints (Databricks) | 4 models | DABs job | `databricks bundle run ml_endpoint_test --target dev` |
+| Baggage Integration | DLT pipeline | DABs job | `databricks bundle run baggage_pipeline_integration_test --target dev` |
+| Unit (Databricks) | Full pytest | DABs job | `databricks bundle run unit_test --target dev` |
 
----
+### Local Development
 
-## For IT Operations
+```bash
+./dev.sh  # Starts FastAPI backend + React dev server, opens http://localhost:3000
+```
 
 ### Deployment
 
-The application deploys as a **Databricks App** (APX: FastAPI backend + React frontend) using **Databricks Asset Bundles (DABs)**.
+The application deploys as a **Databricks App** using **Databricks Asset Bundles (DABs)**. Always use DABs — never `databricks apps deploy` directly.
+
+```bash
+# Build frontend + deploy
+cd app/frontend && npm run build
+databricks bundle deploy --target dev
+```
 
 ```mermaid
 graph TB
@@ -432,14 +589,14 @@ graph TB
         BUILD["npm run build<br/>(React → dist/)"]
     end
 
-    subgraph "Deploy (DABs)"
+    subgraph "Deploy"
         DAB["databricks bundle deploy<br/>--target dev"]
     end
 
     subgraph "Databricks Workspace"
         APP["Databricks App<br/>(FastAPI + static React)"]
-        UC["Unity Catalog<br/>(Delta tables)"]
-        LB["Lakebase<br/>(PostgreSQL)"]
+        UC["Unity Catalog"]
+        LB["Lakebase"]
         DLT["DLT Pipeline"]
         MLF["MLflow"]
     end
@@ -449,102 +606,73 @@ graph TB
     DLT --> UC --> LB
 ```
 
-#### Deploy Commands
-
-```bash
-# Build frontend
-cd app/frontend && npm run build
-
-# Deploy to Databricks (ALWAYS use DABs — never `databricks apps deploy`)
-databricks bundle deploy --target dev
-
-# Run workspace tests
-databricks bundle run unit_test --target dev
-databricks bundle run e2e_smoke_test --target dev
-databricks bundle run baggage_pipeline_integration_test --target dev
-```
-
-#### Local Development
-
-```bash
-./dev.sh  # Starts FastAPI backend + React dev server, opens http://localhost:3000
-```
-
 ### Infrastructure Components
 
 | Component | Technology | Purpose | Config |
 |---|---|---|---|
 | **App Runtime** | Databricks Apps (APX) | Hosts FastAPI + React | `app.yaml` |
-| **Compute** | Serverless SQL Warehouse | SQL queries, DLT | Warehouse ID `b868e84cedeb4262` |
-| **Storage** | Unity Catalog (Delta) | Governed data lake | Catalog `serverless_stable_3n0ihb_catalog` |
+| **Compute** | Serverless SQL Warehouse | SQL queries, DLT | Warehouse ID in `app.yaml` |
+| **Storage** | Unity Catalog (Delta) | Governed data lake | `serverless_stable_3n0ihb_catalog` |
 | **Low-Latency DB** | Lakebase (PostgreSQL) | <10ms frontend serving | Autoscaling endpoint |
 | **ML Tracking** | MLflow | Experiment tracking | Workspace MLflow |
-| **Pipelines** | DLT | Bronze/Silver/Gold ETL | `databricks/dlt_pipeline_config.json` |
-| **CI/CD** | DABs (Terraform) | Infrastructure as code | `databricks.yml` |
-
-### Monitoring
-
-**Health endpoint**: `GET /health`
-```json
-{
-  "status": "healthy",
-  "data_sources": {
-    "lakebase": {"available": true, "healthy": true},
-    "delta": {"available": true, "healthy": true},
-    "synthetic": {"available": true, "healthy": true}
-  }
-}
-```
-
-**Debug logs**: `GET /api/debug/logs?pattern=DIAG` — Ring-buffer log endpoint (last 2,000 entries) with filtering by level and search pattern.
-
-**Data Ops dashboard**: `GET /api/data-ops/dashboard` — Pipeline health, acquisition stats, sync status, data freshness checks.
-
-### Data Source Fallback Chain
-
-The system automatically cascades through data sources with zero downtime:
-
-```
-1. Lakebase (PostgreSQL)    → <10ms   → data_source="live"
-2. Unity Catalog (Delta)    → ~100ms  → data_source="live"
-3. Synthetic Generator      → <5ms    → data_source="synthetic"
-```
-
-If Lakebase goes down, the backend transparently falls back to Delta tables. If those are also unavailable, it falls back to synthetic data generation — the app never goes dark.
+| **ML Serving** | Model Serving (GPU) | Inpainting endpoint | Scale-to-zero, GPU_MEDIUM |
+| **Pipelines** | DLT | Bronze/Silver/Gold ETL | `resources/` YAML |
+| **CI/CD** | DABs | Infrastructure as code | `databricks.yml` |
 
 ### Environment Variables
 
 | Variable | Purpose | Required |
 |---|---|---|
 | `LAKEBASE_HOST` | Lakebase PostgreSQL host | For live data |
-| `LAKEBASE_USE_OAUTH` | Use OAuth for Lakebase (Databricks Apps) | In production |
+| `LAKEBASE_USE_OAUTH` | Use OAuth for Lakebase | In production |
 | `LAKEBASE_ENDPOINT_NAME` | Lakebase autoscaling endpoint | With OAuth |
 | `DATABRICKS_HOST` | Workspace URL | For Delta tables |
 | `DATABRICKS_HTTP_PATH` | SQL Warehouse path | For Delta tables |
-| `DATABRICKS_CATALOG` | Unity Catalog catalog name | For Delta tables |
+| `DATABRICKS_CATALOG` | Unity Catalog catalog | For Delta tables |
 | `DATABRICKS_SCHEMA` | Schema name | For Delta tables |
+| `INPAINTING_ENDPOINT_NAME` | Serving endpoint name | For inpainting |
+| `ASSISTANT_MODEL_ENDPOINT` | LLM endpoint for assistant | For chat |
+| `GENIE_SPACE_ID` | Genie space for NL queries | For assistant |
 | `DEBUG_MODE` | Enable verbose logging | Optional |
 | `DEMO_MODE` | Force synthetic data | Optional |
 
-### Pipeline SLAs
+### Monitoring
 
-| Metric | Target | Current |
-|---|---|---|
-| End-to-end latency (API to Frontend) | <3 min | ~2 min |
-| Lakebase query latency (P99) | <20ms | ~10ms |
-| Delta query latency (P99) | <200ms | ~100ms |
-| Data freshness | <2 min | ~1.5 min |
-| Availability (with fallback) | 99.9% | 99.5% |
+**Health endpoint**: `GET /health` — returns data source availability for Lakebase, Delta, and Synthetic.
+
+**Debug logs**: `GET /api/debug/logs?pattern=DIAG` — ring-buffer (last 2,000 entries) with level and pattern filtering.
+
+**Data Ops dashboard**: `GET /api/data-ops/dashboard` — pipeline health, acquisition stats, sync status, data freshness.
 
 ### Troubleshooting
 
 | Symptom | Likely Cause | Fix |
 |---|---|---|
-| "Demo Mode" in header | Backend can't reach Lakebase/Delta | Check Lakebase instance, OAuth credentials, network |
-| Flights not updating | WebSocket disconnected or DLT stopped | Check connection status in header, verify DLT pipeline |
-| Airport switch hangs | Overpass API timeout | Check internet, try different airport, check backend logs |
-| 3D view slow | GPU/WebGL limitations | Reduce window size, close GPU-heavy apps, use Chrome/Firefox |
-| Stale data (>5 min) | Sync job failing | Check `GET /api/data-ops/sync-status`, restart sync |
+| "Demo Mode" in header | Backend can't reach Lakebase/Delta | Check Lakebase instance, OAuth credentials |
+| Flights not updating | WebSocket disconnected or DLT stopped | Check connection status, verify DLT pipeline |
+| Airport switch hangs | Overpass API timeout | Check internet, try different airport |
+| 3D view slow | GPU/WebGL limitations | Reduce window size, use Chrome/Firefox |
+| Stale data (>5 min) | Sync job failing | Check `/api/data-ops/sync-status` |
+
+### Key Directories
+
+```
+app/backend/       # FastAPI app (main.py, routes, middleware, services)
+app/frontend/      # React app (src/, tests/, dist/)
+src/               # Core logic
+  simulation/      #   Flight state machine, capacity, scenario engine
+  ml/              #   7 ML models + registry + features + inpainting
+  calibration/     #   Profile builder, BTS/OpenSky/OurAirports ingest
+  formats/         #   AIXM, OSM, IFC, AIDM, FAA, MSFS importers
+  ingestion/       #   Fallback generator, schedule, weather, baggage
+  pipelines/       #   DLT Bronze/Silver/Gold definitions
+tests/             # Python test suite (~3,089 tests)
+databricks/        # Notebooks (DLT, test runners)
+resources/         # DABs job/pipeline/app YAML configs
+data/              # Calibration profiles (1,183 airports)
+configs/           # Simulation scenario configs
+scripts/           # CLI tools (build profiles, batch sims)
+```
 
 ---
 
@@ -554,7 +682,9 @@ If Lakebase goes down, the backend transparently falls back to Delta tables. If 
 
 **Backend**: Python 3.13, FastAPI, UV (package manager)
 
-**Data Platform**: Databricks — Unity Catalog, Lakebase (PostgreSQL), DLT, MLflow, Lakeview, Genie
+**Data Platform**: Databricks — Unity Catalog, Lakebase (PostgreSQL), DLT, MLflow, Lakeview, Genie, Model Serving
+
+**ML**: CatBoost, scikit-learn (HistGradientBoosting), YOLOv8s-OBB, LaMa, Conformalized Quantile Regression
 
 **Data Formats**: AIXM, OpenStreetMap (Overpass API), IFC (IfcOpenShell), AIDM, FAA NASR, MSFS BGL
 
@@ -598,7 +728,7 @@ databricks bundle deploy --target dev
 ### Run Tests
 
 ```bash
-uv run pytest tests/ -v                    # ~3,826 backend tests
+uv run pytest tests/ -v                    # ~3,089 backend tests
 cd app/frontend && npm test -- --run       # ~822 frontend tests
 ```
 
