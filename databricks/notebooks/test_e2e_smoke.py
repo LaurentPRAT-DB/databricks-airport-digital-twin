@@ -6,15 +6,24 @@
 # COMMAND ----------
 
 import requests, json, time
+from databricks.sdk import WorkspaceClient
 
 APP_URL = dbutils.widgets.get("app_url").rstrip("/")
 
-# Databricks Apps proxy requires auth — use the notebook context token
-TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+# Get OAuth token via Databricks SDK (handles token exchange for Apps proxy)
+w = WorkspaceClient()
+TOKEN = w.config.authenticate().get("Authorization", "").replace("Bearer ", "")
+if not TOKEN:
+    # Fallback to notebook context token
+    TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+    print("Auth: fallback to notebook context token")
+else:
+    print("Auth: Databricks SDK OAuth token")
+
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
 print(f"Testing app at: {APP_URL}")
-print(f"Auth: notebook context token ({len(TOKEN)} chars)")
+print(f"Token length: {len(TOKEN)} chars")
 
 results = {}
 

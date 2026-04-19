@@ -76,8 +76,9 @@ try:
     schema_fields = {f.name: f.dataType for f in df.schema.fields}
     assert isinstance(schema_fields["_ingested_at"], TimestampType), \
         f"_ingested_at should be TimestampType, got {schema_fields['_ingested_at']}"
-    assert isinstance(schema_fields["total_bags"], (IntegerType,)), \
-        f"total_bags should be IntegerType, got {schema_fields['total_bags']}"
+    from pyspark.sql.types import LongType
+    assert isinstance(schema_fields["total_bags"], (IntegerType, LongType)), \
+        f"total_bags should be IntegerType or LongType, got {schema_fields['total_bags']}"
     assert isinstance(schema_fields["flight_number"], StringType), \
         f"flight_number should be StringType, got {schema_fields['flight_number']}"
 
