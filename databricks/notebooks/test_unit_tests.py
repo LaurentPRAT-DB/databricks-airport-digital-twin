@@ -19,7 +19,15 @@ dbutils.library.restartPython()
 import subprocess, sys, json, os
 
 # Bundle files root — where DABs syncs the project files
-bundle_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# After restartPython(), __file__ is not defined; use notebook context path
+try:
+    _nb_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+    # Notebook is at databricks/notebooks/test_unit_tests.py → go up 2 levels
+    bundle_root = os.path.dirname(os.path.dirname(os.path.dirname(f"/Workspace{_nb_path}")))
+except Exception:
+    # Fallback: scan known DABs deploy path
+    bundle_root = "/Workspace/Users/laurent.prat@databricks.com/.bundle/airport-digital-twin/dev/files"
+
 print(f"Bundle root: {bundle_root}")
 print(f"Contents: {os.listdir(bundle_root)}")
 
