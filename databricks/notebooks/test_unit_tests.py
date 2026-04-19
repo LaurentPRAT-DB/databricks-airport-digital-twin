@@ -33,8 +33,20 @@ print(f"Contents: {os.listdir(bundle_root)}")
 
 # Verify tests/ directory exists
 tests_dir = os.path.join(bundle_root, "tests")
+if not os.path.isdir(tests_dir):
+    print(f"ERROR: tests/ not found at {tests_dir}")
+    print(f"Bundle root contents: {os.listdir(bundle_root)}")
+    # Try alternative paths
+    for alt in ["/Workspace/Users/laurent.prat@databricks.com/.bundle/airport-digital-twin/dev/files"]:
+        alt_tests = os.path.join(alt, "tests")
+        if os.path.isdir(alt_tests):
+            bundle_root = alt
+            tests_dir = alt_tests
+            print(f"Found tests at alternative path: {alt}")
+            break
 assert os.path.isdir(tests_dir), f"tests/ directory not found at {tests_dir}"
 print(f"Tests dir: {tests_dir} ({len(os.listdir(tests_dir))} items)")
+print(f"pyproject.toml exists: {os.path.exists(os.path.join(bundle_root, 'pyproject.toml'))}")
 
 # COMMAND ----------
 
@@ -51,10 +63,15 @@ result = subprocess.run(
     cwd=bundle_root,
 )
 
-# Print output (last 5K chars to avoid truncation)
-print(result.stdout[-5000:])
-if result.stderr:
-    print("STDERR:", result.stderr[-2000:])
+# Print output
+if result.returncode != 0:
+    # On failure, show more context including stderr
+    print("=== STDOUT (last 8K) ===")
+    print(result.stdout[-8000:])
+    print("=== STDERR (last 4K) ===")
+    print(result.stderr[-4000:])
+else:
+    print(result.stdout[-5000:])
 
 # COMMAND ----------
 
