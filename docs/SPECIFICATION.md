@@ -607,6 +607,8 @@ App
 | **Gate Recommendation** | Scoring optimization | Flight + Gate status | gate_id, score, reasons, taxi_time | <5ms |
 | **Congestion Prediction** | Capacity thresholds | All flight positions | area congestion levels per zone | <10ms |
 | **GSE Allocation** | Phase-dependency model | Aircraft type + gate | turnaround timeline + GSE assignment | <1ms |
+| **Turnaround Duration** | CatBoost + CQR (3-stage) | TurnaroundFeatureSet (18 features) | turnaround_duration_min, confidence interval | <5ms |
+| **OBT Departure** | CatBoost + CQR (2-stage) | OBTFeatureSet (19 features) | departure_offset_min (AOBT - SOBT), confidence interval | <5ms |
 
 ### 9.2 Feature Engineering
 
@@ -697,6 +699,110 @@ The `AirportModelRegistry` maintains per-airport model instances cached by ICAO 
 - **Metrics:** Category distribution, feature importance, prediction accuracy
 - **Artifacts:** Model configuration, training data snapshots
 - **Training Data Persistence:** Synthetic training data persisted to Unity Catalog for reproducibility
+
+### 9.8 Turnaround Duration Model
+
+**Modules:** `src/ml/turnaround_features.py`, `src/ml/turnaround_model.py`
+
+**Algorithm:** CatBoost with Conformalized Quantile Regression (CQR), 3-stage prediction
+
+**Prediction Horizons:**
+
+| Stage | Trigger | Feature Set | Features |
+|-------|---------|-------------|----------|
+| T-90 (coarse) | 90 min before scheduled departure | TurnaroundCoarseFeatureSet | 15 |
+| T-park (refined) | Aircraft parks at gate | TurnaroundFeatureSet | 18 |
+| T-board (final) | ~70% of predicted turnaround elapsed | TurnaroundBoardFeatureSet | 21 |
+
+**Target:** `turnaround_duration_min` = AOBT - AIBT (actual gate time in minutes)
+
+**T-90 Coarse Features (15):**
+
+| # | Feature | Type | Derivation |
+|---|---------|------|------------|
+| 1 | `aircraft_category` | Categorical | "narrow", "wide", "regional" — mapped from ICAO type code |
+| 2 | `airline_code` | Categorical | 2-3 letter ICAO carrier code |
+| 3 | `scheduled_departure_hour` | Integer 0-23 | Hour of scheduled off-block time |
+| 4 | `is_international` | Boolean | Origin/destination country differs from airport country |
+| 5 | `arrival_delay_min` | Float | Actual arrival time minus scheduled arrival time |
+| 6 | `wind_speed_kt` | Float | METAR wind speed in knots at prediction time |
+| 7 | `visibility_sm` | Float | METAR visibility in statute miles |
+| 8 | `has_active_ground_stop` | Boolean | FAA ground stop program active at airport |
+| 9 | `airport_code` | Categorical | 3-letter IATA airport code |
+| 10 | `day_of_week` | Integer 0-6 | Monday=0, Sunday=6 |
+| 11 | `hour_sin` | Float | sin(2π · hour/24) — cyclical time encoding |
+| 12 | `hour_cos` | Float | cos(2π · hour/24) — cyclical time encoding |
+| 13 | `is_weather_scenario` | Boolean | True if simulation used a weather scenario file |
+| 14 | `scheduled_buffer_min` | Float | SOBT - SIBT (scheduled gate time from timetable) |
+| 15 | `is_hub_connecting` | Boolean | Airline operates this airport as a hub |
+
+**T-park Refined Features (18) — adds 3 gate-side features:**
+
+| # | Feature | Type | Derivation |
+|---|---------|------|------------|
+| 16 | `gate_id_prefix` | Categorical | First letter(s) of gate ID (terminal area proxy) |
+| 17 | `is_remote_stand` | Boolean | Gate ID pattern indicates remote stand (no jet bridge) |
+| 18 | `concurrent_gate_ops` | Integer | Number of other aircraft parked at gates at park time |
+
+Plus: `hour_of_day` (hour aircraft actually parked, may differ from scheduled hour)
+
+**T-board Final Features (21) — adds 3 elapsed-time features:**
+
+| # | Feature | Type | Derivation |
+|---|---------|------|------------|
+| 19 | `elapsed_gate_time_min` | Float | Minutes since aircraft parked |
+| 20 | `remaining_predicted_min` | Float | T-park prediction minus elapsed time |
+| 21 | `turnaround_progress_pct` | Float 0-1 | Elapsed / T-park predicted (progress ratio) |
+
+**Training Data:** Extracted from 7-day calibrated simulation JSONs via `turnaround_features.extract_training_data()`. Training runs on Databricks serverless with CatBoost 5-fold CV. Models registered to Unity Catalog Model Registry.
+
+### 9.9 OBT Departure Model
+
+**Modules:** `src/ml/obt_features.py`, `src/ml/obt_model.py`
+
+**Algorithm:** CatBoost with Conformalized Quantile Regression (CQR), 2-stage prediction
+
+**Prediction Horizons:**
+
+| Stage | Trigger | Feature Set | Features |
+|-------|---------|-------------|----------|
+| T-schedule (coarse) | Hours before departure | OBTCoarseFeatureSet | 12 |
+| T-park (refined) | Aircraft parks at gate | OBTFeatureSet | 19 |
+
+**Target:** `departure_offset_min` = AOBT - SOBT (minutes early/late vs scheduled pushback). Positive = late, negative = early. Bounded to [-30, +120] minutes.
+
+**T-schedule Coarse Features (12):**
+
+| # | Feature | Type | Derivation |
+|---|---------|------|------------|
+| 1 | `scheduled_departure_hour` | Integer 0-23 | Hour of scheduled off-block time |
+| 2 | `aircraft_category` | Categorical | "narrow", "wide", "regional" |
+| 3 | `airline_code` | Categorical | 2-3 letter ICAO carrier code |
+| 4 | `is_international` | Boolean | International route flag |
+| 5 | `is_hub_connecting` | Boolean | Airline hub at this airport |
+| 6 | `airport_code` | Categorical | 3-letter IATA |
+| 7 | `day_of_week` | Integer 0-6 | Monday=0, Sunday=6 |
+| 8 | `hour_sin` | Float | sin(2π · hour/24) |
+| 9 | `hour_cos` | Float | cos(2π · hour/24) |
+| 10 | `wind_speed_kt` | Float | METAR wind speed |
+| 11 | `visibility_sm` | Float | METAR visibility |
+| 12 | `has_active_ground_stop` | Boolean | Active ground stop program |
+
+**T-park Refined Features (19) — adds 7 operational features:**
+
+| # | Feature | Type | Derivation |
+|---|---------|------|------------|
+| 13 | `scheduled_turnaround_min` | Float | Planned gate time (SOBT - SIBT from schedule) |
+| 14 | `arrival_delay_min` | Float | Actual vs scheduled arrival delay (delay propagation) |
+| 15 | `gate_id_prefix` | Categorical | Terminal area from gate ID |
+| 16 | `is_remote_stand` | Boolean | Remote stand indicator |
+| 17 | `concurrent_gate_ops` | Integer | Simultaneous gate operations at park time |
+| 18 | `hour_of_day` | Integer 0-23 | Hour the aircraft actually parked |
+| 19 | `turnaround_predicted_min` | Float | **Turnaround model's T-park prediction** (cross-model input) |
+
+The OBT model's key distinguishing feature (#19) is that it consumes the turnaround model's output as an input feature, creating a model chain: Turnaround → OBT.
+
+**Training Data:** Same simulation JSONs as turnaround model, extracted via `obt_features.extract_obt_training_data()`. Only departure flights with both a schedule entry and a parked→pushback phase transition are included.
 
 ---
 
