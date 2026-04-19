@@ -1,6 +1,8 @@
 """Tests for the Airport Digital Twin FastAPI backend."""
 
 import pytest
+
+pytestmark = pytest.mark.api
 from fastapi.testclient import TestClient
 
 from app.backend.main import app

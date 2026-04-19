@@ -806,6 +806,7 @@ def main():
     ]
 
     all_console_errors: list[str] = []
+    all_failed_requests: list[dict] = []
     scenarios: list[Scenario] = []
     total_start = time.monotonic()
 
@@ -826,6 +827,25 @@ def main():
                     all_console_errors.append(text)
 
         page.on("console", on_console)
+
+        def on_response(response):
+            if response.status >= 400:
+                url = response.url
+                # Skip noise (favicon, sourcemaps, etc.)
+                if any(p in url for p in [".map", "favicon", "hot-update"]):
+                    return
+                body = ""
+                try:
+                    body = response.text()[:500]
+                except Exception:
+                    pass
+                all_failed_requests.append({
+                    "url": url.replace(args.url, ""),
+                    "status": response.status,
+                    "body": body,
+                })
+
+        page.on("response", on_response)
 
         print(f"\nNavigating to {args.url}...")
         page.goto(args.url, wait_until="domcontentloaded", timeout=30000)
@@ -869,6 +889,7 @@ def main():
             "total_duration_ms": total_ms,
         },
         "console_errors_total": all_console_errors,
+        "failed_api_requests": all_failed_requests,
     }
 
     report_path = REPORT_DIR / "ui_e2e_report.json"
@@ -879,6 +900,10 @@ def main():
           f"\033[31m{fail_count} failed\033[0m, "
           f"{skip_count} skipped — {total_ms}ms total")
     print(f"Report: {report_path}")
+    if all_failed_requests:
+        print(f"Failed API requests ({len(all_failed_requests)}):")
+        for r in all_failed_requests[:10]:
+            print(f"  - {r['status']} {r['url']}: {r['body'][:100]}")
     if all_console_errors:
         print(f"Console errors ({len(all_console_errors)}):")
         for e in all_console_errors[:5]:

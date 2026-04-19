@@ -14,7 +14,7 @@ _activation_lock = asyncio.Lock()
 # Timeout for the entire activation flow (config load + gate reload + ML retrain)
 _ACTIVATION_TIMEOUT_S = 90
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
@@ -1773,3 +1773,34 @@ async def get_client_logs(
         if hasattr(row.get("logged_at"), "isoformat"):
             row["logged_at"] = row["logged_at"].isoformat()
     return {"entries": rows, "count": len(rows)}
+
+
+@router.get("/debug/recent-errors", tags=["debug"])
+async def get_recent_errors(
+    limit: int = Query(default=50, ge=1, le=200),
+    authorization: str = Header(default="", alias="Authorization"),
+) -> dict:
+    """Return recent ERROR/WARNING lines from the ring buffer.
+
+    Unlike /debug/logs, this endpoint does NOT require DEBUG_MODE.
+    It only returns error/warning-level entries and requires a Bearer token
+    for basic auth gating.
+
+    Designed for Claude Code's devloop: after deploy, fetch errors to
+    diagnose runtime issues without ssh or log streaming.
+    """
+    # Require a Bearer token (any valid Databricks token will do)
+    if not authorization.startswith("Bearer ") or len(authorization) < 20:
+        raise HTTPException(status_code=401, detail="Bearer token required")
+
+    all_lines = list(_ring_handler._buffer)
+    errors = [l for l in all_lines if " ERROR " in l]
+    warnings = [l for l in all_lines if " WARNING " in l]
+
+    return {
+        "errors": errors[-limit:],
+        "warnings": warnings[-limit:],
+        "error_count": len(errors),
+        "warning_count": len(warnings),
+        "total_buffered": len(all_lines),
+    }

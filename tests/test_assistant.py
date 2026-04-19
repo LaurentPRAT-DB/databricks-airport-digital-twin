@@ -5,6 +5,9 @@ import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
+pytestmark = pytest.mark.api
+
 from fastapi.testclient import TestClient
 
 from app.backend.main import app

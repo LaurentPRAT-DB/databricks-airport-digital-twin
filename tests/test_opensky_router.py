@@ -1,6 +1,8 @@
 """Tests for OpenSky API router endpoints."""
 
 import pytest
+
+pytestmark = pytest.mark.api
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import HTTPException

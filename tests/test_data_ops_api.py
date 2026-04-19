@@ -1,6 +1,8 @@
 """Tests for Data Operations API routes."""
 
 import pytest
+
+pytestmark = pytest.mark.api
 from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
