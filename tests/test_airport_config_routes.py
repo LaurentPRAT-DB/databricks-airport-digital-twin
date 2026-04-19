@@ -1,6 +1,8 @@
 """Tests for Airport Configuration API Routes."""
 
 import pytest
+
+pytestmark = pytest.mark.api
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 

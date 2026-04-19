@@ -1,6 +1,8 @@
 """Tests for V2 API endpoints: Schedule, Weather, GSE, Baggage."""
 
 import pytest
+
+pytestmark = pytest.mark.api
 from fastapi.testclient import TestClient
 from datetime import datetime
 

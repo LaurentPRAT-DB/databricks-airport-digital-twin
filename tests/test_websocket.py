@@ -1,6 +1,8 @@
 """Tests for WebSocket endpoints and FlightBroadcaster."""
 
 import pytest
+
+pytestmark = pytest.mark.api
 import asyncio
 import json
 from datetime import datetime, timezone

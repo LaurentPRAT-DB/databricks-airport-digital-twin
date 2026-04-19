@@ -1,6 +1,8 @@
 """Tests for backend services."""
 
 import pytest
+
+pytestmark = pytest.mark.api
 from unittest.mock import Mock, patch, MagicMock
 import os
 

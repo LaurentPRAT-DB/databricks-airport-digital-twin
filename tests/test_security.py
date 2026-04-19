@@ -12,6 +12,9 @@ Tests cover:
 """
 
 import pytest
+
+pytestmark = pytest.mark.api
+
 from fastapi.testclient import TestClient
 import json
 
