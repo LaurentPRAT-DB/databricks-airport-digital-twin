@@ -34,6 +34,7 @@ dbutils.library.restartPython()
 
 # ── Setup & Authentication ──────────────────────────────────────────────────
 
+import base64 as _b64module
 import io
 import json
 import math
@@ -46,6 +47,23 @@ matplotlib.use("Agg")   # headless backend for serverless
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from PIL import Image
+
+
+def _show_fig(fig=None):
+    """Render a matplotlib figure inline in the Databricks notebook.
+
+    plt.show() produces no output on serverless compute. This helper saves
+    the current figure (or *fig*) to a PNG buffer, base64-encodes it, and
+    renders it via displayHTML so it appears in the notebook cell output.
+    """
+    if fig is None:
+        fig = plt.gcf()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    img_b64 = _b64module.b64encode(buf.read()).decode("utf-8")
+    displayHTML(f'<img src="data:image/png;base64,{img_b64}" />')
 
 # Widgets — set by the job, or editable when running manually
 dbutils.widgets.text("app_url",
@@ -274,7 +292,7 @@ ax.set_title(
 )
 ax.axis("off")
 plt.tight_layout()
-plt.show()
+_show_fig(fig)
 
 # COMMAND ----------
 
@@ -380,18 +398,23 @@ import numpy as np
 if clean_bytes:
     clean_image = Image.open(io.BytesIO(clean_bytes))
 
-    # ── Panel 1: Before / After / Diff (full tile, large) ────────────────
+    # ── Panel 1: Original / Detections / After / Diff (full tile, large) ──
     orig_arr = np.array(original_image.convert("RGB"))
     clean_arr = np.array(clean_image.convert("RGB"))
     # Absolute pixel difference — amplified for visibility
     diff_arr = np.abs(orig_arr.astype(int) - clean_arr.astype(int)).astype(np.uint8)
     diff_amplified = np.clip(diff_arr * 4, 0, 255).astype(np.uint8)
 
-    fig, axes = plt.subplots(1, 3, figsize=(20, 8), dpi=150)
+    fig, axes = plt.subplots(1, 4, figsize=(28, 8), dpi=150)
 
-    # BEFORE with detection boxes
+    # ORIGINAL — unmodified satellite tile (no annotations)
     axes[0].imshow(original_image, interpolation="nearest")
-    axes[0].set_title(f"BEFORE — {aircraft_count} aircraft detected", fontsize=12, fontweight="bold")
+    axes[0].set_title("ORIGINAL", fontsize=12, fontweight="bold")
+    axes[0].axis("off")
+
+    # DETECTIONS — original with YOLO bounding boxes overlaid
+    axes[1].imshow(original_image, interpolation="nearest")
+    axes[1].set_title(f"DETECTIONS — {aircraft_count} aircraft", fontsize=12, fontweight="bold")
     for det in detections:
         x1, y1 = det["x1"], det["y1"]
         x2, y2 = det["x2"], det["y2"]
@@ -400,30 +423,30 @@ if clean_bytes:
             (x1, y1), x2 - x1, y2 - y1,
             linewidth=2, edgecolor="red", facecolor="none",
         )
-        axes[0].add_patch(rect)
-        axes[0].text(
+        axes[1].add_patch(rect)
+        axes[1].text(
             x1, max(0, y1 - 4), f"{conf:.2f}",
             color="white", fontsize=7, fontweight="bold",
             bbox=dict(boxstyle="round,pad=0.15", facecolor="red", alpha=0.85),
         )
-    axes[0].axis("off")
-
-    # AFTER
-    axes[1].imshow(clean_image, interpolation="nearest")
-    axes[1].set_title(f"AFTER — aircraft removed ({inpainting_latency_ms:,}ms)", fontsize=12, fontweight="bold")
     axes[1].axis("off")
 
-    # DIFF heatmap
-    axes[2].imshow(diff_amplified, interpolation="nearest")
-    axes[2].set_title("DIFFERENCE (4x amplified)", fontsize=12, fontweight="bold")
+    # AFTER — inpainted tile (aircraft removed)
+    axes[2].imshow(clean_image, interpolation="nearest")
+    axes[2].set_title(f"AFTER — aircraft removed ({inpainting_latency_ms:,}ms)", fontsize=12, fontweight="bold")
     axes[2].axis("off")
+
+    # DIFF heatmap
+    axes[3].imshow(diff_amplified, interpolation="nearest")
+    axes[3].set_title("DIFFERENCE (4x amplified)", fontsize=12, fontweight="bold")
+    axes[3].axis("off")
 
     plt.suptitle(
         f"Aircraft Inpainting: {AIRPORT_IATA_RESOLVED} ({icao}) — {description}",
         fontsize=13, fontweight="bold",
     )
     plt.tight_layout()
-    plt.show()
+    _show_fig(fig)
 
     # ── Panel 2: Zoomed crops around each detection ──────────────────────
     # Shows before/after side by side for each detected aircraft so a human
@@ -463,7 +486,7 @@ if clean_bytes:
             fontsize=12, fontweight="bold",
         )
         plt.tight_layout()
-        plt.show()
+        _show_fig(fig)
 
     # Detection details
     if detections:
@@ -648,7 +671,7 @@ if delays:
 
     plt.suptitle(f"Delay Predictions — {len(delays)} flights", fontsize=13)
     plt.tight_layout()
-    plt.show()
+    _show_fig(fig)
 
     # Summary stats
     avg_delay = sum(delay_values) / len(delay_values)
@@ -799,7 +822,7 @@ if recommendations:
 
     plt.suptitle(f"Gate Recommendation for {selected_icao24}", fontsize=12)
     plt.tight_layout()
-    plt.show()
+    _show_fig(fig)
 
     best = recommendations[0]
     results["gate"]["best_gate"] = best["gate_id"]
@@ -973,7 +996,7 @@ if areas:
 
     plt.suptitle(f"Airport Congestion — {len(areas)} areas", fontsize=12)
     plt.tight_layout()
-    plt.show()
+    _show_fig(fig)
 
 # COMMAND ----------
 
