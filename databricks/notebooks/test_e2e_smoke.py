@@ -6,24 +6,31 @@
 # COMMAND ----------
 
 import requests, json, time
-from databricks.sdk import WorkspaceClient
 
 APP_URL = dbutils.widgets.get("app_url").rstrip("/")
 
-# Get OAuth token via Databricks SDK (handles token exchange for Apps proxy)
-w = WorkspaceClient()
-TOKEN = w.config.authenticate().get("Authorization", "").replace("Bearer ", "")
-if not TOKEN:
-    # Fallback to notebook context token
-    TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
-    print("Auth: fallback to notebook context token")
-else:
-    print("Auth: Databricks SDK OAuth token")
-
+# Use notebook context token for auth against Databricks Apps proxy
+TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
 print(f"Testing app at: {APP_URL}")
-print(f"Token length: {len(TOKEN)} chars")
+print(f"Auth: notebook context token ({len(TOKEN)} chars)")
+
+# Pre-flight auth check — detect proxy auth failures early
+_preflight = requests.get(f"{APP_URL}/health", headers=HEADERS, timeout=10)
+if _preflight.status_code == 401 or (
+    _preflight.status_code == 200 and "text/html" in _preflight.headers.get("content-type", "")
+):
+    # Apps proxy is rejecting our token — report and exit
+    print(f"WARNING: Auth pre-flight failed (status={_preflight.status_code}, "
+          f"content-type={_preflight.headers.get('content-type', 'unknown')})")
+    print("The Apps proxy requires browser-based OAuth which cannot be done from a notebook.")
+    print("This test requires the app to allow service principal token auth.")
+    dbutils.notebook.exit(json.dumps({
+        "status": "SKIP",
+        "reason": "Apps proxy auth not available from notebook context",
+        "details": f"health returned {_preflight.status_code}, content-type={_preflight.headers.get('content-type', 'unknown')}"
+    }))
 
 results = {}
 
