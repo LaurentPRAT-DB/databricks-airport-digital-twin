@@ -1,26 +1,18 @@
 resources:
   jobs:
-    simulation_batch:
-      name: "[${bundle.target}] Airport DT - Multi-Airport Simulation Batch"
-      description: "Runs 33 airport simulations (each on own compute), analyzes results, trains turnaround + OBT departure models"
-
-      environments:
-        - environment_key: sim_env
-          spec:
-            client: "1"
-            dependencies:
-              - scikit-learn
-              - catboost>=1.2
-              - pyyaml
-              - pydantic
+    # ── Simulation Batch 1/3: airports ams→dtw (11 airports) ──────────
+    simulation_batch_1:
+      name: "[${bundle.target}] Airport DT - Simulation Batch 1/3"
+      description: "Runs airports 1-11 (ams→dtw) 7-day simulations on isolated serverless compute"
 
       tasks:
-        # ── List all 7-day configs ───────────────────────────────────────
         - task_key: list_configs
           notebook_task:
             notebook_path: ../databricks/notebooks/list_simulation_configs.py
+            base_parameters:
+              batch: "1"
+              total_batches: "3"
 
-        # ── For-each: run one simulation per config on its own compute ──
         - task_key: run_simulations
           for_each_task:
             inputs: "{{tasks.list_configs.values.configs}}"
@@ -33,15 +25,100 @@ resources:
           depends_on:
             - task_key: list_configs
 
-        # ── Analysis (after sims, tolerates partial failures) ────────────
+      tags:
+        project: airport-digital-twin
+        component: simulation
+        batch: "1"
+        target: ${bundle.target}
+
+      timeout_seconds: 21600  # 6 hours
+
+    # ── Simulation Batch 2/3: airports dxb→msp (11 airports) ──────────
+    simulation_batch_2:
+      name: "[${bundle.target}] Airport DT - Simulation Batch 2/3"
+      description: "Runs airports 12-22 (dxb→msp) 7-day simulations on isolated serverless compute"
+
+      tasks:
+        - task_key: list_configs
+          notebook_task:
+            notebook_path: ../databricks/notebooks/list_simulation_configs.py
+            base_parameters:
+              batch: "2"
+              total_batches: "3"
+
+        - task_key: run_simulations
+          for_each_task:
+            inputs: "{{tasks.list_configs.values.configs}}"
+            task:
+              task_key: run_single_sim
+              notebook_task:
+                notebook_path: ../databricks/notebooks/run_simulation_airport.py
+                base_parameters:
+                  config_file: "{{input}}"
+          depends_on:
+            - task_key: list_configs
+
+      tags:
+        project: airport-digital-twin
+        component: simulation
+        batch: "2"
+        target: ${bundle.target}
+
+      timeout_seconds: 21600  # 6 hours
+
+    # ── Simulation Batch 3/3: airports nrt→syd (11 airports) ──────────
+    simulation_batch_3:
+      name: "[${bundle.target}] Airport DT - Simulation Batch 3/3"
+      description: "Runs airports 23-33 (nrt→syd) 7-day simulations on isolated serverless compute"
+
+      tasks:
+        - task_key: list_configs
+          notebook_task:
+            notebook_path: ../databricks/notebooks/list_simulation_configs.py
+            base_parameters:
+              batch: "3"
+              total_batches: "3"
+
+        - task_key: run_simulations
+          for_each_task:
+            inputs: "{{tasks.list_configs.values.configs}}"
+            task:
+              task_key: run_single_sim
+              notebook_task:
+                notebook_path: ../databricks/notebooks/run_simulation_airport.py
+                base_parameters:
+                  config_file: "{{input}}"
+          depends_on:
+            - task_key: list_configs
+
+      tags:
+        project: airport-digital-twin
+        component: simulation
+        batch: "3"
+        target: ${bundle.target}
+
+      timeout_seconds: 21600  # 6 hours
+
+    # ── Analysis + Training (run after all 3 batches complete) ────────
+    simulation_train:
+      name: "[${bundle.target}] Airport DT - Simulation Analysis & Training"
+      description: "Analyzes simulation results from UC Volume and trains turnaround + OBT models. Run after all 3 simulation batches complete."
+
+      environments:
+        - environment_key: sim_env
+          spec:
+            client: "1"
+            dependencies:
+              - scikit-learn
+              - catboost>=1.2
+              - pyyaml
+              - pydantic
+
+      tasks:
         - task_key: analyze_results
           notebook_task:
             notebook_path: ../databricks/notebooks/analyze_simulations.py
-          run_if: ALL_DONE
-          depends_on:
-            - task_key: run_simulations
 
-        # ── Turnaround model training ────────────────────────────────────
         - task_key: train_turnaround_model
           notebook_task:
             notebook_path: ../databricks/notebooks/train_turnaround_model.py
@@ -50,7 +127,6 @@ resources:
           depends_on:
             - task_key: analyze_results
 
-        # ── OBT departure model training ─────────────────────────────────
         - task_key: train_obt_model
           notebook_task:
             notebook_path: ../databricks/notebooks/train_obt_model.py
@@ -61,7 +137,7 @@ resources:
 
       tags:
         project: airport-digital-twin
-        component: simulation
+        component: ml-training
         target: ${bundle.target}
 
-      timeout_seconds: 43200  # 12 hours
+      timeout_seconds: 14400  # 4 hours
