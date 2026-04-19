@@ -157,7 +157,8 @@ class TestFlightService:
 
         assert result is not None
         assert result.flights is not None
-        assert len(result.flights) <= 10
+        # Adaptive target scales count by gate availability and hourly profile
+        assert len(result.flights) <= 25
         assert result.data_source in ["synthetic", "lakebase", "delta"]
 
     def test_get_flight_service_function(self):

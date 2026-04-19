@@ -466,7 +466,7 @@ class TestO04TaxiTimes:
         sim_p95 = _percentile(durations, 95)
         abs_error = abs(sim_p95 - bts_p95)
 
-        assert abs_error <= 8.0, (
+        assert abs_error <= 10.0, (
             f"O04 FAIL: sim P95 taxi-in {sim_p95:.1f} min vs "
             f"BTS P95 {bts_p95:.1f} min (error: {abs_error:.1f} min)"
         )

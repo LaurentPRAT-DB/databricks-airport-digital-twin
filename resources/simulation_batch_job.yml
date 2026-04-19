@@ -14,6 +14,7 @@ resources:
               - catboost>=1.2
               - pyyaml
               - pydantic
+              - mlflow
 
       tasks:
         - task_key: list_configs
@@ -73,6 +74,7 @@ resources:
               - catboost>=1.2
               - pyyaml
               - pydantic
+              - mlflow
 
       tasks:
         - task_key: list_configs
@@ -132,6 +134,7 @@ resources:
               - catboost>=1.2
               - pyyaml
               - pydantic
+              - mlflow
 
       tasks:
         - task_key: list_configs
@@ -191,6 +194,7 @@ resources:
               - catboost>=1.2
               - pyyaml
               - pydantic
+              - mlflow
 
       tasks:
         - task_key: analyze_results
