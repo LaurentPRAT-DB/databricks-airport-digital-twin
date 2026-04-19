@@ -6,9 +6,15 @@ cached for the lifetime of the process.
 
 When a calibrated AirportProfile is available, it is passed to model
 constructors so predictions are calibrated with real-data priors.
+
+Trained models are loaded from UC Volume pickles (saved by the training
+notebooks) when running on Databricks. Falls back to untrained instances
+when pickles are not available.
 """
 
 import logging
+import os
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from src.ml.congestion_model import CongestionPredictor
@@ -17,6 +23,11 @@ from src.ml.gate_model import GateRecommender
 from src.calibration.profile import AirportProfileLoader
 
 logger = logging.getLogger(__name__)
+
+# UC Volume path for trained model pickles
+_UC_CATALOG = os.getenv("DATABRICKS_CATALOG", "serverless_stable_3n0ihb_catalog")
+_UC_SCHEMA = os.getenv("DATABRICKS_SCHEMA", "airport_digital_twin")
+_ML_MODELS_DIR = Path(f"/Volumes/{_UC_CATALOG}/{_UC_SCHEMA}/simulation_data/ml_models")
 
 # Lazy import — TurnaroundPredictor requires scikit-learn which may not be
 # installed in the lightweight Databricks App runtime.
@@ -94,6 +105,9 @@ class AirportModelRegistry:
             if OBT is not None:
                 models["obt"] = OBT(airport_code=airport_code, airport_profile=profile)
             self._instances[airport_code] = models
+            # Try loading trained models from UC Volume
+            if self.load_from_unity_catalog(airport_code):
+                logger.info(f"Loaded trained models from UC for {airport_code}")
         return self._instances[airport_code]
 
     def retrain(self, airport_code: str) -> Dict[str, Any]:
@@ -132,15 +146,69 @@ class AirportModelRegistry:
         return {"status": "deprecated_use_training_notebook"}
 
     def load_from_unity_catalog(self, airport_code: str) -> bool:
-        """Load registered models from UC if available.
+        """Load trained models from UC Volume pickles if available.
+
+        Loads turnaround (refined/coarse/board) and OBT departure
+        (refined/coarse) pickles saved by the training notebooks.
+        Models are airport-agnostic (trained on all airports), so
+        the same pickles are used regardless of airport_code.
 
         Returns:
-            True if models were loaded from UC, False otherwise.
+            True if at least one model was loaded, False otherwise.
         """
-        if not MLFLOW_AVAILABLE:
+        if not _ML_MODELS_DIR.exists():
+            logger.debug("UC Volume model dir not found: %s", _ML_MODELS_DIR)
             return False
-        # Placeholder — actual UC model loading would go here
-        return False
+
+        models = self.get_models(airport_code)
+        loaded_any = False
+
+        # Load turnaround model pickles
+        turnaround = models.get("turnaround")
+        if turnaround is not None:
+            refined_pkl = _ML_MODELS_DIR / "obt_refined.pkl"
+            coarse_pkl = _ML_MODELS_DIR / "obt_coarse.pkl"
+            board_pkl = _ML_MODELS_DIR / "obt_board.pkl"
+
+            if hasattr(turnaround, "load") and hasattr(turnaround, "refined"):
+                # TwoStageTurnaroundPredictor
+                r = turnaround.refined.load(refined_pkl) if refined_pkl.exists() else False
+                c = turnaround.coarse.load(coarse_pkl) if coarse_pkl.exists() else False
+                if r or c:
+                    loaded_any = True
+                    logger.info("Loaded turnaround model from UC Volume (refined=%s, coarse=%s)", r, c)
+            elif hasattr(turnaround, "load"):
+                # Single predictor
+                if refined_pkl.exists() and turnaround.load(refined_pkl):
+                    loaded_any = True
+                    logger.info("Loaded turnaround refined model from UC Volume")
+
+            # Load T-board model if available
+            if hasattr(turnaround, "board_predictor"):
+                bp = turnaround.board_predictor
+                if bp is not None and hasattr(bp, "load") and board_pkl.exists():
+                    if bp.load(board_pkl):
+                        loaded_any = True
+                        logger.info("Loaded turnaround T-board model from UC Volume")
+
+        # Load OBT departure model pickles
+        obt = models.get("obt")
+        if obt is not None:
+            obt_refined_pkl = _ML_MODELS_DIR / "obt_departure_refined.pkl"
+            obt_coarse_pkl = _ML_MODELS_DIR / "obt_departure_coarse.pkl"
+
+            if hasattr(obt, "refined") and hasattr(obt, "coarse"):
+                r = obt.refined.load(obt_refined_pkl) if obt_refined_pkl.exists() else False
+                c = obt.coarse.load(obt_coarse_pkl) if obt_coarse_pkl.exists() else False
+                if r or c:
+                    loaded_any = True
+                    logger.info("Loaded OBT departure model from UC Volume (refined=%s, coarse=%s)", r, c)
+            elif hasattr(obt, "load"):
+                if obt_refined_pkl.exists() and obt.load(obt_refined_pkl):
+                    loaded_any = True
+                    logger.info("Loaded OBT departure refined model from UC Volume")
+
+        return loaded_any
 
     def has_models(self, airport_code: str) -> bool:
         """Check if models are cached for an airport."""

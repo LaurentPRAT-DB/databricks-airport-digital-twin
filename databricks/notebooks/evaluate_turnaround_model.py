@@ -191,7 +191,7 @@ model_source = "fallback"
 try:
     import mlflow
     mlflow.set_registry_uri("databricks-uc")
-    model_uri = f"models:/{MODEL_UC_NAME}/latest"
+    model_uri = f"models:/{MODEL_UC_NAME}@champion"
     loaded_pipeline = mlflow.sklearn.load_model(model_uri)
     # Inject the loaded pipeline into the predictor
     predictor._pipeline = loaded_pipeline

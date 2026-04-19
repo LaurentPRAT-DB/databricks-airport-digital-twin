@@ -191,6 +191,100 @@ for group_name, group in MODEL_GROUPS.items():
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Export Champion Pickles to UC Volume
+# MAGIC
+# MAGIC The app loads models from UC Volume pickles at startup.
+# MAGIC Download the champion's MLflow artifacts and save as the active pickles.
+
+# COMMAND ----------
+
+import os, shutil, tempfile
+
+VOLUME_PATH = f"/Volumes/{UC_CATALOG}/{UC_SCHEMA}/simulation_data"
+MODEL_DIR = f"{VOLUME_PATH}/ml_models"
+os.makedirs(MODEL_DIR, exist_ok=True)
+
+# Map: (group_name, model_key) -> pickle filename in UC Volume
+PICKLE_MAP = {
+    ("turnaround", "primary"): [
+        ("obt_refined_model", "obt_refined.pkl"),
+    ],
+    ("turnaround", "coarse"): [
+        ("obt_coarse_model", "obt_coarse.pkl"),
+    ],
+    ("turnaround", "board"): [
+        ("obt_board_model", "obt_board.pkl"),
+    ],
+    ("obt_departure", "primary"): [
+        ("obt_departure_refined_model", "obt_departure_refined.pkl"),
+    ],
+    ("obt_departure", "coarse"): [
+        ("obt_departure_coarse_model", "obt_departure_coarse.pkl"),
+    ],
+}
+
+for group_name, group in MODEL_GROUPS.items():
+    group_results = results.get(group_name, [])
+    if not group_results:
+        continue
+
+    valid = [r for r in group_results if r["mae"] is not None]
+    if not valid:
+        continue
+
+    best = min(valid, key=lambda r: r["mae"])
+    best_run_id = best["run_id"]
+
+    # Download artifacts from the champion's MLflow run
+    for model_key in ["primary", "coarse", "board"]:
+        pkl_entries = PICKLE_MAP.get((group_name, model_key), [])
+        if not pkl_entries:
+            continue
+
+        model_name = group.get(model_key)
+        if not model_name:
+            continue
+
+        for artifact_subdir, pkl_filename in pkl_entries:
+            try:
+                # Download the artifact directory from MLflow
+                local_dir = mlflow.artifacts.download_artifacts(
+                    run_id=best_run_id,
+                    artifact_path=artifact_subdir,
+                    dst_path=tempfile.mkdtemp(),
+                )
+                # Find the pkl file in the downloaded artifacts
+                pkl_src = None
+                for root, dirs, files in os.walk(local_dir):
+                    for f in files:
+                        if f.endswith(".pkl"):
+                            pkl_src = os.path.join(root, f)
+                            break
+                    if pkl_src:
+                        break
+
+                if pkl_src:
+                    dest = os.path.join(MODEL_DIR, pkl_filename)
+                    shutil.copy2(pkl_src, dest)
+                    size_mb = os.path.getsize(dest) / (1024 * 1024)
+                    print(f"  Exported {pkl_filename} ({size_mb:.1f} MB) from run {best_run_id[:8]}...")
+                else:
+                    print(f"  No .pkl found in {artifact_subdir} artifacts for run {best_run_id[:8]}")
+            except Exception as e:
+                # The training notebooks also save pickles directly — those are already there
+                print(f"  Could not export {pkl_filename} from MLflow: {e}")
+                existing = os.path.join(MODEL_DIR, pkl_filename)
+                if os.path.exists(existing):
+                    print(f"  (existing pickle at {existing} will be used)")
+
+print(f"\nModel pickles in {MODEL_DIR}:")
+for f in sorted(os.listdir(MODEL_DIR)):
+    size_mb = os.path.getsize(os.path.join(MODEL_DIR, f)) / (1024 * 1024)
+    print(f"  {f}: {size_mb:.1f} MB")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Summary
 
 # COMMAND ----------
