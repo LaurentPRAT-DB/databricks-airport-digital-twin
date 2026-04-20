@@ -392,7 +392,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </div>
 
           {/* Event table */}
-          <div className="max-h-96 overflow-y-auto rounded-lg border border-slate-200">
+          <div className="max-h-[50vh] overflow-y-auto rounded-lg border border-slate-200">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100">
                 <tr>
