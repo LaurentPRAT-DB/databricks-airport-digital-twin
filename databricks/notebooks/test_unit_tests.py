@@ -61,7 +61,7 @@ result = subprocess.run(
     capture_output=True,
     text=True,
     cwd=bundle_root,
-    env={**os.environ, "PYTHONPATH": bundle_root},
+    env={**os.environ, "PYTHONPATH": bundle_root, "PYTHONDONTWRITEBYTECODE": "1"},
 )
 
 # Print output
