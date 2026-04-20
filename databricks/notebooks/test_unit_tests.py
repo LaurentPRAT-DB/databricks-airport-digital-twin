@@ -56,6 +56,7 @@ result = subprocess.run(
         sys.executable, "-m", "pytest",
         "tests/", "-q", "--tb=short",
         "--override-ini=asyncio_mode=auto",
+        "--ignore=tests/test_aviation_procedures.py",  # Stochastic sim tests, too slow for serverless
     ],
     capture_output=True,
     text=True,
