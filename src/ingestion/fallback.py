@@ -1901,14 +1901,15 @@ def _osm_runway_endpoints(runway: dict) -> tuple:
 
     need_swap = False
     if len(designators) >= 2:
-        # The first designator matches raw_heading (first→last geoPoint)
-        # The second designator matches the reciprocal
-        first_des, second_des = designators[0], designators[1]
-        # Use the higher-numbered designator as the active arrival direction
-        # (prevailing westerly winds → higher number in US/Europe)
-        if second_des > first_des:
-            # The active arrival matches the SECOND designator = reciprocal
-            # Swap so threshold = last geoPoint, heading = reciprocal
+        # Active arrival = higher-numbered designator (prevailing wind)
+        active_des = max(designators[0], designators[1])
+        active_heading_nominal = active_des * 10  # e.g., 28 → 280°
+
+        # OSM geoPoint order is arbitrary — compare active designator's
+        # nominal heading against the actual raw_heading to decide swap.
+        diff = abs((raw_heading - active_heading_nominal + 180) % 360 - 180)
+        if diff >= 90:
+            # raw_heading is opposite to active → swap endpoints
             need_swap = True
 
     if need_swap:
@@ -5212,7 +5213,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     _dep_threshold = _get_departure_runway()
     if _rwy_threshold is None or _dep_threshold is None:
         return []  # No runway data, disable trajectory
-    runway_28l_lon, runway_28l_lat = _rwy_threshold[0], _rwy_threshold[1]
+    rwy_threshold_lon, rwy_threshold_lat = _rwy_threshold[0], _rwy_threshold[1]
     dep_rwy_lon, dep_rwy_lat = _dep_threshold[0], _dep_threshold[1]
 
     if is_on_ground:
@@ -5227,7 +5228,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         _rwy_heading_rad = math.radians(_rwy_heading)
         _roll_distance = 0.020  # ~2.2 km roll in degrees (typical landing rollout)
         roll_dlat = _roll_distance * math.cos(_rwy_heading_rad)
-        roll_dlon = _roll_distance * math.sin(_rwy_heading_rad) / math.cos(math.radians(runway_28l_lat))
+        roll_dlon = _roll_distance * math.sin(_rwy_heading_rad) / math.cos(math.radians(rwy_threshold_lat))
 
         _running_hdg = current_heading  # smooth heading across points
         for i in range(num_points):
@@ -5278,8 +5279,8 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 roll_progress = (progress - 0.45) / 0.20
 
                 # Move along runway heading
-                lat = runway_28l_lat + roll_progress * roll_dlat
-                lon = runway_28l_lon + roll_progress * roll_dlon
+                lat = rwy_threshold_lat + roll_progress * roll_dlat
+                lon = rwy_threshold_lon + roll_progress * roll_dlon
                 alt = 0
 
                 heading = _rwy_heading
@@ -5292,8 +5293,8 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 taxi_progress = (progress - 0.65) / 0.35
 
                 # Landing roll endpoint (must match the roll phase above)
-                roll_end_lat = runway_28l_lat + roll_dlat
-                roll_end_lon = runway_28l_lon + roll_dlon
+                roll_end_lat = rwy_threshold_lat + roll_dlat
+                roll_end_lon = rwy_threshold_lon + roll_dlon
 
                 # Build taxi path: use the flight's taxi route if available,
                 # otherwise fall back to the gate-based route or straight line.
