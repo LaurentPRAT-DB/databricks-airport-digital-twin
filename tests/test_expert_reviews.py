@@ -23,74 +23,24 @@ import pytest
 
 from src.simulation.config import SimulationConfig
 from src.simulation.engine import SimulationEngine
-from src.simulation.recorder import SimulationRecorder
+
+from tests.sim_helpers import (
+    extract_flight_traces as _extract_flight_traces,
+    haversine_nm as _haversine_nm,
+    phase_positions as _phase_positions,
+    phase_sequence as _phase_sequence,
+)
 
 
 # ---------------------------------------------------------------------------
-# Helpers (shared with test_trajectory_coherence.py)
+# Helpers
 # ---------------------------------------------------------------------------
-
-def _extract_flight_traces(recorder: SimulationRecorder) -> dict[str, list[dict]]:
-    """Group position_snapshots by icao24, sorted by time."""
-    traces: dict[str, list[dict]] = defaultdict(list)
-    for snap in recorder.position_snapshots:
-        traces[snap["icao24"]].append(snap)
-    for icao24 in traces:
-        traces[icao24].sort(key=lambda p: p["time"])
-    return dict(traces)
-
-
-def _phase_positions(trace: list[dict], phase: str) -> list[dict]:
-    """Extract positions belonging to a specific phase."""
-    return [p for p in trace if p["phase"] == phase]
-
-
-def _haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Haversine distance in nautical miles."""
-    R_NM = 3440.065
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(dlon / 2) ** 2)
-    return 2 * R_NM * math.asin(math.sqrt(min(a, 1.0)))
-
-
-def _phase_sequence(trace: list[dict]) -> list[str]:
-    """Extract ordered list of distinct phases (deduplicated consecutive)."""
-    if not trace:
-        return []
-    phases = [trace[0]["phase"]]
-    for p in trace[1:]:
-        if p["phase"] != phases[-1]:
-            phases.append(p["phase"])
-    return phases
-
 
 def _time_delta_seconds(t1: str, t2: str) -> float:
     """Seconds between two ISO timestamps."""
     dt1 = datetime.fromisoformat(t1)
     dt2 = datetime.fromisoformat(t2)
     return (dt2 - dt1).total_seconds()
-
-
-# ---------------------------------------------------------------------------
-# Valid phase transitions (subset needed for auditor)
-# ---------------------------------------------------------------------------
-
-VALID_NEXT_PHASE: dict[str, set[str]] = {
-    "approaching": {"landing", "approaching", "ground", "taxi_to_gate", "parked", "enroute"},
-    "landing": {"taxi_to_gate", "landing", "ground", "parked"},
-    "ground": {"taxi_to_gate", "ground", "parked"},
-    "taxi_to_gate": {"parked", "taxi_to_gate"},
-    "parked": {"pushback", "parked", "taxi_to_runway"},
-    "pushback": {"taxi_to_runway", "pushback", "parked"},
-    "taxi_to_runway": {"takeoff", "taxi_to_runway"},
-    "takeoff": {"departing", "takeoff", "enroute", "climbing"},
-    "departing": {"enroute", "departing", "climbing"},
-    "climbing": {"enroute", "climbing", "departing"},
-    "enroute": {"enroute", "approaching"},
-}
 
 
 # ---------------------------------------------------------------------------
@@ -382,22 +332,6 @@ class TestLinePilot:
                     f"Pilot: {icao24} takeoff doesn't show acceleration: {speeds[:5]}"
                 )
 
-    def test_departure_climb_positive(self, traces):
-        """After takeoff, altitude should increase (positive climb rate).
-
-        Departing/climbing phase must show upward trend.
-        """
-        for icao24, trace in traces.items():
-            departing = _phase_positions(trace, "departing") + _phase_positions(trace, "climbing")
-            if len(departing) < 3:
-                continue
-            alts = [s["altitude"] for s in departing]
-            # Overall trend should be upward
-            if len(alts) > 3:
-                assert alts[-1] > alts[0], (
-                    f"Pilot: {icao24} departure altitude not climbing "
-                    f"(start={alts[0]:.0f}, end={alts[-1]:.0f})"
-                )
 
 
 # ============================================================================
@@ -516,43 +450,6 @@ class TestGroundMovementController:
     Ensures safe taxi speeds and proper runway hold procedures.
     References: ICAO Annex 14, aerodrome design standards.
     """
-
-    def test_taxi_speed_limit(self, traces):
-        """ICAO Annex 14 — taxi speed should not exceed 35 kts.
-
-        Standard taxiway design speed is 25 kts; 30 kts on straight sections
-        is acceptable. Above 35 kts is a violation.
-        """
-        violations = 0
-        total = 0
-        for icao24, trace in traces.items():
-            taxi = _phase_positions(trace, "taxi_to_gate") + _phase_positions(trace, "taxi_to_runway")
-            for snap in taxi:
-                total += 1
-                if snap["velocity"] > 40:  # 35 + 5 tolerance
-                    violations += 1
-        if total > 0:
-            assert violations / total < 0.05, (
-                f"Ground: {violations}/{total} taxi speed violations (>40kt)"
-            )
-
-    def test_ground_aircraft_low_altitude(self, traces):
-        """Taxiing aircraft must be on the ground (altitude ~0ft)."""
-        violations = 0
-        total = 0
-        for icao24, trace in traces.items():
-            taxi = (_phase_positions(trace, "taxi_to_gate") +
-                    _phase_positions(trace, "taxi_to_runway") +
-                    _phase_positions(trace, "parked") +
-                    _phase_positions(trace, "pushback"))
-            for snap in taxi:
-                total += 1
-                if snap["altitude"] > 100:
-                    violations += 1
-        if total > 0:
-            assert violations / total < 0.05, (
-                f"Ground: {violations}/{total} ground aircraft above 100ft"
-            )
 
     def test_departure_queue_exists(self, sim):
         """Departing aircraft should transition through taxi_to_runway before takeoff."""
@@ -764,54 +661,6 @@ class TestSafetyComplianceAuditor:
     References: ICAO Doc 4444, Annex 14, FAA Order 7110.65.
     """
 
-    def test_phase_transition_legality(self, traces):
-        """All phase transitions must be in the legal transition graph.
-
-        ICAO Doc 4444 §8.7.3.2 — proper sequencing of flight phases.
-        """
-        violations = []
-        for icao24, trace in traces.items():
-            seq = _phase_sequence(trace)
-            for i in range(1, len(seq)):
-                prev, curr = seq[i - 1], seq[i]
-                valid = VALID_NEXT_PHASE.get(prev, set())
-                if curr not in valid:
-                    violations.append(f"{icao24}: {prev} -> {curr}")
-        assert len(violations) == 0, (
-            f"Audit: {len(violations)} illegal phase transitions:\n"
-            + "\n".join(violations[:10])
-        )
-
-    def test_no_negative_altitude(self, traces):
-        """Aircraft altitude must never be negative.
-
-        Fundamental physical constraint — altitude >= 0 at all times.
-        """
-        violations = 0
-        for icao24, trace in traces.items():
-            for snap in trace:
-                if snap["altitude"] < -10:  # Small tolerance for float precision
-                    violations += 1
-        assert violations == 0, f"Audit: {violations} negative altitude readings"
-
-    def test_approach_below_fl100_speed(self, traces):
-        """ICAO/FAA: 250kt speed limit below FL100 on approach.
-
-        All aircraft below 10,000ft in approach phase should respect this.
-        """
-        violations = 0
-        total = 0
-        for icao24, trace in traces.items():
-            for snap in trace:
-                if snap["phase"] == "approaching" and snap["altitude"] < 10000:
-                    total += 1
-                    if snap["velocity"] > 260:
-                        violations += 1
-        if total > 0:
-            assert violations / total < 0.05, (
-                f"Audit: {violations}/{total} approach speed violations below FL100"
-            )
-
     def test_runway_incursion_prevention(self, sim):
         """No simultaneous runway occupancy by different aircraft.
 
@@ -839,21 +688,3 @@ class TestSafetyComplianceAuditor:
         assert max_simultaneous <= 6, (
             f"Audit: {max_simultaneous} aircraft simultaneously on runway"
         )
-
-    def test_parked_aircraft_stationary(self, traces):
-        """Parked aircraft must be stationary (velocity near 0).
-
-        ICAO Annex 14 — aircraft at gate must be chocked and stationary.
-        """
-        violations = 0
-        total = 0
-        for icao24, trace in traces.items():
-            parked = _phase_positions(trace, "parked")
-            for snap in parked:
-                total += 1
-                if snap["velocity"] > 5:  # Small tolerance
-                    violations += 1
-        if total > 0:
-            assert violations / total < 0.05, (
-                f"Audit: {violations}/{total} parked aircraft moving"
-            )

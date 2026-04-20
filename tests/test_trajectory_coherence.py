@@ -25,49 +25,18 @@ import pytest
 
 from src.simulation.config import SimulationConfig
 from src.simulation.engine import SimulationEngine
-from src.simulation.recorder import SimulationRecorder
+
+from tests.sim_helpers import (
+    extract_flight_traces as _extract_flight_traces,
+    haversine_nm as _haversine_nm,
+    phase_positions as _phase_positions,
+    phase_sequence as _phase_sequence,
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _extract_flight_traces(recorder: SimulationRecorder) -> dict[str, list[dict]]:
-    """Group position_snapshots by icao24, sorted by time."""
-    traces: dict[str, list[dict]] = defaultdict(list)
-    for snap in recorder.position_snapshots:
-        traces[snap["icao24"]].append(snap)
-    for icao24 in traces:
-        traces[icao24].sort(key=lambda p: p["time"])
-    return dict(traces)
-
-
-def _phase_sequence(trace: list[dict]) -> list[str]:
-    """Extract the ordered list of distinct phases (deduplicated consecutive)."""
-    if not trace:
-        return []
-    phases = [trace[0]["phase"]]
-    for p in trace[1:]:
-        if p["phase"] != phases[-1]:
-            phases.append(p["phase"])
-    return phases
-
-
-def _phase_positions(trace: list[dict], phase: str) -> list[dict]:
-    """Extract positions belonging to a specific phase."""
-    return [p for p in trace if p["phase"] == phase]
-
-
-def _haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Haversine distance in nautical miles."""
-    R_NM = 3440.065
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(dlon / 2) ** 2)
-    return 2 * R_NM * math.asin(math.sqrt(a))
-
 
 def _angle_diff(a: float, b: float) -> float:
     """Smallest signed difference between two headings in degrees."""

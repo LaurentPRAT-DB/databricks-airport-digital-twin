@@ -29,9 +29,7 @@ import pytest
 
 from src.simulation.config import SimulationConfig
 from src.simulation.engine import SimulationEngine
-from src.simulation.recorder import SimulationRecorder
 
-# Import the aviation constants we're validating against
 from src.ingestion.fallback import (
     VREF_SPEEDS,
     _DEFAULT_VREF,
@@ -49,35 +47,11 @@ from src.ingestion.fallback import (
     NM_TO_DEG,
 )
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _extract_flight_traces(recorder: SimulationRecorder) -> dict[str, list[dict]]:
-    """Group position_snapshots by icao24, sorted by time."""
-    traces: dict[str, list[dict]] = defaultdict(list)
-    for snap in recorder.position_snapshots:
-        traces[snap["icao24"]].append(snap)
-    for icao24 in traces:
-        traces[icao24].sort(key=lambda p: p["time"])
-    return dict(traces)
-
-
-def _phase_positions(trace: list[dict], phase: str) -> list[dict]:
-    """Extract positions belonging to a specific phase."""
-    return [p for p in trace if p["phase"] == phase]
-
-
-def _haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Haversine distance in nautical miles."""
-    R_NM = 3440.065
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(dlon / 2) ** 2)
-    return 2 * R_NM * math.asin(math.sqrt(a))
+from tests.sim_helpers import (
+    extract_flight_traces as _extract_flight_traces,
+    haversine_nm as _haversine_nm,
+    phase_positions as _phase_positions,
+)
 
 
 def _time_delta_seconds(t1: str, t2: str) -> float:

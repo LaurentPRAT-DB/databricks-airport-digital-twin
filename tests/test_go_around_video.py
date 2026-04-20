@@ -43,6 +43,12 @@ from src.simulation.engine import SimulationEngine
 from src.simulation.recorder import SimulationRecorder
 from src.ingestion.fallback import VREF_SPEEDS, _DEFAULT_VREF
 
+from tests.sim_helpers import (
+    extract_flight_traces as _extract_traces,
+    haversine_nm as _haversine_nm,
+    phase_sequence as _phase_sequence,
+)
+
 OUTPUT_DIR = Path(__file__).parent / "output"
 SCENARIO_PATH = str(Path(__file__).parent.parent / "scenarios" / "sfo_go_around_test.yaml")
 
@@ -50,26 +56,6 @@ SCENARIO_PATH = str(Path(__file__).parent.parent / "scenarios" / "sfo_go_around_
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _haversine_nm(lat1, lon1, lat2, lon2):
-    R_NM = 3440.065
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(dlon / 2) ** 2)
-    return 2 * R_NM * math.asin(math.sqrt(min(a, 1.0)))
-
-
-def _extract_traces(recorder):
-    """Group position_snapshots by icao24, sorted by time."""
-    traces = defaultdict(list)
-    for snap in recorder.position_snapshots:
-        traces[snap["icao24"]].append(snap)
-    for icao24 in traces:
-        traces[icao24].sort(key=lambda p: p["time"])
-    return dict(traces)
-
 
 def _build_frames(recorder):
     """Group snapshots by time into frames (what the user sees each tick)."""
@@ -609,17 +595,6 @@ def _trace_to_geojson(trace, callsign, phases):
             prev_phase = snap["phase"]
 
     return {"type": "FeatureCollection", "features": features}
-
-
-def _phase_sequence(trace):
-    """Return ordered list of distinct phases a flight goes through."""
-    if not trace:
-        return []
-    phases = [trace[0]["phase"]]
-    for p in trace[1:]:
-        if p["phase"] != phases[-1]:
-            phases.append(p["phase"])
-    return phases
 
 
 class TestGA09TrajectoryExport:

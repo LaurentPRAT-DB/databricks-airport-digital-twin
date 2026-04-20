@@ -36,6 +36,15 @@ from src.ingestion.fallback import (
     TAXI_SPEED_STRAIGHT_KTS,
 )
 
+from tests.sim_helpers import (
+    extract_flight_traces as _extract_traces,
+    haversine_nm as _haversine_nm,
+    haversine_m as _haversine_m,
+    phase_positions as _phase_positions,
+    phase_sequence as _phase_sequence,
+    dt_seconds as _dt_seconds,
+)
+
 OUTPUT_DIR = Path(__file__).parent / "output"
 SCENARIO_PATH = str(Path(__file__).parent.parent / "scenarios" / "sfo_go_around_test.yaml")
 
@@ -44,29 +53,6 @@ SCENARIO_PATH = str(Path(__file__).parent.parent / "scenarios" / "sfo_go_around_
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _haversine_nm(lat1, lon1, lat2, lon2):
-    R_NM = 3440.065
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(dlon / 2) ** 2)
-    return 2 * R_NM * math.asin(math.sqrt(min(a, 1.0)))
-
-
-def _haversine_m(lat1, lon1, lat2, lon2):
-    return _haversine_nm(lat1, lon1, lat2, lon2) * 1852.0
-
-
-def _extract_traces(recorder):
-    traces = defaultdict(list)
-    for snap in recorder.position_snapshots:
-        traces[snap["icao24"]].append(snap)
-    for icao24 in traces:
-        traces[icao24].sort(key=lambda p: p["time"])
-    return dict(traces)
-
-
 def _build_frames(recorder):
     frames = defaultdict(list)
     for snap in recorder.position_snapshots:
@@ -74,27 +60,9 @@ def _build_frames(recorder):
     return dict(sorted(frames.items()))
 
 
-def _phase_positions(trace, phase):
-    return [p for p in trace if p["phase"] == phase]
-
-
-def _phase_sequence(trace):
-    if not trace:
-        return []
-    phases = [trace[0]["phase"]]
-    for p in trace[1:]:
-        if p["phase"] != phases[-1]:
-            phases.append(p["phase"])
-    return phases
-
-
 def _heading_abs_diff(h1, h2):
     d = abs(h1 - h2) % 360
     return min(d, 360 - d)
-
-
-def _dt_seconds(t1, t2):
-    return (datetime.fromisoformat(t2) - datetime.fromisoformat(t1)).total_seconds()
 
 
 def _find_go_around_transitions(recorder):
