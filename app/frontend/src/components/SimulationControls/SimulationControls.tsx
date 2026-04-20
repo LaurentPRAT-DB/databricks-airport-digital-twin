@@ -688,13 +688,14 @@ export function SimulationControls({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-start demo when backend signals demo_ready
+  // Auto-start demo when backend signals demo_ready (only in simulation mode)
   useEffect(() => {
+    if (dataMode !== 'simulation') return;
     if (demoReady && currentAirport && !sim.isActive && !sim.isLoading && !demoAutoStarted) {
       setDemoAutoStarted(true);
       sim.loadDemo(currentAirport);
     }
-  }, [demoReady, currentAirport, sim.isActive, sim.isLoading, demoAutoStarted, sim.loadDemo]);
+  }, [demoReady, currentAirport, sim.isActive, sim.isLoading, demoAutoStarted, sim.loadDemo, dataMode]);
 
   // Reset auto-start flag when airport changes so demo auto-starts for the new airport
   useEffect(() => {

@@ -230,6 +230,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dataSourceRef = useRef<string>('simulation');
+  const wantsAutoPlayRef = useRef(false);
 
   const isActive = simData !== null;
   const totalFrames = simData?.frame_count ?? 0;
@@ -338,6 +339,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setIsPlaying(false);
     setSwitchPaused(false);
     dataSourceRef.current = 'simulation';
+    wantsAutoPlayRef.current = true;
     try {
       // Retry loop: demo may still be generating (202) after airport switch
       const maxRetries = 5;
@@ -368,7 +370,9 @@ export function useSimulationReplay(): UseSimulationReplayResult {
 
       // Auto-play demo
       setIsPlaying(true);
+      wantsAutoPlayRef.current = false;
     } catch (err) {
+      wantsAutoPlayRef.current = false;
       console.error('Failed to load demo simulation:', err);
     } finally {
       setIsLoading(false);
@@ -401,6 +405,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setIsPlaying(false);
     setSwitchPaused(false);
     dataSourceRef.current = 'opensky_recorded';
+    wantsAutoPlayRef.current = true;
     try {
       debugLog('info', 'loadRecording', `fetching ${airport}/${date}...`);
       const res = await fetch(`/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`);
@@ -424,7 +429,9 @@ export function useSimulationReplay(): UseSimulationReplayResult {
 
       // Auto-play recording
       setIsPlaying(true);
+      wantsAutoPlayRef.current = false;
     } catch (err) {
+      wantsAutoPlayRef.current = false;
       debugLog('error', 'loadRecording', `failed: ${err}`);
     } finally {
       setIsLoading(false);
@@ -433,6 +440,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
 
   // Pause simulation (for airport switch)
   const pauseForSwitch = useCallback(() => {
+    wantsAutoPlayRef.current = false;
     setIsPlaying(false);
     setSwitchPaused(true);
   }, []);
@@ -497,6 +505,16 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     };
   }, [isPlaying, speed, simData, simSecondsPerFrame]);
 
+  // Defensive auto-play: if a load function requested auto-play but the
+  // inline setIsPlaying(true) was lost (e.g. React batching edge case or
+  // a concurrent effect resetting state), this effect catches it.
+  useEffect(() => {
+    if (wantsAutoPlayRef.current && simData && !isPlaying && !isLoading) {
+      wantsAutoPlayRef.current = false;
+      setIsPlaying(true);
+    }
+  }, [simData, isPlaying, isLoading]);
+
   const play = useCallback(() => {
     if (!simData) return;
     // If at end, restart
@@ -506,7 +524,10 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setIsPlaying(true);
   }, [simData, currentFrameIndex]);
 
-  const pause = useCallback(() => setIsPlaying(false), []);
+  const pause = useCallback(() => {
+    wantsAutoPlayRef.current = false;
+    setIsPlaying(false);
+  }, []);
 
   const togglePlayPause = useCallback(() => {
     if (isPlaying) {
@@ -542,6 +563,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   }, [simData, seekTo]);
 
   const stop = useCallback(() => {
+    wantsAutoPlayRef.current = false;
     setIsPlaying(false);
     setSimData(null);
     setLoadedFile(null);

@@ -233,6 +233,79 @@ describe('useSimulationReplay', () => {
     });
   });
 
+  describe('loadRecording', () => {
+    it('loads recording data and auto-plays', async () => {
+      const recordingData = makeDemoData(5);
+      globalThis.fetch = mockFetchSuccess(recordingData);
+
+      const { result } = renderHook(() => useSimulationReplay());
+
+      await act(async () => {
+        await result.current.loadRecording('EDDF', '2024-01-15');
+      });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/opensky/recordings/EDDF/2024-01-15'
+      );
+      expect(result.current.isActive).toBe(true);
+      expect(result.current.isPlaying).toBe(true);
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.loadedFile).toBe('recording_EDDF_2024-01-15');
+      expect(result.current.totalFrames).toBe(5);
+      expect(result.current.flights.length).toBe(1);
+      expect(result.current.flights[0].data_source).toBe('opensky_recorded');
+    });
+
+    it('handles recording load failure gracefully', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: () => Promise.resolve('Recording not found'),
+      });
+
+      const { result } = renderHook(() => useSimulationReplay());
+
+      await act(async () => {
+        await result.current.loadRecording('EDDF', '2024-01-15');
+      });
+
+      expect(result.current.isActive).toBe(false);
+      expect(result.current.isPlaying).toBe(false);
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    it('clears switchPaused when loading recording', async () => {
+      const demoData = makeDemoData(3);
+      globalThis.fetch = mockFetchSuccess(demoData);
+
+      const { result } = renderHook(() => useSimulationReplay());
+
+      // Load a demo first
+      await act(async () => {
+        await result.current.loadDemo('KSFO');
+      });
+
+      // Pause for switch
+      act(() => {
+        result.current.pauseForSwitch();
+      });
+      expect(result.current.switchPaused).toBe(true);
+
+      // Load recording — should clear switchPaused and auto-play
+      const recordingData = makeDemoData(5);
+      globalThis.fetch = mockFetchSuccess(recordingData);
+
+      await act(async () => {
+        await result.current.loadRecording('EDDF', '2024-01-15');
+      });
+
+      expect(result.current.switchPaused).toBe(false);
+      expect(result.current.isPlaying).toBe(true);
+      expect(result.current.loadedFile).toBe('recording_EDDF_2024-01-15');
+    });
+  });
+
   describe('pauseForSwitch', () => {
     it('pauses playback and sets switchPaused flag', async () => {
       globalThis.fetch = mockFetchSuccess(makeDemoData(3));
