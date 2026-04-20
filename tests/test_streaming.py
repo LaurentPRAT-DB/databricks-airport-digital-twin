@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 
 class TestSilverWatermark:
     """Tests for Silver layer watermark configuration."""
@@ -84,14 +86,16 @@ class TestCheckpointConfiguration:
             )
 
 
+_FALLBACK_PATH = Path(__file__).parent.parent / "data" / "fallback" / "sample_flights.json"
+
+
+@pytest.mark.skipif(not _FALLBACK_PATH.exists(), reason="Fallback data file not present (serverless)")
 class TestFallbackData:
     """Tests for fallback/sample flight data."""
 
     def test_fallback_json_valid_schema(self):
         """Verify sample_flights.json has valid OpenSky response structure."""
-        fallback_path = (
-            Path(__file__).parent.parent / "data" / "fallback" / "sample_flights.json"
-        )
+        fallback_path = _FALLBACK_PATH
         assert fallback_path.exists(), "Fallback data file should exist"
 
         with open(fallback_path) as f:

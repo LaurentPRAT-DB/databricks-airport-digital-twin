@@ -35,6 +35,24 @@ APP_URL = os.environ.get(
 )
 
 
+def _cli_available() -> bool:
+    """Check if databricks CLI auth token is available."""
+    try:
+        result = subprocess.run(
+            ["databricks", "auth", "token", "--profile", "FEVM_SERVERLESS_STABLE"],
+            capture_output=True, text=True, timeout=15,
+        )
+        return result.returncode == 0 and "access_token" in result.stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _cli_available(),
+    reason="Databricks CLI auth not available (serverless or missing profile)",
+)
+
+
 def _get_token() -> str:
     """Get Databricks auth token."""
     result = subprocess.run(
