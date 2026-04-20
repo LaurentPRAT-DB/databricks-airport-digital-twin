@@ -2,7 +2,7 @@ resources:
   jobs:
     unit_test:
       name: "[${bundle.target}] Airport DT - Python Unit Tests"
-      description: "Runs pytest backend unit tests on serverless compute"
+      description: "3 parallel pytest groups on serverless: API, core logic, simulation"
 
       environments:
         - environment_key: test_env
@@ -10,9 +10,19 @@ resources:
             client: "1"
 
       tasks:
-        - task_key: run_pytest
+        - task_key: api_tests
           notebook_task:
-            notebook_path: ../databricks/notebooks/test_unit_tests.py
+            notebook_path: ../databricks/notebooks/test_unit_api.py
+          environment_key: test_env
+
+        - task_key: core_tests
+          notebook_task:
+            notebook_path: ../databricks/notebooks/test_unit_core.py
+          environment_key: test_env
+
+        - task_key: simulation_tests
+          notebook_task:
+            notebook_path: ../databricks/notebooks/test_unit_simulation.py
           environment_key: test_env
 
       tags:
