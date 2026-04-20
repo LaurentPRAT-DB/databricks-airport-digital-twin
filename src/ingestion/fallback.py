@@ -4721,26 +4721,26 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 # Approach full — FAA standard racetrack holding pattern
                 # 1-minute inbound/outbound legs, standard rate turns (3°/s)
                 HOLDING_LEG_SECONDS = 60.0  # 1-minute legs per FAA 7110.65
+                HOLDING_TURN_SECONDS = 60.0  # 180° at 3°/s standard rate
                 STANDARD_RATE_DEG_S = 3.0   # Standard rate turn
                 state.holding_phase_time += dt
                 if state.holding_inbound:
-                    # Inbound leg: fly toward the fix (airport center)
-                    state.heading = _calculate_heading(
+                    # Inbound leg: smooth turn toward the fix (airport center)
+                    target_heading = _calculate_heading(
                         (state.latitude, state.longitude), center
                     )
+                    state.heading = _smooth_heading(state.heading, target_heading, STANDARD_RATE_DEG_S, dt)
                     if state.holding_phase_time >= HOLDING_LEG_SECONDS:
                         state.holding_phase_time = 0.0
                         state.holding_inbound = False  # Start turn + outbound
                 else:
-                    # Outbound leg: 180° turn then fly away from fix
-                    if state.holding_phase_time < 30.0:
-                        # Standard rate 180° turn (~60s for full 360°, 30s for 180°)
+                    # Outbound phase: 180° turn then straight outbound leg
+                    if state.holding_phase_time < HOLDING_TURN_SECONDS:
                         state.heading = (state.heading + STANDARD_RATE_DEG_S * dt) % 360
-                    elif state.holding_phase_time < 30.0 + HOLDING_LEG_SECONDS:
+                    elif state.holding_phase_time < HOLDING_TURN_SECONDS + HOLDING_LEG_SECONDS:
                         # Straight outbound leg — maintain heading
                         pass
                     else:
-                        # Turn back inbound
                         state.holding_phase_time = 0.0
                         state.holding_inbound = True
 
