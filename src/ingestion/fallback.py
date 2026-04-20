@@ -5241,7 +5241,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         if _rwy_heading is None:
             return []
         _rwy_heading_rad = math.radians(_rwy_heading)
-        _roll_distance = 0.020  # ~2.2 km roll in degrees (typical landing rollout)
+        _roll_distance = 0.012  # ~1.3 km roll in degrees (touchdown to high-speed exit)
         roll_dlat = _roll_distance * math.cos(_rwy_heading_rad)
         roll_dlon = _roll_distance * math.sin(_rwy_heading_rad) / math.cos(math.radians(rwy_threshold_lat))
 
