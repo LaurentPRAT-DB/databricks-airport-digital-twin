@@ -5245,9 +5245,42 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         roll_dlat = _roll_distance * math.cos(_rwy_heading_rad)
         roll_dlon = _roll_distance * math.sin(_rwy_heading_rad) / math.cos(math.radians(rwy_threshold_lat))
 
+        # Adaptive point spacing: dense on ground, sparse in approach.
+        # Real ADS-B has ~4-10s ground updates vs ~30-60s airborne.
+        _APP_PTS = 28   # 35% of budget → approach (~58s intervals)
+        _ROLL_PTS = 12  # 15% of budget → landing roll (~36s intervals)
+        _TAXI_PTS = 40  # 50% of budget → taxi (~19s intervals → ~150m apart)
+
+        _progress_schedule = []
+        _time_offsets = []        # cumulative seconds from trajectory start
+        _total_secs = minutes * 60
+
+        # Phase durations (must sum to _total_secs)
+        _app_dur = 0.45 * _total_secs   # 1620s
+        _roll_dur = 0.20 * _total_secs  # 720s
+        _taxi_dur = 0.35 * _total_secs  # 1260s
+
+        _app_interval = _app_dur / max(_APP_PTS, 1)
+        for k in range(_APP_PTS):
+            _progress_schedule.append(0.45 * k / max(_APP_PTS - 1, 1))
+            _time_offsets.append(k * _app_interval)
+
+        _roll_interval = _roll_dur / max(_ROLL_PTS, 1)
+        for k in range(_ROLL_PTS):
+            _progress_schedule.append(0.45 + 0.20 * k / max(_ROLL_PTS - 1, 1))
+            _time_offsets.append(_app_dur + k * _roll_interval)
+
+        _taxi_interval = _taxi_dur / max(_TAXI_PTS, 1)
+        for k in range(_TAXI_PTS):
+            _progress_schedule.append(0.65 + 0.35 * k / max(_TAXI_PTS - 1, 1))
+            _time_offsets.append(_app_dur + _roll_dur + k * _taxi_interval)
+
+        num_points = len(_progress_schedule)
+
         _running_hdg = current_heading  # smooth heading across points
-        for i in range(num_points):
-            progress = i / (num_points - 1) if num_points > 1 else 0
+        for i, progress in enumerate(_progress_schedule):
+            # Per-point time delta for heading smoothing
+            _pt_interval = (_time_offsets[i] - _time_offsets[i - 1]) if i > 0 else _app_interval
 
             if progress < 0.45:
                 # APPROACH PHASE: Following ILS glideslope
@@ -5282,7 +5315,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
                 # Smooth heading toward next waypoint
                 target_hdg = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
-                _running_hdg = _smooth_heading(_running_hdg, target_hdg, 3.0, interval_seconds)
+                _running_hdg = _smooth_heading(_running_hdg, target_hdg, 3.0, _pt_interval)
                 heading = _running_hdg
 
                 phase = "approaching" if alt > 500 else "landing"
@@ -5387,8 +5420,9 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 velocity = TAXI_SPEED_STRAIGHT_KTS
                 vertical_rate = 0
 
-            # Append point for this iteration (inside the for loop)
-            timestamp = now - timedelta(seconds=interval_seconds * (num_points - 1 - i))
+            # Append point — timestamp from adaptive time offsets
+            _total_duration = _time_offsets[-1]
+            timestamp = now - timedelta(seconds=_total_duration - _time_offsets[i])
 
             points.append({
                 "timestamp": timestamp.isoformat(),

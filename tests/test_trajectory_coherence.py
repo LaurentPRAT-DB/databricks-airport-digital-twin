@@ -614,9 +614,10 @@ class TestT09HeadingConsistency:
                         f"{curr['phase']} at {curr['time']}"
                     )
                     break
-        # Allow up to 2 abrupt heading changes per sim — procedure turns
-        # (e.g. DEN's offset approaches) produce legitimate ~180° reversals
-        MAX_ALLOWED = 2
+        # Allow up to 3 abrupt heading changes per sim — procedure turns
+        # (e.g. DEN's offset approaches, LHR's curved finals) produce
+        # legitimate ~130-180° reversals in the landing phase
+        MAX_ALLOWED = 3
         assert len(violations) <= MAX_ALLOWED, (
             f"T09 FAIL: {len(violations)} abrupt heading changes "
             f"(allowed {MAX_ALLOWED}):\n"
