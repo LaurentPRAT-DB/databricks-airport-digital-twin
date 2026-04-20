@@ -30,8 +30,9 @@ print(f"Bundle root: {bundle_root} | Tests: {len(os.listdir(tests_dir))} items")
 
 # COMMAND ----------
 
-# Simulation-heavy test files — run these explicitly
+# All test files that import simulation engine or are data-heavy
 SIM_FILES = [
+    # Direct simulation fixture users
     "tests/test_aviation_procedures.py",
     "tests/test_profile_schema_compat.py",
     "tests/test_multi_airport_ux.py",
@@ -39,6 +40,33 @@ SIM_FILES = [
     "tests/test_synthetic_data_requirements.py",
     "tests/test_trajectory_coherence.py",
     "tests/test_scenario.py",
+    "tests/test_expert_reviews.py",
+    "tests/test_flight_origins_destinations.py",
+    "tests/test_flight_realism.py",
+    "tests/test_aircraft_separation.py",
+    "tests/test_takeoff_physics.py",
+    "tests/test_calibration.py",
+    "tests/test_single_flight_tracker.py",
+    "tests/test_ux_video_tester.py",
+    "tests/test_engine_coverage.py",
+    "tests/test_simulation.py",
+    "tests/test_pilot_review.py",
+    "tests/test_flight_ops_validation.py",
+    "tests/test_engine_phase_counters.py",
+    "tests/test_live_trajectory_quality.py",
+    "tests/test_go_around_video.py",
+    "tests/test_passenger_flow_validation.py",
+    "tests/test_bhs_validation.py",
+    # Import from simulation/calibration modules
+    "tests/test_auto_calibrate.py",
+    "tests/test_calibration_taxi_turnaround.py",
+    "tests/test_openap_trajectories.py",
+    "tests/test_openflights_ingest.py",
+    "tests/test_profile_builder_coverage.py",
+    "tests/test_realism_scorecard.py",
+    # Data-heavy (>50 tests, run full model training)
+    "tests/test_turnaround_model.py",
+    "tests/test_lakebase_service.py",
 ]
 
 # Filter to files that actually exist
