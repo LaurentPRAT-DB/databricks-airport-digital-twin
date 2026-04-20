@@ -2920,6 +2920,14 @@ def _get_airport_coordinates() -> dict:
     return AIRPORT_COORDINATES
 
 
+# Cache random bearings for unknown airports so the same origin/destination
+# always gets the same approach/departure direction within a session.
+# Without this, each call to _bearing_from_airport/_bearing_to_airport for
+# an unknown airport returns a different random bearing, causing approach
+# waypoints to change every tick → zigzag trajectories.
+_bearing_cache: dict[str, float] = {}
+
+
 def _bearing_from_airport(origin_iata: str) -> float:
     """Compute initial bearing FROM origin airport TO current airport center (degrees, 0=N, 90=E).
 
@@ -2927,7 +2935,10 @@ def _bearing_from_airport(origin_iata: str) -> float:
     """
     coords = _get_airport_coordinates()
     if origin_iata not in coords:
-        return random.uniform(0, 360)
+        key = f"from_{origin_iata}"
+        if key not in _bearing_cache:
+            _bearing_cache[key] = random.uniform(0, 360)
+        return _bearing_cache[key]
 
     center = get_airport_center()
     lat1, lon1 = math.radians(coords[origin_iata][0]), math.radians(coords[origin_iata][1])
@@ -2947,7 +2958,10 @@ def _bearing_to_airport(dest_iata: str) -> float:
     """
     coords = _get_airport_coordinates()
     if dest_iata not in coords:
-        return random.uniform(0, 360)
+        key = f"to_{dest_iata}"
+        if key not in _bearing_cache:
+            _bearing_cache[key] = random.uniform(0, 360)
+        return _bearing_cache[key]
 
     center = get_airport_center()
     lat1, lon1 = math.radians(center[0]), math.radians(center[1])
@@ -5707,6 +5721,7 @@ def reset_synthetic_state() -> dict:
 
     # Clear flight state only — airport center is managed by the activate endpoint
     _flight_states.clear()
+    _bearing_cache.clear()
     _last_update = 0.0
     _runway_states.clear()
     # Re-populate with current airport's runway names (dynamic, not hardcoded SFO)

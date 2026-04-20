@@ -510,7 +510,7 @@ async def audit_schedule():
                 "altitude": round(state.altitude, 0),
                 "velocity": round(state.velocity, 0),
                 "vertical_rate": round(state.vertical_rate, 0),
-                "heading": round(state.heading, 1),
+                "heading": round(state.heading % 360, 1),
                 "latitude": round(state.latitude, 4),
                 "longitude": round(state.longitude, 4),
                 "on_ground": state.on_ground,
