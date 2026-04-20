@@ -2833,6 +2833,20 @@ def _distance_between(pos1: tuple, pos2: tuple) -> float:
     return math.sqrt((lat2 - lat1) ** 2 + (lon2 - lon1) ** 2)
 
 
+def _snap_to_nearest_waypoint(state) -> int:
+    """Find the closest approach waypoint to the aircraft's current position."""
+    approach_wps = _get_approach_waypoints(state.origin_airport)
+    best_idx = 0
+    if approach_wps:
+        best_dist = float('inf')
+        for wi, wp in enumerate(approach_wps):
+            d = _distance_between((state.latitude, state.longitude), (wp[1], wp[0]))
+            if d < best_dist:
+                best_dist = d
+                best_idx = wi
+    return best_idx
+
+
 def _move_toward(current: tuple, target: tuple, speed_factor: float) -> tuple:
     """Move current position toward target by speed factor."""
     lat, lon = current[:2]
@@ -4693,7 +4707,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.aircraft_type, state.assigned_gate,
                 )
                 _set_phase(state, FlightPhase.APPROACHING)
-                state.waypoint_index = 0
+                state.waypoint_index = _snap_to_nearest_waypoint(state)
                 state.star_name = _get_star_name(state.origin_airport)
                 # Smooth speed transition: set speed from OpenAP descent profile
                 # to prevent a visible speed jump on the first approach tick
@@ -4710,7 +4724,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.aircraft_type, state.assigned_gate,
                 )
                 _set_phase(state, FlightPhase.APPROACHING)
-                state.waypoint_index = 0
+                state.waypoint_index = _snap_to_nearest_waypoint(state)
                 state.star_name = _get_star_name(state.origin_airport)
                 _dp = get_descent_profile(state.aircraft_type)
                 _, _ps, _pv = interpolate_profile(_dp, 0.5)
@@ -4795,16 +4809,17 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
             if random.random() < 0.005 * dt:
                 _set_phase(state, FlightPhase.APPROACHING)
-                state.waypoint_index = 0
+                state.waypoint_index = _snap_to_nearest_waypoint(state)
                 state.star_name = _get_star_name(state.origin_airport)
 
         # 14 CFR 91.117: 250 kts IAS below 10,000 ft MSL
         if state.altitude < 10000:
             state.velocity = min(state.velocity, MAX_SPEED_BELOW_FL100_KTS)
 
-        # Move in current heading direction
-        state.latitude += math.cos(math.radians(state.heading)) * 0.001 * dt
-        state.longitude += math.sin(math.radians(state.heading)) * 0.001 * dt
+        # Move in current heading direction (velocity-based, latitude-corrected)
+        speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+        state.latitude += math.cos(math.radians(state.heading)) * speed_deg
+        state.longitude += math.sin(math.radians(state.heading)) * speed_deg / max(0.01, math.cos(math.radians(state.latitude)))
 
     # Safety: clamp altitude floor and normalize heading
     state.altitude = max(0.0, state.altitude)

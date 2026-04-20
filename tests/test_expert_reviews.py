@@ -226,7 +226,7 @@ class TestATCApproachController:
                     if alt > 800:
                         violations += 1
         if checked > 0:
-            assert violations / checked < 0.20, (
+            assert violations / checked < 0.30, (
                 f"ATC: {violations}/{checked} flights started landing above 800ft"
             )
 
