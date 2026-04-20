@@ -8,7 +8,7 @@
 # Install app dependencies + test dependencies
 # Note: psycopg2-binary and openap excluded — not installable on serverless
 # (psycopg2 guarded by PSYCOPG2_AVAILABLE flag, openap only lazy-imported)
-%pip install fastapi==0.135.2 uvicorn==0.42.0 websockets==16.0 pydantic==2.12.5 starlette==1.0.0 python-dotenv==1.2.2 httpx==0.28.1 requests==2.32.5 tenacity==9.1.4 circuitbreaker==2.1.3 Faker==40.11.1 databricks-sql-connector==4.2.5 databricks-sdk==0.102.0 pyyaml==6.0.2 pytest pytest-mock pytest-asyncio pytest-cov --quiet
+%pip install fastapi==0.135.2 uvicorn==0.42.0 websockets==16.0 pydantic==2.12.5 starlette==1.0.0 python-dotenv==1.2.2 httpx==0.28.1 requests==2.32.5 tenacity==9.1.4 circuitbreaker==2.1.3 Faker==40.11.1 databricks-sql-connector==4.2.5 databricks-sdk==0.102.0 pyyaml==6.0.2 python-multipart==0.0.20 pytest pytest-mock pytest-asyncio pytest-cov --quiet
 
 # COMMAND ----------
 
