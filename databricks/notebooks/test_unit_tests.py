@@ -55,7 +55,6 @@ result = subprocess.run(
     [
         sys.executable, "-m", "pytest",
         "tests/", "-v", "--tb=short",
-        "-x",  # Stop on first failure for faster feedback
         "--override-ini=asyncio_mode=auto",
     ],
     capture_output=True,
