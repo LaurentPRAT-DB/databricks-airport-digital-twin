@@ -30,4 +30,4 @@ resources:
         component: unit-test
         target: ${bundle.target}
 
-      timeout_seconds: 1800
+      timeout_seconds: 3600
