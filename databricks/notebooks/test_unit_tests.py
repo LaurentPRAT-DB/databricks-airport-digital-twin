@@ -50,17 +50,18 @@ print(f"pyproject.toml exists: {os.path.exists(os.path.join(bundle_root, 'pyproj
 
 # COMMAND ----------
 
-# Run pytest with JUnit XML output
+# Run pytest
 result = subprocess.run(
     [
         sys.executable, "-m", "pytest",
         "tests/", "-v", "--tb=short",
-        "--junitxml=/tmp/test-results.xml",
         "-x",  # Stop on first failure for faster feedback
+        "--override-ini=asyncio_mode=auto",
     ],
     capture_output=True,
     text=True,
     cwd=bundle_root,
+    env={**os.environ, "PYTHONPATH": bundle_root},
 )
 
 # Print output
