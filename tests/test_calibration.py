@@ -263,9 +263,9 @@ class TestAirportProfileLoader:
         if not available:
             pytest.skip("No pre-built profiles found")
 
-        for icao in available:
-            p = loader.get_profile(icao)
-            assert p.icao_code == icao
+        for code in available:
+            p = loader.get_profile(code)
+            assert p.icao_code  # has a valid ICAO code
             assert len(p.airline_shares) > 0
 
 

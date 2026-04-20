@@ -194,8 +194,10 @@ class AirportProfileLoader:
                 self._cache[icao] = uc_profile
                 return uc_profile
 
-        # Try local JSON
+        # Try local JSON (files may be named by ICAO or IATA)
         json_path = self._profiles_dir / f"{icao}.json"
+        if not json_path.exists() and iata != icao:
+            json_path = self._profiles_dir / f"{iata}.json"
         if json_path.exists():
             try:
                 profile = AirportProfile.load(json_path)
@@ -385,24 +387,13 @@ def save_batch_to_unity_catalog(
 
 
 # ============================================================================
-# IATA ↔ ICAO mapping (common airports)
+# IATA ↔ ICAO mapping (derived from AIRPORTS table — all 1180+ airports)
 # ============================================================================
 
+from src.ingestion.airport_table import AIRPORTS as _AIRPORT_TABLE
+
 _IATA_TO_ICAO: dict[str, str] = {
-    "SFO": "KSFO", "LAX": "KLAX", "ORD": "KORD", "DFW": "KDFW",
-    "JFK": "KJFK", "ATL": "KATL", "DEN": "KDEN", "SEA": "KSEA",
-    "BOS": "KBOS", "PHX": "KPHX", "LAS": "KLAS", "MCO": "KMCO",
-    "MIA": "KMIA", "CLT": "KCLT", "MSP": "KMSP", "DTW": "KDTW",
-    "EWR": "KEWR", "PHL": "KPHL", "IAH": "KIAH", "SAN": "KSAN",
-    "PDX": "KPDX",
-    "LHR": "EGLL", "CDG": "LFPG", "FRA": "EDDF", "AMS": "EHAM",
-    "HKG": "VHHH", "NRT": "RJAA", "SIN": "WSSS", "SYD": "YSSY",
-    "DXB": "OMDB", "ICN": "RKSI", "GRU": "SBGR", "JNB": "FAOR",
-    "CPT": "FACT",
-    # New international airports
-    "GVA": "LSGG", "ATH": "LGAV", "MAD": "LEMD", "FCO": "LIRF",
-    "AUH": "OMAA", "HND": "RJTT", "PEK": "ZBAA", "BKK": "VTBS",
-    "CMN": "GMMN", "MEX": "MMMX",
+    iata: icao for iata, (_lat, _lon, icao, _cc) in _AIRPORT_TABLE.items()
 }
 
 _ICAO_TO_IATA: dict[str, str] = {v: k for k, v in _IATA_TO_ICAO.items()}
