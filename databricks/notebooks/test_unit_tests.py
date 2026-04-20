@@ -54,7 +54,7 @@ print(f"pyproject.toml exists: {os.path.exists(os.path.join(bundle_root, 'pyproj
 result = subprocess.run(
     [
         sys.executable, "-m", "pytest",
-        "tests/", "-v", "--tb=short",
+        "tests/", "-q", "--tb=short",
         "--override-ini=asyncio_mode=auto",
     ],
     capture_output=True,
