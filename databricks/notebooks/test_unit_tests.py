@@ -76,11 +76,16 @@ else:
 
 # COMMAND ----------
 
-# Report result
+# Report result — include error details in exit message for CLI visibility
 if result.returncode != 0:
+    # Include last 2K of stderr + stdout in exit value so CLI can see the error
+    err_tail = (result.stderr or "")[-2000:]
+    out_tail = (result.stdout or "")[-2000:]
     dbutils.notebook.exit(json.dumps({
         "status": "FAIL",
         "returncode": result.returncode,
+        "stderr_tail": err_tail,
+        "stdout_tail": out_tail,
     }))
 else:
     dbutils.notebook.exit(json.dumps({"status": "PASS"}))
