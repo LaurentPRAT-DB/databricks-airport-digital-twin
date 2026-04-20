@@ -13,6 +13,16 @@ from fastapi.testclient import TestClient
 from app.backend.main import app
 
 
+@pytest.fixture(autouse=True)
+def _mock_databricks_auth():
+    """Ensure assistant tests don't need real Databricks credentials."""
+    with patch(
+        "app.backend.api.assistant._get_databricks_auth",
+        return_value=("https://mock-host.databricks.com", "mock-token"),
+    ):
+        yield
+
+
 @pytest.fixture
 def client():
     return TestClient(app)
