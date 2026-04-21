@@ -8,6 +8,30 @@ function distSq(lat1: number, lon1: number, lat2: number, lon2: number) {
   return (lat1 - lat2) ** 2 + (lon1 - lon2) ** 2;
 }
 
+/** Max gap (degrees²) before splitting a polyline — ~0.04° ≈ 2.5 NM.
+ *  Normal 30s snapshot spacing at 180 kts is ~0.025° (0.000625 sq),
+ *  go-around gaps are 0.08°+ (0.0064 sq). */
+const MAX_GAP_SQ = 0.04 * 0.04; // 0.0016
+
+/** Split a polyline into segments wherever consecutive points are far apart. */
+function splitAtGaps(positions: [number, number][]): [number, number][][] {
+  if (positions.length < 2) return positions.length === 0 ? [] : [positions];
+  const segments: [number, number][][] = [];
+  let current: [number, number][] = [positions[0]];
+  for (let i = 1; i < positions.length; i++) {
+    const prev = positions[i - 1];
+    const cur = positions[i];
+    if (distSq(prev[0], prev[1], cur[0], cur[1]) > MAX_GAP_SQ) {
+      if (current.length >= 2) segments.push(current);
+      current = [cur];
+    } else {
+      current.push(cur);
+    }
+  }
+  if (current.length >= 2) segments.push(current);
+  return segments;
+}
+
 /** Normalize trajectory points from either API or simulation into a common shape. */
 interface NormalizedPoint {
   latitude: number;
@@ -100,7 +124,12 @@ export default function TrajectoryLine() {
     return { traveledPositions: traveled, remainingPositions: remaining };
   }, [validPoints, selectedFlight?.latitude, selectedFlight?.longitude]);
 
-  if (!showTrajectory || (traveledPositions.length < 2 && remainingPositions.length < 2)) {
+  // Split polylines at large gaps (e.g. go-around enroute segments that are
+  // excluded from the trajectory, causing unrealistic straight-line jumps)
+  const traveledSegments = useMemo(() => splitAtGaps(traveledPositions), [traveledPositions]);
+  const remainingSegments = useMemo(() => splitAtGaps(remainingPositions), [remainingPositions]);
+
+  if (!showTrajectory || (traveledSegments.length === 0 && remainingSegments.length === 0)) {
     return null;
   }
 
@@ -115,10 +144,11 @@ export default function TrajectoryLine() {
 
   return (
     <>
-      {/* Traveled trajectory — dashed line (─ ─ ─) */}
-      {traveledPositions.length >= 2 && (
+      {/* Traveled trajectory — dashed line (─ ─ ─), split at gaps */}
+      {traveledSegments.map((seg, i) => (
         <Polyline
-          positions={traveledPositions}
+          key={`traveled-${i}`}
+          positions={seg}
           pathOptions={{
             color: '#3b82f6',
             weight: 3,
@@ -126,12 +156,13 @@ export default function TrajectoryLine() {
             dashArray: '10, 5',
           }}
         />
-      )}
+      ))}
 
-      {/* Remaining trajectory — animated marching-ants dotted line */}
-      {remainingPositions.length >= 2 && (
+      {/* Remaining trajectory — animated marching-ants dotted line, split at gaps */}
+      {remainingSegments.map((seg, i) => (
         <Polyline
-          positions={remainingPositions}
+          key={`remaining-${i}`}
+          positions={seg}
           pathOptions={{
             color: '#1e293b',
             weight: 3,
@@ -140,7 +171,7 @@ export default function TrajectoryLine() {
             className: 'trajectory-remaining',
           }}
         />
-      )}
+      ))}
 
       {/* Historical position markers (show every Nth point) */}
       {validPoints
