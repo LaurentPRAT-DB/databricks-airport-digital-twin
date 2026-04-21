@@ -180,6 +180,35 @@ function getEventPosition(event: ScenarioEvent, startTime: string | null, endTim
   return Math.max(0, Math.min(100, pct));
 }
 
+interface EventCluster {
+  events: ScenarioEvent[];
+  position: number;
+}
+
+function clusterEvents(
+  events: ScenarioEvent[],
+  startTime: string | null,
+  endTime: string | null,
+  thresholdPct = 1.5,
+): EventCluster[] {
+  const positioned = events
+    .map(e => ({ event: e, pos: getEventPosition(e, startTime, endTime) }))
+    .filter((p): p is { event: ScenarioEvent; pos: number } => p.pos !== null)
+    .sort((a, b) => a.pos - b.pos);
+
+  const clusters: EventCluster[] = [];
+  for (const { event, pos } of positioned) {
+    const last = clusters[clusters.length - 1];
+    if (last && Math.abs(pos - last.position) < thresholdPct) {
+      last.events.push(event);
+      last.position = (last.position * (last.events.length - 1) + pos) / last.events.length;
+    } else {
+      clusters.push({ events: [event], position: pos });
+    }
+  }
+  return clusters;
+}
+
 /** Playback control bar shown at the bottom of the screen during simulation replay. */
 function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResult; isRecorded?: boolean }) {
   const barRef = useRef<HTMLDivElement>(null);
@@ -298,28 +327,47 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          {/* Scenario event markers */}
-          {sim.scenarioEvents
-            .filter((e) => e.event_type !== 'capacity')
-            .map((event, i) => {
-              const pos = getEventPosition(event, sim.simStartTime, sim.simEndTime);
-              if (pos === null) return null;
-              const colorClass = EVENT_COLORS[event.event_type] || 'bg-gray-400';
-              return (
-                <div
-                  key={`${event.time}-${i}`}
-                  className="absolute top-0 -translate-x-1/2 cursor-pointer z-10"
-                  style={{ left: `${pos}%` }}
-                  title={`${event.event_type}: ${event.description}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    sim.seekToTime(event.time);
-                  }}
-                >
-                  <div className={`w-1.5 h-3 rounded-sm ${colorClass} opacity-80 hover:opacity-100 hover:scale-150 transition-all`} />
-                </div>
-              );
-            })}
+          {/* Scenario event markers (clustered when overlapping) */}
+          {clusterEvents(
+            sim.scenarioEvents.filter((e) => e.event_type !== 'capacity'),
+            sim.simStartTime,
+            sim.simEndTime,
+          ).map((cluster, ci) => {
+            const mainColor = EVENT_COLORS[cluster.events[0].event_type] || 'bg-gray-400';
+            const tooltip = cluster.events.map(e => `${EVENT_LABELS[e.event_type] || e.event_type}: ${e.description}`).join('\n');
+            return (
+              <div
+                key={`cluster-${ci}`}
+                className="absolute top-0 -translate-x-1/2 cursor-pointer z-10"
+                style={{ left: `${cluster.position}%` }}
+                title={tooltip}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sim.seekToTime(cluster.events[0].time);
+                }}
+              >
+                {cluster.events.length === 1 ? (
+                  <div className={`w-1.5 h-3 rounded-sm ${mainColor} opacity-80 hover:opacity-100 hover:scale-150 transition-all`} />
+                ) : (
+                  <div className="relative">
+                    {cluster.events.slice(0, 4).map((evt, j) => {
+                      const color = EVENT_COLORS[evt.event_type] || 'bg-gray-400';
+                      return (
+                        <div
+                          key={j}
+                          className={`w-1.5 h-3 rounded-sm ${color} opacity-80`}
+                          style={{ position: j === 0 ? 'relative' : 'absolute', top: `${j * 4}px`, left: 0 }}
+                        />
+                      );
+                    })}
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-800 text-[8px] text-white font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center ring-1 ring-slate-600">
+                      {cluster.events.length}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {/* Frame info tooltip on hover */}
           <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
             Frame {sim.currentFrameIndex + 1} / {sim.totalFrames}

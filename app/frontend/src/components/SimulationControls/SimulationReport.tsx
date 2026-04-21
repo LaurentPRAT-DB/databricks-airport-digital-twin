@@ -103,7 +103,10 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   const [toHour, setToHour] = useState(endHour === 0 ? 24 : endHour);
 
   // Grouping mode
-  const [groupBy, setGroupBy] = useState<'time' | 'category'>('time');
+  const [groupBy, setGroupBy] = useState<'time' | 'category' | 'flight'>('time');
+
+  // Expanded flight groups (for flight grouping mode)
+  const [expandedFlights, setExpandedFlights] = useState<Set<string>>(new Set());
 
   // Captured screenshots
   const [captures, setCaptures] = useState<CapturedImage[]>([]);
@@ -121,9 +124,31 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
         const cmp = a.event_type.localeCompare(b.event_type);
         if (cmp !== 0) return cmp;
       }
+      if (groupBy === 'flight') {
+        const csA = extractCallsign(a.description) ?? '';
+        const csB = extractCallsign(b.description) ?? '';
+        const cmp = csA.localeCompare(csB);
+        if (cmp !== 0) return cmp;
+      }
       return new Date(a.time).getTime() - new Date(b.time).getTime();
     });
   }, [sim.scenarioEvents, selectedTypes, fromHour, toHour, groupBy]);
+
+  // Group events by flight callsign (for flight grouping mode)
+  const flightGroups = useMemo(() => {
+    if (groupBy !== 'flight') return null;
+    const groups: { callsign: string; events: typeof filteredEvents }[] = [];
+    const map = new Map<string, typeof filteredEvents>();
+    for (const e of filteredEvents) {
+      const cs = extractCallsign(e.description) ?? '(no callsign)';
+      if (!map.has(cs)) {
+        map.set(cs, []);
+        groups.push({ callsign: cs, events: map.get(cs)! });
+      }
+      map.get(cs)!.push(e);
+    }
+    return groups;
+  }, [filteredEvents, groupBy]);
 
   // Toggle event type
   const toggleType = useCallback((type: string) => {
@@ -379,18 +404,15 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
             <div className="flex-shrink-0">
               <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block mb-2">Group By</span>
               <div className="flex rounded overflow-hidden border border-slate-300">
-                <button
-                  onClick={() => setGroupBy('time')}
-                  className={`px-2 py-1 text-xs ${groupBy === 'time' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500'}`}
-                >
-                  Time
-                </button>
-                <button
-                  onClick={() => setGroupBy('category')}
-                  className={`px-2 py-1 text-xs ${groupBy === 'category' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500'}`}
-                >
-                  Category
-                </button>
+                {(['time', 'category', 'flight'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setGroupBy(mode)}
+                    className={`px-2 py-1 text-xs ${groupBy === mode ? 'bg-blue-600 text-white' : 'bg-white text-slate-500'}`}
+                  >
+                    {mode === 'time' ? 'Time' : mode === 'category' ? 'Category' : 'Flight'}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -408,6 +430,61 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
               <tbody>
                 {filteredEvents.length === 0 ? (
                   <tr><td colSpan={3} className="text-center py-6 text-slate-400">No events match filters</td></tr>
+                ) : groupBy === 'flight' && flightGroups ? (
+                  flightGroups.map((group) => {
+                    const isExpanded = expandedFlights.has(group.callsign);
+                    const typeCountMap = new Map<string, number>();
+                    for (const e of group.events) {
+                      typeCountMap.set(e.event_type, (typeCountMap.get(e.event_type) ?? 0) + 1);
+                    }
+                    const typeSummary = [...typeCountMap.entries()]
+                      .map(([t, c]) => `${c} ${EVENT_LABELS[t] || t}`)
+                      .join(', ');
+
+                    return [
+                      <tr
+                        key={`flight-${group.callsign}`}
+                        onClick={() => setExpandedFlights(prev => {
+                          const next = new Set(prev);
+                          if (next.has(group.callsign)) next.delete(group.callsign);
+                          else next.add(group.callsign);
+                          return next;
+                        })}
+                        className="bg-slate-50 hover:bg-blue-50 cursor-pointer border-b border-slate-200"
+                      >
+                        <td className="px-3 py-1.5 text-slate-500 font-mono text-xs">
+                          {fmtTime(group.events[0].time)}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <span className="flex items-center gap-1.5">
+                            <svg className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="currentColor" viewBox="0 0 20 20">
+                              <polygon points="6,4 14,10 6,16" />
+                            </svg>
+                            <span className="font-semibold text-slate-800 text-xs">{group.callsign}</span>
+                            <span className="bg-slate-200 text-slate-600 text-[10px] px-1.5 rounded-full font-medium">{group.events.length}</span>
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 text-slate-500 text-xs">{typeSummary}</td>
+                      </tr>,
+                      ...(isExpanded ? group.events.map((event, i) => (
+                        <tr
+                          key={`${group.callsign}-${i}`}
+                          onClick={() => handleEventClick(event.time, event.description)}
+                          className="hover:bg-blue-50 cursor-pointer transition-colors border-b border-slate-100"
+                          title="Click to jump to this event"
+                        >
+                          <td className="px-3 py-1.5 text-slate-500 font-mono text-xs pl-6">{fmtTime(event.time)}</td>
+                          <td className="px-3 py-1.5">
+                            <span className="flex items-center gap-1.5 pl-4">
+                              <span className={`w-2 h-2 rounded-sm flex-shrink-0 ${EVENT_COLORS[event.event_type] || 'bg-gray-400'}`} />
+                              <span className="text-slate-700 text-xs">{EVENT_LABELS[event.event_type] || event.event_type}</span>
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 text-slate-800 text-xs">{event.description}</td>
+                        </tr>
+                      )) : []),
+                    ];
+                  })
                 ) : filteredEvents.map((event, i) => (
                   <tr
                     key={`${event.time}-${i}`}
@@ -429,7 +506,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
             </table>
           </div>
           <div className="text-[10px] text-slate-400 text-right -mt-3">
-            {filteredEvents.length} events shown
+            {filteredEvents.length} events shown{groupBy === 'flight' && flightGroups ? ` (${flightGroups.length} flights)` : ''}
           </div>
 
           {/* Scene captures */}
