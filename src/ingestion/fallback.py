@@ -5165,7 +5165,7 @@ def generate_synthetic_flights(
         # Sanitize numeric fields to prevent NaN/Inf propagation to frontend
         _alt = _sanitize_float(state.altitude, 0.0)
         _vel = _sanitize_float(state.velocity, 0.0)
-        _hdg = _sanitize_float(state.heading, 0.0)
+        _hdg = _sanitize_float(state.heading, 0.0) % 360
         _vr = _sanitize_float(state.vertical_rate, 0.0)
         _lat = _sanitize_float(state.latitude, 0.0)
         _lon = _sanitize_float(state.longitude, 0.0)
@@ -5784,14 +5784,17 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         )
 
         if aircraft_past_threshold:
-            # Don't draw approach waypoints — just show a short
-            # descent segment ending at the aircraft position to avoid
-            # a trajectory line that crosses the airfield.
-            # Use only the last 3 approach waypoints (near threshold)
-            # offset toward the aircraft's side so the trail stays
-            # on the approach side of the field.
-            path_wps = [(clamped_lon, clamped_lat, final_alt)]
-            path_count = 1
+            # Back-project a short trailing segment so the renderer
+            # has >= 2 points (splitAtGaps drops single-point segments).
+            back_dist = 0.02  # ~2.2 km behind aircraft
+            back_bearing = (current_heading + 180) % 360
+            back_lat = clamped_lat + back_dist * math.cos(math.radians(back_bearing))
+            back_lon = clamped_lon + back_dist * math.sin(math.radians(back_bearing)) / math.cos(math.radians(clamped_lat))
+            path_wps = [
+                (back_lon, back_lat, final_alt + 300),
+                (clamped_lon, clamped_lat, final_alt),
+            ]
+            path_count = 2
         else:
             # Normal case: find nearest waypoint and build path
             wp_count = len(_traj_app_wps2)
