@@ -277,7 +277,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-[900px] max-w-[95vw] max-h-[85vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-[900px] max-w-[95vw] max-h-[92vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 rounded-t-xl">
           <div>
@@ -392,7 +392,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </div>
 
           {/* Event table */}
-          <div className="max-h-[50vh] overflow-y-auto rounded-lg border border-slate-200">
+          <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-slate-200">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100">
                 <tr>

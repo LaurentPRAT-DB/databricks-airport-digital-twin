@@ -4020,11 +4020,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.vertical_rate = 0
         else:
             # On-ground rollout: decelerate from touchdown speed to taxi speed
-            # Typical rollout: 1500-2500m, decel ~2 kts/s (reverse thrust + brakes)
+            # Typical rollout: 1000-1500m, decel ~4 kts/s (reverse thrust + brakes)
             state.altitude = 0
             state.on_ground = True
             state.vertical_rate = 0
-            state.velocity = max(25, state.velocity - 2.0 * dt)
+            state.velocity = max(25, state.velocity - 4.0 * dt)
 
         # Early runway release: vacate when on ground and past initial rollout
         # Real airports: aircraft clears active runway within ~20-30s via high-speed exit
