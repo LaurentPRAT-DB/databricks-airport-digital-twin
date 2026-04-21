@@ -34,8 +34,8 @@ sync:
     - data/calibration/download_manual/**
     - data/ml_models/**
     - data/msfs_bgl/**
-    # Frontend: only dist/ is needed at runtime (3D models served from UC Volumes)
-    - app/frontend/dist/models/**
+    # Large 3D models that aren't used in the app
+    - app/frontend/dist/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb
     - app/frontend/src/**
     - app/frontend/coverage/**
     - app/frontend/public/**
