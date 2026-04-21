@@ -44,7 +44,6 @@ from src.ingestion.fallback import (
     _release_gate,
     # State management
     _flight_states,
-    _runway_28R,
     _gate_states,
     _init_gate_states,
     # Main generator
@@ -533,31 +532,38 @@ class TestRunwayOccupancy:
 
     def setup_method(self):
         """Reset runway state before each test."""
-        _runway_28R.occupied_by = None
+        from src.ingestion.fallback import _get_runway_state
+        rs = _get_runway_state("28R")
+        rs.occupied_by = None
 
     def teardown_method(self):
         """Clean up after each test."""
-        _runway_28R.occupied_by = None
+        from src.ingestion.fallback import _get_runway_state
+        rs = _get_runway_state("28R")
+        rs.occupied_by = None
 
     def test_runway_initially_clear(self):
         """Test runway is initially clear."""
-        _runway_28R.occupied_by = None
+        from src.ingestion.fallback import _get_runway_state
+        _get_runway_state("28R").occupied_by = None
         assert _is_runway_clear("28R") is True
 
     def test_runway_occupied_after_occupy(self):
         """Test runway marked occupied."""
+        from src.ingestion.fallback import _get_runway_state
         _occupy_runway("test001", "28R")
         assert _is_runway_clear("28R") is False
-        assert _runway_28R.occupied_by == "test001"
+        assert _get_runway_state("28R").occupied_by == "test001"
 
     def test_runway_clear_after_release(self):
         """Test runway cleared after release."""
+        from src.ingestion.fallback import _get_runway_state
         _occupy_runway("test001", "28R")
         assert _is_runway_clear("28R") is False
 
         _release_runway("test001", "28R")
         assert _is_runway_clear("28R") is True
-        assert _runway_28R.occupied_by is None
+        assert _get_runway_state("28R").occupied_by is None
 
     def test_runway_release_only_by_occupier(self):
         """Test only occupying aircraft can release runway."""
@@ -782,8 +788,9 @@ class TestSeparationOverMultipleUpdates:
 
     def setup_method(self):
         """Clear all state before each test."""
+        from src.ingestion.fallback import _get_runway_state
         _flight_states.clear()
-        _runway_28R.occupied_by = None
+        _get_runway_state("28R").occupied_by = None
         _init_gate_states()
         for gate in _gate_states:
             _gate_states[gate].occupied_by = None
@@ -791,8 +798,9 @@ class TestSeparationOverMultipleUpdates:
 
     def teardown_method(self):
         """Clean up after each test."""
+        from src.ingestion.fallback import _get_runway_state
         _flight_states.clear()
-        _runway_28R.occupied_by = None
+        _get_runway_state("28R").occupied_by = None
 
     def test_separation_maintained_multiple_approach_updates(self):
         """Test approach separation is maintained across multiple updates."""

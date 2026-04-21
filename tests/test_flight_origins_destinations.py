@@ -56,9 +56,17 @@ from src.ingestion.fallback import _get_current_airport_profile
 
 @pytest.fixture(autouse=True)
 def clean_state():
-    """Reset global state before and after each test."""
+    """Reset global state before and after each test.
+
+    Explicitly resets the airport center to SFO because other tests
+    (e.g. test_multi_airport_ux) may change it, and bearing tests
+    assume SFO as the reference airport.
+    """
+    from src.ingestion.fallback import set_airport_center
+    set_airport_center(37.6213, -122.379, "SFO")
     reset_synthetic_state()
     yield
+    set_airport_center(37.6213, -122.379, "SFO")
     reset_synthetic_state()
 
 
