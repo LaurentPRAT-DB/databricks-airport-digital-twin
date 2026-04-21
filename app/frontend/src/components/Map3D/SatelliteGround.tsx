@@ -34,6 +34,7 @@ export interface TileLoadingProgress {
   loaded: number;
   total: number;
   inpainting: boolean;
+  staleTiles?: number;
 }
 
 interface SatelliteGroundProps {
@@ -100,12 +101,16 @@ export function SatelliteGround({
     return { zoom, minTX, maxTX, minTY, maxTY, cols, rows, gridNW, gridSE, deltaLat, deltaLon };
   }, [size, scale, centerLat, centerLon]);
 
-  /** Load a tile image — via inpainting proxy or direct Esri URL. */
+  /**
+   * Load a tile image — via inpainting proxy or direct Esri URL.
+   * Uses two-phase loading: cache_only first, full inpaint on miss.
+   * Returns { img, stale } where stale indicates the cached version is outdated.
+   */
   const loadTileImage = (
     esriUrl: string,
     useInpainting: boolean,
     icao: string | undefined,
-  ): Promise<HTMLImageElement> => {
+  ): Promise<{ img: HTMLImageElement; stale: boolean }> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -113,38 +118,55 @@ export function SatelliteGround({
       const loadDirect = () => {
         const directImg = new Image();
         directImg.crossOrigin = 'anonymous';
-        directImg.onload = () => resolve(directImg);
-        directImg.onerror = () => resolve(directImg); // still resolve — caller handles missing tiles
+        directImg.onload = () => resolve({ img: directImg, stale: false });
+        directImg.onerror = () => resolve({ img: directImg, stale: false });
         directImg.src = esriUrl;
+      };
+
+      const loadFromBlob = (blob: Blob, stale: boolean) => {
+        const objectUrl = URL.createObjectURL(blob);
+        img.onload = () => {
+          URL.revokeObjectURL(objectUrl);
+          resolve({ img, stale });
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          loadDirect();
+        };
+        img.src = objectUrl;
       };
 
       if (useInpainting) {
         const params = new URLSearchParams({ url: esriUrl });
         if (icao) params.set('airport_icao', icao);
 
-        fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST' })
+        // Phase 1: cache-only check
+        const cacheParams = new URLSearchParams(params);
+        cacheParams.set('cache_only', 'true');
+
+        fetch(`/api/inpainting/clean-tile?${cacheParams.toString()}`, { method: 'POST' })
           .then((resp) => {
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            return resp.blob();
-          })
-          .then((blob) => {
-            const objectUrl = URL.createObjectURL(blob);
-            img.onload = () => {
-              URL.revokeObjectURL(objectUrl);
-              resolve(img);
-            };
-            img.onerror = () => {
-              URL.revokeObjectURL(objectUrl);
-              loadDirect(); // Fallback to raw Esri tile
-            };
-            img.src = objectUrl;
+            if (resp.ok) {
+              const isStale = resp.headers.get('X-Cache') === 'STALE';
+              return resp.blob().then((blob) => loadFromBlob(blob, isStale));
+            }
+            if (resp.status === 204) {
+              // Phase 2: full inpaint on cache miss
+              return fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST' })
+                .then((r) => {
+                  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                  return r.blob();
+                })
+                .then((blob) => loadFromBlob(blob, false));
+            }
+            throw new Error(`HTTP ${resp.status}`);
           })
           .catch(() => {
-            loadDirect(); // Fallback to raw Esri tile
+            loadDirect();
           });
       } else {
-        img.onload = () => resolve(img);
-        img.onerror = () => resolve(img);
+        img.onload = () => resolve({ img, stale: false });
+        img.onerror = () => resolve({ img, stale: false });
         img.src = esriUrl;
       }
     });
@@ -171,10 +193,11 @@ export function SatelliteGround({
 
     let cancelled = false;
     let loadedCount = 0;
+    let staleCount = 0;
     const totalTiles = cols * rows;
 
     // Signal loading start
-    onLoadingProgress?.({ loaded: 0, total: totalTiles, inpainting });
+    onLoadingProgress?.({ loaded: 0, total: totalTiles, inpainting, staleTiles: 0 });
 
     const finalize = () => {
       if (cancelled) return;
@@ -218,11 +241,12 @@ export function SatelliteGround({
         const px = (tx - minTX) * TILE_SIZE;
         const py = (ty - minTY) * TILE_SIZE;
 
-        loadTileImage(esriUrl, inpainting, airportIcao).then((img) => {
+        loadTileImage(esriUrl, inpainting, airportIcao).then(({ img, stale }) => {
           if (cancelled) return;
           ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE);
           loadedCount++;
-          onLoadingProgress?.({ loaded: loadedCount, total: totalTiles, inpainting });
+          if (stale) staleCount++;
+          onLoadingProgress?.({ loaded: loadedCount, total: totalTiles, inpainting, staleTiles: staleCount });
           if (loadedCount === totalTiles) {
             onLoadingProgress?.(null); // done
             finalize();

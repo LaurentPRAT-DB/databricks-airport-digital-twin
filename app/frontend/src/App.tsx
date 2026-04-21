@@ -120,6 +120,7 @@ function ViewToggle({
   inpainting,
   onInpaintingToggle,
   airportIcao,
+  staleTileCount = 0,
 }: {
   viewMode: ViewMode;
   onToggle: (mode: ViewMode) => void;
@@ -128,6 +129,7 @@ function ViewToggle({
   inpainting: boolean;
   onInpaintingToggle: (on: boolean) => void;
   airportIcao?: string;
+  staleTileCount?: number;
 }) {
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>('unknown');
   const [statusMessage, setStatusMessage] = useState('');
@@ -465,6 +467,28 @@ function ViewToggle({
           )}
         </div>
       )}
+
+      {/* Stale cache notification — satellite imagery updated but cached tiles are from older version */}
+      {inpainting && satellite && staleTileCount > 0 && (
+        <div className="bg-amber-800/90 backdrop-blur text-white rounded-lg shadow-md px-3 py-2 text-xs max-w-[280px]">
+          <div className="flex items-center gap-2">
+            <svg className="w-3 h-3 flex-shrink-0 text-amber-300" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+            </svg>
+            <span className="text-amber-200">{staleTileCount} tile{staleTileCount !== 1 ? 's have' : ' has'} newer satellite imagery</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-amber-400/80">
+            <span>Cached versions shown</span>
+            <button
+              onClick={handleRefreshTiles}
+              className="ml-2 text-amber-300 hover:text-amber-200 transition-colors font-medium"
+              title="Clear cache and re-inpaint with latest satellite imagery"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -494,6 +518,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
   const [satellite, setSatellite] = useState(false);
   const [inpainting, setInpainting] = useState(false);
+  const [staleTileCount, setStaleTileCount] = useState(0);
   const [showFIDS, setShowFIDS] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Initializing');
@@ -528,6 +553,15 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   }, []);
   const { flights, filteredFlights, selectedFlight, setSelectedFlight, dataMode, setDataMode } = useFlightContext();
   const { currentAirport, loadAirport, initializeDefaultAirport, demoReady: wsDemoReady } = useAirportConfigContext();
+
+  // Reset stale tile count when inpainting is toggled or airport changes
+  useEffect(() => {
+    setStaleTileCount(0);
+  }, [inpainting, currentAirport]);
+
+  const handleStaleTileDetected = useCallback(() => {
+    setStaleTileCount((prev) => prev + 1);
+  }, []);
 
   // Turn off clean tiles (inpainting) when switching to recorded data mode
   // to avoid tile processing competing with recording loading
@@ -679,7 +713,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   // Shared map view (used in both desktop and mobile layouts)
   const mapView = (
     <div className="flex-1 overflow-hidden relative">
-      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} />
+      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} staleTileCount={staleTileCount} />
       <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
         <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>
           <AirportMap
@@ -688,6 +722,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
             satellite={satellite}
             inpainting={inpainting && satellite}
             airportIcao={currentAirport ?? undefined}
+            onStaleDetected={handleStaleTileDetected}
           />
         </Suspense>
       </div>

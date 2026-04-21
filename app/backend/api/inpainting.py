@@ -208,6 +208,7 @@ async def clean_tile(
     request: Request,
     url: Optional[str] = Query(None, description="Satellite tile URL to fetch and clean"),
     airport_icao: Optional[str] = Query(None, description="Airport ICAO code for cache tagging"),
+    cache_only: bool = Query(False, description="Only check cache, never call inpainting endpoint"),
     file: Optional[UploadFile] = File(None, description="Direct image upload"),
 ):
     """Remove aircraft from a satellite tile image.
@@ -219,7 +220,8 @@ async def clean_tile(
     1. Parse tile coords from URL
     2. Fetch source tile headers (ETag/Last-Modified) for freshness check
     3. Check Lakebase cache — if hit with matching ETag, return cached
-    4. On miss: fetch full tile, call serving endpoint, cache result
+    4. On miss: if cache_only, return stale cached tile (X-Cache: STALE) or 204 (X-Cache: MISS)
+    5. Otherwise: fetch full tile, call serving endpoint, cache result
     """
     lakebase = get_lakebase_service()
     tile_coords = _parse_tile_coords(url) if url else None
@@ -257,6 +259,31 @@ async def clean_tile(
                     media_type="image/png",
                     headers=resp_headers,
                 )
+
+            # Fresh cache miss — in cache_only mode, try returning stale version
+            if cache_only:
+                stale = lakebase.get_cached_tile(z, tx, ty, source_etag=None)
+                if stale:
+                    logger.debug("Returning stale cached tile for %d/%d/%d", z, tx, ty)
+                    stale_headers = {
+                        "X-Cache": "STALE",
+                        "X-Aircraft-Count": str(stale["aircraft_count"]),
+                    }
+                    if stale.get("detections"):
+                        stale_headers["X-Detections"] = (
+                            stale["detections"] if isinstance(stale["detections"], str)
+                            else json.dumps(stale["detections"])
+                        )
+                    return Response(
+                        content=stale["image_bytes"],
+                        media_type="image/png",
+                        headers=stale_headers,
+                    )
+                return Response(status_code=204, headers={"X-Cache": "MISS"})
+
+        # cache_only with no tile coords or no URL — nothing to check
+        if cache_only:
+            return Response(status_code=204, headers={"X-Cache": "MISS"})
 
         # --- Step 2: Fetch the full tile ---
         try:
