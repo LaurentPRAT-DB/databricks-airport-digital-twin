@@ -75,7 +75,18 @@ export function capture3D(simTime: string | null, airport: string | null): strin
   return watermarked.toDataURL('image/png');
 }
 
-/** Capture the 2D map by compositing Leaflet tile canvases and SVG overlays. */
+/** Load an image with CORS and return it, or null on failure. */
+function loadImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+/** Capture the 2D map by compositing Leaflet tile images and overlays. */
 export async function capture2D(simTime: string | null, airport: string | null): Promise<string | null> {
   const mapContainer = document.querySelector('.leaflet-container') as HTMLElement;
   if (!mapContainer) return null;
@@ -92,32 +103,73 @@ export async function capture2D(simTime: string | null, airport: string | null):
   if (!ctx) return null;
   ctx.scale(dpr, dpr);
 
-  // 1. Draw tile layer canvases (background map)
-  const tileCanvases = mapContainer.querySelectorAll('.leaflet-tile-pane canvas');
-  if (tileCanvases.length > 0) {
-    for (const tc of tileCanvases) {
-      const tileCanvas = tc as HTMLCanvasElement;
-      const tileRect = tileCanvas.getBoundingClientRect();
-      const tx = tileRect.left - rect.left;
-      const ty = tileRect.top - rect.top;
+  // 1. Draw tile images (Leaflet uses <img> elements, not <canvas>)
+  const tileImages = mapContainer.querySelectorAll('.leaflet-tile-pane img.leaflet-tile');
+  let tilesDrawn = 0;
+  if (tileImages.length > 0) {
+    // Load tiles with CORS to avoid tainted canvas
+    const tilePromises = Array.from(tileImages).map(async (tile) => {
+      const tileEl = tile as HTMLImageElement;
+      const tileRect = tileEl.getBoundingClientRect();
+      // Skip tiles outside viewport
+      if (tileRect.right < rect.left || tileRect.left > rect.right ||
+          tileRect.bottom < rect.top || tileRect.top > rect.bottom) return;
       try {
-        ctx.drawImage(tileCanvas, tx, ty, tileRect.width, tileRect.height);
+        // Try drawing directly first (same-origin or CORS-allowed tiles)
+        const tx = tileRect.left - rect.left;
+        const ty = tileRect.top - rect.top;
+        ctx.drawImage(tileEl, tx, ty, tileRect.width, tileRect.height);
+        tilesDrawn++;
       } catch {
-        // CORS-tainted tile, skip
+        // CORS-tainted: reload with crossOrigin attribute
+        const img = await loadImage(tileEl.src);
+        if (img) {
+          const tx = tileRect.left - rect.left;
+          const ty = tileRect.top - rect.top;
+          try {
+            ctx.drawImage(img, tx, ty, tileRect.width, tileRect.height);
+            tilesDrawn++;
+          } catch { /* skip this tile */ }
+        }
+      }
+    });
+    await Promise.all(tilePromises);
+  }
+
+  // Fallback: also try canvas tiles (some tile layers use canvas renderer)
+  if (tilesDrawn === 0) {
+    const tileCanvases = mapContainer.querySelectorAll('.leaflet-tile-pane canvas');
+    if (tileCanvases.length > 0) {
+      for (const tc of tileCanvases) {
+        const tileCanvas = tc as HTMLCanvasElement;
+        const tileRect = tileCanvas.getBoundingClientRect();
+        const tx = tileRect.left - rect.left;
+        const ty = tileRect.top - rect.top;
+        try {
+          ctx.drawImage(tileCanvas, tx, ty, tileRect.width, tileRect.height);
+          tilesDrawn++;
+        } catch { /* CORS-tainted tile, skip */ }
       }
     }
-  } else {
-    ctx.fillStyle = '#1e293b';
+  }
+
+  // Last resort: fill with map background color
+  if (tilesDrawn === 0) {
+    ctx.fillStyle = '#aad3df'; // OSM water color
     ctx.fillRect(0, 0, rect.width, rect.height);
   }
 
-  // 2. Draw SVG overlays (flight markers, paths, etc.)
-  const svgs = mapContainer.querySelectorAll('.leaflet-overlay-pane svg, .leaflet-marker-pane svg');
+  // 2. Draw SVG overlays (polylines, polygons, circles)
+  const svgs = mapContainer.querySelectorAll('.leaflet-overlay-pane svg');
   for (const svg of svgs) {
     const svgEl = svg as SVGSVGElement;
     const svgRect = svgEl.getBoundingClientRect();
     try {
-      const svgData = new XMLSerializer().serializeToString(svgEl);
+      const clone = svgEl.cloneNode(true) as SVGSVGElement;
+      // Ensure the SVG has explicit dimensions for rendering
+      clone.setAttribute('width', String(svgRect.width));
+      clone.setAttribute('height', String(svgRect.height));
+      const svgData = new XMLSerializer().serializeToString(clone);
       const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(svgBlob);
       const img = new Image();
@@ -132,6 +184,45 @@ export async function capture2D(simTime: string | null, airport: string | null):
       URL.revokeObjectURL(url);
     } catch {
       // SVG serialization failed, skip
+    }
+  }
+
+  // 3. Draw marker pane elements (divIcon markers with aircraft icons)
+  const markerPane = mapContainer.querySelector('.leaflet-marker-pane');
+  if (markerPane) {
+    const markers = markerPane.querySelectorAll('.leaflet-marker-icon');
+    for (const marker of markers) {
+      const markerEl = marker as HTMLElement;
+      const markerRect = markerEl.getBoundingClientRect();
+      const mx = markerRect.left - rect.left;
+      const my = markerRect.top - rect.top;
+
+      // Try to find an SVG inside the marker div (aircraft icons)
+      const innerSvg = markerEl.querySelector('svg');
+      if (innerSvg) {
+        try {
+          const clone = innerSvg.cloneNode(true) as SVGSVGElement;
+          clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+          clone.setAttribute('width', String(markerRect.width));
+          clone.setAttribute('height', String(markerRect.height));
+          const svgData = new XMLSerializer().serializeToString(clone);
+          const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+          const url = URL.createObjectURL(svgBlob);
+          const img = await loadImage(url);
+          if (img) {
+            ctx.drawImage(img, mx, my, markerRect.width, markerRect.height);
+          }
+          URL.revokeObjectURL(url);
+        } catch { /* skip */ }
+      }
+
+      // Try to find an <img> inside the marker
+      const innerImg = markerEl.querySelector('img') as HTMLImageElement;
+      if (innerImg && !innerSvg) {
+        try {
+          ctx.drawImage(innerImg, mx, my, markerRect.width, markerRect.height);
+        } catch { /* skip */ }
+      }
     }
   }
 
