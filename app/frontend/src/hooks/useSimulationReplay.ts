@@ -451,7 +451,10 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     const timestamp = simData.frame_timestamps[currentFrameIndex];
     const snapshots = simData.frames[timestamp] || [];
     const src = dataSourceRef.current;
-    setFlights(snapshots.map((s) => snapshotToFlight(s, src)));
+    // Filter out enroute flights — they're at cruise altitude far from the airport
+    // and render as tiny confusing dots on the map during playback
+    const relevant = snapshots.filter((s) => s.phase !== 'enroute');
+    setFlights(relevant.map((s) => snapshotToFlight(s, src)));
   }, [simData, currentFrameIndex]);
 
   // Compute sim-seconds between consecutive frames from the loaded data.
