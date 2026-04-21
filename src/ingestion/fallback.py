@@ -3988,6 +3988,17 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # Check if reached waypoint
             if _distance_between((state.latitude, state.longitude), target) < 0.003:
                 state.waypoint_index += 1
+                # Immediately aim toward the NEXT waypoint to prevent zigzag.
+                # Without this, heading was computed toward the just-reached
+                # waypoint (distance ≈ 0) which returns a degenerate 0° bearing,
+                # swinging the heading ~90° off course every other tick.
+                if state.waypoint_index < len(approach_wps):
+                    next_wp = approach_wps[state.waypoint_index]
+                    next_target = (next_wp[1], next_wp[0])
+                    next_hdg = _calculate_heading(
+                        (state.latitude, state.longitude), next_target
+                    )
+                    state.heading = _smooth_heading(state.heading, next_hdg, 3.0, dt)
         else:
             # Safety fallback: waypoint exhaustion
             if state.altitude > 1000:
