@@ -1355,11 +1355,21 @@ def _build_arrival_taxi_route(
         spine_between.reverse()
     route.extend(spine_between)
 
-    # Turnoff, ramp midpoint, gate
+    # Turnoff → apron perimeter → gate (routes around the terminal building)
     route.append(turnoff)
-    ramp_lon = (turnoff[0] + gate_lon) / 2
-    ramp_lat = (turnoff[1] + gate_lat) / 2
-    route.append((ramp_lon, ramp_lat))
+    term_lat, term_lon = term
+    gate_dlat = gate_lat - term_lat
+    gate_dlon = gate_lon - term_lon
+    gate_dist = math.sqrt(gate_dlat ** 2 + gate_dlon ** 2)
+    if gate_dist > 1e-8:
+        # Apron radius = distance from terminal center to taxiway line midpoint.
+        # This keeps the apron waypoint outside the building footprint.
+        tw_mid_lon = (tw_start[0] + tw_end[0]) / 2
+        tw_mid_lat = (tw_start[1] + tw_end[1]) / 2
+        apron_radius = math.sqrt((term_lat - tw_mid_lat) ** 2 + (term_lon - tw_mid_lon) ** 2)
+        apron_lat = term_lat + (gate_dlat / gate_dist) * apron_radius
+        apron_lon = term_lon + (gate_dlon / gate_dist) * apron_radius
+        route.append((apron_lon, apron_lat))
     route.append((gate_lon, gate_lat))
 
     return route
@@ -1393,11 +1403,19 @@ def _build_departure_taxi_route(
 
     route: List[tuple] = []
 
-    # Gate → ramp → merge onto taxiway
+    # Gate → apron perimeter → merge onto taxiway (routes around terminal)
     route.append((gate_lon, gate_lat))
-    ramp_lon = (merge[0] + gate_lon) / 2
-    ramp_lat = (merge[1] + gate_lat) / 2
-    route.append((ramp_lon, ramp_lat))
+    term_lat, term_lon = term
+    gate_dlat = gate_lat - term_lat
+    gate_dlon = gate_lon - term_lon
+    gate_dist = math.sqrt(gate_dlat ** 2 + gate_dlon ** 2)
+    if gate_dist > 1e-8:
+        tw_mid_lon = (tw_start[0] + tw_end[0]) / 2
+        tw_mid_lat = (tw_start[1] + tw_end[1]) / 2
+        apron_radius = math.sqrt((term_lat - tw_mid_lat) ** 2 + (term_lon - tw_mid_lon) ** 2)
+        apron_lat = term_lat + (gate_dlat / gate_dist) * apron_radius
+        apron_lon = term_lon + (gate_dlon / gate_dist) * apron_radius
+        route.append((apron_lon, apron_lat))
     route.append(merge)
 
     # Spine points between merge and hold line (in correct direction)
@@ -2068,6 +2086,8 @@ def _get_taxi_waypoints_arrival(gate_ref: str, start_pos: tuple = None) -> List[
                     gate_pos,  # (lat, lon)
                 )
                 if route and len(route) >= 2:
+                    diag_log("TAXI_ROUTE_GRAPH", datetime.now(timezone.utc),
+                             gate=gate_ref, points=len(route), direction="arrival")
                     return [(lon, lat) for lat, lon in route]
     except ImportError:
         pass
@@ -2079,9 +2099,13 @@ def _get_taxi_waypoints_arrival(gate_ref: str, start_pos: tuple = None) -> List[
     if gate_ref and gate_pos:
         route = _build_arrival_taxi_route(gate_pos, start_pos=start_pos)
         if route and len(route) >= 2:
+            diag_log("TAXI_ROUTE_GEOMETRY", datetime.now(timezone.utc),
+                     gate=gate_ref, points=len(route), direction="arrival")
             return route
 
     # Last resort: generic waypoints (offset for non-SFO airports)
+    diag_log("TAXI_ROUTE_STATIC", datetime.now(timezone.utc),
+             gate=gate_ref, direction="arrival")
     return list(TAXI_WAYPOINTS_ARRIVAL)
 
 
@@ -2106,6 +2130,8 @@ def _get_taxi_waypoints_departure(gate_ref: str) -> List[tuple]:
                     (runway_threshold[1], runway_threshold[0]),  # (lat, lon) for graph
                 )
                 if route and len(route) >= 2:
+                    diag_log("TAXI_ROUTE_GRAPH", datetime.now(timezone.utc),
+                             gate=gate_ref, points=len(route), direction="departure")
                     return [(lon, lat) for lat, lon in route]
     except ImportError:
         pass
@@ -2117,9 +2143,13 @@ def _get_taxi_waypoints_departure(gate_ref: str) -> List[tuple]:
     if gate_ref and gate_pos:
         route = _build_departure_taxi_route(gate_pos)
         if route and len(route) >= 2:
+            diag_log("TAXI_ROUTE_GEOMETRY", datetime.now(timezone.utc),
+                     gate=gate_ref, points=len(route), direction="departure")
             return route
 
     # Last resort: generic waypoints (offset for non-SFO airports)
+    diag_log("TAXI_ROUTE_STATIC", datetime.now(timezone.utc),
+             gate=gate_ref, direction="departure")
     return list(TAXI_WAYPOINTS_DEPARTURE)
 
 
@@ -4673,6 +4703,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.longitude += math.sin(math.radians(state.heading)) * speed_deg / max(0.01, math.cos(math.radians(state.latitude)))
                 if state.altitude >= state.go_around_target_alt:
                     state.go_around_target_alt = 0.0
+                state.heading = state.heading % 360
                 return state
 
             target_heading = _calculate_heading(
@@ -5225,6 +5256,18 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     ground_phases = ["ground", "taxi_to_gate", "taxi_to_runway", "pushback"]
     is_on_ground = current_phase in ground_phases or end_alt < 100
 
+    # Detect go-around: aircraft is ENROUTE but arriving (missed approach climb)
+    _local_iata = get_current_airport_iata()
+    is_go_around = (
+        current_state
+        and current_state.go_around_count > 0
+        and current_phase == "enroute"
+        and (current_state.origin_airport and (
+            not current_state.destination_airport
+            or current_state.destination_airport == _local_iata
+        ))
+    )
+
     # =========================================================================
     # Generate trajectory following the ILS approach path
     # =========================================================================
@@ -5245,7 +5288,130 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     rwy_threshold_lon, rwy_threshold_lat = _rwy_threshold[0], _rwy_threshold[1]
     dep_rwy_lon, dep_rwy_lat = _dep_threshold[0], _dep_threshold[1]
 
-    if is_on_ground:
+    if is_go_around:
+        # =================================================================
+        # GO-AROUND TRAJECTORY: approach trail + missed approach climb-out
+        # =================================================================
+        # Shows the approach path the aircraft flew, then the climb-out
+        # on runway heading after the missed approach decision, curving
+        # back toward the holding area / aircraft's current position.
+        origin_airport = current_state.origin_airport if current_state else None
+        _traj_app_wps_ga = _get_approach_waypoints(origin_airport)
+        _rwy_heading_ga = _get_runway_heading()
+        if _rwy_heading_ga is None or len(_traj_app_wps_ga) < 2:
+            return []
+
+        # Phase budget: 60% approach, 25% climb-out, 15% return to holding
+        _GA_APP_PTS = 48
+        _GA_CLIMB_PTS = 20
+        _GA_RETURN_PTS = 12
+        _ga_total = _GA_APP_PTS + _GA_CLIMB_PTS + _GA_RETURN_PTS  # 80
+
+        _ga_total_secs = minutes * 60
+        _ga_app_dur = 0.60 * _ga_total_secs
+        _ga_climb_dur = 0.25 * _ga_total_secs
+        _ga_return_dur = 0.15 * _ga_total_secs
+
+        # Climb-out endpoint: project forward on runway heading from threshold
+        _rwy_rad_ga = math.radians(_rwy_heading_ga)
+        _climb_dist_deg = 0.03  # ~3.3 km climb-out segment
+        _climb_end_lat = rwy_threshold_lat + _climb_dist_deg * math.cos(_rwy_rad_ga)
+        _climb_end_lon = rwy_threshold_lon + _climb_dist_deg * math.sin(_rwy_rad_ga) / math.cos(math.radians(rwy_threshold_lat))
+        _climb_end_alt = 1500.0  # missed approach altitude
+
+        # Aircraft type for descent/climb profiles
+        _ga_actype = current_state.aircraft_type if current_state else "A320"
+        _ga_desc_prof = get_descent_profile(_ga_actype)
+
+        _running_hdg = current_heading
+        for i in range(_ga_total):
+            if i < _GA_APP_PTS:
+                # APPROACH phase: interpolate along origin-aware waypoints
+                app_progress = i / max(_GA_APP_PTS - 1, 1)
+                wp_count = len(_traj_app_wps_ga)
+                wp_progress = app_progress * (wp_count - 1)
+                wp_idx = int(wp_progress)
+                wp_frac = wp_progress - wp_idx
+                if wp_idx >= wp_count - 1:
+                    wp_idx = wp_count - 2
+                    wp_frac = 1.0
+
+                wp1 = _traj_app_wps_ga[wp_idx]
+                wp2 = _traj_app_wps_ga[min(wp_idx + 1, wp_count - 1)]
+                lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
+                lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
+
+                _ga_prof_prog = 0.5 + 0.5 * app_progress
+                prof_alt, prof_spd, prof_vr = interpolate_profile(_ga_desc_prof, _ga_prof_prog)
+                alt = prof_alt
+
+                target_hdg = _calculate_heading((lat, lon), (wp2[1], wp2[0]))
+                _ga_interval = _ga_app_dur / max(_GA_APP_PTS, 1)
+                _running_hdg = _smooth_heading(_running_hdg, target_hdg, 3.0, _ga_interval)
+                heading = _running_hdg
+                velocity = prof_spd
+                vertical_rate = prof_vr
+                phase = "approaching"
+                t_offset = i * _ga_interval
+
+            elif i < _GA_APP_PTS + _GA_CLIMB_PTS:
+                # CLIMB-OUT phase: fly runway heading, climb from 200ft to 1500ft
+                ci = i - _GA_APP_PTS
+                climb_progress = ci / max(_GA_CLIMB_PTS - 1, 1)
+
+                lat = rwy_threshold_lat + climb_progress * (_climb_end_lat - rwy_threshold_lat)
+                lon = rwy_threshold_lon + climb_progress * (_climb_end_lon - rwy_threshold_lon)
+                alt = float(DECISION_HEIGHT_FT) + climb_progress * (_climb_end_alt - DECISION_HEIGHT_FT)
+
+                heading = _rwy_heading_ga
+                _running_hdg = heading
+                vref_ga = VREF_SPEEDS.get(_ga_actype, _DEFAULT_VREF)
+                velocity = vref_ga + 20  # missed approach speed
+                vertical_rate = 1500
+                phase = "enroute"
+                _ga_climb_interval = _ga_climb_dur / max(_GA_CLIMB_PTS, 1)
+                t_offset = _ga_app_dur + ci * _ga_climb_interval
+
+            else:
+                # RETURN phase: curve from climb-out end toward current position
+                ri = i - _GA_APP_PTS - _GA_CLIMB_PTS
+                return_progress = ri / max(_GA_RETURN_PTS - 1, 1)
+
+                lat = _climb_end_lat + return_progress * (end_lat - _climb_end_lat)
+                lon = _climb_end_lon + return_progress * (end_lon - _climb_end_lon)
+                alt = _climb_end_alt + return_progress * (end_alt - _climb_end_alt)
+
+                target_hdg = _calculate_heading((lat, lon), (end_lat, end_lon))
+                _ga_return_interval = _ga_return_dur / max(_GA_RETURN_PTS, 1)
+                _running_hdg = _smooth_heading(_running_hdg, target_hdg, 3.0, _ga_return_interval)
+                heading = _running_hdg
+                vref_ga = VREF_SPEEDS.get(_ga_actype, _DEFAULT_VREF)
+                velocity = vref_ga + 10
+                vertical_rate = 500 if end_alt > _climb_end_alt else -500
+                phase = "enroute"
+                t_offset = _ga_app_dur + _ga_climb_dur + ri * _ga_return_interval
+
+            _total_ga_dur = _ga_app_dur + _ga_climb_dur + _ga_return_dur
+            timestamp = now - timedelta(seconds=_total_ga_dur - t_offset)
+
+            points.append({
+                "timestamp": timestamp.isoformat(),
+                "icao24": icao24,
+                "callsign": callsign,
+                "latitude": lat,
+                "longitude": lon,
+                "altitude": max(0, alt),
+                "velocity": max(50, velocity),
+                "heading": heading % 360,
+                "vertical_rate": vertical_rate,
+                "on_ground": False,
+                "flight_phase": phase,
+                "data_source": "synthetic",
+            })
+
+        return points
+
+    elif is_on_ground:
         # Aircraft is on ground - show approach + landing + taxi trajectory
         # Divide trajectory: 45% approach, 20% landing roll, 35% taxi
         # Realistic rollout: 1500-2500m from touchdown to taxi turnoff.
