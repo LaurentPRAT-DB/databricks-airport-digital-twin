@@ -339,7 +339,11 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
                     <div className={`w-2 h-2 rounded-sm ${EVENT_COLORS[type] || 'bg-gray-400'}`} />
                     {EVENT_LABELS[type] || type}
                     <span className="text-[10px] text-slate-400 ml-0.5">
-                      ({sim.scenarioEvents.filter(e => e.event_type === type).length})
+                      ({sim.scenarioEvents.filter(e => {
+                        if (e.event_type !== type) return false;
+                        const h = getHour(e.time);
+                        return h >= fromHour && h < toHour;
+                      }).length})
                     </span>
                   </button>
                 ))}

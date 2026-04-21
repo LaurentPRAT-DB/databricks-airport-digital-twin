@@ -21,6 +21,8 @@ export function SceneCapture({ viewMode, airport, simTime }: SceneCaptureProps) 
         downloadDataUrl(dataUrl, filename);
         setShowToast(true);
         setTimeout(() => setShowToast(false), 2000);
+      } else {
+        console.warn('Scene capture returned null — view may not be available');
       }
     } catch (err) {
       console.error('Scene capture failed:', err);

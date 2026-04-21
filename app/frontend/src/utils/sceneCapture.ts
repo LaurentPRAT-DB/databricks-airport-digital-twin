@@ -104,33 +104,27 @@ export async function capture2D(simTime: string | null, airport: string | null):
   ctx.scale(dpr, dpr);
 
   // 1. Draw tile images (Leaflet uses <img> elements, not <canvas>)
+  // Always reload tiles with crossOrigin='anonymous' to avoid tainting
+  // the canvas. Direct drawImage from <img> without CORS headers silently
+  // taints the canvas, causing toDataURL() to throw SecurityError later.
   const tileImages = mapContainer.querySelectorAll('.leaflet-tile-pane img.leaflet-tile');
   let tilesDrawn = 0;
   if (tileImages.length > 0) {
-    // Load tiles with CORS to avoid tainted canvas
     const tilePromises = Array.from(tileImages).map(async (tile) => {
       const tileEl = tile as HTMLImageElement;
       const tileRect = tileEl.getBoundingClientRect();
       // Skip tiles outside viewport
       if (tileRect.right < rect.left || tileRect.left > rect.right ||
           tileRect.bottom < rect.top || tileRect.top > rect.bottom) return;
-      try {
-        // Try drawing directly first (same-origin or CORS-allowed tiles)
-        const tx = tileRect.left - rect.left;
-        const ty = tileRect.top - rect.top;
-        ctx.drawImage(tileEl, tx, ty, tileRect.width, tileRect.height);
-        tilesDrawn++;
-      } catch {
-        // CORS-tainted: reload with crossOrigin attribute
-        const img = await loadImage(tileEl.src);
-        if (img) {
-          const tx = tileRect.left - rect.left;
-          const ty = tileRect.top - rect.top;
-          try {
-            ctx.drawImage(img, tx, ty, tileRect.width, tileRect.height);
-            tilesDrawn++;
-          } catch { /* skip this tile */ }
-        }
+      const tx = tileRect.left - rect.left;
+      const ty = tileRect.top - rect.top;
+      // Reload with CORS to keep canvas exportable
+      const img = await loadImage(tileEl.src);
+      if (img) {
+        try {
+          ctx.drawImage(img, tx, ty, tileRect.width, tileRect.height);
+          tilesDrawn++;
+        } catch { /* CORS rejected by server, skip tile */ }
       }
     });
     await Promise.all(tilePromises);
@@ -227,7 +221,14 @@ export async function capture2D(simTime: string | null, airport: string | null):
   }
 
   const watermarked = addWatermark(out, simTime, airport);
-  return watermarked.toDataURL('image/png');
+  try {
+    return watermarked.toDataURL('image/png');
+  } catch {
+    // Canvas still tainted despite CORS reload — fall back to watermark-only
+    // capture (blank background + overlays that did draw successfully)
+    console.warn('Canvas tainted by CORS tiles, capture may be incomplete');
+    return null;
+  }
 }
 
 /** Capture current view (auto-detects 2D vs 3D). */
