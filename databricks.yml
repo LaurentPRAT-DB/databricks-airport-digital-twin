@@ -10,6 +10,7 @@ sync:
     - configs/**
     - scenarios/**
     - simulation_output/report/**
+    - simulation_output/REPORT_*.md
     - data/calibration/profiles/**
     - app.yaml
     - requirements.txt
