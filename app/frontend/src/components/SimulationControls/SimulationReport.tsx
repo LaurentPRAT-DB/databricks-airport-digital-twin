@@ -355,13 +355,13 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </button>
         </div>
 
-        {/* Body — scrollable (min-h-0 lets flexbox shrink below content height) */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-5">
+        {/* Body — flex child that can shrink; each tab manages its own scroll */}
+        <div className="flex-1 min-h-0 flex flex-col px-6 py-4">
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
             hasAnalysisReport ? (
-              <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-td:text-xs prose-th:text-xs prose-code:text-xs prose-pre:bg-slate-50 prose-pre:text-slate-800">
+              <div className="flex-1 min-h-0 overflow-y-auto prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-td:text-xs prose-th:text-xs prose-code:text-xs prose-pre:bg-slate-50 prose-pre:text-slate-800">
                 <Markdown remarkPlugins={[remarkGfm]}>{sim.markdownReport!}</Markdown>
               </div>
             ) : (
@@ -376,9 +376,9 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           )}
 
           {/* ── Dashboard tab ── */}
-          {activeTab === 'dashboard' && <>
+          {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col gap-5">
           {/* KPI Cards */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="shrink-0 grid grid-cols-4 gap-3">
             {[
               { label: 'On-Time', value: summary?.on_time_pct != null ? `${summary.on_time_pct}%` : '--', color: (summary?.on_time_pct as number) >= 70 ? 'text-green-600' : 'text-red-600' },
               { label: 'Avg Delay', value: summary?.schedule_delay_min != null ? `${summary.schedule_delay_min}m` : '--', color: 'text-amber-600' },
@@ -397,7 +397,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </div>
 
           {/* Filters */}
-          <div className="flex items-start gap-6">
+          <div className="shrink-0 flex items-start gap-6">
             {/* Event type filter */}
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
@@ -472,8 +472,8 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
             </div>
           </div>
 
-          {/* Event table */}
-          <div className="max-h-[40vh] overflow-y-auto rounded-lg border border-slate-200">
+          {/* Event table — fills remaining space, always shows scrollbar */}
+          <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-slate-200" style={{ scrollbarGutter: 'stable' }}>
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100">
                 <tr>
@@ -560,12 +560,12 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
               </tbody>
             </table>
           </div>
-          <div className="text-[10px] text-slate-400 text-right -mt-3">
+          <div className="shrink-0 text-[10px] text-slate-400 text-right">
             {filteredEvents.length} events shown{groupBy === 'flight' && flightGroups ? ` (${flightGroups.length} flights)` : ''}
           </div>
 
           {/* Scene captures */}
-          <div>
+          <div className="shrink-0">
             <div className="flex items-center gap-3 mb-2">
               <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Scene Captures</span>
               <button
@@ -612,7 +612,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
               </div>
             )}
           </div>
-          </>}
+          </div>}
         </div>
 
         {/* Footer */}
