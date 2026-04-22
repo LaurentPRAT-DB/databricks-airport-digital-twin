@@ -834,14 +834,15 @@ export function SimulationControls({
     setWindowPickerMetadata(meta);
   };
 
-  const handleWindowLoad = (filename: string, startTime: string, endTime: string) => {
+  const handleWindowLoad = async (filename: string, startTime: string, endTime: string) => {
     const isBatch = windowPickerMetadata?.total_frames === 0;
+    // Keep modal open while loading — sim.isLoading drives the spinner in TimeWindowPicker
+    await sim.loadWindow(filename, startTime, endTime);
     setShowWindowPicker(false);
     setWindowPickerFile(null);
     setWindowPickerMetadata(null);
-    sim.loadWindow(filename, startTime, endTime);
     if (isBatch) {
-      setTimeout(() => setShowBatchReport(true), 500);
+      setShowBatchReport(true);
     }
   };
 
