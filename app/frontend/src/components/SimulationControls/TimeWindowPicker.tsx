@@ -68,7 +68,11 @@ export function TimeWindowPicker({
   const totalFlights = (metadata.summary as Record<string, unknown>)?.total_flights as number | undefined;
   const isBatchMode = metadata.total_frames === 0 && (totalFlights ?? 0) > 0;
 
+  const [localLoading, setLocalLoading] = useState(false);
+  const loading = isLoading || localLoading;
+
   const handleLoad = () => {
+    setLocalLoading(true);
     const { startTime, endTime } = getAbsoluteTimes();
     onLoad(filename, startTime, endTime);
   };
@@ -254,14 +258,14 @@ export function TimeWindowPicker({
           {/* Load button */}
           <button
             onClick={handleLoad}
-            disabled={isLoading || windowHours <= 0}
+            disabled={loading || windowHours <= 0}
             className={`w-full py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               isBatchMode
                 ? 'bg-amber-600 hover:bg-amber-500 text-white'
                 : 'bg-blue-600 hover:bg-blue-500 text-white'
             }`}
           >
-            {isLoading ? (
+            {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 Loading...
