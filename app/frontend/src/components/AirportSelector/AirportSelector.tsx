@@ -93,7 +93,7 @@ export default function AirportSelector({
   }, [isOpen, fetchCacheStatus]);
 
   const handleSelect = async (icaoCode: string) => {
-    if (icaoCode === currentAirport) {
+    if (icaoCode === currentAirport && !isLoading) {
       setIsOpen(false);
       return;
     }

@@ -169,21 +169,24 @@ export function useAirportConfig(): UseAirportConfigReturn {
     currentAirportRef.current = currentAirport;
   }, [currentAirport]);
 
-  // Listen for airport_switch_progress and airport_switch_complete on the existing WS connection
+  // Listen for airport_switch_progress and airport_switch_complete via WS
+  // with automatic reconnection on disconnect.
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsBase = API_BASE
       ? API_BASE.replace(/^http/, 'ws')
       : `${protocol}//${window.location.host}`;
-    const ws = new WebSocket(`${wsBase}/ws/flights`);
 
-    ws.onmessage = (event) => {
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectDelay = 1000;
+    let disposed = false;
+
+    function handleMessage(event: MessageEvent) {
       try {
         const msg = JSON.parse(event.data);
 
-        // Handle async activation completion (config payload delivered via WS)
         if (msg.type === 'airport_switch_complete') {
-          // Clear safety timeout — WS message arrived
           if (loadingTimeoutRef.current) {
             clearTimeout(loadingTimeoutRef.current);
             loadingTimeoutRef.current = null;
@@ -199,18 +202,14 @@ export function useAirportConfig(): UseAirportConfigReturn {
             if (data.icaoCode) {
               setCurrentAirport(data.icaoCode);
               prevAirportRef.current = data.icaoCode;
-              // Cache the config for future use (L1 in-memory + L2 IndexedDB)
               configCache.set(data.icaoCode, { config: data.config, lastUpdated: new Date().toISOString() } as ConfigResponse);
               setCachedConfig(data.icaoCode, data.config).catch(() => {});
             }
           }
           setIsLoading(false);
-          // demoReady is already reset by loadAirport() — don't reset here
-          // to avoid batching with the subsequent demo_ready WS message
           return;
         }
 
-        // Handle demo_ready signal — backend finished generating demo for this airport
         if (msg.type === 'demo_ready') {
           const icao = msg.data?.icao;
           if (!icao || icao === currentAirportRef.current) {
@@ -223,7 +222,6 @@ export function useAirportConfig(): UseAirportConfigReturn {
         if (msg.type === 'airport_switch_progress') {
           const data = msg.data as SwitchProgress;
           setSwitchProgress(data);
-          // Set error state when backend reports failure
           if (data.error && data.message) {
             setError(data.message);
             setIsLoading(false);
@@ -231,12 +229,10 @@ export function useAirportConfig(): UseAirportConfigReturn {
               clearTimeout(loadingTimeoutRef.current);
               loadingTimeoutRef.current = null;
             }
-            // Revert to previous airport on error (backend rolls back too)
             if (prevAirportRef.current) {
               setCurrentAirport(prevAirportRef.current);
             }
           }
-          // Auto-clear progress overlay after done
           if (data.done) {
             if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
             progressTimerRef.current = setTimeout(() => setSwitchProgress(null), data.error ? 3000 : 1500);
@@ -245,11 +241,23 @@ export function useAirportConfig(): UseAirportConfigReturn {
       } catch {
         // ignore non-JSON or irrelevant messages
       }
-    };
+    }
 
-    // Fallback poll: detect demo_ready via /api/ready in case WS misses it.
-    // Keeps running (gated by ref) so loadAirport resetting demoReady doesn't
-    // leave the UI stuck — the next poll tick re-detects demo_ready.
+    function connect() {
+      if (disposed) return;
+      ws = new WebSocket(`${wsBase}/ws/flights`);
+      ws.onopen = () => { reconnectDelay = 1000; };
+      ws.onmessage = handleMessage;
+      ws.onclose = () => {
+        if (!disposed) {
+          reconnectTimer = setTimeout(connect, reconnectDelay);
+          reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
+        }
+      };
+    }
+
+    connect();
+
     const demoPoll = setInterval(async () => {
       if (demoReadyRef.current) return;
       try {
@@ -267,7 +275,9 @@ export function useAirportConfig(): UseAirportConfigReturn {
     }, 2000);
 
     return () => {
-      ws.close();
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) ws.close();
       clearInterval(demoPoll);
       if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
       if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
@@ -416,12 +426,33 @@ export function useAirportConfig(): UseAirportConfigReturn {
         // Config will arrive via WS `airport_switch_complete` message.
         // Keep isLoading=true; WS handler will clear it.
         setCurrentAirport(icaoCode);
-        // Safety timeout: clear isLoading if WS message is missed (e.g. connection race)
+        // Safety timeout: if WS confirmation never arrives, try REST fallback
+        // then revert so the user can retry.
         if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-        loadingTimeoutRef.current = setTimeout(() => {
-          setIsLoading(false);
+        loadingTimeoutRef.current = setTimeout(async () => {
           loadingTimeoutRef.current = null;
-        }, 20_000);
+          // REST fallback: check if backend actually switched
+          try {
+            const res = await fetch(`${API_BASE}/api/airport/config`);
+            if (res.ok) {
+              const data = await res.json();
+              const cfg = data?.config;
+              if (cfg && cfg.icaoCode === icaoCode && Object.keys(cfg).length > 0) {
+                setConfig((prev) => ({ ...prev, ...cfg, lastUpdated: new Date().toISOString() }));
+                setCurrentAirport(icaoCode);
+                prevAirportRef.current = icaoCode;
+                configCache.set(icaoCode, data);
+                setCachedConfig(icaoCode, cfg).catch(() => {});
+                setIsLoading(false);
+                return;
+              }
+            }
+          } catch { /* fallthrough to revert */ }
+          setIsLoading(false);
+          if (prevAirportRef.current) {
+            setCurrentAirport(prevAirportRef.current);
+          }
+        }, 60_000);
         return;
       }
 
