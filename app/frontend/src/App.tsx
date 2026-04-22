@@ -392,6 +392,18 @@ function ViewToggle({
             Clean Tiles
           </button>
         )}
+        {inpainting && satellite && (
+          <button
+            onClick={handleRefreshTiles}
+            className="flex items-center gap-1 px-2 py-2 text-sm font-medium rounded-lg shadow-md bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors"
+            title="Clear tile cache and re-process all tiles"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.598a.75.75 0 0 0-.75.75v3.634a.75.75 0 0 0 1.5 0v-2.033l.312.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.624-2.85a5.5 5.5 0 0 1 9.201-2.465l.312.31H11.77a.75.75 0 0 0 0 1.5h3.634a.75.75 0 0 0 .75-.75V3.535a.75.75 0 0 0-1.5 0v2.033l-.312-.31A7 7 0 0 0 2.63 8.383a.75.75 0 0 0 1.449.39Z" clipRule="evenodd" />
+            </svg>
+            Reset
+          </button>
+        )}
       </div>
 
       {/* Endpoint status banner */}
