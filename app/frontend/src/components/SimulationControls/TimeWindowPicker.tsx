@@ -65,6 +65,9 @@ export function TimeWindowPicker({
     ? Math.round((estimatedFrames / metadata.total_frames) * (metadata.total_snapshots * 200) / (1024 * 1024))
     : 0;
 
+  const totalFlights = (metadata.summary as Record<string, unknown>)?.total_flights as number | undefined;
+  const isBatchMode = metadata.total_frames === 0 && (totalFlights ?? 0) > 0;
+
   const handleLoad = () => {
     const { startTime, endTime } = getAbsoluteTimes();
     onLoad(filename, startTime, endTime);
@@ -107,8 +110,12 @@ export function TimeWindowPicker({
             <span className="font-medium text-slate-700 dark:text-slate-300">
               {(metadata.config as Record<string, unknown>)?.airport as string || '?'}
             </span>
-            {' '}&middot; {metadata.duration_hours}h &middot; {metadata.total_frames} frames &middot;{' '}
-            {(metadata.summary as Record<string, unknown>)?.total_flights as number || '?'} flights
+            {' '}&middot; {metadata.duration_hours}h &middot;{' '}
+            {isBatchMode
+              ? <span className="text-amber-500 font-medium">batch mode</span>
+              : <>{metadata.total_frames} frames</>
+            }
+            {' '}&middot; {totalFlights ?? '?'} flights
           </div>
 
           {/* Day selector — only show when multi-day */}
@@ -195,47 +202,72 @@ export function TimeWindowPicker({
             </div>
           </div>
 
-          {/* Estimate */}
-          <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg px-4 py-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500 dark:text-slate-400">Estimated load</span>
-              <span className="font-medium text-slate-700 dark:text-slate-300">
-                ~{estimatedFrames.toLocaleString()} frames
-                {estimatedSizeMB > 0 && ` (~${estimatedSizeMB} MB)`}
-              </span>
+          {/* Batch mode warning */}
+          {isBatchMode && (
+            <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-lg px-4 py-3">
+              <div className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                </svg>
+                <div className="text-xs text-amber-800 dark:text-amber-200">
+                  <span className="font-medium">Batch mode simulation</span> — this file was run without position recording.
+                  Visual replay is not available, but summary, schedule, and events data can be viewed in the report.
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Estimate */}
+          {!isBatchMode && (
+            <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg px-4 py-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500 dark:text-slate-400">Estimated load</span>
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  ~{estimatedFrames.toLocaleString()} frames
+                  {estimatedSizeMB > 0 && ` (~${estimatedSizeMB} MB)`}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Quick presets */}
-          <div className="flex gap-2">
-            <span className="text-xs text-slate-400 self-center">Quick:</span>
-            {[
-              { label: 'Morning', start: 6, end: 12 },
-              { label: 'Afternoon', start: 12, end: 18 },
-              { label: 'Evening', start: 18, end: 24 },
-              { label: 'Full Day', start: 0, end: 24 },
-            ].map(({ label, start, end }) => (
-              <button
-                key={label}
-                onClick={() => { setStartHour(start); setEndHour(end); }}
-                className="px-2.5 py-1 rounded text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {!isBatchMode && (
+            <div className="flex gap-2">
+              <span className="text-xs text-slate-400 self-center">Quick:</span>
+              {[
+                { label: 'Morning', start: 6, end: 12 },
+                { label: 'Afternoon', start: 12, end: 18 },
+                { label: 'Evening', start: 18, end: 24 },
+                { label: 'Full Day', start: 0, end: 24 },
+              ].map(({ label, start, end }) => (
+                <button
+                  key={label}
+                  onClick={() => { setStartHour(start); setEndHour(end); }}
+                  className="px-2.5 py-1 rounded text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Load button */}
           <button
             onClick={handleLoad}
             disabled={isLoading || windowHours <= 0}
-            className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`w-full py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              isBatchMode
+                ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                : 'bg-blue-600 hover:bg-blue-500 text-white'
+            }`}
           >
             {isLoading ? (
               <span className="flex items-center justify-center gap-2">
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 Loading...
               </span>
+            ) : isBatchMode ? (
+              'Load Summary & Events'
             ) : (
               `Load ${days.length > 1 ? formatDay(days[selectedDayIndex]) + ' ' : ''}${formatHour(startHour)} - ${formatHour(endHour)}`
             )}

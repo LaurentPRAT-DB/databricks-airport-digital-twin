@@ -725,6 +725,7 @@ export function SimulationControls({
   const [pendingAirport, setPendingAirport] = useState<string | null>(null);
   const [demoAutoStarted, setDemoAutoStarted] = useState(false);
   const [showRecordingPicker, setShowRecordingPicker] = useState(false);
+  const [showBatchReport, setShowBatchReport] = useState(false);
   // Track airport-switching so we push [] (empty) instead of null (WS fallback) to the parent
   const airportSwitchingRef = useRef(false);
   // Track previous airport to detect actual changes (not initial mount)
@@ -834,10 +835,14 @@ export function SimulationControls({
   };
 
   const handleWindowLoad = (filename: string, startTime: string, endTime: string) => {
+    const isBatch = windowPickerMetadata?.total_frames === 0;
     setShowWindowPicker(false);
     setWindowPickerFile(null);
     setWindowPickerMetadata(null);
     sim.loadWindow(filename, startTime, endTime);
+    if (isBatch) {
+      setTimeout(() => setShowBatchReport(true), 500);
+    }
   };
 
   const handleWindowBack = () => {
@@ -988,6 +993,9 @@ export function SimulationControls({
           </div>
         )
       )}
+
+      {/* Batch mode report — auto-shown when loading a file with no position data */}
+      {showBatchReport && <SimulationReport sim={sim} onClose={() => setShowBatchReport(false)} />}
 
       {/* Playback bar — active replay in simulation or recorded mode */}
       {dataMode !== 'live' && sim.isActive && !sim.switchPaused && <PlaybackBar sim={sim} isRecorded={dataMode === 'recorded'} />}
