@@ -417,10 +417,25 @@ export function useAirportConfig(): UseAirportConfigReturn {
         method: 'POST',
       });
 
+      if (response.status === 200) {
+        // Already active — backend returned the normalized ICAO code.
+        // Update currentAirport to the canonical ICAO code and stop loading.
+        const data = await response.json();
+        const normalizedIcao = data.icaoCode || icaoCode;
+        setCurrentAirport(normalizedIcao);
+        prevAirportRef.current = normalizedIcao;
+        setIsLoading(false);
+        return;
+      }
+
       if (response.status === 202) {
         // Async activation: backend is working in background.
         // Config will arrive via WS `airport_switch_complete` message.
         // Keep isLoading=true; WS handler will clear it.
+        // Use the normalized ICAO code from the response.
+        const respData = await response.json();
+        const normalizedIcao = respData.icaoCode || icaoCode;
+        setCurrentAirport(normalizedIcao);
         // Safety timeout: if WS confirmation never arrives, try REST fallback
         // then revert so the user can retry.
         if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
@@ -432,12 +447,12 @@ export function useAirportConfig(): UseAirportConfigReturn {
             if (res.ok) {
               const data = await res.json();
               const cfg = data?.config;
-              if (cfg && cfg.icaoCode === icaoCode && Object.keys(cfg).length > 0) {
+              if (cfg && Object.keys(cfg).length > 0) {
                 setConfig((prev) => ({ ...prev, ...cfg, lastUpdated: new Date().toISOString() }));
-                setCurrentAirport(icaoCode);
-                prevAirportRef.current = icaoCode;
-                configCache.set(icaoCode, data);
-                setCachedConfig(icaoCode, cfg).catch(() => {});
+                setCurrentAirport(normalizedIcao);
+                prevAirportRef.current = normalizedIcao;
+                configCache.set(normalizedIcao, data);
+                setCachedConfig(normalizedIcao, cfg).catch(() => {});
                 setIsLoading(false);
                 return;
               }
@@ -464,19 +479,6 @@ export function useAirportConfig(): UseAirportConfigReturn {
         throw new Error(detail);
       }
 
-      // Backward compat: 200 with config in body (shouldn't happen with new backend)
-      const data = await response.json();
-
-      if (data.config && Object.keys(data.config).length > 0) {
-        setConfig((prev) => ({
-          ...prev,
-          ...data.config,
-          sources: (data.config.sources as AirportConfig['sources']) || prev.sources,
-          lastUpdated: new Date().toISOString(),
-        }));
-        setCurrentAirport(icaoCode);
-        prevAirportRef.current = icaoCode;
-      }
       setIsLoading(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to activate airport';

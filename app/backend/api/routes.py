@@ -1121,13 +1121,29 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
     Progress and completion are broadcast via WebSocket so the frontend
     can update without waiting for the HTTP response.
 
-    Args:
-        icao_code: ICAO airport code (e.g., "KSFO", "KJFK")
+    Accepts both IATA (MIA, CDG) and ICAO (KMIA, LFPG) codes — normalized to ICAO.
 
     Returns:
         202 Accepted with {"status": "activating", "icaoCode": icao_code}
+        200 OK with {"status": "already_active"} if the airport is already loaded
     """
     icao_code = _validate_icao(icao_code)
+
+    # Normalize IATA → ICAO so callers can pass either format
+    from src.calibration.profile import _iata_to_icao
+    icao_code = _iata_to_icao(icao_code)
+
+    # Skip re-activation if this airport is already loaded
+    current_iata = get_current_airport_iata()
+    current_icao = _iata_to_icao(current_iata)
+    if current_icao == icao_code:
+        service = get_airport_config_service()
+        if service.config_ready:
+            return JSONResponse(
+                status_code=200,
+                content={"status": "already_active", "icaoCode": icao_code},
+            )
+
     from app.backend.api.websocket import broadcaster
 
     # Serialize concurrent activations (prevents global state corruption from multiple tabs)
@@ -1152,6 +1168,11 @@ async def activate_airport(icao_code: str, user: str = Depends(get_current_user)
 async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> None:
     """Inner activation logic, runs as background task. Releases _activation_lock on exit."""
     import time as _time
+
+    # Normalize IATA → ICAO so callers can pass either format
+    from src.calibration.profile import _iata_to_icao
+    icao_code = _iata_to_icao(icao_code)
+
     total_steps = 7
     service = get_airport_config_service()
     _t_activate_start = _time.monotonic()
@@ -1159,7 +1180,7 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
     # Save rollback state before modifying anything
     prev_iata = get_current_airport_iata()
     prev_center = get_airport_center()
-    prev_icao = f"K{prev_iata}" if len(prev_iata) == 3 else prev_iata
+    prev_icao = _iata_to_icao(prev_iata)
 
     logger.info(f"[DIAG] ===== _activate_airport_inner({icao_code}) START =====")
 

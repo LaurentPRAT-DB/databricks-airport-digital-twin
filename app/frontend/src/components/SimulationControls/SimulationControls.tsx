@@ -765,20 +765,16 @@ export function SimulationControls({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentAirport]);
 
-  // Switch airport when simulation loads a different one (manual file load)
+  // Switch airport when simulation loads a different one (manual file load).
+  // sim.airport is IATA (e.g. "MIA") while currentAirport is ICAO (e.g. "KMIA").
+  // We always send the request — the backend normalizes IATA→ICAO and returns
+  // 200 immediately if the airport is already active (no-op dedup).
   useEffect(() => {
-    if (sim.airport && onAirportChange && currentAirport) {
-      // Skip for demo/recording loads — these are always for the current airport
+    if (sim.airport && onAirportChange) {
       if (sim.loadedFile?.startsWith('demo_') || sim.loadedFile?.startsWith('recording_')) return;
-      // Only switch if the sim airport differs from the current airport
-      const simAirportIcao = sim.airport.length === 3
-        ? `K${sim.airport}`
-        : sim.airport;
-      if (simAirportIcao !== currentAirport) {
-        onAirportChange(sim.airport).catch((err) => {
-          console.warn('Failed to switch airport for simulation:', err);
-        });
-      }
+      onAirportChange(sim.airport).catch((err) => {
+        console.warn('Failed to switch airport for simulation:', err);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sim.airport]);
@@ -921,14 +917,11 @@ export function SimulationControls({
 
   const handleLoadRecording = (airport: string, date: string) => {
     setShowRecordingPicker(false);
-    // Switch airport immediately so map updates in parallel with recording fetch
-    if (onAirportChange && currentAirport) {
-      const icao = airport.length === 3 ? `K${airport}` : airport;
-      if (icao !== currentAirport) {
-        onAirportChange(airport).catch((err) => {
-          console.warn('Failed to switch airport for recording:', err);
-        });
-      }
+    // Switch airport — backend normalizes IATA→ICAO and deduplicates
+    if (onAirportChange) {
+      onAirportChange(airport).catch((err) => {
+        console.warn('Failed to switch airport for recording:', err);
+      });
     }
     sim.loadRecording(airport, date);
   };
