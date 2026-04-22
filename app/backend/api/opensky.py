@@ -965,6 +965,7 @@ async def _load_recording_from_raw(airport: str, date: str) -> dict:
 
     # Event inference (local, fast)
     from src.inference.opensky_events import OpenSkyEventInferrer
+    lat, lon = _get_airport_center()
     try:
         service = get_airport_config_service()
         config = service.get_config()
@@ -972,7 +973,7 @@ async def _load_recording_from_raw(airport: str, date: str) -> dict:
     except Exception:
         gates = []
 
-    inferrer = OpenSkyEventInferrer(gates)
+    inferrer = OpenSkyEventInferrer(gates, airport_center=(lat, lon))
     for ts in sorted_timestamps:
         inferrer.process_frame(ts, frames[ts])
     enrichment = inferrer.get_results()
@@ -1002,7 +1003,6 @@ async def _load_recording_from_raw(airport: str, date: str) -> dict:
                     snap["latitude"], snap["longitude"] = gate_coords[gate]
 
     # Origin enrichment (heading heuristic)
-    lat, lon = _get_airport_center()
     aircraft_first_seen: dict[str, dict] = {}
     for ts_key in sorted_timestamps:
         for snap in frames[ts_key]:

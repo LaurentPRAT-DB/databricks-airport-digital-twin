@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 STATIONARY_VELOCITY_MS = 2.0   # < 2 m/s ≈ 4 kts → considered stopped
 TAXI_MAX_VELOCITY_MS = 30.0    # > 30 m/s ≈ 58 kts → likely takeoff roll
 GATE_MATCH_RADIUS_M = 200.0    # Max distance to match aircraft to a gate (ADS-B ±50-100m)
+LANDING_TAKEOFF_RADIUS_M = 18_500.0  # ~10 NM — max distance from airport for landing/takeoff phase
 
 # Earth radius for haversine
 _R_EARTH_M = 6_371_000.0
@@ -77,13 +78,16 @@ class OpenSkyEventInferrer:
         # result["phase_transitions"], result["gate_events"]
     """
 
-    def __init__(self, gates: list[dict[str, Any]]) -> None:
+    def __init__(self, gates: list[dict[str, Any]], airport_center: tuple[float, float] | None = None) -> None:
         """Initialize with gate positions from airport config.
 
         Args:
             gates: List of gate dicts from config["gates"], each with
                    "ref" (or "id") and "geo": {"latitude": ..., "longitude": ...}
+            airport_center: (lat, lon) of the airport reference point. When provided,
+                   landing/takeoff phases are only assigned within ~10 NM of the airport.
         """
+        self._airport_center = airport_center
         self._gate_positions: list[tuple[str, float, float]] = []
         self._gate_coords: dict[str, tuple[float, float]] = {}
         for g in gates:
@@ -240,13 +244,19 @@ class OpenSkyEventInferrer:
             # Determine current phase
             phase = self._infer_phase(on_ground, velocity_ms, near_gate, was_parked)
 
-            # Refine airborne phases
+            # Refine airborne phases — use airport distance to distinguish
+            # landing/takeoff (close) from approaching/departing (farther out)
             if phase == "airborne":
                 tracker.was_airborne = True
+                near_airport = True
+                if self._airport_center:
+                    dist = haversine_m(lat, lon, self._airport_center[0], self._airport_center[1])
+                    near_airport = dist < LANDING_TAKEOFF_RADIUS_M
+
                 if altitude_ft < 3000 and vrate_ftmin < -200:
-                    phase = "landing"
+                    phase = "landing" if near_airport else "approaching"
                 elif altitude_ft < 3000 and vrate_ftmin > 200:
-                    phase = "takeoff"
+                    phase = "takeoff" if near_airport else "departing"
                 elif altitude_ft < 10000 and vrate_ftmin < -200:
                     phase = "approaching"
                 elif altitude_ft < 10000 and vrate_ftmin > 200:

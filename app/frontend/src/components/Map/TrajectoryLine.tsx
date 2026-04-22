@@ -175,7 +175,7 @@ export default function TrajectoryLine() {
 
       {/* Historical position markers (show every Nth point) */}
       {validPoints
-        .filter((_, i) => i % Math.max(1, Math.floor(validPoints.length / 20)) === 0)
+        .filter((_, i) => i % Math.max(1, Math.floor(validPoints.length / 10)) === 0)
         .map((point, index) => (
           <CircleMarker
             key={`trajectory-point-${index}`}

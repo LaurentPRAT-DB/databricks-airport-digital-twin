@@ -254,8 +254,15 @@ for airport_icao, date in pending:
     sorted_timestamps = sorted(frames.keys())
     print(f"  Frames: {len(sorted_timestamps)}")
 
+    # Derive airport center from gate positions (OSM-sourced)
+    airport_center = None
+    if gates:
+        avg_lat = sum(g["geo"]["latitude"] for g in gates) / len(gates)
+        avg_lon = sum(g["geo"]["longitude"] for g in gates) / len(gates)
+        airport_center = (avg_lat, avg_lon)
+
     # Run inferrer
-    inferrer = OpenSkyEventInferrer(gates)
+    inferrer = OpenSkyEventInferrer(gates, airport_center=airport_center)
     for ts in sorted_timestamps:
         inferrer.process_frame(ts, frames[ts])
     results = inferrer.get_results()

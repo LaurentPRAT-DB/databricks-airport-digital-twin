@@ -397,7 +397,12 @@ def evaluate(
 
         # 3. Group into frames and run inferrer
         frames = group_lakebase_into_frames(records) if from_lakebase else group_into_frames(records)
-        inferrer = OpenSkyEventInferrer(gates)
+        airport_center = None
+        if gates:
+            avg_lat = sum(g["geo"]["latitude"] for g in gates) / len(gates)
+            avg_lon = sum(g["geo"]["longitude"] for g in gates) / len(gates)
+            airport_center = (avg_lat, avg_lon)
+        inferrer = OpenSkyEventInferrer(gates, airport_center=airport_center)
 
         for ts, snapshots in frames:
             inferrer.process_frame(ts, snapshots)
