@@ -133,8 +133,9 @@ with tempfile.TemporaryDirectory() as tmp:
         "yolo_weights": YOLO_WEIGHTS_VOLUME,
         "lama_weights_dir": LAMA_WEIGHTS_DIR,
         "lama_weights_file": LAMA_WEIGHTS_FILE,
-        "confidence_threshold": 0.15,
+        "confidence_threshold": 0.35,
         "mask_dilation_px": 10,
+        "max_detection_ratio": 0.03,
     }
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
@@ -193,8 +194,9 @@ with tempfile.TemporaryDirectory() as tmp:
 
             self._yolo_weights = config.get("yolo_weights", "yolov8n.pt")
             self._lama_weights = config.get("lama_weights_file")
-            self._confidence = config.get("confidence_threshold", 0.5)
+            self._confidence = config.get("confidence_threshold", 0.35)
             self._dilation = config.get("mask_dilation_px", 10)
+            self._max_det_ratio = config.get("max_detection_ratio", 0.03)
 
             # Load YOLO
             from ultralytics import YOLO
@@ -262,32 +264,24 @@ with tempfile.TemporaryDirectory() as tmp:
                     image_np, conf=self._confidence, device=self._device, verbose=False
                 )
 
+                # Collect detections from YOLO results
                 detections = []
-                mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
                 import cv2
                 for r in yolo_results:
-                    # OBB model: use r.obb (oriented bounding boxes)
-                    # Fallback to r.boxes for non-OBB models
                     obb = getattr(r, 'obb', None)
                     if obb is not None and len(obb) > 0:
                         for i in range(len(obb)):
                             cls_id = int(obb.cls[i].item())
                             cls_name = r.names.get(cls_id, "")
                             is_aircraft = (
-                                cls_id == 0  # DOTA "plane" class
+                                cls_id == 0
                                 or "plane" in cls_name.lower()
                                 or "aircraft" in cls_name.lower()
                             )
                             if not is_aircraft:
                                 continue
                             conf = float(obb.conf[i].item())
-                            # OBB: 4 corner points as [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
                             corners = obb.xyxyxyxy[i].cpu().numpy().astype(np.int32)
-                            # Expand mask outward by dilation factor
-                            center = corners.mean(axis=0)
-                            scale = 1 + self._dilation / 60.0
-                            expanded = (center + (corners - center) * scale).astype(np.int32)
-                            cv2.fillPoly(mask, [expanded], 255)
                             x1, y1 = corners.min(axis=0)
                             x2, y2 = corners.max(axis=0)
                             detections.append({
@@ -295,14 +289,14 @@ with tempfile.TemporaryDirectory() as tmp:
                                 "x2": int(x2), "y2": int(y2),
                                 "confidence": round(conf, 3),
                                 "class_name": cls_name or "plane",
+                                "_corners": corners,
                             })
                     elif r.boxes is not None and len(r.boxes) > 0:
-                        # Fallback for axis-aligned box models
                         for i in range(len(r.boxes)):
                             cls_id = int(r.boxes.cls[i].item())
                             cls_name = r.names.get(cls_id, "")
                             is_aircraft = (
-                                cls_id == 4  # COCO airplane
+                                cls_id == 4
                                 or "plane" in cls_name.lower()
                                 or "aircraft" in cls_name.lower()
                             )
@@ -310,10 +304,6 @@ with tempfile.TemporaryDirectory() as tmp:
                                 continue
                             conf = float(r.boxes.conf[i].item())
                             x1, y1, x2, y2 = r.boxes.xyxy[i].cpu().numpy().astype(int)
-                            d = self._dilation
-                            mx1, my1 = max(0, int(x1)-d), max(0, int(y1)-d)
-                            mx2, my2 = min(image_np.shape[1], int(x2)+d), min(image_np.shape[0], int(y2)+d)
-                            mask[my1:my2, mx1:mx2] = 255
                             detections.append({
                                 "x1": int(x1), "y1": int(y1),
                                 "x2": int(x2), "y2": int(y2),
@@ -321,21 +311,39 @@ with tempfile.TemporaryDirectory() as tmp:
                                 "class_name": cls_name or "plane",
                             })
 
-                # Cap mask at 40% of tile area — if too much is masked,
-                # regenerate with tighter dilation to avoid over-inpainting
-                total_pixels = mask.shape[0] * mask.shape[1]
-                mask_ratio = np.count_nonzero(mask) / total_pixels
-                if mask_ratio > 0.40:
-                    # Re-generate mask with no dilation
-                    mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
-                    for det in detections:
+                # Filter out oversized detections (likely buildings)
+                tile_area = image_np.shape[0] * image_np.shape[1]
+                max_area = self._max_det_ratio * tile_area
+                detections = [
+                    d for d in detections
+                    if (d["x2"] - d["x1"]) * (d["y2"] - d["y1"]) < max_area
+                ]
+
+                # Build mask from filtered detections
+                mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
+                for det in detections:
+                    corners = det.pop("_corners", None)
+                    if corners is not None:
+                        center = corners.mean(axis=0)
+                        scale = 1 + self._dilation / 60.0
+                        expanded = (center + (corners - center) * scale).astype(np.int32)
+                        cv2.fillPoly(mask, [expanded], 255)
+                    else:
                         x1, y1 = det["x1"], det["y1"]
                         x2, y2 = det["x2"], det["y2"]
-                        mask[max(0,y1):min(mask.shape[0],y2),
-                             max(0,x1):min(mask.shape[1],x2)] = 255
+                        d = self._dilation
+                        mx1, my1 = max(0, x1 - d), max(0, y1 - d)
+                        mx2 = min(image_np.shape[1], x2 + d)
+                        my2 = min(image_np.shape[0], y2 + d)
+                        mask[my1:my2, mx1:mx2] = 255
 
-                # Inpaint if aircraft found
-                if mask.max() > 0:
+                # Safety cap: if >15% of tile is masked, likely false positives
+                total_pixels = mask.shape[0] * mask.shape[1]
+                mask_ratio = np.count_nonzero(mask) / total_pixels
+                if mask_ratio > 0.15:
+                    clean = image_np
+                    detections = []
+                elif mask.max() > 0:
                     clean = self._inpaint(image_np, mask)
                 else:
                     clean = image_np
