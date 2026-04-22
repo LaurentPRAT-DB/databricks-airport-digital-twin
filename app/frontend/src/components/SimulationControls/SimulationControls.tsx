@@ -915,13 +915,14 @@ export function SimulationControls({
     }
   }, [dataMode, sim]);
 
-  const handleLoadRecording = (airport: string, date: string) => {
+  const handleLoadRecording = async (airport: string, date: string) => {
     setShowRecordingPicker(false);
-    // Switch airport — backend normalizes IATA→ICAO and deduplicates
     if (onAirportChange) {
-      onAirportChange(airport).catch((err) => {
+      try {
+        await onAirportChange(airport);
+      } catch (err) {
         console.warn('Failed to switch airport for recording:', err);
-      });
+      }
     }
     sim.loadRecording(airport, date);
   };
