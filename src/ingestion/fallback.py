@@ -5267,12 +5267,13 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
     ground_phases = ["ground", "taxi_to_gate", "taxi_to_runway", "pushback"]
     is_on_ground = current_phase in ground_phases or end_alt < 100
 
-    # Detect go-around: aircraft is ENROUTE but arriving (missed approach climb)
+    # Detect go-around: aircraft has executed a missed approach and is either
+    # still in enroute/holding or has re-entered approaching for a second attempt.
     _local_iata = get_current_airport_iata()
     is_go_around = (
         current_state
         and current_state.go_around_count > 0
-        and current_phase == "enroute"
+        and current_phase in ("enroute", "approaching")
         and (current_state.origin_airport and (
             not current_state.destination_airport
             or current_state.destination_airport == _local_iata
@@ -5301,27 +5302,46 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
 
     if is_go_around:
         # =================================================================
-        # GO-AROUND TRAJECTORY: approach trail + missed approach climb-out
+        # GO-AROUND TRAJECTORY: approach → climb-out → return → re-approach
         # =================================================================
-        # Shows the approach path the aircraft flew, then the climb-out
-        # on runway heading after the missed approach decision, curving
-        # back toward the holding area / aircraft's current position.
+        # Shows the initial approach, the climb-out on runway heading after
+        # the missed approach, the curve back, and (when the aircraft has
+        # re-entered approaching) the second approach to current position.
         origin_airport = current_state.origin_airport if current_state else None
         _traj_app_wps_ga = _get_approach_waypoints(origin_airport)
         _rwy_heading_ga = _get_runway_heading()
         if _rwy_heading_ga is None or len(_traj_app_wps_ga) < 2:
             return []
 
-        # Phase budget: 60% approach, 25% climb-out, 15% return to holding
-        _GA_APP_PTS = 48
-        _GA_CLIMB_PTS = 20
-        _GA_RETURN_PTS = 12
-        _ga_total = _GA_APP_PTS + _GA_CLIMB_PTS + _GA_RETURN_PTS  # 80
+        _ga_is_reapproach = current_phase == "approaching"
 
+        if _ga_is_reapproach:
+            # 4-phase: initial approach + climb-out + return + re-approach
+            _GA_APP_PTS = 30
+            _GA_CLIMB_PTS = 12
+            _GA_RETURN_PTS = 10
+            _GA_REAPP_PTS = 28
+            _ga_app_frac = 0.35
+            _ga_climb_frac = 0.15
+            _ga_return_frac = 0.15
+            _ga_reapp_frac = 0.35
+        else:
+            # 3-phase: initial approach + climb-out + return to holding
+            _GA_APP_PTS = 48
+            _GA_CLIMB_PTS = 20
+            _GA_RETURN_PTS = 12
+            _GA_REAPP_PTS = 0
+            _ga_app_frac = 0.60
+            _ga_climb_frac = 0.25
+            _ga_return_frac = 0.15
+            _ga_reapp_frac = 0.0
+
+        _ga_total = _GA_APP_PTS + _GA_CLIMB_PTS + _GA_RETURN_PTS + _GA_REAPP_PTS
         _ga_total_secs = minutes * 60
-        _ga_app_dur = 0.60 * _ga_total_secs
-        _ga_climb_dur = 0.25 * _ga_total_secs
-        _ga_return_dur = 0.15 * _ga_total_secs
+        _ga_app_dur = _ga_app_frac * _ga_total_secs
+        _ga_climb_dur = _ga_climb_frac * _ga_total_secs
+        _ga_return_dur = _ga_return_frac * _ga_total_secs
+        _ga_reapp_dur = _ga_reapp_frac * _ga_total_secs
 
         # Climb-out endpoint: project forward on runway heading from threshold
         _rwy_rad_ga = math.radians(_rwy_heading_ga)
@@ -5330,6 +5350,17 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         _climb_end_lon = rwy_threshold_lon + _climb_dist_deg * math.sin(_rwy_rad_ga) / math.cos(math.radians(rwy_threshold_lat))
         _climb_end_alt = 1500.0  # missed approach altitude
 
+        # Re-approach entry point: first approach waypoint (far end of approach)
+        # The return phase curves from climb-out end to this entry, then the
+        # re-approach follows the approach waypoints toward the aircraft position.
+        _reapp_entry_lon, _reapp_entry_lat = _traj_app_wps_ga[0]
+
+        # How far along the approach waypoints the aircraft currently is
+        _ga_wp_idx = current_state.waypoint_index if current_state else 0
+        _ga_wp_count = len(_traj_app_wps_ga)
+        # Clamp to valid range
+        _ga_wp_idx = min(_ga_wp_idx, _ga_wp_count - 1)
+
         # Aircraft type for descent/climb profiles
         _ga_actype = current_state.aircraft_type if current_state else "A320"
         _ga_desc_prof = get_descent_profile(_ga_actype)
@@ -5337,7 +5368,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         _running_hdg = current_heading
         for i in range(_ga_total):
             if i < _GA_APP_PTS:
-                # APPROACH phase: interpolate along origin-aware waypoints
+                # PHASE 1 — Initial approach: interpolate along waypoints to threshold
                 app_progress = i / max(_GA_APP_PTS - 1, 1)
                 wp_count = len(_traj_app_wps_ga)
                 wp_progress = app_progress * (wp_count - 1)
@@ -5366,7 +5397,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 t_offset = i * _ga_interval
 
             elif i < _GA_APP_PTS + _GA_CLIMB_PTS:
-                # CLIMB-OUT phase: fly runway heading, climb from 200ft to 1500ft
+                # PHASE 2 — Climb-out: fly runway heading, climb to missed approach alt
                 ci = i - _GA_APP_PTS
                 climb_progress = ci / max(_GA_CLIMB_PTS - 1, 1)
 
@@ -5383,26 +5414,84 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 _ga_climb_interval = _ga_climb_dur / max(_GA_CLIMB_PTS, 1)
                 t_offset = _ga_app_dur + ci * _ga_climb_interval
 
-            else:
-                # RETURN phase: curve from climb-out end toward current position
+            elif i < _GA_APP_PTS + _GA_CLIMB_PTS + _GA_RETURN_PTS:
+                # PHASE 3 — Return: curve from climb-out end toward holding/re-approach entry
                 ri = i - _GA_APP_PTS - _GA_CLIMB_PTS
                 return_progress = ri / max(_GA_RETURN_PTS - 1, 1)
 
-                lat = _climb_end_lat + return_progress * (end_lat - _climb_end_lat)
-                lon = _climb_end_lon + return_progress * (end_lon - _climb_end_lon)
-                alt = _climb_end_alt + return_progress * (end_alt - _climb_end_alt)
+                if _ga_is_reapproach:
+                    # Curve toward the first approach waypoint (re-approach entry)
+                    _ret_target_lat = _reapp_entry_lat
+                    _ret_target_lon = _reapp_entry_lon
+                    _ret_target_alt = 3500.0  # re-approach entry altitude
+                else:
+                    # Curve toward aircraft's current position (holding)
+                    _ret_target_lat = end_lat
+                    _ret_target_lon = end_lon
+                    _ret_target_alt = end_alt
 
-                target_hdg = _calculate_heading((lat, lon), (end_lat, end_lon))
+                lat = _climb_end_lat + return_progress * (_ret_target_lat - _climb_end_lat)
+                lon = _climb_end_lon + return_progress * (_ret_target_lon - _climb_end_lon)
+                alt = _climb_end_alt + return_progress * (_ret_target_alt - _climb_end_alt)
+
+                target_hdg = _calculate_heading((lat, lon), (_ret_target_lat, _ret_target_lon))
                 _ga_return_interval = _ga_return_dur / max(_GA_RETURN_PTS, 1)
                 _running_hdg = _smooth_heading(_running_hdg, target_hdg, 3.0, _ga_return_interval)
                 heading = _running_hdg
                 vref_ga = VREF_SPEEDS.get(_ga_actype, _DEFAULT_VREF)
                 velocity = vref_ga + 10
-                vertical_rate = 500 if end_alt > _climb_end_alt else -500
+                vertical_rate = 500 if _ret_target_alt > _climb_end_alt else -500
                 phase = "enroute"
                 t_offset = _ga_app_dur + _ga_climb_dur + ri * _ga_return_interval
 
-            _total_ga_dur = _ga_app_dur + _ga_climb_dur + _ga_return_dur
+            else:
+                # PHASE 4 — Re-approach: follow approach waypoints from entry to current position
+                rai = i - _GA_APP_PTS - _GA_CLIMB_PTS - _GA_RETURN_PTS
+                reapp_progress = rai / max(_GA_REAPP_PTS - 1, 1)
+
+                # Interpolate along approach waypoints from wp[0] to wp[_ga_wp_idx],
+                # then from there to the aircraft's actual current position.
+                # Use 80% of points for waypoint traversal, 20% for final segment.
+                if _ga_wp_idx > 0 and reapp_progress < 0.80:
+                    # Traversing approach waypoints
+                    wp_progress = (reapp_progress / 0.80) * _ga_wp_idx
+                    wp_idx = int(wp_progress)
+                    wp_frac = wp_progress - wp_idx
+                    if wp_idx >= _ga_wp_count - 1:
+                        wp_idx = _ga_wp_count - 2
+                        wp_frac = 1.0
+                    wp1 = _traj_app_wps_ga[wp_idx]
+                    wp2 = _traj_app_wps_ga[min(wp_idx + 1, _ga_wp_count - 1)]
+                    lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
+                    lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
+                else:
+                    # Final segment: from last waypoint to aircraft position
+                    if _ga_wp_idx > 0:
+                        final_frac = (reapp_progress - 0.80) / 0.20
+                    else:
+                        final_frac = reapp_progress
+                    _last_wp = _traj_app_wps_ga[min(_ga_wp_idx, _ga_wp_count - 1)]
+                    lon = _last_wp[0] + final_frac * (end_lon - _last_wp[0])
+                    lat = _last_wp[1] + final_frac * (end_lat - _last_wp[1])
+
+                # Descent profile for re-approach
+                _reapp_prof_prog = 0.5 + 0.5 * reapp_progress
+                prof_alt, prof_spd, prof_vr = interpolate_profile(_ga_desc_prof, _reapp_prof_prog)
+                alt = prof_alt
+
+                if reapp_progress < 0.95:
+                    target_hdg = _calculate_heading((lat, lon), (end_lat, end_lon))
+                else:
+                    target_hdg = current_heading
+                _ga_reapp_interval = _ga_reapp_dur / max(_GA_REAPP_PTS, 1)
+                _running_hdg = _smooth_heading(_running_hdg, target_hdg, 3.0, _ga_reapp_interval)
+                heading = _running_hdg
+                velocity = prof_spd
+                vertical_rate = prof_vr
+                phase = "approaching"
+                t_offset = _ga_app_dur + _ga_climb_dur + _ga_return_dur + rai * _ga_reapp_interval
+
+            _total_ga_dur = _ga_app_dur + _ga_climb_dur + _ga_return_dur + _ga_reapp_dur
             timestamp = now - timedelta(seconds=_total_ga_dur - t_offset)
 
             points.append({
