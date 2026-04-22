@@ -774,6 +774,7 @@ TAXI_SPEED_RAMP_KTS = 8         # Near-gate / ramp area
 TAXI_SPEED_PUSHBACK_KTS = 3     # Tug-assisted pushback
 
 MAX_SPEED_BELOW_FL100_KTS = 250  # 14 CFR 91.117: 250 kts IAS below 10,000 ft MSL
+MAX_VELOCITY_KTS = 600            # Hard safety cap — no commercial aircraft exceeds this
 
 # ILS Category I decision height (ft AGL) — primary approach→landing trigger
 DECISION_HEIGHT_FT = 200
@@ -3916,11 +3917,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     if dist < req_sep * 1.5:
                         speed_slow = 0.5
 
-                # Clamp speed: altitude-aware Vref floor + 250kt ceiling
+                # Clamp speed: altitude-aware Vref floor + 250kt below FL100
                 # Smooth acceleration/deceleration (max 5 kts/s) to prevent
                 # visible speed jumps in 30s snapshot intervals (A05 fix).
                 vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
-                raw_speed = min(prof_spd * speed_slow, MAX_SPEED_BELOW_FL100_KTS)
+                speed_ceiling = MAX_SPEED_BELOW_FL100_KTS if state.altitude < 10000 else MAX_VELOCITY_KTS
+                raw_speed = min(prof_spd * speed_slow, speed_ceiling)
                 if state.altitude < 1000:
                     # Below 1000ft: hard ceiling at Vref + 30 (stabilized approach)
                     # This also handles post-go-around re-entry at low altitude
@@ -4916,6 +4918,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         state.velocity = 0.0
         state.vertical_rate = 0.0
 
+    # Hard safety cap — no commercial aircraft exceeds 600 kts
+    state.velocity = min(state.velocity, MAX_VELOCITY_KTS)
+
     return state
 
 
@@ -5192,7 +5197,7 @@ def generate_synthetic_flights(
     for icao24, state in list(_flight_states.items())[:target]:
         # Sanitize numeric fields to prevent NaN/Inf propagation to frontend
         _alt = _sanitize_float(state.altitude, 0.0)
-        _vel = _sanitize_float(state.velocity, 0.0)
+        _vel = min(_sanitize_float(state.velocity, 0.0), MAX_VELOCITY_KTS)
         _hdg = _sanitize_float(state.heading, 0.0) % 360
         _vr = _sanitize_float(state.vertical_rate, 0.0)
         _lat = _sanitize_float(state.latitude, 0.0)
@@ -5529,7 +5534,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 "latitude": lat,
                 "longitude": lon,
                 "altitude": max(0, alt),
-                "velocity": max(50, velocity),
+                "velocity": min(max(50, velocity), MAX_VELOCITY_KTS),
                 "heading": heading % 360,
                 "vertical_rate": vertical_rate,
                 "on_ground": False,
@@ -5739,7 +5744,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 "latitude": lat,
                 "longitude": lon,
                 "altitude": max(0, alt),
-                "velocity": max(10, velocity),
+                "velocity": min(max(10, velocity), MAX_VELOCITY_KTS),
                 "heading": heading,
                 "vertical_rate": vertical_rate,
                 "on_ground": alt < 50,
@@ -5843,7 +5848,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 "latitude": lat,
                 "longitude": lon,
                 "altitude": max(0, alt),
-                "velocity": max(50, velocity),
+                "velocity": min(max(50, velocity), MAX_VELOCITY_KTS),
                 "heading": heading,
                 "vertical_rate": vertical_rate,
                 "on_ground": alt < 50,
@@ -5991,7 +5996,7 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                     "latitude": lat,
                     "longitude": lon,
                     "altitude": max(0, alt),
-                    "velocity": max(100, velocity),
+                    "velocity": min(max(100, velocity), MAX_VELOCITY_KTS),
                     "heading": heading,
                     "vertical_rate": vertical_rate,
                     "on_ground": alt < 50,
