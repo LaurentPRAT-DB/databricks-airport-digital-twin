@@ -2864,17 +2864,45 @@ def _distance_between(pos1: tuple, pos2: tuple) -> float:
 
 
 def _snap_to_nearest_waypoint(state) -> int:
-    """Find the closest approach waypoint to the aircraft's current position."""
+    """Find the closest approach waypoint that is AHEAD of the aircraft.
+
+    After a go-around, the aircraft re-enters approach from a holding area
+    that may be on the opposite side of the airport from the approach path.
+    Snapping to the closest waypoint by distance alone can pick a waypoint
+    behind the aircraft, causing it to fly backward across the airport.
+
+    Instead, prefer waypoints that are roughly in the aircraft's forward
+    hemisphere (within ±90° of current heading).  Fall back to pure distance
+    if no forward waypoint is found.
+    """
     approach_wps = _get_approach_waypoints(state.origin_airport)
+    if not approach_wps:
+        return 0
+
     best_idx = 0
-    if approach_wps:
-        best_dist = float('inf')
-        for wi, wp in enumerate(approach_wps):
-            d = _distance_between((state.latitude, state.longitude), (wp[1], wp[0]))
-            if d < best_dist:
-                best_dist = d
-                best_idx = wi
-    return best_idx
+    best_dist = float('inf')
+    best_fwd_idx = -1
+    best_fwd_dist = float('inf')
+
+    for wi, wp in enumerate(approach_wps):
+        wp_lat, wp_lon = wp[1], wp[0]
+        d = _distance_between((state.latitude, state.longitude), (wp_lat, wp_lon))
+
+        # Track overall closest (fallback)
+        if d < best_dist:
+            best_dist = d
+            best_idx = wi
+
+        # Check if waypoint is ahead of the aircraft (within ±90° of heading)
+        bearing = _calculate_heading(
+            (state.latitude, state.longitude), (wp_lat, wp_lon)
+        )
+        angle_diff = abs((bearing - state.heading + 540) % 360 - 180)
+        if angle_diff <= 90 and d < best_fwd_dist:
+            best_fwd_dist = d
+            best_fwd_idx = wi
+
+    return best_fwd_idx if best_fwd_idx >= 0 else best_idx
 
 
 def _move_toward(current: tuple, target: tuple, speed_factor: float) -> tuple:

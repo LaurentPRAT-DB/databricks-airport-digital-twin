@@ -639,9 +639,37 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       return [];
     }
 
-    // Collect all points for this flight in the allowed phase group
+    // Collect points for the CURRENT continuous segment only.
+    // For flights with go-arounds, there are multiple approach segments
+    // separated by enroute phases. Showing all of them creates a messy
+    // web of overlapping paths. Instead, find the segment that spans the
+    // current frame and return only those points.
+
+    // Step 1: Scan backward from current frame to find segment start
+    let segStart = currentFrameIndex;
+    for (let i = currentFrameIndex - 1; i >= 0; i--) {
+      const ts = timestamps[i];
+      const snapshots = simData.frames[ts];
+      if (!snapshots) { segStart = i + 1; break; }
+      const snap = snapshots.find(s => s.icao24 === icao24);
+      if (!snap || !allowedPhases.has(snap.phase)) { segStart = i + 1; break; }
+      segStart = i;
+    }
+
+    // Step 2: Scan forward from current frame to find segment end
+    let segEnd = currentFrameIndex;
+    for (let i = currentFrameIndex + 1; i < timestamps.length; i++) {
+      const ts = timestamps[i];
+      const snapshots = simData.frames[ts];
+      if (!snapshots) break;
+      const snap = snapshots.find(s => s.icao24 === icao24);
+      if (!snap || !allowedPhases.has(snap.phase)) break;
+      segEnd = i;
+    }
+
+    // Step 3: Collect points from segment range
     const allPoints: SimTrajectoryPoint[] = [];
-    for (let i = 0; i < timestamps.length; i++) {
+    for (let i = segStart; i <= segEnd; i++) {
       const ts = timestamps[i];
       const snapshots = simData.frames[ts];
       if (!snapshots) continue;

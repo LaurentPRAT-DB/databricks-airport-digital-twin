@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { UseSimulationReplayResult } from '../../hooks/useSimulationReplay';
@@ -63,6 +63,88 @@ interface CapturedImage {
 function extractCallsign(description: string): string | null {
   const match = description.match(/^([A-Z]{2,4}\d{1,5})\b/);
   return match ? match[1] : null;
+}
+
+interface EventTypeDropdownProps {
+  allTypes: string[];
+  selectedTypes: Set<string>;
+  events: { event_type: string; time: string }[];
+  fromHour: number;
+  toHour: number;
+  onToggle: (type: string) => void;
+  onSelectAll: () => void;
+  onClearAll: () => void;
+}
+
+function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, onToggle, onSelectAll, onClearAll }: EventTypeDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const selectedCount = allTypes.filter(t => selectedTypes.has(t)).length;
+  const label = selectedCount === allTypes.length
+    ? 'All types'
+    : selectedCount === 0
+    ? 'No types'
+    : `${selectedCount} of ${allTypes.length} types`;
+
+  return (
+    <div ref={ref} className="relative flex-shrink-0">
+      <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block mb-2">Event Types</span>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-700 hover:border-slate-400 transition-colors min-w-[160px]"
+      >
+        <span className="flex-1 text-left">{label}</span>
+        <svg className={`w-3 h-3 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] py-1">
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-100">
+            <button onClick={onSelectAll} className="text-[10px] text-blue-600 hover:text-blue-500">All</button>
+            <button onClick={onClearAll} className="text-[10px] text-blue-600 hover:text-blue-500">None</button>
+          </div>
+          {allTypes.map(type => {
+            const count = events.filter(e => {
+              if (e.event_type !== type) return false;
+              const h = getHour(e.time);
+              return h >= fromHour && h < toHour;
+            }).length;
+            return (
+              <button
+                key={type}
+                onClick={() => onToggle(type)}
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors"
+              >
+                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${
+                  selectedTypes.has(type) ? 'bg-blue-600 border-blue-600' : 'border-slate-300'
+                }`}>
+                  {selectedTypes.has(type) && (
+                    <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                <span className={`w-2 h-2 rounded-sm flex-shrink-0 ${EVENT_COLORS[type] || 'bg-gray-400'}`} />
+                <span className="text-slate-700 flex-1 text-left">{EVENT_LABELS[type] || type}</span>
+                <span className="text-slate-400 text-[10px]">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SimulationReport({ sim, onClose }: SimulationReportProps) {
@@ -373,12 +455,12 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
         </div>
 
         {/* Body — flex child that can shrink; each tab manages its own scroll */}
-        <div className="flex-1 min-h-0 flex flex-col px-6 py-4">
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col px-6 py-4">
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
             hasAnalysisReport ? (
-              <div className="flex-1 min-h-0 overflow-y-auto prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-td:text-xs prose-th:text-xs prose-code:text-xs prose-pre:bg-slate-50 prose-pre:text-slate-800">
+              <div className="flex-1 min-h-0 overflow-y-auto markdown-report">
                 <Markdown remarkPlugins={[remarkGfm]}>{sim.markdownReport!}</Markdown>
               </div>
             ) : (
@@ -415,37 +497,17 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
 
           {/* Filters */}
           <div className="shrink-0 flex items-start gap-6">
-            {/* Event type filter */}
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Event Types</span>
-                <button onClick={selectAll} className="text-[10px] text-blue-600 hover:text-blue-500">All</button>
-                <button onClick={clearAll} className="text-[10px] text-blue-600 hover:text-blue-500">Clear</button>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {allEventTypes.map(type => (
-                  <button
-                    key={type}
-                    onClick={() => toggleType(type)}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-all ${
-                      selectedTypes.has(type)
-                        ? 'bg-slate-200 text-slate-800 ring-1 ring-slate-300'
-                        : 'bg-slate-100 text-slate-400'
-                    }`}
-                  >
-                    <div className={`w-2 h-2 rounded-sm ${EVENT_COLORS[type] || 'bg-gray-400'}`} />
-                    {EVENT_LABELS[type] || type}
-                    <span className="text-[10px] text-slate-400 ml-0.5">
-                      ({sim.scenarioEvents.filter(e => {
-                        if (e.event_type !== type) return false;
-                        const h = getHour(e.time);
-                        return h >= fromHour && h < toHour;
-                      }).length})
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Event type filter — compact dropdown */}
+            <EventTypeDropdown
+              allTypes={allEventTypes}
+              selectedTypes={selectedTypes}
+              events={sim.scenarioEvents}
+              fromHour={fromHour}
+              toHour={toHour}
+              onToggle={toggleType}
+              onSelectAll={selectAll}
+              onClearAll={clearAll}
+            />
 
             {/* Time range filter */}
             <div className="flex-shrink-0 w-48">
