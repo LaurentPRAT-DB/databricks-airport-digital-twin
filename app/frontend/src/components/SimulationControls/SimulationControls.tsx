@@ -751,14 +751,16 @@ export function SimulationControls({
     setDemoAutoStarted(false);
   }, [currentAirport]);
 
-  // Stop simulation on airport switch — clears old flights and allows auto-start for new airport
+  // Stop simulation on airport switch — clears old flights and allows auto-start for new airport.
+  // Skip when the airport change was triggered by loading a user-selected file
+  // (loadedFile is set) to avoid killing the just-loaded simulation.
   useEffect(() => {
     if (!currentAirport) return;
     // Only trigger on actual airport changes, not initial mount
     if (prevAirportRef.current === currentAirport) return;
     prevAirportRef.current = currentAirport;
     if (dataMode !== 'simulation') return;
-    if (sim.isActive) {
+    if (sim.isActive && !sim.loadedFile) {
       airportSwitchingRef.current = true;
       sim.stop();
     }
@@ -818,6 +820,7 @@ export function SimulationControls({
 
   const handleLoad = (filename: string) => {
     setShowPicker(false);
+    setDemoAutoStarted(true);
     sim.loadFile(filename, 0, 24);
   };
 
@@ -832,6 +835,7 @@ export function SimulationControls({
 
   const handleWindowLoad = async (filename: string, startTime: string, endTime: string) => {
     const isBatch = windowPickerMetadata?.total_frames === 0;
+    setDemoAutoStarted(true);
     // Keep modal open while loading — sim.isLoading drives the spinner in TimeWindowPicker
     await sim.loadWindow(filename, startTime, endTime);
     setShowWindowPicker(false);
