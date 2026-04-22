@@ -24,20 +24,35 @@ logger = logging.getLogger(__name__)
 opensky_router = APIRouter(prefix="/api/opensky", tags=["opensky"])
 
 
-def _get_airport_center() -> tuple[float, float]:
-    """Get the current airport's center coordinates."""
+def _get_airport_center(target_icao: str | None = None) -> tuple[float, float]:
+    """Get airport center coordinates.
+
+    When *target_icao* is given and the currently loaded config belongs to a
+    different airport, fall back to the OurAirports lookup table so that
+    recording endpoints work even before the airport switch completes.
+    """
     service = get_airport_config_service()
     config = service.get_config()
 
-    # Try reference point from config
-    ref = config.get("reference_point") or config.get("referencePoint")
-    if ref and "latitude" in ref and "longitude" in ref:
-        return float(ref["latitude"]), float(ref["longitude"])
+    # Check whether the loaded config matches the requested airport
+    loaded_icao = config.get("icao") or config.get("icao_code") or ""
+    config_matches = (not target_icao) or loaded_icao.upper() == target_icao.upper()
 
-    # Fall back to converter reference
-    converter = getattr(service, "_converter", None)
-    if converter:
-        return converter.reference_lat, converter.reference_lon
+    if config_matches:
+        ref = config.get("reference_point") or config.get("referencePoint")
+        if ref and "latitude" in ref and "longitude" in ref:
+            return float(ref["latitude"]), float(ref["longitude"])
+
+        converter = getattr(service, "_converter", None)
+        if converter:
+            return converter.reference_lat, converter.reference_lon
+
+    # Loaded config doesn't match or has no coordinates — use AIRPORTS table
+    if target_icao:
+        from src.ingestion.airport_table import AIRPORTS
+        for _iata, (lat, lon, icao, _country) in AIRPORTS.items():
+            if icao.upper() == target_icao.upper():
+                return lat, lon
 
     raise HTTPException(status_code=503, detail="No airport loaded — cannot determine location")
 
@@ -810,7 +825,7 @@ def _build_recording_response_from_enriched(
             ge["time"] = ge["time"].isoformat()
 
     # Origin enrichment (heading heuristic — fast, local)
-    lat, lon = _get_airport_center()
+    lat, lon = _get_airport_center(airport)
     aircraft_first_seen: dict[str, dict] = {}
     for ts in sorted_timestamps:
         for snap in frames[ts]:
@@ -965,7 +980,7 @@ async def _load_recording_from_raw(airport: str, date: str) -> dict:
 
     # Event inference (local, fast)
     from src.inference.opensky_events import OpenSkyEventInferrer
-    lat, lon = _get_airport_center()
+    lat, lon = _get_airport_center(airport)
     try:
         service = get_airport_config_service()
         config = service.get_config()
