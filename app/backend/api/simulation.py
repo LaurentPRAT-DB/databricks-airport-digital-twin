@@ -511,6 +511,29 @@ async def get_demo_simulation(request: Request, airport_icao: str) -> dict:
     }
 
 
+@simulation_router.get("/report/{filename:path}")
+async def get_simulation_report(filename: str) -> dict:
+    """Return the markdown analysis report for a simulation file, if it exists.
+
+    Derives the report filename from the simulation JSON filename:
+    - Strips any subdirectory prefix (e.g. "calibrated/")
+    - Replaces "simulation_" prefix with "REPORT_"
+    - Changes .json extension to .md
+    """
+    base = Path(filename).name  # strip directory (e.g. "calibrated/")
+    if base.startswith("simulation_") and base.endswith(".json"):
+        report_name = "REPORT_" + base[len("simulation_"):-len(".json")] + ".md"
+    else:
+        raise HTTPException(status_code=404, detail="No report available")
+
+    report_path = PROJECT_ROOT / "simulation_output" / report_name
+    if not report_path.is_file():
+        raise HTTPException(status_code=404, detail=f"Report not found: {report_name}")
+
+    content = report_path.read_text(encoding="utf-8")
+    return {"content": content, "filename": report_name}
+
+
 @simulation_router.get("/files")
 async def list_simulation_files(request: Request) -> dict:
     """List available simulation output files."""

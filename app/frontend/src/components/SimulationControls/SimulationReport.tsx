@@ -1,8 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { UseSimulationReplayResult } from '../../hooks/useSimulationReplay';
 import { useFlightContext } from '../../context/FlightContext';
 import { captureCurrentView, downloadDataUrl } from '../../utils/sceneCapture';
 import { EVENT_COLORS, EVENT_LABELS } from './SimulationControls';
+
+type ReportTab = 'dashboard' | 'analysis';
 
 interface SimulationReportProps {
   sim: UseSimulationReplayResult;
@@ -111,6 +115,10 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   // Captured screenshots
   const [captures, setCaptures] = useState<CapturedImage[]>([]);
   const [capturing, setCapturing] = useState(false);
+
+  // Report tab (Dashboard vs Analysis Report)
+  const [activeTab, setActiveTab] = useState<ReportTab>('dashboard');
+  const hasAnalysisReport = sim.markdownReport != null;
 
   // Filter events
   const filteredEvents = useMemo(() => {
@@ -320,8 +328,55 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </button>
         </div>
 
+        {/* Tab bar */}
+        <div className="flex border-b border-slate-200 px-6">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'dashboard'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Dashboard
+          </button>
+          <button
+            onClick={() => setActiveTab('analysis')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'analysis'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Analysis Report
+            {hasAnalysisReport && (
+              <span className="ml-1.5 inline-flex items-center justify-center w-2 h-2 rounded-full bg-blue-500" />
+            )}
+          </button>
+        </div>
+
         {/* Body — scrollable (min-h-0 lets flexbox shrink below content height) */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-5">
+
+          {/* ── Analysis Report tab ── */}
+          {activeTab === 'analysis' && (
+            hasAnalysisReport ? (
+              <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-td:text-xs prose-th:text-xs prose-code:text-xs prose-pre:bg-slate-50 prose-pre:text-slate-800">
+                <Markdown remarkPlugins={[remarkGfm]}>{sim.markdownReport!}</Markdown>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                <svg className="w-12 h-12 mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-sm font-medium">No analysis report available</p>
+                <p className="text-xs mt-1">Run a batch simulation to generate a detailed analysis report.</p>
+              </div>
+            )
+          )}
+
+          {/* ── Dashboard tab ── */}
+          {activeTab === 'dashboard' && <>
           {/* KPI Cards */}
           <div className="grid grid-cols-4 gap-3">
             {[
@@ -557,6 +612,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
               </div>
             )}
           </div>
+          </>}
         </div>
 
         {/* Footer */}

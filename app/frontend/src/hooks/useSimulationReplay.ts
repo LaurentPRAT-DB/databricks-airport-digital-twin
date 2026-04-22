@@ -170,6 +170,7 @@ export interface UseSimulationReplayResult {
   simEndTime: string | null;
   metadata: SimulationMetadata | null;
   currentWindow: TimeWindow | null;
+  markdownReport: string | null;
 
   // Actions
   loadFile: (filename: string, startHour?: number, endHour?: number) => Promise<void>;
@@ -227,6 +228,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const [currentWindow, setCurrentWindow] = useState<TimeWindow | null>(null);
   const [availableRecordings, setAvailableRecordings] = useState<RecordingFile[]>([]);
   const [isFetchingRecordings, setIsFetchingRecordings] = useState(false);
+  const [markdownReport, setMarkdownReport] = useState<string | null>(null);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dataSourceRef = useRef<string>('simulation');
@@ -444,6 +446,24 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setIsPlaying(false);
     setSwitchPaused(true);
   }, []);
+
+  // Fetch markdown analysis report when a simulation file is loaded
+  useEffect(() => {
+    if (!loadedFile) {
+      setMarkdownReport(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/simulation/report/${encodeURIComponent(loadedFile)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled) setMarkdownReport(data?.content ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setMarkdownReport(null);
+      });
+    return () => { cancelled = true; };
+  }, [loadedFile]);
 
   // Update flights when frame index changes
   useEffect(() => {
@@ -713,6 +733,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     simEndTime,
     metadata,
     currentWindow,
+    markdownReport,
 
     loadFile,
     loadWindow,
