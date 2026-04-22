@@ -372,36 +372,28 @@ function ViewToggle({
             disabled={endpointStatus === 'checking'}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg shadow-md transition-colors ${
               inpainting
-                ? 'bg-emerald-600 text-white'
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                 : endpointStatus === 'checking'
                   ? 'bg-gray-400 text-white cursor-wait'
                   : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-600'
             }`}
-            title={inpainting ? 'Show original satellite tiles' : 'Remove aircraft from satellite tiles'}
+            title={inpainting ? 'Click to disable AI tile cleaning' : 'Enable AI aircraft removal from satellite tiles'}
           >
             {endpointStatus === 'checking' ? (
               <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
+            ) : inpainting ? (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
             ) : (
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                 <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
               </svg>
             )}
-            Clean Tiles
-          </button>
-        )}
-        {inpainting && satellite && (
-          <button
-            onClick={handleRefreshTiles}
-            className="flex items-center gap-1 px-2 py-2 text-sm font-medium rounded-lg shadow-md bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors"
-            title="Clear tile cache and re-process all tiles"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.598a.75.75 0 0 0-.75.75v3.634a.75.75 0 0 0 1.5 0v-2.033l.312.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.624-2.85a5.5 5.5 0 0 1 9.201-2.465l.312.31H11.77a.75.75 0 0 0 0 1.5h3.634a.75.75 0 0 0 .75-.75V3.535a.75.75 0 0 0-1.5 0v2.033l-.312-.31A7 7 0 0 0 2.63 8.383a.75.75 0 0 0 1.449.39Z" clipRule="evenodd" />
-            </svg>
-            Reset
+            {inpainting ? 'Clean Tiles ON' : 'Clean Tiles'}
           </button>
         )}
       </div>
@@ -440,65 +432,68 @@ function ViewToggle({
         </div>
       )}
 
-      {/* Cache status info — shown when inpainting is active */}
+      {/* Cache status panel — shown when inpainting is active */}
       {inpainting && satellite && (
-        <div className="bg-slate-800/90 backdrop-blur text-white rounded-lg shadow-md px-3 py-2 text-xs max-w-[280px]">
+        <div className="bg-slate-800/90 backdrop-blur text-white rounded-lg shadow-md px-3 py-3 text-xs max-w-[300px]">
           {processing ? (
-            <div className="flex items-center gap-2">
-              <svg className="animate-spin w-3 h-3 flex-shrink-0 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <>
+              <div className="flex items-center gap-2">
+                <svg className="animate-spin w-3.5 h-3.5 flex-shrink-0 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-emerald-300 font-medium">
+                  Removing aircraft from tiles...
+                </span>
+              </div>
+              {cacheStats && cacheStats.total_tiles > 0 && (
+                <div className="mt-1.5 text-slate-400 pl-5.5">
+                  {cacheStats.total_tiles} tile{cacheStats.total_tiles !== 1 ? 's' : ''} processed so far
+                </div>
+              )}
+            </>
+          ) : cacheStats && cacheStats.total_tiles > 0 ? (
+            <>
+              <div className="flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 flex-shrink-0 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <span className="text-emerald-300 font-medium">
+                  {cacheStats.total_tiles} tile{cacheStats.total_tiles !== 1 ? 's' : ''} cleaned &amp; cached
+                </span>
+              </div>
+              <div className="mt-1.5 pl-5.5 text-slate-400">
+                {formatDate(cacheStats.newest_tile) && <span>Last processed {formatDate(cacheStats.newest_tile)}</span>}
+                {cacheStats.cache_size && <span> · {cacheStats.cache_size}</span>}
+              </div>
+              {staleTileCount > 0 && (
+                <div className="mt-1.5 pl-5.5 flex items-center gap-1 text-amber-400">
+                  <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                  </svg>
+                  <span>{staleTileCount} tile{staleTileCount !== 1 ? 's' : ''} have newer imagery available</span>
+                </div>
+              )}
+              <button
+                onClick={handleRefreshTiles}
+                className="mt-2.5 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-600/80 hover:bg-slate-500/80 text-slate-200 font-medium transition-colors"
+                title="Clear cache and re-process all tiles with AI inpainting"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                  <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H4.28a.75.75 0 00-.75.75v3.955a.75.75 0 001.5 0v-2.137l.312.311a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39l-.293-.006zm.038-4.848a.75.75 0 00.75-.75V1.871a.75.75 0 00-1.5 0v2.137l-.312-.311a7 7 0 00-11.712 3.138.75.75 0 001.449.39 5.5 5.5 0 019.201-2.466l.312.311H11.3a.75.75 0 000 1.5h3.955a.75.75 0 00.094.006z" clipRule="evenodd" />
+                </svg>
+                Re-process Tiles
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 text-slate-400">
+              <svg className="animate-spin w-3 h-3 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <span className="text-emerald-300">
-                Processing tiles{cacheStats ? ` ... ${cacheStats.total_tiles} cached` : '...'}
-              </span>
-            </div>
-          ) : cacheStats && cacheStats.total_tiles > 0 ? (
-            <div className="flex items-center gap-2">
-              <svg className="w-3 h-3 flex-shrink-0 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              <span className="text-emerald-300">{cacheStats.total_tiles} tiles cleaned</span>
-            </div>
-          ) : null}
-
-          {cacheStats && cacheStats.total_tiles > 0 && (
-            <div className="mt-1 flex items-center justify-between text-slate-400">
-              <span>
-                Cached{formatDate(cacheStats.newest_tile) ? ` ${formatDate(cacheStats.newest_tile)}` : ''}
-                {cacheStats.cache_size ? ` · ${cacheStats.cache_size}` : ''}
-              </span>
-              <button
-                onClick={handleRefreshTiles}
-                className="ml-2 text-blue-400 hover:text-blue-300 transition-colors"
-                title="Clear cache and re-fetch satellite tiles"
-              >
-                Refresh
-              </button>
+              <span>Connecting to inpainting service...</span>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Stale cache notification — satellite imagery updated but cached tiles are from older version */}
-      {inpainting && satellite && staleTileCount > 0 && (
-        <div className="bg-amber-800/90 backdrop-blur text-white rounded-lg shadow-md px-3 py-2 text-xs max-w-[280px]">
-          <div className="flex items-center gap-2">
-            <svg className="w-3 h-3 flex-shrink-0 text-amber-300" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-            </svg>
-            <span className="text-amber-200">{staleTileCount} tile{staleTileCount !== 1 ? 's have' : ' has'} newer satellite imagery</span>
-          </div>
-          <div className="mt-1 flex items-center justify-between text-amber-400/80">
-            <span>Cached versions shown</span>
-            <button
-              onClick={handleRefreshTiles}
-              className="ml-2 text-amber-300 hover:text-amber-200 transition-colors font-medium"
-              title="Clear cache and re-inpaint with latest satellite imagery"
-            >
-              Refresh
-            </button>
-          </div>
         </div>
       )}
     </div>
