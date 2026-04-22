@@ -114,6 +114,7 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
             <button onClick={onSelectAll} className="text-[10px] text-blue-600 hover:text-blue-500">All</button>
             <button onClick={onClearAll} className="text-[10px] text-blue-600 hover:text-blue-500">None</button>
           </div>
+          <div className="max-h-[240px] overflow-y-auto">
           {allTypes.map(type => {
             const count = events.filter(e => {
               if (e.event_type !== type) return false;
@@ -141,6 +142,7 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
               </button>
             );
           })}
+          </div>
         </div>
       )}
     </div>
