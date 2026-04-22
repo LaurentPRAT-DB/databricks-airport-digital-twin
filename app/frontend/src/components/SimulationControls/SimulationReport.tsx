@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { UseSimulationReplayResult } from '../../hooks/useSimulationReplay';
@@ -100,6 +100,19 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
     return initial;
   });
 
+  // Sync selectedTypes when allEventTypes changes (handles late-arriving events)
+  const allEventTypesKey = allEventTypes.join(',');
+  useEffect(() => {
+    setSelectedTypes(prev => {
+      if (prev.size === 0 && allEventTypes.length > 0) {
+        const next = new Set(allEventTypes);
+        next.delete('capacity');
+        return next;
+      }
+      return prev;
+    });
+  }, [allEventTypesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Time range filter (hours)
   const startHour = sim.simStartTime ? getHour(sim.simStartTime) : 0;
   const endHour = sim.simEndTime ? getHour(sim.simEndTime) : 24;
@@ -119,6 +132,9 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   // Report tab (Dashboard vs Analysis Report)
   const [activeTab, setActiveTab] = useState<ReportTab>('dashboard');
   const hasAnalysisReport = sim.markdownReport != null;
+
+  // Stable key for selectedTypes so useMemo dependencies use a primitive
+  const selectedTypesKey = [...selectedTypes].sort().join(',');
 
   // Filter events
   const filteredEvents = useMemo(() => {
@@ -140,7 +156,8 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
       }
       return new Date(a.time).getTime() - new Date(b.time).getTime();
     });
-  }, [sim.scenarioEvents, selectedTypes, fromHour, toHour, groupBy]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sim.scenarioEvents, selectedTypesKey, fromHour, toHour, groupBy]);
 
   // Group events by flight callsign (for flight grouping mode)
   const flightGroups = useMemo(() => {
@@ -473,7 +490,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </div>
 
           {/* Event table — fills remaining space, always shows scrollbar */}
-          <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-slate-200" style={{ scrollbarGutter: 'stable' }}>
+          <div className="flex-1 min-h-[120px] overflow-y-auto rounded-lg border border-slate-200" style={{ scrollbarGutter: 'stable' }}>
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100">
                 <tr>
