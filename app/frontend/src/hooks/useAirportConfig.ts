@@ -363,7 +363,10 @@ export function useAirportConfig(): UseAirportConfigReturn {
     demoReadyRef.current = false;
     setDemoReady(false);
 
-    // Check L1 in-memory cache first
+    // Apply cached frontend config optimistically (shows airport geometry instantly)
+    // but always go through the backend activation flow for proper WS progress/errors.
+    let hasCachedConfig = false;
+
     if (configCache.has(icaoCode)) {
       const cached = configCache.get(icaoCode)!;
       const configData = cached.config as AirportConfig & { icaoCode?: string };
@@ -374,43 +377,36 @@ export function useAirportConfig(): UseAirportConfigReturn {
           sources: configData.sources || prev.sources,
           lastUpdated: cached.lastUpdated || undefined,
         }));
-        setCurrentAirport(icaoCode);
-        prevAirportRef.current = icaoCode;
-        // Always activate backend so flights/gates/demo switch too
-        fetch(`${API_BASE}/api/airports/${icaoCode}/activate`, { method: 'POST' }).catch(() => {});
-        return;
+        hasCachedConfig = true;
       }
     }
 
-    // Check L2 IndexedDB cache (persists across reloads)
-    try {
-      const idbCached = await getCachedConfig(icaoCode);
-      if (idbCached && typeof idbCached === 'object') {
-        const configData = idbCached as AirportConfig & { icaoCode?: string };
-        if (Object.keys(configData).length > 0) {
-          setConfig((prev) => ({
-            ...prev,
-            ...configData,
-            sources: configData.sources || prev.sources,
-            lastUpdated: new Date().toISOString(),
-          }));
-          setCurrentAirport(icaoCode);
-          prevAirportRef.current = icaoCode;
-          // Also populate L1 cache
-          configCache.set(icaoCode, { config: configData, lastUpdated: new Date().toISOString() } as ConfigResponse);
-          // Fire activation in background to refresh backend state (non-blocking)
-          fetch(`${API_BASE}/api/airports/${icaoCode}/activate`, { method: 'POST' }).catch(() => {});
-          return;
+    if (!hasCachedConfig) {
+      try {
+        const idbCached = await getCachedConfig(icaoCode);
+        if (idbCached && typeof idbCached === 'object') {
+          const configData = idbCached as AirportConfig & { icaoCode?: string };
+          if (Object.keys(configData).length > 0) {
+            setConfig((prev) => ({
+              ...prev,
+              ...configData,
+              sources: configData.sources || prev.sources,
+              lastUpdated: new Date().toISOString(),
+            }));
+            configCache.set(icaoCode, { config: configData, lastUpdated: new Date().toISOString() } as ConfigResponse);
+            hasCachedConfig = true;
+          }
         }
+      } catch {
+        // IndexedDB not available — proceed to network
       }
-    } catch {
-      // IndexedDB not available — proceed to network
     }
 
-    // No cache hit — activate via network
-    configCache.delete(icaoCode);
+    // Always activate via network — backend needs to switch gates, ML, flights
+    if (!hasCachedConfig) configCache.delete(icaoCode);
     setIsLoading(true);
     setError(null);
+    setCurrentAirport(icaoCode);
 
     // Save previous airport for rollback on error
     prevAirportRef.current = currentAirport;
@@ -425,7 +421,6 @@ export function useAirportConfig(): UseAirportConfigReturn {
         // Async activation: backend is working in background.
         // Config will arrive via WS `airport_switch_complete` message.
         // Keep isLoading=true; WS handler will clear it.
-        setCurrentAirport(icaoCode);
         // Safety timeout: if WS confirmation never arrives, try REST fallback
         // then revert so the user can retry.
         if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
@@ -487,6 +482,10 @@ export function useAirportConfig(): UseAirportConfigReturn {
       const message = err instanceof Error ? err.message : 'Failed to activate airport';
       setError(message);
       setIsLoading(false);
+      // Revert to previous airport on failure
+      if (prevAirportRef.current && prevAirportRef.current !== icaoCode) {
+        setCurrentAirport(prevAirportRef.current);
+      }
       throw err;
     }
   }, [currentAirport]);
