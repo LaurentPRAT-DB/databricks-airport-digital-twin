@@ -56,8 +56,8 @@ class DemoSimulationService:
             iata = icao_to_iata(airport_icao)
             logger.info("Generating demo simulation for %s (%s)...", airport_icao, iata)
 
-            arrivals = 60
-            departures = 60
+            arrivals = 40
+            departures = 40
 
             config = SimulationConfig(
                 airport=iata,
