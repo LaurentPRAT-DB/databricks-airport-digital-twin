@@ -150,6 +150,7 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
 }
 
 export function SimulationReport({ sim, onClose }: SimulationReportProps) {
+  const [fullscreen, setFullscreen] = useState(false);
   const { filteredFlights, setSelectedFlight } = useFlightContext();
 
   // Handle clicking an event row — seek to event time, select matching flight, close report
@@ -411,9 +412,13 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-[900px] max-w-[95vw] max-h-[92vh] flex flex-col">
+      <div className={`bg-white shadow-2xl border border-slate-200 flex flex-col transition-all duration-200 ${
+        fullscreen
+          ? 'w-full h-full max-w-full max-h-full rounded-none'
+          : 'w-[900px] max-w-[95vw] max-h-[92vh] rounded-xl'
+      }`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 rounded-t-xl">
+        <div className={`flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 ${fullscreen ? '' : 'rounded-t-xl'}`}>
           <div>
             <h2 className="text-lg font-bold text-slate-900">
               {sim.scenarioName || `${sim.airport} Simulation Report`}
@@ -422,11 +427,24 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
               {sim.airport} &middot; {fmtDateTime(sim.simStartTime)} — {fmtDateTime(sim.simEndTime)}
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setFullscreen(f => !f)} className="text-slate-400 hover:text-slate-700 p-1" title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+              {fullscreen ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9L4 4m0 0v4m0-4h4m7 11l5 5m0 0v-4m0 4h-4M9 15l-5 5m0 0v-4m0 4h4m7-11l5-5m0 0v4m0-4h-4" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m4 0v-4m0 4l-5-5" />
+                </svg>
+              )}
+            </button>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1" title="Close">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Tab bar */}
