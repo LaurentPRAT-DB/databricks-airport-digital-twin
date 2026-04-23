@@ -234,8 +234,10 @@ const InpaintingGridLayer = L.GridLayer.extend({
         throw new Error(`HTTP ${resp.status}`);
       })
       .catch(() => {
-        // Let the base satellite TileLayer show through
-        done(null, tile);
+        // Fallback: load original Esri tile so there's no visible gap
+        tile.onload = () => done(null, tile);
+        tile.onerror = () => done(null, tile);
+        tile.src = esriUrl;
       });
 
     return tile;
