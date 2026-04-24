@@ -1,0 +1,7 @@
+resources:
+  volumes:
+    demo_simulations:
+      catalog_name: ${var.catalog}
+      schema_name: ${var.schema}
+      name: demo_simulations
+      volume_type: MANAGED

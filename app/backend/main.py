@@ -309,13 +309,11 @@ async def _background_init(app: FastAPI):
             from app.backend.api.websocket import broadcaster
             try:
                 demo_svc = get_demo_simulation_service()
-                from app.backend.services.demo_simulation_service import _STATIC_DEMO_DIR
-                is_static = (_STATIC_DEMO_DIR / f"demo_{airport_icao}.json").exists()
-                app.state.startup_status = "Loading demo simulation..." if is_static else "Generating demo simulation..."
+                app.state.startup_status = "Loading demo simulation..."
                 t_demo = time.monotonic()
                 await asyncio.to_thread(demo_svc.generate_demo, airport_icao)
                 demo_ms = (time.monotonic() - t_demo) * 1000
-                source = "static" if is_static else "generated"
+                source = demo_svc.get_source(airport_icao)
                 logger.info(f"INIT | Demo simulation {source} in {demo_ms:.0f}ms")
                 app.state.init_timings["phase4_demo_sim"] = round(demo_ms / 1000, 2)
                 app.state.init_timings["phase4_source"] = source
