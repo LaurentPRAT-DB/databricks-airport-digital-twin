@@ -254,6 +254,7 @@ function InpaintingTileLayer({ airportIcao, onStaleDetected }: { airportIcao?: s
   useEffect(() => {
     const layer = new (InpaintingGridLayer as unknown as new (opts: object) => L.GridLayer)({
       attribution: SAT_ATTR,
+      maxNativeZoom: 17,
       airportIcao,
       onStaleDetected: () => callbackRef.current?.(),
     });
