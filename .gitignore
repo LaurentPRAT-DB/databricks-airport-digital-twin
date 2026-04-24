@@ -69,6 +69,8 @@ env/
 data/*
 # Exception: keep fallback sample data for offline mode
 !data/fallback/
+# Exception: keep pre-generated demo simulation files
+!data/demo/
 # Exception: keep calibration data needed for synthetic data generation
 !data/calibration/
 data/calibration/*

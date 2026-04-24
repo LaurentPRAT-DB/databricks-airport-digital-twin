@@ -1,11 +1,14 @@
-"""Demo simulation service — generates 24h replay simulations per airport.
+"""Demo simulation service — generates replay simulations per airport.
 
-On startup (and on airport switch), generates a full 24h simulation using
-the existing SimulationEngine. The output is served to the frontend for
-auto-playing timeline replay with seek/speed controls.
+On startup (and on airport switch), provides a demo simulation for
+auto-playing timeline replay. For the default airport (KSFO), a
+pre-generated static file is shipped to avoid the 90s+ engine run.
+Other airports generate a shorter 6h simulation on demand.
 """
 
+import json
 import logging
+import shutil
 import tempfile
 import threading
 from datetime import datetime, timezone
@@ -13,6 +16,8 @@ from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+_STATIC_DEMO_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "demo"
 
 
 class DemoSimulationService:
@@ -31,21 +36,59 @@ class DemoSimulationService:
             cls._instance = cls()
         return cls._instance
 
-    def generate_demo(self, airport_icao: str) -> Path:
-        """Generate a 24h demo simulation for the airport.
+    @staticmethod
+    def _get_static_demo_path(airport_icao: str) -> Path | None:
+        """Return path to a bundled static demo file, or None."""
+        path = _STATIC_DEMO_DIR / f"demo_{airport_icao}.json"
+        if path.exists():
+            return path
+        return None
 
-        Runs the SimulationEngine synchronously (CPU-bound, ~10-30s).
+    def _load_static_demo(self, airport_icao: str) -> Path | None:
+        """Load a pre-generated static demo, patching start_time to today."""
+        static_path = self._get_static_demo_path(airport_icao)
+        if not static_path:
+            return None
+
+        logger.info("Loading static demo for %s from %s", airport_icao, static_path.name)
+        output_path = Path(tempfile.gettempdir()) / f"demo_{airport_icao}.json"
+
+        today_start = datetime.now(timezone.utc).replace(
+            hour=6, minute=0, second=0, microsecond=0
+        )
+
+        with open(static_path) as f:
+            data = json.load(f)
+
+        if "config" in data and "start_time" in data["config"]:
+            data["config"]["start_time"] = today_start.isoformat()
+
+        with open(output_path, "w") as f:
+            json.dump(data, f, default=str)
+
+        size_mb = output_path.stat().st_size / (1024 * 1024)
+        logger.info("Static demo for %s loaded: %.1f MB", airport_icao, size_mb)
+        return output_path
+
+    def generate_demo(self, airport_icao: str) -> Path:
+        """Generate or load a demo simulation for the airport.
+
+        For airports with a bundled static file, loads it instantly.
+        Otherwise runs SimulationEngine (CPU-bound, ~45s for 6h on Databricks).
         Returns path to the JSON output file.
         """
+        static = self._load_static_demo(airport_icao)
+        if static:
+            self._demo_files[airport_icao] = static
+            return static
+
         from app.backend.demo_config import icao_to_iata
-        from src.calibration.profile import AirportProfileLoader
         from src.simulation.config import SimulationConfig
         from src.simulation.engine import SimulationEngine
 
         with self._lock:
             if airport_icao in self._generating:
                 logger.warning("Demo already generating for %s", airport_icao)
-                # Wait for it — return existing path if available
                 existing = self._demo_files.get(airport_icao)
                 if existing and existing.exists():
                     return existing
@@ -63,7 +106,7 @@ class DemoSimulationService:
                 airport=iata,
                 arrivals=arrivals,
                 departures=departures,
-                duration_hours=12.0,
+                duration_hours=6.0,
                 time_step_seconds=10.0,
                 seed=42,
                 start_time=datetime.now(timezone.utc).replace(
