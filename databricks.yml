@@ -12,6 +12,7 @@ sync:
     - simulation_output/report/**
     - simulation_output/REPORT_*.md
     - data/calibration/profiles/**
+    - data/demo/**
     - app.yaml
     - requirements.txt
     - pyproject.toml

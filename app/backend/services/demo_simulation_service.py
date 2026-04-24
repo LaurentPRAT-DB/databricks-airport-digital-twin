@@ -78,10 +78,28 @@ class DemoSimulationService:
             return path
         return None
 
+    @staticmethod
+    def _seed_volume(airport_icao: str, local_path: Path) -> None:
+        """Upload local demo file to UC Volume so future startups use it."""
+        vol = _volume_path()
+        if not vol:
+            return
+        try:
+            from databricks.sdk import WorkspaceClient
+
+            w = WorkspaceClient()
+            remote_path = f"{vol}/demo_{airport_icao}.json"
+            with open(local_path, "rb") as f:
+                w.files.upload(remote_path, f, overwrite=True)
+            logger.info("Seeded Volume with %s", remote_path)
+        except Exception as e:
+            logger.warning("Volume seeding failed for %s: %s", airport_icao, e)
+
     def _load_static_demo(self, airport_icao: str) -> Path | None:
         """Load a pre-generated static demo, patching start_time to today.
 
         Tries UC Volume first (Databricks), then local file (dev).
+        If loaded from local on Databricks, seeds the Volume for next time.
         """
         raw_path = self._download_from_volume(airport_icao)
         source = "volume"
@@ -92,6 +110,7 @@ class DemoSimulationService:
             logger.info("Loading static demo for %s from local: %s", airport_icao, local.name)
             raw_path = local
             source = "local"
+            self._seed_volume(airport_icao, local)
 
         today_start = datetime.now(timezone.utc).replace(
             hour=6, minute=0, second=0, microsecond=0
