@@ -70,6 +70,7 @@ for _logger_name in (
     "app.backend.services.opensky_service",
     "app.backend.services.opensky_collector",
     "app.backend.api.opensky",
+    "src.ingestion.fallback",
 ):
     _lg = logging.getLogger(_logger_name)
     _lg.addHandler(_ring_handler)
