@@ -38,7 +38,19 @@ function MapLoadingFallback({ label }: { label: string }) {
  * Full-screen loading overlay shown during initial data fetch.
  * Displays an animated radar sweep, airport name, and live backend status.
  */
-function LoadingScreen({ airportCode, statusMessage }: { airportCode?: string; statusMessage?: string }) {
+interface InitStep {
+  phase: number;
+  label: string;
+  status: 'running' | 'done' | 'error';
+  detail: string;
+  duration_ms: number;
+}
+
+function LoadingScreen({ airportCode, statusMessage, initSteps }: {
+  airportCode?: string;
+  statusMessage?: string;
+  initSteps?: InitStep[];
+}) {
   const [dotCount, setDotCount] = useState(0);
 
   useEffect(() => {
@@ -46,19 +58,21 @@ function LoadingScreen({ airportCode, statusMessage }: { airportCode?: string; s
     return () => clearInterval(dotTimer);
   }, []);
 
+  const formatDuration = (ms: number) => {
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  };
+
+  const steps = initSteps && initSteps.length > 0 ? initSteps : null;
+
   return (
     <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white">
       {/* Radar sweep animation */}
-      <div className="relative w-32 h-32 mb-8">
-        {/* Outer ring */}
+      <div className="relative w-32 h-32 mb-6">
         <div className="absolute inset-0 rounded-full border-2 border-slate-600" />
-        {/* Middle ring */}
         <div className="absolute inset-4 rounded-full border border-slate-700" />
-        {/* Inner ring */}
         <div className="absolute inset-8 rounded-full border border-slate-700" />
-        {/* Center dot */}
         <div className="absolute inset-[3.5rem] rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
-        {/* Sweep line */}
         <div
           className="absolute inset-0 origin-center"
           style={{ animation: 'radar-sweep 2.4s linear infinite' }}
@@ -70,7 +84,6 @@ function LoadingScreen({ airportCode, statusMessage }: { airportCode?: string; s
             }}
           />
         </div>
-        {/* Blips */}
         <div className="absolute w-1.5 h-1.5 rounded-full bg-emerald-400 top-6 left-10 animate-pulse" />
         <div
           className="absolute w-1.5 h-1.5 rounded-full bg-emerald-400 top-14 right-5 animate-pulse"
@@ -83,17 +96,56 @@ function LoadingScreen({ airportCode, statusMessage }: { airportCode?: string; s
       </div>
 
       {/* Title */}
-      <h1 className="text-2xl font-bold mb-2">Airport Digital Twin</h1>
+      <h1 className="text-2xl font-bold mb-1">Airport Digital Twin</h1>
       {airportCode && (
-        <p className="text-lg text-slate-400 mb-6 font-mono">{airportCode}</p>
+        <p className="text-lg text-slate-400 mb-4 font-mono">{airportCode}</p>
       )}
 
-      {/* Status text */}
-      <p className="text-sm text-slate-400 h-5">
-        {(statusMessage || 'Initializing')}{'.'.repeat(dotCount)}
-      </p>
+      {/* Init steps progress */}
+      {steps ? (
+        <div className="w-80 max-w-[90vw] mb-4">
+          {steps.map((step) => (
+            <div key={step.phase} className="flex items-center gap-2 py-1 text-xs font-mono">
+              {/* Status icon */}
+              <span className="w-4 text-center flex-shrink-0">
+                {step.status === 'done' && <span className="text-emerald-400">&#10003;</span>}
+                {step.status === 'error' && <span className="text-amber-400">!</span>}
+                {step.status === 'running' && (
+                  <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                )}
+              </span>
+              {/* Label */}
+              <span className={`flex-1 truncate ${
+                step.status === 'running' ? 'text-blue-300' :
+                step.status === 'error' ? 'text-amber-300' :
+                'text-slate-500'
+              }`}>
+                {step.label}
+              </span>
+              {/* Duration */}
+              {step.status !== 'running' && step.duration_ms > 0 && (
+                <span className="text-slate-600 flex-shrink-0">
+                  {formatDuration(step.duration_ms)}
+                </span>
+              )}
+            </div>
+          ))}
+          {/* Detail for the latest completed or running step */}
+          {(() => {
+            const reversed = [...steps].reverse();
+            const active = reversed.find((s: InitStep) => s.status === 'running') ||
+                           reversed.find((s: InitStep) => s.status === 'done' || s.status === 'error');
+            return active?.detail ? (
+              <p className="text-[10px] text-slate-600 mt-1 truncate pl-6">{active.detail}</p>
+            ) : null;
+          })()}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-400 h-5 mb-4">
+          {(statusMessage || 'Connecting to backend')}{'.'.repeat(dotCount)}
+        </p>
+      )}
 
-      {/* Inline keyframes for the radar sweep */}
       <style>{`
         @keyframes radar-sweep {
           from { transform: rotate(0deg); }
@@ -529,6 +581,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [showFIDS, setShowFIDS] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Initializing');
+  const [initSteps, setInitSteps] = useState<InitStep[]>([]);
   const [, setSimulationActive] = useState(false);
   const [simTime, setSimTime] = useState<string | null>(null);
   const [openskyAvailable, setOpenskyAvailable] = useState(false);
@@ -632,23 +685,28 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
 
   // Poll /api/ready until backend signals readiness
   useEffect(() => {
+    const handleReadyResponse = (data: Record<string, unknown>) => {
+      setStatusMessage((data.status as string) || 'Initializing');
+      if (Array.isArray(data.init_steps) && data.init_steps.length > 0) {
+        setInitSteps(data.init_steps as InitStep[]);
+      }
+      if (data.ready && !backendReady) {
+        setBackendReady(true);
+        initializeDefaultAirport();
+        if (data.debug_client_logs) debugLogger.enable();
+      }
+      if (data.opensky_available === true) {
+        setOpenskyAvailable(true);
+      }
+    };
+
     const poll = setInterval(async () => {
       try {
         const res = await fetch('/api/ready');
         if (res.ok) {
           const data = await res.json();
-          setStatusMessage(data.status || 'Initializing');
-          if (data.ready && !backendReady) {
-            setBackendReady(true);
-            initializeDefaultAirport();
-            if (data.debug_client_logs) debugLogger.enable();
-          }
-          if (data.opensky_available === true) {
-            setOpenskyAvailable(true);
-          }
-          if (data.ready) {
-            clearInterval(poll);
-          }
+          handleReadyResponse(data);
+          if (data.ready) clearInterval(poll);
         }
       } catch {
         // Backend not up yet — keep polling
@@ -659,18 +717,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
     (async () => {
       try {
         const res = await fetch('/api/ready');
-        if (res.ok) {
-          const data = await res.json();
-          setStatusMessage(data.status || 'Initializing');
-          if (data.ready) {
-            setBackendReady(true);
-            initializeDefaultAirport();
-            if (data.debug_client_logs) debugLogger.enable();
-          }
-          if (data.opensky_available === true) {
-            setOpenskyAvailable(true);
-          }
-        }
+        if (res.ok) handleReadyResponse(await res.json());
       } catch {
         // ignore
       }
@@ -696,7 +743,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
 
   // Show loading screen until backend is ready
   if (!backendReady) {
-    return <LoadingScreen airportCode={currentAirport || undefined} statusMessage={statusMessage} />;
+    return <LoadingScreen airportCode={currentAirport || undefined} statusMessage={statusMessage} initSteps={initSteps} />;
   }
 
   const simulationControlsNode = (

@@ -163,6 +163,18 @@ async def _background_init(app: FastAPI):
     airport_iata = DEFAULT_AIRPORT_IATA
     t_start = time.monotonic()
     app.state.init_timings = {}  # phase -> seconds
+    app.state.init_steps = []    # ordered list of {phase, label, status, duration_ms, detail}
+
+    def _step(phase: int, label: str, status: str = "running", detail: str = "", duration_ms: float = 0):
+        """Track an init step for the loading screen."""
+        for s in app.state.init_steps:
+            if s["phase"] == phase:
+                s.update(status=status, detail=detail, duration_ms=round(duration_ms))
+                return
+        app.state.init_steps.append({
+            "phase": phase, "label": label,
+            "status": status, "detail": detail, "duration_ms": round(duration_ms),
+        })
 
     logger.info("=" * 70)
     logger.info(f"INIT | Airport Digital Twin — Build {BUILD_NUMBER}")
@@ -176,12 +188,15 @@ async def _background_init(app: FastAPI):
     try:
         # ── Phase 0: Test database connections ────────────────────────────
         app.state.startup_status = "Testing database connections..."
+        _step(0, "Database connections", "running")
         logger.info("INIT | Phase 0: Testing database connections")
+        t_phase = time.monotonic()
 
         lakebase = get_lakebase_service()
+        db_details = []
         if lakebase.is_available:
             logger.info(f"INIT |   Lakebase: CONNECTED (host={os.getenv('LAKEBASE_HOST', 'n/a')})")
-            # Check existing record counts
+            db_details.append("Lakebase: connected")
             try:
                 flight_records = lakebase.get_flights(limit=1)
                 schedule_records = lakebase.get_schedule(hours_behind=24, hours_ahead=24, limit=1, airport_icao=airport_icao)
@@ -191,18 +206,24 @@ async def _background_init(app: FastAPI):
                 logger.info(f"INIT |   Lakebase record check: skipped ({e})")
         else:
             logger.warning("INIT |   Lakebase: NOT AVAILABLE — synthetic data only")
+            db_details.append("Lakebase: unavailable")
 
         delta = get_delta_service()
         if delta.is_available:
             logger.info(f"INIT |   Delta tables (Unity Catalog): configured (host={os.getenv('DATABRICKS_HOST', 'n/a')})")
+            db_details.append("Unity Catalog: configured")
         else:
             logger.info("INIT |   Delta tables (Unity Catalog): NOT CONFIGURED")
+            db_details.append("Unity Catalog: not configured")
 
-        app.state.init_timings["phase0_db_connections"] = round(time.monotonic() - t_start, 2)
+        phase0_ms = (time.monotonic() - t_phase) * 1000
+        app.state.init_timings["phase0_db_connections"] = round(phase0_ms / 1000, 2)
+        _step(0, "Database connections", "done", ", ".join(db_details), phase0_ms)
         logger.info("-" * 70)
 
         # ── Phase 1: Load airport configuration ──────────────────────────
         app.state.startup_status = f"Loading airport config for {airport_icao}..."
+        _step(1, f"Airport config ({airport_icao})", "running")
         logger.info(f"INIT | Phase 1: Loading airport configuration for {airport_icao}")
 
         airport_config = get_airport_config_service()
@@ -250,9 +271,12 @@ async def _background_init(app: FastAPI):
             registry.retrain(airport_icao)
             ml_ms = (time.monotonic() - t_ml) * 1000
             logger.info(f"INIT |   ML models retrained in {ml_ms:.0f}ms")
+
+            phase1_detail = f"{source_label}: {n_gates} gates, {n_taxiways} taxiways, {n_aprons} aprons"
         else:
             logger.warning("INIT |   FAILED to load airport config from any source (tried all 3 tiers)")
             app.state.startup_status = "Warning: airport config failed to load from all sources"
+            phase1_detail = "FAILED — all 3 tiers"
 
         if not airport_config.config_ready:
             logger.warning(
@@ -260,12 +284,15 @@ async def _background_init(app: FastAPI):
                 "synthetic data will use default 9-gate fallback until config loads"
             )
 
-        app.state.init_timings["phase1_airport_config"] = round(time.monotonic() - t_start - sum(app.state.init_timings.values()), 2)
+        phase1_ms = (time.monotonic() - t0) * 1000
+        app.state.init_timings["phase1_airport_config"] = round(phase1_ms / 1000, 2)
         app.state.init_timings["phase1_source"] = source or "none"
+        _step(1, f"Airport config ({airport_icao})", "done" if source else "error", phase1_detail, phase1_ms)
         logger.info("-" * 70)
 
         # ── Phase 2: Generate synthetic data ─────────────────────────────
         app.state.startup_status = f"Generating synthetic flight data ({DEFAULT_FLIGHT_COUNT} flights)..."
+        _step(2, "Synthetic flight data", "running")
         logger.info(f"INIT | Phase 2: Generating synthetic data ({DEFAULT_FLIGHT_COUNT} flights for {airport_icao})")
 
         data_generator = get_data_generator_service()
@@ -277,23 +304,31 @@ async def _background_init(app: FastAPI):
             await data_generator.start_periodic_refresh()
             logger.info("INIT |   Periodic refresh started (weather=10m, schedule=1m, baggage=30s, GSE=30s, snapshots=15s)")
             app.state.startup_status = f"Synthetic data generated in {gen_ms:.0f}ms — periodic refresh active"
+            _step(2, "Synthetic flight data", "done", f"{DEFAULT_FLIGHT_COUNT} flights, periodic refresh active", gen_ms)
         else:
             logger.warning("INIT |   Data initialization FAILED — using fallback generators only")
             app.state.startup_status = "Warning: data init failed, using fallback generators"
+            _step(2, "Synthetic flight data", "error", "using fallback generators", gen_ms)
 
         app.state.init_timings["phase2_synthetic_data"] = round(gen_ms / 1000, 2)
         logger.info("-" * 70)
 
         # ── Phase 3: Pre-warm weather cache ──────────────────────────────
+        _step(3, "Weather cache", "running")
         logger.info(f"INIT | Phase 3: Pre-warming weather cache for {airport_icao}")
+        t_weather = time.monotonic()
         try:
             weather_svc = get_weather_service()
             weather_svc.get_current_weather()
+            weather_ms = (time.monotonic() - t_weather) * 1000
             logger.info(f"INIT |   Weather cache pre-warmed for {airport_icao}")
+            _step(3, "Weather cache", "done", f"METAR/TAF for {airport_icao}", weather_ms)
         except Exception as e:
+            weather_ms = (time.monotonic() - t_weather) * 1000
             logger.warning(f"INIT |   Weather pre-warm failed (non-critical): {e}")
+            _step(3, "Weather cache", "done", "skipped (non-critical)", weather_ms)
 
-        app.state.init_timings["phase3_weather"] = round(time.monotonic() - t_start - sum(v for v in app.state.init_timings.values() if isinstance(v, (int, float))), 2)
+        app.state.init_timings["phase3_weather"] = round(weather_ms / 1000, 2)
         total_ms = (time.monotonic() - t_start) * 1000
         app.state.init_timings["total_ready"] = round(total_ms / 1000, 2)
         app.state.ready = True
@@ -304,6 +339,7 @@ async def _background_init(app: FastAPI):
         logger.info("=" * 70)
 
         # ── Phase 4: Generate demo simulation (background, non-blocking) ──
+        _step(4, "Demo simulation", "running", "background")
         async def _generate_demo_background():
             from app.backend.services.demo_simulation_service import get_demo_simulation_service
             from app.backend.api.websocket import broadcaster
@@ -318,7 +354,7 @@ async def _background_init(app: FastAPI):
                 app.state.init_timings["phase4_demo_sim"] = round(demo_ms / 1000, 2)
                 app.state.init_timings["phase4_source"] = source
                 app.state.startup_status = "Ready"
-                # Signal frontend that demo is ready (same WS message as activate flow)
+                _step(4, "Demo simulation", "done", f"{source}", demo_ms)
                 await broadcaster.broadcast({
                     "type": "demo_ready",
                     "data": {"icao": airport_icao},
@@ -327,6 +363,7 @@ async def _background_init(app: FastAPI):
                 logger.error(f"INIT | Demo simulation generation FAILED: {e}", exc_info=True)
                 app.state.init_timings["phase4_demo_sim"] = f"FAILED: {type(e).__name__}: {e}"
                 app.state.startup_status = "Ready"
+                _step(4, "Demo simulation", "error", str(e)[:80], 0)
 
         asyncio.create_task(_generate_demo_background())
 
@@ -468,6 +505,8 @@ async def readiness():
         "demo_ready_icao": current_icao,
         "opensky_available": getattr(app.state, "opensky_available", None),
         "debug_client_logs": os.environ.get("DEBUG_MODE", "false").lower() == "true",
+        "init_steps": getattr(app.state, "init_steps", []),
+        "init_timings": getattr(app.state, "init_timings", {}),
     }
 
 
