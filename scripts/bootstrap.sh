@@ -6,12 +6,12 @@
 # workspace resources from scratch:
 #   1. Create UC catalog + schema (or use existing)
 #   2. Create UC Volume and upload 3D models
-#   3. Create Lakebase project + apply schema
-#   4. Create Genie Space (optional, can be skipped)
-#   5. Patch app.yaml + databricks.yml with target workspace values
-#   6. Build frontend (if needed)
-#   7. Run databricks bundle deploy
-#   8. Start the app
+#   3. Upload calibration profiles to UC Volume (1,183 JSON files)
+#   4. Create Lakebase project + apply schema
+#   5. Create Genie Space (optional, can be skipped)
+#   6. Patch app.yaml + databricks.yml with target workspace values
+#   7. Build frontend (if needed)
+#   8. Run databricks bundle deploy + start the app
 #
 # Usage:
 #   # From a backup tarball
@@ -95,7 +95,7 @@ fi
 
 # Resolve workspace host
 WS_HOST=$(databricks auth describe --profile "$PROFILE" 2>/dev/null \
-  | grep -oP 'Host:\s*\K\S+' || true)
+  | grep 'Host:' | sed 's/.*Host:[[:space:]]*//' | awk '{print $1}' | sed 's|https://||' || true)
 if [[ -z "$WS_HOST" ]]; then
   # Try from config
   WS_HOST=$(grep -A5 "\[$PROFILE\]" ~/.databrickscfg 2>/dev/null \
@@ -153,7 +153,7 @@ get_models_dir() {
 # =============================================================================
 # Step 1: UC Catalog + Schema
 # =============================================================================
-echo "[1/7] Setting up Unity Catalog..."
+echo "[1/8] Setting up Unity Catalog..."
 
 # Create schema (catalog should already exist in most workspaces)
 databricks api post /api/2.1/unity-catalog/schemas \
@@ -166,7 +166,7 @@ echo "  ✓ $CATALOG.$SCHEMA ready"
 # =============================================================================
 # Step 2: UC Volume + 3D Models
 # =============================================================================
-echo "[2/7] Creating UC Volume and uploading 3D models..."
+echo "[2/8] Creating UC Volume and uploading 3D models..."
 
 databricks volumes create "$CATALOG" "$SCHEMA" static_assets MANAGED \
   --comment "3D model assets for Airport Digital Twin frontend" \
@@ -191,15 +191,45 @@ else
 fi
 
 # =============================================================================
-# Step 3: Lakebase (optional)
+# Step 3: Calibration Profiles → UC Volume
+# =============================================================================
+echo "[3/8] Uploading calibration profiles to UC Volume..."
+
+PROFILES_SRC="$REPO_ROOT/data/calibration/profiles"
+if [[ -n "$BACKUP_DIR" && -d "$BACKUP_DIR/uc_volumes/calibration_profiles" ]]; then
+  PROFILES_SRC="$BACKUP_DIR/uc_volumes/calibration_profiles"
+fi
+
+if [[ -d "$PROFILES_SRC" ]]; then
+  PROFILES_VOLUME="dbfs:/Volumes/$CATALOG/$SCHEMA/calibration_profiles"
+
+  COUNT=0
+  TOTAL=$(find "$PROFILES_SRC" -maxdepth 1 -name "*.json" -type f | wc -l | tr -d ' ')
+  for f in "$PROFILES_SRC"/*.json; do
+    [[ -f "$f" ]] || continue
+    NAME=$(basename "$f")
+    databricks fs cp "$f" "$PROFILES_VOLUME/$NAME" --profile "$PROFILE" --overwrite 2>/dev/null
+    COUNT=$((COUNT + 1))
+    if (( COUNT % 100 == 0 )); then
+      echo "  Uploaded $COUNT/$TOTAL profiles..."
+    fi
+  done
+  echo "  ✓ Uploaded $COUNT calibration profiles to UC Volume"
+else
+  echo "  WARNING: No calibration profiles found at $PROFILES_SRC"
+  echo "  The app will use known-stats and hardcoded fallbacks."
+fi
+
+# =============================================================================
+# Step 4: Lakebase (optional)
 # =============================================================================
 LAKEBASE_HOST=""
 LAKEBASE_ENDPOINT=""
 
 if $SKIP_LAKEBASE; then
-  echo "[3/7] Skipping Lakebase setup (--skip-lakebase)"
+  echo "[4/8] Skipping Lakebase setup (--skip-lakebase)"
 else
-  echo "[3/7] Setting up Lakebase Autoscaling..."
+  echo "[4/8] Setting up Lakebase Autoscaling..."
 
   # Create project
   databricks postgres create-project "$LAKEBASE_PROJECT" \
@@ -229,23 +259,23 @@ except: pass
 fi
 
 # =============================================================================
-# Step 4: Genie Space (optional)
+# Step 5: Genie Space (optional)
 # =============================================================================
 GENIE_SPACE_ID=""
 
 if $SKIP_GENIE; then
-  echo "[4/7] Skipping Genie Space setup (--skip-genie)"
+  echo "[5/8] Skipping Genie Space setup (--skip-genie)"
 else
-  echo "[4/7] Genie Space setup..."
+  echo "[5/8] Genie Space setup..."
   echo "  NOTE: Genie Spaces must be created manually via the UI."
   echo "  After creation, update GENIE_SPACE_ID in app.yaml."
   echo "  The app works without it (chat feature will be disabled)."
 fi
 
 # =============================================================================
-# Step 5: Patch configs
+# Step 6: Patch configs
 # =============================================================================
-echo "[5/7] Patching app.yaml and databricks.yml for target workspace..."
+echo "[6/8] Patching app.yaml and databricks.yml for target workspace..."
 
 # Compute HTTP path
 HTTP_PATH="/sql/1.0/warehouses/$WAREHOUSE_ID"
@@ -304,12 +334,12 @@ rm -f resources/app.yml.tmp
 echo "  ✓ Configs patched (backup saved as app.yaml.bak)"
 
 # =============================================================================
-# Step 6: Build frontend
+# Step 7: Build frontend
 # =============================================================================
 if $SKIP_BUILD; then
-  echo "[6/7] Skipping frontend build (--skip-build)"
+  echo "[7/8] Skipping frontend build (--skip-build)"
 else
-  echo "[6/7] Building frontend..."
+  echo "[7/8] Building frontend..."
   cd "$REPO_ROOT/app/frontend"
   if [[ -f package.json ]]; then
     npm install --silent 2>/dev/null
@@ -321,9 +351,9 @@ else
 fi
 
 # =============================================================================
-# Step 7: Deploy
+# Step 8: Deploy
 # =============================================================================
-echo "[7/7] Deploying to Databricks..."
+echo "[8/8] Deploying to Databricks..."
 cd "$REPO_ROOT"
 databricks bundle deploy --target "$TARGET_NAME" 2>&1
 

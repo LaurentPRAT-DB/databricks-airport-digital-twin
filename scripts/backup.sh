@@ -5,7 +5,7 @@
 # Creates a self-contained tarball with:
 #   - Git repo snapshot (working tree, not .git history)
 #   - 3D model assets from UC Volumes
-#   - Calibration profiles (already in repo)
+#   - Calibration profiles from UC Volume (1,183 JSON files)
 #   - Lakebase schema DDL
 #   - UC table DDL (tables are recreated by DLT / sync scripts, not exported)
 #   - Workspace-portable app.yaml template
@@ -53,7 +53,7 @@ echo "Staging:  $BACKUP_DIR"
 echo ""
 
 # --- 1. Repo snapshot (working tree, no .git) --------------------------------
-echo "[1/5] Packaging repo snapshot..."
+echo "[1/6] Packaging repo snapshot..."
 cd "$REPO_ROOT"
 # Use git archive for tracked files, then overlay untracked dist/
 git archive HEAD --prefix=repo/ | tar -x -C "$BACKUP_DIR"
@@ -68,7 +68,7 @@ fi
 echo "  Repo snapshot: $(du -sh "$BACKUP_DIR/repo" | cut -f1)"
 
 # --- 2. UC Volumes assets (3D models) ---------------------------------------
-echo "[2/5] Downloading 3D models from UC Volumes..."
+echo "[2/6] Downloading 3D models from UC Volumes..."
 MODELS_DIR="$BACKUP_DIR/uc_volumes/models/aircraft"
 mkdir -p "$MODELS_DIR"
 
@@ -84,15 +84,32 @@ else
   fi
 fi
 
-# --- 3. Lakebase schema DDL -------------------------------------------------
-echo "[3/5] Including Lakebase schema..."
+# --- 3. Calibration profiles from UC Volume ---------------------------------
+echo "[3/6] Downloading calibration profiles from UC Volume..."
+CAL_DIR="$BACKUP_DIR/uc_volumes/calibration_profiles"
+mkdir -p "$CAL_DIR"
+
+CAL_VOLUME="dbfs:/Volumes/$CATALOG/$SCHEMA/calibration_profiles"
+if databricks fs ls "$CAL_VOLUME" --profile "$PROFILE" &>/dev/null; then
+  databricks fs cp -r "$CAL_VOLUME" "$CAL_DIR" --profile "$PROFILE" --overwrite
+  echo "  Downloaded: $(ls "$CAL_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ') profile files ($(du -sh "$CAL_DIR" | cut -f1))"
+else
+  echo "  WARNING: UC Volume not found, copying from repo data/calibration/profiles/ instead"
+  if [[ -d "$REPO_ROOT/data/calibration/profiles" ]]; then
+    cp "$REPO_ROOT/data/calibration/profiles/"*.json "$CAL_DIR/" 2>/dev/null || true
+    echo "  Copied from repo: $(ls "$CAL_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ') files"
+  fi
+fi
+
+# --- 4. Lakebase schema DDL -------------------------------------------------
+echo "[4/6] Including Lakebase schema..."
 mkdir -p "$BACKUP_DIR/lakebase"
 cp "$REPO_ROOT/scripts/lakebase_schema.sql" "$BACKUP_DIR/lakebase/"
 cp "$REPO_ROOT/scripts/setup_lakebase.py" "$BACKUP_DIR/lakebase/"
 echo "  Included lakebase_schema.sql + setup_lakebase.py"
 
-# --- 4. UC table DDL (tables are created by DLT / sync scripts) -------------
-echo "[4/5] Including UC table setup scripts..."
+# --- 5. UC table DDL (tables are created by DLT / sync scripts) -------------
+echo "[5/6] Including UC table setup scripts..."
 mkdir -p "$BACKUP_DIR/uc_tables"
 cp "$REPO_ROOT/scripts/setup_trajectory_tables.py" "$BACKUP_DIR/uc_tables/"
 # Export DLT pipeline config
@@ -117,8 +134,8 @@ except: print('-- Could not export DDL')
   echo "  Exported DDL for 3 tables"
 fi
 
-# --- 5. Workspace-portable config template -----------------------------------
-echo "[5/5] Creating portable config template..."
+# --- 6. Workspace-portable config template -----------------------------------
+echo "[6/6] Creating portable config template..."
 mkdir -p "$BACKUP_DIR/config"
 
 # Create app.yaml.template with placeholder variables
@@ -147,6 +164,7 @@ cat > "$BACKUP_DIR/MANIFEST.md" << 'MANIFEST'
 |-----------|-------------|
 | `repo/` | Full source code snapshot (git working tree) |
 | `uc_volumes/models/aircraft/` | 3D GLB model files (served via UC Volumes at runtime) |
+| `uc_volumes/calibration_profiles/` | 1,183 airport calibration profile JSONs (served via UC Volumes) |
 | `lakebase/` | PostgreSQL schema DDL + setup script |
 | `uc_tables/` | Unity Catalog table DDL + DLT pipeline config |
 | `config/` | Workspace-portable templates (app.yaml, databricks.yml) |

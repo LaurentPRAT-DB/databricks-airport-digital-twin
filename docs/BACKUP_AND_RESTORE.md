@@ -101,6 +101,10 @@ airport-digital-twin-backup-*/
       pan_am_airbus_a310-324.glb      #   3.0 MB
       fighter_jet_collection.glb      #   25 MB
       ...                             #   11 files total
+    calibration_profiles/             # 1,183 airport calibration profiles
+      KSFO.json                       #   5 KB
+      KJFK.json                       #   4 KB
+      ...                             #   ~5.8 MB total
   lakebase/
     lakebase_schema.sql               # PostgreSQL DDL for all tables
     setup_lakebase.py                 # Automated Lakebase setup script
