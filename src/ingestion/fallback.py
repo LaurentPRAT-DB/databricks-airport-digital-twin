@@ -4979,6 +4979,11 @@ def generate_synthetic_flights(
     """
     global _flight_states, _last_update
 
+    # Don't create flights until the airport config (runways/gates) is loaded.
+    # Generating flights with fallback 270° heading locks in wrong trajectories.
+    if _get_osm_primary_runway() is None:
+        return {"time": int(datetime.now(timezone.utc).timestamp()), "states": []}
+
     current_time = datetime.now(timezone.utc).timestamp()
     dt = min(current_time - _last_update, 5.0) if _last_update > 0 else 1.0
     _last_update = current_time
