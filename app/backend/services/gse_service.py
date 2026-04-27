@@ -197,12 +197,16 @@ class GSEService:
                     aircraft_type=effective_aircraft,
                 )
 
-            # If we found a departure at this gate, use its time and flight number
+            # Use FIDS departure only if it's within a plausible turnaround window;
+            # otherwise it's an unrelated flight at the same gate hours later.
             departing_flight_number = None
             if scheduled_dep:
                 sched_time_str = scheduled_dep.get("estimated_time") or scheduled_dep["scheduled_time"]
-                status["estimated_departure"] = datetime.fromisoformat(sched_time_str)
-                departing_flight_number = scheduled_dep.get("flight_number")
+                fids_departure = datetime.fromisoformat(sched_time_str)
+                turnaround_est = status["estimated_departure"]
+                if abs((fids_departure - turnaround_est).total_seconds()) < 3600:
+                    status["estimated_departure"] = fids_departure
+                    departing_flight_number = scheduled_dep.get("flight_number")
 
             # Update cache so clear_turnaround works
             self._active_turnarounds[icao24] = {
