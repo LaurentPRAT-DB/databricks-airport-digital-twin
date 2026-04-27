@@ -11,9 +11,8 @@ sync:
     - scenarios/**
     - simulation_output/report/**
     - simulation_output/REPORT_*.md
-    - data/calibration/profiles/**
-    # data/demo/** excluded — KSFO demo file >10MB exceeds Apps deploy limit;
-    # served from UC Volume in production
+    # data/calibration/profiles/** and data/demo/** excluded —
+    # both served from UC Volume in production
     - app.yaml
     - requirements.txt
     - pyproject.toml
