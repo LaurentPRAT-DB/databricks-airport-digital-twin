@@ -109,7 +109,7 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
         </svg>
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] py-1">
+        <div className="absolute bottom-full left-0 mb-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] py-1">
           <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-100">
             <button onClick={onSelectAll} className="text-[10px] text-blue-600 hover:text-blue-500">All</button>
             <button onClick={onClearAll} className="text-[10px] text-blue-600 hover:text-blue-500">None</button>
