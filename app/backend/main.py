@@ -330,10 +330,8 @@ async def _background_init(app: FastAPI):
 
         asyncio.create_task(_generate_demo_background())
 
-        # ── Phase 5: Pre-warm Lakebase cache for all well-known airports ──
-        # This runs after the app is ready and serves users, so it doesn't
-        # block startup. Airports already in Lakebase are skipped (Tier 1 hit).
-        asyncio.create_task(_prewarm_airports_background())
+        # Phase 5 (pre-warm all airports) removed — only load the selected
+        # airport on startup.  Other airports load on-demand via /activate.
 
         # ── Phase 6: Ensure MCP UC HTTP Connection ──────────────────────
         try:

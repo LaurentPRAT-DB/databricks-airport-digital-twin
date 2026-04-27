@@ -852,10 +852,9 @@ export function useAirportConfig(): UseAirportConfigReturn {
     return { lat: DEFAULT_CENTER_LAT, lon: DEFAULT_CENTER_LON };
   }, [config.gates, config.terminals]);
 
-  // Load config on mount and fire pre-warm for user's top airports
+  // Load config on mount (selected airport only — no pre-warm of others)
   useEffect(() => {
     refresh();
-    fetch(`${API_BASE}/api/user/prewarm`, { method: 'POST' }).catch(() => {});
   }, [refresh]);
 
   return {
