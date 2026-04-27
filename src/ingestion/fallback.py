@@ -1754,10 +1754,32 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
 
 
 def _get_runway_heading() -> Optional[float]:
-    """Compute the runway heading from OSM runway geometry.
+    """Get the active runway heading.
 
-    Returns the heading in degrees or None when no OSM runway data is available.
+    Prefers the FAA bearing (from ``config["runways"]``) over the OSM
+    geoPoint-derived heading because OSM ways can be slightly curved or
+    include displaced thresholds, giving a bearing that drifts from the
+    true centerline.  Falls back to OSM when FAA data is unavailable.
     """
+    # Prefer FAA bearing — more accurate than OSM geoPoint computation
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        config = get_airport_config_service().get_config()
+        faa_runways = config.get("runways", [])
+        if faa_runways:
+            longest = max(faa_runways, key=lambda r: r.get("length", 0))
+            directions = longest.get("directions", [])
+            if len(directions) >= 2:
+                des_nums = []
+                for d in directions:
+                    nums = [int(c) for c in d.get("designator", "") if c.isdigit()]
+                    des_nums.append((int("".join(str(n) for n in nums)) if nums else 0, d.get("bearing", 0)))
+                active = max(des_nums, key=lambda t: t[0])
+                if active[1]:
+                    return float(active[1])
+    except Exception:
+        pass
+
     rwy = _get_osm_primary_runway()
     if rwy:
         _, _, heading = _osm_runway_endpoints(rwy)
@@ -1929,6 +1951,19 @@ def _osm_runway_endpoints(runway: dict) -> tuple:
         diff = abs((raw_heading - active_heading_nominal + 180) % 360 - 180)
         if diff >= 90:
             # raw_heading is opposite to active → swap endpoints
+            need_swap = True
+    else:
+        # No valid ref tag — use prevailing wind to pick orientation
+        airport_lat = (p0_lat + pN_lat) / 2
+        abs_lat = abs(airport_lat)
+        if abs_lat < 15:
+            expected_heading = 90.0
+        elif abs_lat < 30:
+            expected_heading = 60.0
+        else:
+            expected_heading = 270.0
+        diff = abs((raw_heading - expected_heading + 180) % 360 - 180)
+        if diff >= 90:
             need_swap = True
 
     if need_swap:
@@ -2994,9 +3029,11 @@ def _bearing_from_airport(origin_iata: str) -> float:
     """
     coords = _get_airport_coordinates()
     if origin_iata not in coords:
+        # Deterministic bearing from IATA hash — spreads unknown origins
+        # evenly across all quadrants instead of pure random.
         key = f"from_{origin_iata}"
         if key not in _bearing_cache:
-            _bearing_cache[key] = random.uniform(0, 360)
+            _bearing_cache[key] = (hash(origin_iata) % 360)
         return _bearing_cache[key]
 
     center = get_airport_center()
@@ -3019,7 +3056,7 @@ def _bearing_to_airport(dest_iata: str) -> float:
     if dest_iata not in coords:
         key = f"to_{dest_iata}"
         if key not in _bearing_cache:
-            _bearing_cache[key] = random.uniform(0, 360)
+            _bearing_cache[key] = (hash(dest_iata) % 360)
         return _bearing_cache[key]
 
     center = get_airport_center()
