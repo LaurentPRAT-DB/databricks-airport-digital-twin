@@ -21,6 +21,7 @@ from src.ingestion.weather_generator import generate_metar, generate_taf
 from src.ingestion.schedule_generator import generate_daily_schedule
 from src.ingestion.baggage_generator import get_flight_baggage_stats
 from src.ml.gse_model import get_fleet_status, generate_gse_positions
+from src.calibration.profile import AirportProfileLoader
 
 from app.backend.demo_config import (
     DEFAULT_AIRPORT_ICAO, DEFAULT_AIRPORT_IATA, icao_to_iata,
@@ -28,6 +29,8 @@ from app.backend.demo_config import (
 from app.backend.services.lakebase_service import get_lakebase_service
 
 logger = logging.getLogger(__name__)
+
+_profile_loader = AirportProfileLoader()
 
 
 class DataGeneratorService:
@@ -274,7 +277,8 @@ class DataGeneratorService:
         if not lakebase.is_available:
             return 0
 
-        schedule = generate_daily_schedule(airport=self._airport)
+        profile = _profile_loader.get_profile(self._current_airport_icao)
+        schedule = generate_daily_schedule(airport=self._airport, profile=profile)
 
         # Clean old schedule first
         lakebase.clear_old_schedule(hours_old=24, airport_icao=self._current_airport_icao)
