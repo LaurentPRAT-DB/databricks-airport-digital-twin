@@ -144,6 +144,16 @@ class FlightBroadcaster:
                 logger.debug("No WS clients, stopping broadcast loop")
                 return
 
+            # Wait for airport config to load before generating flights —
+            # creating flights before runways are loaded locks in wrong headings.
+            try:
+                from app.backend.main import app as _app
+                if not getattr(_app.state, "ready", False):
+                    await asyncio.sleep(interval)
+                    continue
+            except Exception:
+                pass
+
             try:
                 if self._mode == "live":
                     flights_dicts, timestamp = await self._fetch_opensky_flights()
