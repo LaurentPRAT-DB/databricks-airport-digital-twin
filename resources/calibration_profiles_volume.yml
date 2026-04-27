@@ -1,0 +1,7 @@
+resources:
+  volumes:
+    calibration_profiles:
+      catalog_name: ${var.catalog}
+      schema_name: ${var.schema}
+      name: calibration_profiles
+      volume_type: MANAGED

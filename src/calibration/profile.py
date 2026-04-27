@@ -8,6 +8,7 @@ generator samples from these distributions instead of hardcoded dicts.
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
@@ -146,18 +147,25 @@ class AirportProfile:
         return cls.from_json(data)
 
 
+def _volume_path() -> str | None:
+    """Return the UC Volume path for calibration profiles, or None."""
+    catalog = os.environ.get("DATABRICKS_CATALOG")
+    schema = os.environ.get("DATABRICKS_SCHEMA")
+    if catalog and schema:
+        return f"/Volumes/{catalog}/{schema}/calibration_profiles"
+    return None
+
+
 class AirportProfileLoader:
     """Loads airport profiles with fallback chain.
 
-    On Databricks (DATABRICKS_WAREHOUSE_ID set): UC first, local JSON as fallback.
-    Locally: local JSON first, UC as fallback.
+    On Databricks: UC table → UC Volume → local JSON → known → OpenFlights → hardcoded.
+    Locally: local JSON → known → OpenFlights → UC (if available) → hardcoded.
     """
 
     def __init__(self, profiles_dir: Optional[Path] = None):
         self._profiles_dir = profiles_dir or _PROFILES_DIR
         self._cache: dict[str, AirportProfile] = {}
-        # Detect Databricks environment
-        import os
         self._on_databricks = bool(os.environ.get("DATABRICKS_WAREHOUSE_ID", ""))
 
     def get_profile(self, airport_code: str) -> AirportProfile:
@@ -166,10 +174,11 @@ class AirportProfileLoader:
         Loading order on Databricks:
         1. In-memory cache
         2. Unity Catalog airport_profiles table
-        3. Local JSON file (data/calibration/profiles/{ICAO}.json)
-        4. Known-stats profiles (known_profiles.py)
-        5. OpenFlights auto-build (if routes.dat cached locally)
-        6. Hardcoded fallback
+        3. UC Volume (calibration_profiles/{ICAO}.json)
+        4. Local JSON file (data/calibration/profiles/{ICAO}.json)
+        5. Known-stats profiles (known_profiles.py)
+        6. OpenFlights auto-build (if routes.dat cached locally)
+        7. Hardcoded fallback
 
         Loading order locally (no warehouse ID):
         1. In-memory cache
@@ -179,7 +188,6 @@ class AirportProfileLoader:
         5. Unity Catalog (skipped — no warehouse)
         6. Hardcoded fallback
         """
-        # Normalize to ICAO
         icao = _iata_to_icao(airport_code)
 
         if icao in self._cache:
@@ -187,27 +195,24 @@ class AirportProfileLoader:
 
         iata = _icao_to_iata(icao) if len(icao) == 4 else airport_code
 
-        # On Databricks: UC first (source of truth)
         if self._on_databricks:
             uc_profile = self._load_from_unity_catalog(icao)
             if uc_profile is not None:
                 self._cache[icao] = uc_profile
                 return uc_profile
 
-        # Try local JSON (files may be named by ICAO or IATA)
-        json_path = self._profiles_dir / f"{icao}.json"
-        if not json_path.exists() and iata != icao:
-            json_path = self._profiles_dir / f"{iata}.json"
-        if json_path.exists():
-            try:
-                profile = AirportProfile.load(json_path)
-                self._cache[icao] = profile
-                logger.info("Loaded calibration profile for %s from %s", icao, json_path)
-                return profile
-            except Exception as e:
-                logger.warning("Failed to load profile %s: %s", json_path, e)
+            vol_profile = self._load_from_volume(icao)
+            if vol_profile is not None:
+                self._cache[icao] = vol_profile
+                return vol_profile
 
-        # Try hand-researched known profiles (known_profiles.py)
+        json_profile = self._load_from_local_json(icao, iata)
+        if json_profile is not None:
+            if self._on_databricks:
+                self._seed_volume(icao, json_profile)
+            self._cache[icao] = json_profile
+            return json_profile
+
         from src.calibration.known_profiles import get_known_profile
         known = get_known_profile(iata)
         if known is not None:
@@ -215,24 +220,73 @@ class AirportProfileLoader:
             logger.info("Loaded known-stats profile for %s (%s)", icao, iata)
             return known
 
-        # Try OpenFlights auto-build (if routes.dat exists locally)
         openflights_profile = self._try_openflights(iata)
         if openflights_profile is not None:
             self._cache[icao] = openflights_profile
             return openflights_profile
 
-        # Local dev: try UC as late fallback (usually skipped — no warehouse)
         if not self._on_databricks:
             uc_profile = self._load_from_unity_catalog(icao)
             if uc_profile is not None:
                 self._cache[icao] = uc_profile
                 return uc_profile
 
-        # Fallback to hardcoded
         profile = _build_fallback_profile(airport_code)
         self._cache[icao] = profile
         logger.info("Using fallback profile for %s", icao)
         return profile
+
+    def _load_from_local_json(self, icao: str, iata: str) -> Optional[AirportProfile]:
+        """Try to load profile from local JSON files."""
+        json_path = self._profiles_dir / f"{icao}.json"
+        if not json_path.exists() and iata != icao:
+            json_path = self._profiles_dir / f"{iata}.json"
+        if json_path.exists():
+            try:
+                profile = AirportProfile.load(json_path)
+                logger.info("Loaded calibration profile for %s from %s", icao, json_path.name)
+                return profile
+            except Exception as e:
+                logger.warning("Failed to load profile %s: %s", json_path, e)
+        return None
+
+    @staticmethod
+    def _load_from_volume(icao: str) -> Optional[AirportProfile]:
+        """Load a profile JSON from UC Volume."""
+        vol = _volume_path()
+        if not vol:
+            return None
+        try:
+            from databricks.sdk import WorkspaceClient
+
+            w = WorkspaceClient()
+            remote_path = f"{vol}/{icao}.json"
+            resp = w.files.download(remote_path)
+            data = json.loads(resp.contents.read())
+            profile = AirportProfile.from_json(data)
+            logger.info("Loaded profile for %s from Volume", icao)
+            return profile
+        except Exception as e:
+            logger.debug("Volume profile load for %s failed: %s", icao, e)
+            return None
+
+    @staticmethod
+    def _seed_volume(icao: str, profile: AirportProfile) -> None:
+        """Upload a profile to UC Volume so subsequent loads skip local JSON."""
+        vol = _volume_path()
+        if not vol:
+            return
+        try:
+            from databricks.sdk import WorkspaceClient
+
+            w = WorkspaceClient()
+            remote_path = f"{vol}/{icao}.json"
+            content = profile.to_json().encode("utf-8")
+            import io
+            w.files.upload(remote_path, io.BytesIO(content), overwrite=True)
+            logger.info("Seeded Volume with profile for %s", icao)
+        except Exception as e:
+            logger.warning("Volume seeding failed for %s: %s", icao, e)
 
     def _try_openflights(self, iata: str) -> Optional[AirportProfile]:
         """Try to build profile from locally cached OpenFlights routes.dat.
