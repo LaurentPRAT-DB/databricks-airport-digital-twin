@@ -1754,32 +1754,13 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
 
 
 def _get_runway_heading() -> Optional[float]:
-    """Get the active runway heading.
+    """Get the active runway heading from OSM geoPoints.
 
-    Prefers the FAA bearing (from ``config["runways"]``) over the OSM
-    geoPoint-derived heading because OSM ways can be slightly curved or
-    include displaced thresholds, giving a bearing that drifts from the
-    true centerline.  Falls back to OSM when FAA data is unavailable.
+    Uses OSM-derived heading so the approach trajectory aligns with the
+    runway drawn on the map (both come from the same geoPoint data).
+    FAA bearings are more accurate for the *real* runway but create a
+    visual mismatch because the map draws the OSM geometry.
     """
-    # Prefer FAA bearing — more accurate than OSM geoPoint computation
-    try:
-        from app.backend.services.airport_config_service import get_airport_config_service
-        config = get_airport_config_service().get_config()
-        faa_runways = config.get("runways", [])
-        if faa_runways:
-            longest = max(faa_runways, key=lambda r: r.get("length", 0))
-            directions = longest.get("directions", [])
-            if len(directions) >= 2:
-                des_nums = []
-                for d in directions:
-                    nums = [int(c) for c in d.get("designator", "") if c.isdigit()]
-                    des_nums.append((int("".join(str(n) for n in nums)) if nums else 0, d.get("bearing", 0)))
-                active = max(des_nums, key=lambda t: t[0])
-                if active[1]:
-                    return float(active[1])
-    except Exception:
-        pass
-
     rwy = _get_osm_primary_runway()
     if rwy:
         _, _, heading = _osm_runway_endpoints(rwy)
