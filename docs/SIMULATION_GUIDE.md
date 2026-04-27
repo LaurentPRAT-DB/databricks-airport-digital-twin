@@ -275,7 +275,7 @@ traffic_modifiers:
 
 ## Calibrated Airports
 
-43 airports have calibration profiles (real-world traffic stats from BTS, OpenSky, OurAirports). Using these airports produces realistic flight counts, airline mixes, and route distributions.
+43 airports have hand-researched calibration profiles, with a total of 1,183 auto-generated profiles stored in a UC Volume (real-world traffic stats from BTS, OpenSky, OurAirports). Using calibrated airports produces realistic flight counts, airline mixes, and route distributions. On Databricks, profiles are loaded from the UC Volume; locally, they fall back to `data/calibration/profiles/`.
 
 **US:** SFO, JFK, ATL, ORD, LAX, DFW, DEN, SEA, MIA, EWR, BOS, PHX, LAS, MCO, CLT, MSP, DTW, PHL, IAH, SAN, PDX
 

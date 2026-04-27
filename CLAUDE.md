@@ -82,10 +82,11 @@ databricks bundle deploy --target dev
 ## Data Architecture
 
 - **Unity Catalog:** `serverless_stable_3n0ihb_catalog.airport_digital_twin` — `flight_status_gold`, `flight_positions_history`.
+- **UC Volumes:** Managed volumes for file-based assets — `calibration_profiles` (1,183 airport JSON files), `demo_simulations` (pre-generated demo data). Declared in `resources/calibration_profiles_volume.yml`.
 - **Lakebase:** PostgreSQL endpoint for <10ms reads — `flight_status` table.
 - **OSM data:** Fetched per airport from Overpass API, cached in `airport_config_service` singleton.
 - **DLT pipeline:** Bronze/silver/gold layers for flights + baggage (`databricks/dlt_pipeline_config.json`).
-- **Calibration profiles:** `data/calibration/profiles/` — real-data-driven airport stats from BTS, OpenSky, OurAirports.
+- **Calibration profiles:** Loaded from UC Volume on Databricks (fallback: local `data/calibration/profiles/`). Loading chain: UC table → UC Volume → local JSON → known profiles → OpenFlights → hardcoded.
 
 ## Airport Data — No Hardcoding
 
@@ -121,7 +122,7 @@ src/               # Core logic (simulation, ml, calibration, formats)
 tests/             # Python test suite
 databricks/        # Notebooks (DLT, test runners)
 resources/         # DABs job/pipeline/app YAML configs
-data/              # Calibration profiles, airport data
+data/              # Local calibration profiles (dev fallback; production uses UC Volume)
 scripts/           # CLI tools (build profiles, batch sims)
 configs/           # Simulation scenario configs
 ```

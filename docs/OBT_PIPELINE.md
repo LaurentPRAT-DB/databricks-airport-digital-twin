@@ -95,10 +95,10 @@ produces a JSON file with schedule, phase transitions, gate events, and weather 
 
 **Generation pipeline:**
 
-1. **Calibration profiles** (`data/calibration/profiles/*.json`)
+1. **Calibration profiles** (UC Volume `calibration_profiles`, fallback: `data/calibration/profiles/*.json`)
    - Hand-researched airport statistics from BTS, OpenSky, OurAirports
    - Provide delay_rate, mean_delay_minutes, runway configs, traffic patterns
-   - 1183 profile files across 43 airports with known stats
+   - 1,183 profile files stored in UC Volume; 43 airports with hand-researched known stats
 
 2. **Batch config generation** (`scripts/generate_calibration_batch.py`)
    - 33 airports x 4 runs = 132 simulation tasks

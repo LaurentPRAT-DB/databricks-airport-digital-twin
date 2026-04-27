@@ -133,6 +133,7 @@ graph TB
         S["Silver<br/>Validated, deduplicated,<br/>data quality expectations"]
         G["Gold<br/>Aggregated positions,<br/>computed flight_phase"]
         UC["Unity Catalog<br/>Governed Delta tables"]
+        VOL["UC Volumes<br/>Calibration profiles,<br/>demo data"]
     end
 
     subgraph "Lakebase (PostgreSQL)"
@@ -148,6 +149,7 @@ graph TB
     CB -->|failure| SYN --> B
     B --> S --> G --> UC
     UC -->|sync ~1 min| LB
+    VOL -->|calibration profiles| API
     LB -->|"Tier 1: <10ms"| API
     UC -->|"Tier 2: ~100ms"| API
     SYN -->|"Tier 3: <5ms"| API
@@ -162,6 +164,23 @@ The backend cascades through data sources transparently — if Lakebase goes dow
 1. Lakebase (PostgreSQL)    → <10ms   → data_source="live"
 2. Unity Catalog (Delta)    → ~100ms  → data_source="live"  
 3. Synthetic Generator      → <5ms    → data_source="synthetic"
+```
+
+### Calibration Profile Loading
+
+Airport calibration profiles (1,183 JSON files) are stored in a **UC Volume** and loaded with a fallback chain:
+
+```
+On Databricks:
+1. UC Table (airport_profiles)      → governed, queryable
+2. UC Volume (calibration_profiles) → 1,183 JSON files
+3. Local JSON (data/calibration/)   → bundled fallback (dev only)
+4. Known profiles (known_profiles)  → 43 hand-researched airports
+5. OpenFlights auto-build           → derived from routes.dat
+6. Hardcoded fallback               → generic defaults
+
+Locally:
+1. Local JSON → 2. Known profiles → 3. OpenFlights → 4. Hardcoded
 ```
 
 ### DLT Pipeline (Bronze / Silver / Gold)
@@ -204,6 +223,11 @@ graph LR
         PB["profile_builder.py<br/>Merges & reconciles<br/>multiple sources"]
     end
 
+    subgraph "Storage"
+        VOL["UC Volume<br/>(1,183 JSON files)"]
+        LOCAL["Local JSON<br/>(dev fallback)"]
+    end
+
     subgraph "Airport Profile"
         AP["AirportProfile<br/>15+ statistical fields"]
     end
@@ -214,12 +238,13 @@ graph LR
         ML["ML Models<br/>Calibrated thresholds"]
     end
 
-    BTS1 & BTS2 & OSK & OA & KP --> PB --> AP --> SG & SE & ML
+    BTS1 & BTS2 & OSK & OA & KP --> PB --> VOL & LOCAL
+    VOL & LOCAL --> AP --> SG & SE & ML
 ```
 
 ### What's in a Profile?
 
-Each of the **1,183 airport profiles** in `data/calibration/profiles/` is a JSON file containing:
+Each of the **1,183 airport profiles** stored in a **UC Volume** (`calibration_profiles`) is a JSON file containing:
 
 | Field | Example (SFO) | What It Drives |
 |---|---|---|
@@ -414,7 +439,7 @@ The calibration system ensures synthetic data matches real-world statistics:
 | `Known profiles` | `src/calibration/known_profiles.py` | 43 hand-researched US + international airports |
 | `Auto-calibrate` | `src/calibration/auto_calibrate.py` | Auto-detect and apply best available profile |
 
-**1,183 calibration profiles** in `data/calibration/profiles/` — each a JSON file with airline shares, route frequencies, fleet mix, hourly traffic patterns, taxi times, turnaround stats, and delay distributions learned from real data.
+**1,183 calibration profiles** stored in a **UC Volume** (`calibration_profiles`) — each a JSON file with airline shares, route frequencies, fleet mix, hourly traffic patterns, taxi times, turnaround stats, and delay distributions learned from real data. A local copy in `data/calibration/profiles/` is used for development and as a fallback.
 
 ### Experiment Tracking
 
@@ -451,6 +476,7 @@ graph TB
         DLT_S["Silver<br/>Validated + deduped"]
         DLT_G["Gold<br/>Aggregated"]
         UC["Unity Catalog<br/>Governed tables"]
+        VOL["UC Volumes<br/>Calibration profiles,<br/>demo data"]
         LB["Lakebase<br/>PostgreSQL (<10ms)"]
     end
 
@@ -476,7 +502,9 @@ graph TB
 
     OS --> CB --> DLT_B
     CB -->|failure| SYN --> DLT_B
-    BTS & OA --> CAL --> SYN
+    BTS & OA --> CAL --> VOL
+    CAL --> SYN
+    VOL --> SYN
     DLT_B --> DLT_S --> DLT_G --> UC
     UC --> LB
     UC --> FE --> REG --> DM & GM & CM & TM & OBT
@@ -596,13 +624,14 @@ graph TB
     subgraph "Databricks Workspace"
         APP["Databricks App<br/>(FastAPI + static React)"]
         UC["Unity Catalog"]
+        VOL["UC Volumes<br/>(profiles, demos)"]
         LB["Lakebase"]
         DLT["DLT Pipeline"]
         MLF["MLflow"]
     end
 
     DEV -->|test locally| BUILD --> DAB --> APP
-    APP --> UC & LB & MLF
+    APP --> UC & VOL & LB & MLF
     DLT --> UC --> LB
 ```
 
@@ -612,7 +641,7 @@ graph TB
 |---|---|---|---|
 | **App Runtime** | Databricks Apps (APX) | Hosts FastAPI + React | `app.yaml` |
 | **Compute** | Serverless SQL Warehouse | SQL queries, DLT | Warehouse ID in `app.yaml` |
-| **Storage** | Unity Catalog (Delta) | Governed data lake | `serverless_stable_3n0ihb_catalog` |
+| **Storage** | Unity Catalog (Delta + Volumes) | Governed data lake + file storage | `serverless_stable_3n0ihb_catalog` |
 | **Low-Latency DB** | Lakebase (PostgreSQL) | <10ms frontend serving | Autoscaling endpoint |
 | **ML Tracking** | MLflow | Experiment tracking | Workspace MLflow |
 | **ML Serving** | Model Serving (GPU) | Inpainting endpoint | Scale-to-zero, GPU_MEDIUM |
@@ -669,7 +698,7 @@ src/               # Core logic
 tests/             # Python test suite (~3,089 tests)
 databricks/        # Notebooks (DLT, test runners)
 resources/         # DABs job/pipeline/app YAML configs
-data/              # Calibration profiles (1,183 airports)
+data/              # Local calibration profiles (dev fallback; production uses UC Volume)
 configs/           # Simulation scenario configs
 scripts/           # CLI tools (build profiles, batch sims)
 ```
