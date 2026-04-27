@@ -244,6 +244,115 @@ async def get_bottlenecks(
     return CongestionListResponse(areas=areas, count=len(areas))
 
 
+class KPICard(BaseModel):
+    label: str
+    value: str
+    color: str = "slate"
+
+
+class DelayRow(BaseModel):
+    icao24: str
+    callsign: str
+    delay_minutes: float
+    confidence: float
+    category: str
+
+
+class PredictionsDashboardResponse(BaseModel):
+    kpi_cards: List[KPICard]
+    congestion_areas: List[CongestionResponse]
+    delay_table: List[DelayRow]
+    total_flights: int
+
+
+@prediction_router.get("/dashboard", response_model=PredictionsDashboardResponse)
+async def get_predictions_dashboard(
+    prediction_service: PredictionService = Depends(get_prediction_service),
+    flight_service: FlightService = Depends(get_flight_service),
+) -> PredictionsDashboardResponse:
+    """Aggregate predictions dashboard: KPI summary + congestion + delays."""
+    flight_response = await flight_service.get_flights()
+    flight_dicts = [f.model_dump() for f in flight_response.flights]
+    total_flights = len(flight_dicts)
+
+    predictions = await prediction_service.get_flight_predictions(flight_dicts)
+    congestion = await prediction_service.get_congestion(flight_dicts)
+
+    # Delay aggregates
+    delays = predictions.get("delays", {})
+    delay_list = list(delays.values())
+    on_time_count = sum(1 for d in delay_list if d.delay_minutes < 15)
+    on_time_pct = round(on_time_count / max(total_flights, 1) * 100)
+    avg_delay = round(sum(d.delay_minutes for d in delay_list) / max(len(delay_list), 1), 1)
+
+    # Congestion aggregates
+    level_rank = {"low": 0, "moderate": 1, "high": 2, "critical": 3}
+    worst_level = "low"
+    for c in congestion:
+        if level_rank.get(c.level.value, 0) > level_rank.get(worst_level, 0):
+            worst_level = c.level.value
+    bottleneck_count = sum(1 for c in congestion if c.level.value in ("high", "critical"))
+
+    # Turnaround average (from parked flights)
+    parked = [f for f in flight_dicts if f.get("flight_phase") == "parked"]
+    from src.ml.gse_model import get_turnaround_timing
+    turnaround_minutes = []
+    for f in parked:
+        timing = get_turnaround_timing(f.get("aircraft_type", "A320"))
+        turnaround_minutes.append(timing["total_minutes"])
+    avg_turnaround = round(sum(turnaround_minutes) / max(len(turnaround_minutes), 1)) if turnaround_minutes else 55
+
+    # KPI cards
+    level_colors = {"low": "green", "moderate": "yellow", "high": "orange", "critical": "red"}
+    kpi_cards = [
+        KPICard(label="On-Time", value=f"{on_time_pct}%", color="green" if on_time_pct >= 80 else "orange" if on_time_pct >= 60 else "red"),
+        KPICard(label="Avg Delay", value=f"{avg_delay}m", color="green" if avg_delay < 10 else "orange" if avg_delay < 30 else "red"),
+        KPICard(label="Congestion", value=worst_level.capitalize(), color=level_colors.get(worst_level, "slate")),
+        KPICard(label="Bottlenecks", value=str(bottleneck_count), color="green" if bottleneck_count == 0 else "red"),
+        KPICard(label="Avg Turnaround", value=f"{avg_turnaround}m", color="blue"),
+        KPICard(label="Active Flights", value=str(total_flights), color="blue"),
+    ]
+
+    # Congestion table sorted by severity
+    congestion_areas = sorted(
+        [
+            CongestionResponse(
+                area_id=c.area_id,
+                area_type=c.area_type,
+                level=c.level.value,
+                flight_count=c.flight_count,
+                capacity=c.capacity,
+                wait_minutes=c.predicted_wait_minutes,
+            )
+            for c in congestion
+        ],
+        key=lambda a: -level_rank.get(a.level, 0),
+    )
+
+    # Delay table sorted by worst delay
+    icao_to_callsign = {f.get("icao24", ""): f.get("callsign", "").strip() for f in flight_dicts}
+    delay_table = sorted(
+        [
+            DelayRow(
+                icao24=icao24,
+                callsign=icao_to_callsign.get(icao24, icao24),
+                delay_minutes=round(pred.delay_minutes, 1),
+                confidence=round(pred.confidence, 2),
+                category=pred.delay_category,
+            )
+            for icao24, pred in delays.items()
+        ],
+        key=lambda r: -r.delay_minutes,
+    )
+
+    return PredictionsDashboardResponse(
+        kpi_cards=kpi_cards,
+        congestion_areas=congestion_areas,
+        delay_table=delay_table,
+        total_flights=total_flights,
+    )
+
+
 @prediction_router.get("/congestion-summary", response_model=CongestionSummaryResponse)
 async def get_congestion_summary(
     prediction_service: PredictionService = Depends(get_prediction_service),

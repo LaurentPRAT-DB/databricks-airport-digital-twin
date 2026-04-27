@@ -11,6 +11,7 @@ const AirportMap = lazy(() => import('./components/Map/AirportMap'));
 import FlightDetail from './components/FlightDetail/FlightDetail';
 import GateStatus from './components/GateStatus/GateStatus';
 import FIDS from './components/FIDS/FIDS';
+import KPIDashboard from './components/KPIDashboard/KPIDashboard';
 import GenieChat from './components/GenieChat/GenieChat';
 import MobileTabBar, { type MobileTab } from './components/MobileTabBar/MobileTabBar';
 import { useIsMobile } from './hooks/useIsMobile';
@@ -579,6 +580,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [inpainting, setInpainting] = useState(false);
   const [staleTileCount, setStaleTileCount] = useState(0);
   const [showFIDS, setShowFIDS] = useState(false);
+  const [showKPI, setShowKPI] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Initializing');
   const [initSteps, setInitSteps] = useState<InitStep[]>([]);
@@ -836,8 +838,9 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <Header onShowFIDS={() => setShowFIDS(true)} simulationControls={simulationControlsNode} dataModeToggle={dataModeToggleNode} />
+      <Header onShowFIDS={() => setShowFIDS(true)} onShowKPI={() => setShowKPI(true)} simulationControls={simulationControlsNode} dataModeToggle={dataModeToggleNode} />
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
+      {showKPI && <KPIDashboard onClose={() => setShowKPI(false)} />}
       <GenieChat />
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List + recorded mode indicator */}
