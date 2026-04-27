@@ -241,9 +241,10 @@ async def _background_init(app: FastAPI):
             n_gates = len(config.get('gates', []))
             n_taxiways = len(config.get('osmTaxiways', []))
             n_aprons = len(config.get('osmAprons', []))
+            n_runways = len(config.get('osmRunways', []))
             logger.info(f"INIT |   Source: {source_label}")
             logger.info(f"INIT |   Load time: {load_ms:.0f}ms")
-            logger.info(f"INIT |   Elements: {n_terminals} terminals, {n_gates} gates, {n_taxiways} taxiways, {n_aprons} aprons")
+            logger.info(f"INIT |   Elements: {n_terminals} terminals, {n_gates} gates, {n_runways} runways, {n_taxiways} taxiways, {n_aprons} aprons")
             app.state.startup_status = f"Airport data loaded from {source_label} in {load_ms:.0f}ms"
 
             # Set airport center for synthetic data generation
@@ -272,7 +273,7 @@ async def _background_init(app: FastAPI):
             ml_ms = (time.monotonic() - t_ml) * 1000
             logger.info(f"INIT |   ML models retrained in {ml_ms:.0f}ms")
 
-            phase1_detail = f"{source_label}: {n_gates} gates, {n_taxiways} taxiways, {n_aprons} aprons"
+            phase1_detail = f"{source_label}: {n_gates} gates, {n_runways} runways, {n_taxiways} taxiways, {n_aprons} aprons"
         else:
             logger.warning("INIT |   FAILED to load airport config from any source (tried all 3 tiers)")
             app.state.startup_status = "Warning: airport config failed to load from all sources"

@@ -1825,3 +1825,51 @@ async def get_recent_errors(
         "warning_count": len(warnings),
         "total_buffered": len(all_lines),
     }
+
+
+@router.get("/debug/runway-diag", tags=["debug"])
+async def get_runway_diagnostics() -> dict:
+    """Return runway diagnostic data — what the simulator sees."""
+    from app.backend.services.airport_config_service import get_airport_config_service
+    config = get_airport_config_service().get_config()
+    osm_runways = config.get("osmRunways", [])
+
+    runway_info = []
+    for r in osm_runways:
+        pts = r.get("geoPoints", [])
+        info = {
+            "ref": r.get("ref"),
+            "name": r.get("name"),
+            "geoPoints_count": len(pts),
+        }
+        if len(pts) >= 2:
+            info["first_pt"] = pts[0]
+            info["last_pt"] = pts[-1]
+        runway_info.append(info)
+
+    from src.ingestion.fallback import _get_osm_primary_runway, _osm_runway_endpoints, _get_runway_heading
+    primary = _get_osm_primary_runway()
+    heading = _get_runway_heading()
+    endpoints = None
+    if primary:
+        thr, far, hdg = _osm_runway_endpoints(primary)
+        endpoints = {
+            "threshold": {"lon": thr[0], "lat": thr[1]},
+            "far_end": {"lon": far[0], "lat": far[1]},
+            "heading": hdg,
+            "ref": primary.get("ref"),
+        }
+
+    return {
+        "config_keys": list(config.keys())[:20],
+        "osmRunways_count": len(osm_runways),
+        "runways": runway_info,
+        "primary_runway": {
+            "ref": primary.get("ref") if primary else None,
+            "geoPoints_count": len(primary.get("geoPoints", [])) if primary else 0,
+        },
+        "computed_heading": heading,
+        "endpoints": endpoints,
+        "config_source": config.get("source"),
+        "config_ready": get_airport_config_service().config_ready,
+    }

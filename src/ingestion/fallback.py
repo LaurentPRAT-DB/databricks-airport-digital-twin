@@ -1764,7 +1764,9 @@ def _get_runway_heading() -> Optional[float]:
     rwy = _get_osm_primary_runway()
     if rwy:
         _, _, heading = _osm_runway_endpoints(rwy)
+        logger.info("[DIAG] _get_runway_heading: ref=%s heading=%.1f geoPoints=%d", rwy.get("ref"), heading, len(rwy.get("geoPoints", [])))
         return heading
+    logger.debug("[DIAG] _get_runway_heading: no OSM runway, returning None")
     return None
 
 
@@ -1884,10 +1886,11 @@ def _get_osm_primary_runway() -> Optional[dict]:
         config = service.get_config()
         runways = config.get("osmRunways", [])
         if not runways:
+            logger.debug("[DIAG] _get_osm_primary_runway: osmRunways empty/missing, config keys=%s", list(config.keys())[:15])
             return None
-        # Pick the longest runway by number of geoPoints (proxy for length)
         best = max(runways, key=lambda r: len(r.get("geoPoints", [])))
         if len(best.get("geoPoints", [])) < 2:
+            logger.warning("[DIAG] _get_osm_primary_runway: best runway has <2 geoPoints: ref=%s, pts=%d", best.get("ref"), len(best.get("geoPoints", [])))
             return None
         return best
     except Exception as e:
@@ -1949,8 +1952,12 @@ def _osm_runway_endpoints(runway: dict) -> tuple:
 
     if need_swap:
         heading = (raw_heading + 180) % 360
+        logger.info("[DIAG] _osm_runway_endpoints: ref=%s raw=%.1f active_des=%s swap=True → heading=%.1f",
+                     ref, raw_heading, designators, heading)
         return (pN_lon, pN_lat), (p0_lon, p0_lat), heading
     else:
+        logger.info("[DIAG] _osm_runway_endpoints: ref=%s raw=%.1f active_des=%s swap=False → heading=%.1f",
+                     ref, raw_heading, designators, raw_heading)
         return (p0_lon, p0_lat), (pN_lon, pN_lat), raw_heading
 
 
@@ -4981,8 +4988,13 @@ def generate_synthetic_flights(
 
     # Don't create flights until the airport config (runways/gates) is loaded.
     # Generating flights with fallback 270° heading locks in wrong trajectories.
-    if _get_osm_primary_runway() is None:
+    osm_rwy = _get_osm_primary_runway()
+    if osm_rwy is None:
+        logger.info("[DIAG] generate_synthetic_flights: BLOCKED — no OSM runway yet")
         return {"time": int(datetime.now(timezone.utc).timestamp()), "states": []}
+    if not _flight_states:
+        logger.info("[DIAG] generate_synthetic_flights: FIRST RUN with runway ref=%s, %d geoPoints",
+                     osm_rwy.get("ref"), len(osm_rwy.get("geoPoints", [])))
 
     current_time = datetime.now(timezone.utc).timestamp()
     dt = min(current_time - _last_update, 5.0) if _last_update > 0 else 1.0
