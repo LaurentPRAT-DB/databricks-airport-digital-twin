@@ -137,10 +137,8 @@ app/frontend/test-results/
 test-results/
 tests/output/
 
-# Simulation output data (large JSON files and screenshots)
-simulation_output/*.json
-simulation_output/calibrated/
-simulation_output/screenshots/
+# Simulation output data — served from UC Volume in production
+simulation_output/
 simulation_output_*.json
 simulation_output.json
 sim_*.json

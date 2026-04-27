@@ -99,7 +99,7 @@ function DelayTable({ delays }: { delays: DelayRow[] }) {
                   {CATEGORY_LABELS[d.category] || d.category}
                 </span>
               </td>
-              <td className="py-2 px-3 text-right font-mono">{d.delay_minutes > 0 ? `+${d.delay_minutes}m` : '0m'}</td>
+              <td className="py-2 px-3 text-right font-mono">{d.delay_minutes != null && !isNaN(d.delay_minutes) ? (d.delay_minutes > 0 ? `+${d.delay_minutes}m` : '0m') : '—'}</td>
               <td className="py-2 px-3 text-right">
                 <div className="flex items-center justify-end gap-2">
                   <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">

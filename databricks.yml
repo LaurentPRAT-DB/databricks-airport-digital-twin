@@ -9,10 +9,8 @@ sync:
     - config/**
     - configs/**
     - scenarios/**
-    - simulation_output/report/**
-    - simulation_output/REPORT_*.md
-    # data/calibration/profiles/** and data/demo/** excluded —
-    # both served from UC Volume in production
+    # simulation_output/** excluded — served from UC Volume in production
+    # data/calibration/profiles/** and data/demo/** excluded — same
     - app.yaml
     - requirements.txt
     - pyproject.toml
@@ -27,15 +25,15 @@ sync:
     - .planning/**
     - .databricks/**
     - screenshots/**
-    - simulation_output*.json
-    - simulation_output/*.json
-    - simulation_output/calibrated/**
+    - simulation_output/**
     - configs/calibration_batch/**
     - data/fallback/**
     - data/calibration/raw/**
     - data/calibration/download_manual/**
     - data/ml_models/**
     - data/msfs_bgl/**
+    - tests/output/**
+    - reports/**
     # Large 3D models that aren't used in the app
     - app/frontend/dist/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb
     - app/frontend/src/**

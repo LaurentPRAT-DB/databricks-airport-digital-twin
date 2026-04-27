@@ -512,13 +512,15 @@ async def get_demo_simulation(request: Request, airport_icao: str) -> dict:
 
 
 @simulation_router.get("/report/{filename:path}")
-async def get_simulation_report(filename: str) -> dict:
+async def get_simulation_report(request: Request, filename: str) -> dict:
     """Return the markdown analysis report for a simulation file, if it exists.
 
     Derives the report filename from the simulation JSON filename:
     - Strips any subdirectory prefix (e.g. "calibrated/")
     - Replaces "simulation_" prefix with "REPORT_"
     - Changes .json extension to .md
+
+    Tries UC Volume first, then local filesystem.
     """
     base = Path(filename).name  # strip directory (e.g. "calibrated/")
     if base.startswith("simulation_") and base.endswith(".json"):
@@ -526,6 +528,41 @@ async def get_simulation_report(filename: str) -> dict:
     else:
         raise HTTPException(status_code=404, detail="No report available")
 
+    # Try UC Volume first
+    user_token = _extract_user_token(request)
+    volume_path = f"/Volumes/{_UC_CATALOG}/{_UC_SCHEMA}/{_UC_VOLUME}/{report_name}"
+    try:
+        import threading
+
+        result: list = []
+        error: list = []
+
+        def _try_read(tkn=user_token):
+            try:
+                w = _make_workspace_client(tkn)
+                if w is None:
+                    error.append("no client")
+                    return
+                resp = w.files.download(volume_path)
+                result.append(resp.contents.read().decode("utf-8"))
+            except Exception as e:
+                error.append(e)
+
+        tokens_to_try = [None]
+        if user_token:
+            tokens_to_try.append(user_token)
+        for tkn in tokens_to_try:
+            result.clear()
+            error.clear()
+            thread = threading.Thread(target=_try_read, kwargs={"tkn": tkn}, daemon=True)
+            thread.start()
+            thread.join(timeout=10)
+            if result:
+                return {"content": result[0], "filename": report_name}
+    except Exception:
+        pass
+
+    # Fall back to local filesystem
     report_path = PROJECT_ROOT / "simulation_output" / report_name
     if not report_path.is_file():
         raise HTTPException(status_code=404, detail=f"Report not found: {report_name}")
