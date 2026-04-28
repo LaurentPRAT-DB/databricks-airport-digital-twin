@@ -221,6 +221,18 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   // Stable key for selectedTypes so useMemo dependencies use a primitive
   const selectedTypesKey = [...selectedTypes].sort().join(',');
 
+  // Time-range-filtered event counts (for KPI cards — matches dropdown counts)
+  const timeFilteredCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const e of sim.scenarioEvents) {
+      const h = getHour(e.time);
+      if (h >= fromHour && h < toHour) {
+        counts[e.event_type] = (counts[e.event_type] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [sim.scenarioEvents, fromHour, toHour]);
+
   // Filter events
   const filteredEvents = useMemo(() => {
     return sim.scenarioEvents.filter(e => {
@@ -501,9 +513,9 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
             {[
               { label: 'On-Time', value: summary?.on_time_pct != null ? `${summary.on_time_pct}%` : '--', color: (summary?.on_time_pct as number) >= 70 ? 'text-green-600' : 'text-red-600' },
               { label: 'Avg Delay', value: summary?.schedule_delay_min != null ? `${summary.schedule_delay_min}m` : '--', color: 'text-amber-600' },
-              { label: 'Cancellations', value: `${summary?.total_cancellations ?? '--'}`, color: 'text-rose-600' },
-              { label: 'Go-Arounds', value: `${summary?.total_go_arounds ?? '--'}`, color: 'text-yellow-600' },
-              { label: 'Diversions', value: `${summary?.total_diversions ?? '--'}`, color: 'text-cyan-600' },
+              { label: 'Cancellations', value: `${timeFilteredCounts['cancellation'] ?? 0}`, color: 'text-rose-600' },
+              { label: 'Go-Arounds', value: `${timeFilteredCounts['go_around'] ?? 0}`, color: 'text-yellow-600' },
+              { label: 'Diversions', value: `${timeFilteredCounts['diversion'] ?? 0}`, color: 'text-cyan-600' },
               { label: 'Peak Flights', value: `${summary?.peak_simultaneous_flights ?? '--'}`, color: 'text-blue-600' },
               { label: 'Avg Hold', value: summary?.avg_capacity_hold_min != null ? `${summary.avg_capacity_hold_min}m` : '--', color: 'text-purple-600' },
               { label: 'Total Flights', value: `${summary?.total_flights ?? '--'}`, color: 'text-slate-900' },
