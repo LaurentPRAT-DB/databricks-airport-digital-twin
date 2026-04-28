@@ -358,7 +358,7 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating }: {
             </div>
 
             {/* Event cards */}
-            <div className="space-y-2 max-h-[240px] overflow-y-auto">
+            <div className="space-y-2">
               {events.map(event => (
                 <EventCard key={event.id} event={event} onChange={updateEvent} onRemove={removeEvent} />
               ))}
