@@ -381,7 +381,7 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating }: {
                     <button
                       key={cat}
                       onClick={() => addEvent(cat)}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2"
+                      className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
                     >
                       <span className={`w-2 h-2 rounded-sm ${CATEGORY_COLORS[cat].split(' ')[0]}`} />
                       {CATEGORY_LABELS[cat]}
