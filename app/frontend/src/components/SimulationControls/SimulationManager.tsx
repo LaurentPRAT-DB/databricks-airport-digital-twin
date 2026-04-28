@@ -239,8 +239,6 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
   const [timeStep, setTimeStep] = useState(2.0);
   const [seed, setSeed] = useState('');
   const [skipPositions, setSkipPositions] = useState(false);
-  const [draftName, setDraftName] = useState('');
-  const [showSaveInput, setShowSaveInput] = useState(false);
 
   // Custom scenario state
   const [scenarioName, setScenarioName] = useState('Custom Scenario');
@@ -258,7 +256,6 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
     setTimeStep(editingDraft.time_step_seconds);
     setSeed(editingDraft.seed != null ? String(editingDraft.seed) : '');
     setSkipPositions(editingDraft.skip_positions);
-    setDraftName(editingDraft.display_name);
 
     if (editingDraft.custom_scenario) {
       setScenarioMode('custom');
@@ -608,61 +605,31 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
         </div>
       )}
 
-      {/* Save Draft input */}
-      {showSaveInput && (
-        <div className="flex gap-2">
-          <input
-            className={inputClass}
-            value={draftName}
-            onChange={e => setDraftName(e.target.value)}
-            placeholder="Draft name..."
-            autoFocus
-          />
-          <button
-            onClick={() => {
-              if (!draftName.trim()) return;
-              const params: SaveDraftParams = {
-                display_name: draftName.trim(),
-                airport,
-                arrivals,
-                departures,
-                duration_hours: durationHours,
-                time_step_seconds: timeStep,
-                seed: seed ? Number(seed) : null,
-                scenario_name: scenarioMode === 'builtin' && selectedScenario ? selectedScenario : null,
-                custom_scenario: scenarioMode === 'custom' && events.length > 0 ? {
-                  name: scenarioName,
-                  description: scenarioDesc,
-                  weather_events: events.filter(e => e.category === 'weather').map(e => e.fields),
-                  runway_events: events.filter(e => e.category === 'runway').map(e => e.fields),
-                  ground_events: events.filter(e => e.category === 'ground').map(e => e.fields),
-                  traffic_modifiers: events.filter(e => e.category === 'traffic').map(e => e.fields),
-                } : null,
-                skip_positions: skipPositions,
-              };
-              onSaveDraft(params);
-              setShowSaveInput(false);
-            }}
-            disabled={isSaving || !draftName.trim()}
-            className="px-4 py-1.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded text-sm font-medium whitespace-nowrap"
-          >
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-          <button
-            onClick={() => setShowSaveInput(false)}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-sm"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
       {/* Action buttons */}
       <div className="flex gap-2">
         <button
           onClick={() => {
-            setDraftName(editingDraft?.display_name || `${airport} ${arrivals + departures}f ${durationHours}h`);
-            setShowSaveInput(true);
+            const name = editingDraft?.display_name || `${airport} ${arrivals + departures}f ${durationHours}h`;
+            const params: SaveDraftParams = {
+              display_name: name,
+              airport,
+              arrivals,
+              departures,
+              duration_hours: durationHours,
+              time_step_seconds: timeStep,
+              seed: seed ? Number(seed) : null,
+              scenario_name: scenarioMode === 'builtin' && selectedScenario ? selectedScenario : null,
+              custom_scenario: scenarioMode === 'custom' && events.length > 0 ? {
+                name: scenarioName,
+                description: scenarioDesc,
+                weather_events: events.filter(e => e.category === 'weather').map(e => e.fields),
+                runway_events: events.filter(e => e.category === 'runway').map(e => e.fields),
+                ground_events: events.filter(e => e.category === 'ground').map(e => e.fields),
+                traffic_modifiers: events.filter(e => e.category === 'traffic').map(e => e.fields),
+              } : null,
+              skip_positions: skipPositions,
+            };
+            onSaveDraft(params);
           }}
           disabled={isSaving || !airport}
           className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
@@ -670,7 +637,7 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
           </svg>
-          Save Draft
+          {isSaving ? 'Saving...' : 'Save Draft'}
         </button>
         <button
           onClick={handleSubmit}
