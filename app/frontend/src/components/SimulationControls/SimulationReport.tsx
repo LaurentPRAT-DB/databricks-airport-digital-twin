@@ -47,9 +47,9 @@ function fmtDateTime(iso: string | null): string {
   }
 }
 
-/** Get hour from ISO string. */
+/** Get UTC hour from ISO string — avoids local-timezone shifts that break filtering. */
 function getHour(iso: string): number {
-  try { return new Date(iso).getHours(); } catch { return 0; }
+  try { return new Date(iso).getUTCHours(); } catch { return 0; }
 }
 
 /** Extract a callsign from an event description (e.g. "KLM214 diverted to alternate" → "KLM214"). */
@@ -339,7 +339,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
     Airport: <strong>${sim.airport || 'Unknown'}</strong> &nbsp;|&nbsp;
     ${fmtDateTime(sim.simStartTime)} — ${fmtDateTime(sim.simEndTime)} &nbsp;|&nbsp;
     ${filteredEvents.length} events shown &nbsp;|&nbsp;
-    Time window: ${fromHour}:00 — ${toHour}:00
+    Time window: ${fromHour}:00 — ${toHour}:00 UTC
   </div>
 
   <h2>Key Performance Indicators</h2>
@@ -439,13 +439,13 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </button>
         </div>
 
-        {/* Body — flex child that can shrink; each tab manages its own scroll */}
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col px-6 py-4">
+        {/* Body — flex child that can shrink and scroll */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
             hasAnalysisReport ? (
-              <div className="flex-1 min-h-0 overflow-y-auto markdown-report">
+              <div className="overflow-y-auto markdown-report">
                 <Markdown remarkPlugins={[remarkGfm]}>{sim.markdownReport!}</Markdown>
               </div>
             ) : (
@@ -460,7 +460,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           )}
 
           {/* ── Dashboard tab ── */}
-          {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col gap-2">
+          {activeTab === 'dashboard' && <div className="flex flex-col gap-2">
           {/* KPI Cards — single compact row */}
           <div className="shrink-0 grid grid-cols-8 gap-1">
             {[
@@ -515,7 +515,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
                   onChange={e => setToHour(Number(e.target.value))}
                   className="w-14 bg-white text-slate-800 text-sm rounded px-2 py-1 border border-slate-300"
                 />
-                <span className="text-[10px] text-slate-400">h</span>
+                <span className="text-[10px] text-slate-400">UTC</span>
               </div>
             </div>
 
@@ -541,8 +541,8 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
             </span>
           </div>
 
-          {/* Event table — explicit max-height ensures scrolling works */}
-          <div className="overflow-y-auto rounded-lg border border-slate-200" style={{ maxHeight: fullscreen ? 'calc(100vh - 260px)' : 'calc(92vh - 260px)', scrollbarGutter: 'stable' }}>
+          {/* Event table */}
+          <div className="rounded-lg border border-slate-200">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100">
                 <tr>
