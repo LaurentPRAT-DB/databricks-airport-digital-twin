@@ -380,7 +380,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
       <div className={`bg-white shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-200 ${
         fullscreen
           ? 'w-full h-full max-w-full max-h-full rounded-none'
-          : 'w-[900px] max-w-[95vw] max-h-[92vh] rounded-xl'
+          : 'w-[900px] max-w-[95vw] h-[92vh] rounded-xl'
       }`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 ${fullscreen ? '' : 'rounded-t-xl'}`}>
@@ -541,8 +541,8 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
             </span>
           </div>
 
-          {/* Event table — explicit max-height ensures scrolling regardless of flex chain */}
-          <div className="rounded-lg border border-slate-200 overflow-y-auto max-h-[45vh]">
+          {/* Event table */}
+          <div className="rounded-lg border border-slate-200">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100">
                 <tr>
