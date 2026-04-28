@@ -3,7 +3,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { UseSimulationReplayResult } from '../../hooks/useSimulationReplay';
 import { useFlightContext } from '../../context/FlightContext';
-import { captureCurrentView, downloadDataUrl } from '../../utils/sceneCapture';
+import { downloadDataUrl } from '../../utils/sceneCapture';
 import { EVENT_COLORS, EVENT_LABELS } from './SimulationControls';
 
 type ReportTab = 'dashboard' | 'analysis';
@@ -52,13 +52,6 @@ function getHour(iso: string): number {
   try { return new Date(iso).getHours(); } catch { return 0; }
 }
 
-interface CapturedImage {
-  id: string;
-  dataUrl: string;
-  simTime: string | null;
-  label: string;
-}
-
 /** Extract a callsign from an event description (e.g. "KLM214 diverted to alternate" → "KLM214"). */
 function extractCallsign(description: string): string | null {
   const match = description.match(/^([A-Z]{2,4}\d{1,5})\b/);
@@ -98,7 +91,7 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
 
   return (
     <div ref={ref} className="relative flex-shrink-0">
-      <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block mb-2">Event Types</span>
+      <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block mb-1">Event Types</span>
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-700 hover:border-slate-400 transition-colors min-w-[160px]"
@@ -109,7 +102,7 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
         </svg>
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] py-1">
+        <div className="absolute bottom-full left-0 mb-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] py-1">
           <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-100">
             <button onClick={onSelectAll} className="text-[10px] text-blue-600 hover:text-blue-500">All</button>
             <button onClick={onClearAll} className="text-[10px] text-blue-600 hover:text-blue-500">None</button>
@@ -210,9 +203,6 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   // Expanded flight groups (for flight grouping mode)
   const [expandedFlights, setExpandedFlights] = useState<Set<string>>(new Set());
 
-  // Captured screenshots
-  const [captures, setCaptures] = useState<CapturedImage[]>([]);
-  const [capturing, setCapturing] = useState(false);
 
   // Report tab (Dashboard vs Analysis Report)
   const [activeTab, setActiveTab] = useState<ReportTab>('dashboard');
@@ -286,28 +276,6 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   const selectAll = useCallback(() => setSelectedTypes(new Set(allEventTypes)), [allEventTypes]);
   const clearAll = useCallback(() => setSelectedTypes(new Set()), []);
 
-  // Capture current view
-  const handleCapture = useCallback(async () => {
-    setCapturing(true);
-    try {
-      const dataUrl = await captureCurrentView(sim.currentSimTime, sim.airport);
-      if (dataUrl) {
-        setCaptures(prev => [...prev, {
-          id: `cap-${Date.now()}`,
-          dataUrl,
-          simTime: sim.currentSimTime,
-          label: `${sim.airport || 'SIM'} at ${fmtTime(sim.currentSimTime || '')}`,
-        }]);
-      }
-    } finally {
-      setCapturing(false);
-    }
-  }, [sim.currentSimTime, sim.airport]);
-
-  // Remove capture
-  const removeCapture = useCallback((id: string) => {
-    setCaptures(prev => prev.filter(c => c.id !== id));
-  }, []);
 
   // Summary data
   const summary = sim.summary as Record<string, unknown> | null;
@@ -336,13 +304,6 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
       </tr>
     `).join('');
 
-    const capturesHtml = captures.map(c => `
-      <div style="margin-bottom:16px">
-        <p style="color:#94a3b8;font-size:12px;margin-bottom:4px">${c.label}</p>
-        <img src="${c.dataUrl}" style="max-width:100%;border-radius:8px;border:1px solid #334155" />
-      </div>
-    `).join('');
-
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -361,7 +322,6 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   .kpi-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
   table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; }
   th { text-align: left; padding: 8px 10px; background: #334155; color: #94a3b8; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .captures { margin-top: 16px; }
   .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #334155; color: #475569; font-size: 12px; text-align: center; }
   @media print {
     body { background: white; color: #1e293b; }
@@ -401,13 +361,6 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
     </tbody>
   </table>
 
-  ${captures.length > 0 ? `
-  <h2>Scene Captures</h2>
-  <div class="captures">
-    ${capturesHtml}
-  </div>
-  ` : ''}
-
   <div class="footer">
     Generated by Airport Digital Twin Simulation Platform &mdash; ${new Date().toLocaleString()}
   </div>
@@ -420,7 +373,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
     const filename = `report_${sim.airport || 'unknown'}_${scenario}_${new Date().toISOString().slice(0, 10)}.html`;
     downloadDataUrl(url, filename);
     URL.revokeObjectURL(url);
-  }, [sim, summary, filteredEvents, captures, fromHour, toHour]);
+  }, [sim, summary, filteredEvents, fromHour, toHour]);
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
@@ -507,28 +460,28 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           )}
 
           {/* ── Dashboard tab ── */}
-          {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col gap-5">
-          {/* KPI Cards */}
-          <div className="shrink-0 grid grid-cols-4 gap-3">
+          {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col gap-2">
+          {/* KPI Cards — single compact row */}
+          <div className="shrink-0 grid grid-cols-8 gap-1">
             {[
               { label: 'On-Time', value: summary?.on_time_pct != null ? `${summary.on_time_pct}%` : '--', color: (summary?.on_time_pct as number) >= 70 ? 'text-green-600' : 'text-red-600' },
               { label: 'Avg Delay', value: summary?.schedule_delay_min != null ? `${summary.schedule_delay_min}m` : '--', color: 'text-amber-600' },
-              { label: 'Cancellations', value: `${timeFilteredCounts['cancellation'] ?? 0}`, color: 'text-rose-600' },
+              { label: 'Cancels', value: `${timeFilteredCounts['cancellation'] ?? 0}`, color: 'text-rose-600' },
               { label: 'Go-Arounds', value: `${timeFilteredCounts['go_around'] ?? 0}`, color: 'text-yellow-600' },
               { label: 'Diversions', value: `${timeFilteredCounts['diversion'] ?? 0}`, color: 'text-cyan-600' },
-              { label: 'Peak Flights', value: `${summary?.peak_simultaneous_flights ?? '--'}`, color: 'text-blue-600' },
+              { label: 'Peak', value: `${summary?.peak_simultaneous_flights ?? '--'}`, color: 'text-blue-600' },
               { label: 'Avg Hold', value: summary?.avg_capacity_hold_min != null ? `${summary.avg_capacity_hold_min}m` : '--', color: 'text-purple-600' },
-              { label: 'Total Flights', value: `${summary?.total_flights ?? '--'}`, color: 'text-slate-900' },
+              { label: 'Flights', value: `${summary?.total_flights ?? '--'}`, color: 'text-slate-900' },
             ].map(kpi => (
-              <div key={kpi.label} className="bg-slate-100 rounded-lg px-3 py-2 text-center">
-                <div className={`text-xl font-bold ${kpi.color}`}>{kpi.value}</div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">{kpi.label}</div>
+              <div key={kpi.label} className="bg-slate-100 rounded px-1 py-1 text-center">
+                <div className={`text-sm font-bold leading-none ${kpi.color}`}>{kpi.value}</div>
+                <div className="text-[8px] text-slate-500 uppercase tracking-wider mt-0.5">{kpi.label}</div>
               </div>
             ))}
           </div>
 
           {/* Filters */}
-          <div className="shrink-0 flex items-start gap-6 relative z-10">
+          <div className="shrink-0 flex items-end gap-6 relative z-10">
             {/* Event type filter — compact dropdown */}
             <EventTypeDropdown
               allTypes={allEventTypes}
@@ -542,8 +495,8 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
             />
 
             {/* Time range filter */}
-            <div className="flex-shrink-0 w-48">
-              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block mb-2">Time Range</span>
+            <div className="flex-shrink-0">
+              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block mb-1">Time Range</span>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -568,7 +521,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
 
             {/* Group by toggle */}
             <div className="flex-shrink-0">
-              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block mb-2">Group By</span>
+              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block mb-1">Group By</span>
               <div className="flex rounded overflow-hidden border border-slate-300">
                 {(['time', 'category', 'flight'] as const).map(mode => (
                   <button
@@ -581,10 +534,15 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
                 ))}
               </div>
             </div>
+
+            {/* Events count — pushed right */}
+            <span className="flex-1 text-[10px] text-slate-400 text-right self-end pb-0.5">
+              {filteredEvents.length} events{groupBy === 'flight' && flightGroups ? ` · ${flightGroups.length} flights` : ''}
+            </span>
           </div>
 
-          {/* Event table — fills remaining space, always shows scrollbar */}
-          <div className="flex-1 min-h-[120px] overflow-y-auto rounded-lg border border-slate-200" style={{ scrollbarGutter: 'stable' }}>
+          {/* Event table — explicit max-height ensures scrolling works */}
+          <div className="overflow-y-auto rounded-lg border border-slate-200" style={{ maxHeight: fullscreen ? 'calc(100vh - 260px)' : 'calc(92vh - 260px)', scrollbarGutter: 'stable' }}>
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100">
                 <tr>
@@ -671,58 +629,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
               </tbody>
             </table>
           </div>
-          <div className="shrink-0 text-[10px] text-slate-400 text-right">
-            {filteredEvents.length} events shown{groupBy === 'flight' && flightGroups ? ` (${flightGroups.length} flights)` : ''}
-          </div>
 
-          {/* Scene captures */}
-          <div className="shrink-0">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Scene Captures</span>
-              <button
-                onClick={handleCapture}
-                disabled={capturing}
-                className="px-2 py-1 rounded text-xs bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-50 flex items-center gap-1"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <circle cx="12" cy="13" r="3" stroke="currentColor" strokeWidth={2} fill="none" />
-                </svg>
-                {capturing ? 'Capturing...' : 'Capture Current View'}
-              </button>
-              <span className="text-[10px] text-slate-400">
-                Scrub the simulation timeline, then capture at key moments
-              </span>
-            </div>
-            {captures.length > 0 ? (
-              <div className="grid grid-cols-3 gap-2">
-                {captures.map(cap => (
-                  <div key={cap.id} className="relative group">
-                    <img
-                      src={cap.dataUrl}
-                      alt={cap.label}
-                      className="w-full h-24 object-cover rounded-lg border border-slate-200"
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[10px] text-white px-2 py-0.5 rounded-b-lg">
-                      {cap.label}
-                    </div>
-                    <button
-                      onClick={() => removeCapture(cap.id)}
-                      className="absolute top-1 right-1 w-5 h-5 bg-red-600/80 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-4 text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
-                No captures yet — scrub to a key moment and click "Capture Current View"
-              </div>
-            )}
-          </div>
           </div>}
         </div>
 
