@@ -79,6 +79,7 @@ class CreateSimulationRequest(BaseModel):
     scenario_name: Optional[str] = None
     custom_scenario: Optional[CustomScenario] = None
     skip_positions: bool = False
+    run_name: Optional[str] = None
 
 
 class SimulationJobResponse(BaseModel):
@@ -181,12 +182,18 @@ def _format_run(run) -> SimulationJobResponse:
                 except Exception:
                     pass
 
-    # Extract airport from run name (format: "Simulation SFO 1000f")
+    # Extract airport from run name or task parameters
     airport = ""
     if run.run_name and run.run_name.startswith("Simulation "):
         parts = run.run_name.split()
         if len(parts) >= 2:
             airport = parts[1]
+    if not airport and run.tasks:
+        for task in run.tasks:
+            nb = task.notebook_task if hasattr(task, "notebook_task") else None
+            if nb and hasattr(nb, "base_parameters") and nb.base_parameters:
+                airport = nb.base_parameters.get("airport", "")
+                break
 
     return SimulationJobResponse(
         run_id=run.run_id,
@@ -274,7 +281,7 @@ async def create_simulation_job(request: Request, body: CreateSimulationRequest)
         params["scenario_file"] = vol_path
 
     total_flights = body.arrivals + body.departures
-    run_name = f"Simulation {body.airport} {total_flights}f"
+    run_name = body.run_name or f"Simulation {body.airport} {total_flights}f"
 
     task = SubmitTask(
         task_key="run_simulation",

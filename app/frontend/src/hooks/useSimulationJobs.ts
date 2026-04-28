@@ -32,6 +32,7 @@ export interface CreateSimulationParams {
   duration_hours: number;
   time_step_seconds: number;
   seed?: number;
+  run_name?: string;
   scenario_name?: string;
   custom_scenario?: {
     name: string;

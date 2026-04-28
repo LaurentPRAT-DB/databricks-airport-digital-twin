@@ -346,6 +346,7 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
       skip_positions: skipPositions,
     };
     if (seed) params.seed = Number(seed);
+    if (draftName.trim()) params.run_name = draftName.trim();
 
     if (scenarioMode === 'builtin' && selectedScenario) {
       params.scenario_name = selectedScenario;
@@ -710,7 +711,7 @@ function RunningTab({ jobs, isLoading, onLoadResult }: {
         <div key={job.run_id} className="border border-slate-200 rounded-lg px-4 py-3 hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="font-medium text-sm text-slate-800">{job.airport || 'Unknown'}</span>
+              <span className="font-medium text-sm text-slate-800">{job.run_name || job.airport || 'Unknown'}</span>
               <StatusBadge status={job.status} />
             </div>
             <div className="flex items-center gap-2">
@@ -738,7 +739,7 @@ function RunningTab({ jobs, isLoading, onLoadResult }: {
               )}
             </div>
           </div>
-          <div className="text-xs text-slate-500 mt-1">{job.run_name}</div>
+          <div className="text-xs text-slate-500 mt-1">{job.airport}</div>
         </div>
       ))}
     </div>
@@ -979,6 +980,7 @@ export default function SimulationManager({
       duration_hours: draft.duration_hours,
       time_step_seconds: draft.time_step_seconds,
       skip_positions: draft.skip_positions,
+      run_name: draft.display_name,
     };
     if (draft.seed != null) params.seed = draft.seed;
     if (draft.scenario_name) params.scenario_name = draft.scenario_name;
