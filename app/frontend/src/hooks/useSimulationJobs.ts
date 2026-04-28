@@ -18,6 +18,13 @@ export interface ScenarioInfo {
   description: string;
 }
 
+export interface ScenarioDetail extends ScenarioInfo {
+  weather_events: Record<string, unknown>[];
+  runway_events: Record<string, unknown>[];
+  ground_events: Record<string, unknown>[];
+  traffic_modifiers: Record<string, unknown>[];
+}
+
 export interface CreateSimulationParams {
   airport: string;
   arrivals: number;
@@ -49,6 +56,12 @@ async function fetchScenarios(): Promise<ScenarioInfo[]> {
   if (!res.ok) throw new Error('Failed to fetch scenarios');
   const data = await res.json();
   return data.scenarios ?? [];
+}
+
+export async function fetchScenarioDetail(filename: string): Promise<ScenarioDetail> {
+  const res = await fetch(`/api/simulation/scenarios/${encodeURIComponent(filename)}`);
+  if (!res.ok) throw new Error('Failed to fetch scenario detail');
+  return res.json();
 }
 
 async function createJob(params: CreateSimulationParams): Promise<{ run_id: number }> {

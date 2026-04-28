@@ -495,6 +495,30 @@ TBLPROPERTIES ('delta.columnMapping.mode' = 'name')
 COMMENT 'Enriched OpenSky ADS-B snapshots with inferred gate assignments and flight phases'
 """
 
+SIMULATION_DRAFTS_DDL = """
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.simulation_drafts (
+  name STRING NOT NULL COMMENT 'URL-safe slug derived from display_name',
+  display_name STRING NOT NULL COMMENT 'Human-readable draft name',
+  airport STRING NOT NULL COMMENT 'ICAO airport code',
+  arrivals INT COMMENT 'Number of arrival flights',
+  departures INT COMMENT 'Number of departure flights',
+  duration_hours INT COMMENT 'Simulation duration in hours',
+  time_step_seconds DOUBLE COMMENT 'Simulation time step',
+  seed INT COMMENT 'Random seed for reproducibility',
+  scenario_name STRING COMMENT 'Named scenario YAML file',
+  custom_scenario STRING COMMENT 'Custom scenario config as JSON',
+  skip_positions BOOLEAN COMMENT 'Skip position recording for lighter output',
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT simulation_drafts_pk PRIMARY KEY (name)
+) USING DELTA
+TBLPROPERTIES (
+  'delta.enableChangeDataFeed' = 'true',
+  'delta.columnMapping.mode' = 'name'
+)
+COMMENT 'Saved simulation draft configurations — backup of Lakebase simulation_drafts table'
+"""
+
 ALL_TABLES = [
     ("airport_metadata", AIRPORT_METADATA_DDL),
     ("gates", GATES_DDL),
@@ -515,6 +539,7 @@ ALL_TABLES = [
     ("opensky_phase_transitions", OPENSKY_PHASE_TRANSITIONS_DDL),
     ("opensky_gate_events", OPENSKY_GATE_EVENTS_DDL),
     ("opensky_enriched_snapshots", OPENSKY_ENRICHED_SNAPSHOTS_DDL),
+    ("simulation_drafts", SIMULATION_DRAFTS_DDL),
 ]
 
 

@@ -1,13 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   useSimulationJobs,
+  fetchScenarioDetail,
   type SimulationJob,
   type ScenarioInfo,
+  type ScenarioDetail,
   type CreateSimulationParams,
 } from '../../hooks/useSimulationJobs';
+import {
+  useSimulationDrafts,
+  type SimulationDraft,
+  type SaveDraftParams,
+} from '../../hooks/useSimulationDrafts';
 import type { SimulationFile } from '../../hooks/useSimulationReplay';
 
-type Tab = 'create' | 'load' | 'running';
+type Tab = 'create' | 'saved' | 'load' | 'running';
 
 // ── Event builder types ─────────────────────────────────────────────
 
@@ -212,11 +219,15 @@ function formatElapsed(seconds: number | null): string {
 
 // ── Create Tab ──────────────────────────────────────────────────────
 
-function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating }: {
+function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSaveDraft, isSaving, editingDraft, onClearDraft }: {
   scenarios: ScenarioInfo[];
   isLoadingScenarios: boolean;
   onSubmit: (params: CreateSimulationParams) => void;
   isCreating: boolean;
+  onSaveDraft: (params: SaveDraftParams) => void;
+  isSaving: boolean;
+  editingDraft: SimulationDraft | null;
+  onClearDraft: () => void;
 }) {
   const [airport, setAirport] = useState('SFO');
   const [arrivals, setArrivals] = useState(500);
@@ -228,12 +239,85 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating }: {
   const [timeStep, setTimeStep] = useState(2.0);
   const [seed, setSeed] = useState('');
   const [skipPositions, setSkipPositions] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [showSaveInput, setShowSaveInput] = useState(false);
 
   // Custom scenario state
   const [scenarioName, setScenarioName] = useState('Custom Scenario');
   const [scenarioDesc, setScenarioDesc] = useState('');
   const [events, setEvents] = useState<ScenarioEvent[]>([]);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+
+  // Load editing draft into form
+  useEffect(() => {
+    if (!editingDraft) return;
+    setAirport(editingDraft.airport);
+    setArrivals(editingDraft.arrivals);
+    setDepartures(editingDraft.departures);
+    setDurationHours(editingDraft.duration_hours);
+    setTimeStep(editingDraft.time_step_seconds);
+    setSeed(editingDraft.seed != null ? String(editingDraft.seed) : '');
+    setSkipPositions(editingDraft.skip_positions);
+    setDraftName(editingDraft.display_name);
+
+    if (editingDraft.custom_scenario) {
+      setScenarioMode('custom');
+      setScenarioName(editingDraft.custom_scenario.name || 'Custom Scenario');
+      setScenarioDesc(editingDraft.custom_scenario.description || '');
+      const loaded: ScenarioEvent[] = [];
+      for (const e of editingDraft.custom_scenario.weather_events || [])
+        loaded.push({ id: nextEventId++, category: 'weather', fields: e as Record<string, string | number> });
+      for (const e of editingDraft.custom_scenario.runway_events || [])
+        loaded.push({ id: nextEventId++, category: 'runway', fields: e as Record<string, string | number> });
+      for (const e of editingDraft.custom_scenario.ground_events || [])
+        loaded.push({ id: nextEventId++, category: 'ground', fields: e as Record<string, string | number> });
+      for (const e of editingDraft.custom_scenario.traffic_modifiers || [])
+        loaded.push({ id: nextEventId++, category: 'traffic', fields: e as Record<string, string | number> });
+      setEvents(loaded);
+    } else if (editingDraft.scenario_name) {
+      setScenarioMode('builtin');
+      setSelectedScenario(editingDraft.scenario_name);
+    } else {
+      setScenarioMode('none');
+      setSelectedScenario('');
+    }
+  }, [editingDraft]);
+
+  // Fetch scenario detail when a built-in scenario is selected
+  const [scenarioDetail, setScenarioDetail] = useState<ScenarioDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  useEffect(() => {
+    if (scenarioMode !== 'builtin' || !selectedScenario) {
+      setScenarioDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingDetail(true);
+    fetchScenarioDetail(selectedScenario)
+      .then(d => { if (!cancelled) setScenarioDetail(d); })
+      .catch(() => { if (!cancelled) setScenarioDetail(null); })
+      .finally(() => { if (!cancelled) setLoadingDetail(false); });
+    return () => { cancelled = true; };
+  }, [scenarioMode, selectedScenario]);
+
+  const handleCustomize = () => {
+    if (!scenarioDetail) return;
+    setScenarioMode('custom');
+    setScenarioName(scenarioDetail.name + ' (customized)');
+    setScenarioDesc(scenarioDetail.description);
+    const loaded: ScenarioEvent[] = [];
+    for (const e of scenarioDetail.weather_events)
+      loaded.push({ id: nextEventId++, category: 'weather', fields: e as Record<string, string | number> });
+    for (const e of scenarioDetail.runway_events)
+      loaded.push({ id: nextEventId++, category: 'runway', fields: e as Record<string, string | number> });
+    for (const e of scenarioDetail.ground_events)
+      loaded.push({ id: nextEventId++, category: 'ground', fields: e as Record<string, string | number> });
+    for (const e of scenarioDetail.traffic_modifiers)
+      loaded.push({ id: nextEventId++, category: 'traffic', fields: e as Record<string, string | number> });
+    setEvents(loaded);
+    setSelectedScenario('');
+  };
 
   const addEvent = (category: EventCategory) => {
     setEvents(prev => [...prev, makeDefaultEvent(category)]);
@@ -339,9 +423,100 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating }: {
         )}
 
         {scenarioMode === 'builtin' && selectedScenario && (
-          <p className="text-xs text-slate-400 mt-1">
-            {scenarios.find(s => s.filename === selectedScenario)?.description}
-          </p>
+          <div className="mt-2 space-y-2">
+            <p className="text-xs text-slate-400">
+              {scenarios.find(s => s.filename === selectedScenario)?.description}
+            </p>
+
+            {loadingDetail && (
+              <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                <div className="w-3 h-3 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+                Loading scenario events...
+              </div>
+            )}
+
+            {scenarioDetail && (
+              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Events</span>
+                  <button
+                    onClick={handleCustomize}
+                    className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded text-xs font-medium transition-colors"
+                  >
+                    Customize...
+                  </button>
+                </div>
+
+                {scenarioDetail.weather_events.length > 0 && (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase text-amber-700 tracking-wider">Weather ({scenarioDetail.weather_events.length})</span>
+                    <div className="space-y-1 mt-1">
+                      {scenarioDetail.weather_events.map((e, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                          <span className="font-mono text-amber-700 w-12">{String(e.time ?? '')}</span>
+                          <span className="font-medium">{String(e.type ?? '').replace(/_/g, ' ')}</span>
+                          {e.severity != null && <span className="text-slate-400">({String(e.severity)})</span>}
+                          {e.duration_hours != null && <span className="text-slate-400">{String(e.duration_hours)}h</span>}
+                          {e.visibility_nm != null && <span className="text-slate-400">vis {String(e.visibility_nm)}nm</span>}
+                          {e.wind_speed_kt != null && <span className="text-slate-400">{String(e.wind_speed_kt)}kt</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {scenarioDetail.runway_events.length > 0 && (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase text-red-700 tracking-wider">Runway ({scenarioDetail.runway_events.length})</span>
+                    <div className="space-y-1 mt-1">
+                      {scenarioDetail.runway_events.map((e, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs text-slate-600 bg-red-50 border border-red-200 rounded px-2 py-1">
+                          <span className="font-mono text-red-700 w-12">{String(e.time ?? '')}</span>
+                          <span className="font-medium">{String(e.type ?? '').replace(/_/g, ' ')}</span>
+                          {e.runway != null && <span className="text-slate-500">RWY {String(e.runway)}</span>}
+                          {e.duration_minutes != null && <span className="text-slate-400">{String(e.duration_minutes)}min</span>}
+                          {e.reason != null && <span className="text-slate-400 truncate max-w-[200px]">{String(e.reason)}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {scenarioDetail.ground_events.length > 0 && (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase text-orange-700 tracking-wider">Ground ({scenarioDetail.ground_events.length})</span>
+                    <div className="space-y-1 mt-1">
+                      {scenarioDetail.ground_events.map((e, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs text-slate-600 bg-orange-50 border border-orange-200 rounded px-2 py-1">
+                          <span className="font-mono text-orange-700 w-12">{String(e.time ?? '')}</span>
+                          <span className="font-medium">{String(e.type ?? '').replace(/_/g, ' ')}</span>
+                          {e.target != null && <span className="text-slate-500">{String(e.target)}</span>}
+                          {e.duration_hours != null && <span className="text-slate-400">{String(e.duration_hours)}h</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {scenarioDetail.traffic_modifiers.length > 0 && (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase text-blue-700 tracking-wider">Traffic ({scenarioDetail.traffic_modifiers.length})</span>
+                    <div className="space-y-1 mt-1">
+                      {scenarioDetail.traffic_modifiers.map((e, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs text-slate-600 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                          <span className="font-mono text-blue-700 w-12">{String(e.time ?? '')}</span>
+                          <span className="font-medium">{String(e.type ?? '').replace(/_/g, ' ')}</span>
+                          {e.extra_arrivals != null && <span className="text-slate-400">+{String(e.extra_arrivals)} arr</span>}
+                          {e.diversion_origin != null && <span className="text-slate-400">from {String(e.diversion_origin)}</span>}
+                          {e.duration_hours != null && <span className="text-slate-400">{String(e.duration_hours)}h</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {scenarioMode === 'custom' && (
@@ -425,26 +600,98 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating }: {
         )}
       </div>
 
-      {/* Submit */}
-      <button
-        onClick={handleSubmit}
-        disabled={isCreating || !airport}
-        className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
-      >
-        {isCreating ? (
-          <>
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            Submitting...
-          </>
-        ) : (
-          <>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            Create Simulation ({arrivals + departures} flights, {durationHours}h)
-          </>
-        )}
-      </button>
+      {/* Editing draft banner */}
+      {editingDraft && (
+        <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <span className="text-xs text-amber-700">Editing: <strong>{editingDraft.display_name}</strong></span>
+          <button onClick={onClearDraft} className="text-xs text-amber-500 hover:text-amber-700">Clear</button>
+        </div>
+      )}
+
+      {/* Save Draft input */}
+      {showSaveInput && (
+        <div className="flex gap-2">
+          <input
+            className={inputClass}
+            value={draftName}
+            onChange={e => setDraftName(e.target.value)}
+            placeholder="Draft name..."
+            autoFocus
+          />
+          <button
+            onClick={() => {
+              if (!draftName.trim()) return;
+              const params: SaveDraftParams = {
+                display_name: draftName.trim(),
+                airport,
+                arrivals,
+                departures,
+                duration_hours: durationHours,
+                time_step_seconds: timeStep,
+                seed: seed ? Number(seed) : null,
+                scenario_name: scenarioMode === 'builtin' && selectedScenario ? selectedScenario : null,
+                custom_scenario: scenarioMode === 'custom' && events.length > 0 ? {
+                  name: scenarioName,
+                  description: scenarioDesc,
+                  weather_events: events.filter(e => e.category === 'weather').map(e => e.fields),
+                  runway_events: events.filter(e => e.category === 'runway').map(e => e.fields),
+                  ground_events: events.filter(e => e.category === 'ground').map(e => e.fields),
+                  traffic_modifiers: events.filter(e => e.category === 'traffic').map(e => e.fields),
+                } : null,
+                skip_positions: skipPositions,
+              };
+              onSaveDraft(params);
+              setShowSaveInput(false);
+            }}
+            disabled={isSaving || !draftName.trim()}
+            className="px-4 py-1.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded text-sm font-medium whitespace-nowrap"
+          >
+            {isSaving ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            onClick={() => setShowSaveInput(false)}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => {
+            setDraftName(editingDraft?.display_name || `${airport} ${arrivals + departures}f ${durationHours}h`);
+            setShowSaveInput(true);
+          }}
+          disabled={isSaving || !airport}
+          className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+          </svg>
+          Save Draft
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={isCreating || !airport}
+          className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
+        >
+          {isCreating ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Run Now
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -514,6 +761,98 @@ function RunningTab({ jobs, isLoading, onLoadResult }: {
           <div className="text-xs text-slate-500 mt-1">{job.run_name}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Saved Tab ──────────────────────────────────────────────────────
+
+function SavedTab({ drafts, isLoading, onEdit, onRun, onDelete, isRunning, isDeleting }: {
+  drafts: SimulationDraft[];
+  isLoading: boolean;
+  onEdit: (draft: SimulationDraft) => void;
+  onRun: (draft: SimulationDraft) => void;
+  onDelete: (name: string) => void;
+  isRunning: boolean;
+  isDeleting: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8 gap-3 text-slate-400">
+        <div className="w-5 h-5 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+        Loading drafts...
+      </div>
+    );
+  }
+
+  if (drafts.length === 0) {
+    return (
+      <div className="text-center py-8 text-slate-400">
+        <svg className="w-10 h-10 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+        </svg>
+        <p className="text-sm">No saved drafts</p>
+        <p className="text-xs mt-1">Use "Save Draft" in the Create tab to save a config here</p>
+      </div>
+    );
+  }
+
+  const sorted = [...drafts].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+
+  return (
+    <div className="space-y-2">
+      {sorted.map(draft => {
+        const scenarioLabel = draft.custom_scenario
+          ? 'Custom'
+          : draft.scenario_name
+            ? draft.scenario_name.replace('.yaml', '')
+            : 'No scenario';
+        const totalFlights = draft.arrivals + draft.departures;
+        return (
+          <div key={draft.name} className="border border-slate-200 rounded-lg px-4 py-3 hover:border-slate-300 transition-colors">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-medium text-sm text-slate-800">{draft.display_name}</span>
+                <span className="ml-2 text-xs text-slate-400">{draft.airport}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => onEdit(draft)}
+                  className="px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded transition-colors"
+                  title="Edit"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => onRun(draft)}
+                  disabled={isRunning}
+                  className="px-2 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded text-xs font-medium transition-colors"
+                >
+                  Run
+                </button>
+                <button
+                  onClick={() => onDelete(draft.name)}
+                  disabled={isDeleting}
+                  className="px-2 py-1 text-xs text-red-500 hover:bg-red-50 rounded transition-colors"
+                  title="Delete"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="text-xs text-slate-500 mt-1">
+              {totalFlights} flights &middot; {draft.duration_hours}h &middot; {scenarioLabel}
+              {draft.updated_at && (
+                <span className="ml-2 text-slate-400">
+                  Updated {new Date(draft.updated_at).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -610,7 +949,14 @@ export default function SimulationManager({
   isFetchingFiles: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<Tab>('create');
+  const [editingDraft, setEditingDraft] = useState<SimulationDraft | null>(null);
   const { jobs, isLoadingJobs, scenarios, isLoadingScenarios, createJob, isCreating } = useSimulationJobs();
+  const {
+    drafts, isLoadingDrafts,
+    saveDraft, isSaving,
+    updateDraft, isUpdating,
+    deleteDraft, isDeleting,
+  } = useSimulationDrafts();
 
   const activeJobCount = useMemo(
     () => jobs.filter(j => ['PENDING', 'QUEUED', 'RUNNING', 'BLOCKED'].includes(j.status)).length,
@@ -621,6 +967,55 @@ export default function SimulationManager({
     try {
       await createJob(params);
       setActiveTab('running');
+    } catch {
+      // Error handled by mutation state
+    }
+  };
+
+  const handleSaveDraft = async (params: SaveDraftParams) => {
+    try {
+      if (editingDraft) {
+        await updateDraft({ name: editingDraft.name, ...params });
+      } else {
+        await saveDraft(params);
+      }
+      setEditingDraft(null);
+      setActiveTab('saved');
+    } catch {
+      // Error handled by mutation state
+    }
+  };
+
+  const handleEditDraft = (draft: SimulationDraft) => {
+    setEditingDraft(draft);
+    setActiveTab('create');
+  };
+
+  const handleRunDraft = async (draft: SimulationDraft) => {
+    const params: CreateSimulationParams = {
+      airport: draft.airport,
+      arrivals: draft.arrivals,
+      departures: draft.departures,
+      duration_hours: draft.duration_hours,
+      time_step_seconds: draft.time_step_seconds,
+      skip_positions: draft.skip_positions,
+    };
+    if (draft.seed != null) params.seed = draft.seed;
+    if (draft.scenario_name) params.scenario_name = draft.scenario_name;
+    if (draft.custom_scenario) params.custom_scenario = draft.custom_scenario;
+
+    try {
+      await createJob(params);
+      setActiveTab('running');
+    } catch {
+      // Error handled by mutation state
+    }
+  };
+
+  const handleDeleteDraft = async (name: string) => {
+    try {
+      await deleteDraft(name);
+      if (editingDraft?.name === name) setEditingDraft(null);
     } catch {
       // Error handled by mutation state
     }
@@ -645,7 +1040,7 @@ export default function SimulationManager({
     <>
       <div className="fixed inset-0 bg-black/40 z-[2000]" onClick={onClose} />
       <div className="fixed inset-0 z-[2001] flex items-center justify-center p-8">
-        <div className="bg-white rounded-xl shadow-2xl w-[600px] max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="bg-white rounded-xl shadow-2xl w-[640px] max-h-[85vh] overflow-hidden flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
             <h2 className="text-lg font-bold text-slate-800">Simulation Manager</h2>
@@ -656,6 +1051,7 @@ export default function SimulationManager({
           <div className="flex gap-1 px-6 pt-3 border-b border-slate-200">
             {([
               { key: 'create' as Tab, label: 'Create' },
+              { key: 'saved' as Tab, label: `Saved${drafts.length > 0 ? ` (${drafts.length})` : ''}` },
               { key: 'load' as Tab, label: 'Load' },
               { key: 'running' as Tab, label: `Running${activeJobCount > 0 ? ` (${activeJobCount})` : ''}` },
             ]).map(tab => (
@@ -681,6 +1077,21 @@ export default function SimulationManager({
                 isLoadingScenarios={isLoadingScenarios}
                 onSubmit={handleCreate}
                 isCreating={isCreating}
+                onSaveDraft={handleSaveDraft}
+                isSaving={isSaving || isUpdating}
+                editingDraft={editingDraft}
+                onClearDraft={() => setEditingDraft(null)}
+              />
+            )}
+            {activeTab === 'saved' && (
+              <SavedTab
+                drafts={drafts}
+                isLoading={isLoadingDrafts}
+                onEdit={handleEditDraft}
+                onRun={handleRunDraft}
+                onDelete={handleDeleteDraft}
+                isRunning={isCreating}
+                isDeleting={isDeleting}
               />
             )}
             {activeTab === 'load' && (

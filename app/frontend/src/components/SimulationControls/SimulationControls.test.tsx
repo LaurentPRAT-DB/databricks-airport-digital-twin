@@ -71,6 +71,19 @@ vi.mock('../../hooks/useSimulationJobs', () => ({
   }),
 }));
 
+vi.mock('../../hooks/useSimulationDrafts', () => ({
+  useSimulationDrafts: () => ({
+    drafts: [],
+    isLoadingDrafts: false,
+    saveDraft: vi.fn().mockResolvedValue({}),
+    isSaving: false,
+    updateDraft: vi.fn().mockResolvedValue({}),
+    isUpdating: false,
+    deleteDraft: vi.fn().mockResolvedValue(undefined),
+    isDeleting: false,
+  }),
+}));
+
 // ── Default props ───────────────────────────────────────────────────
 
 function defaultProps() {
@@ -427,12 +440,13 @@ describe('SimulationControls', () => {
       expect(screen.queryByText('Simulation Manager')).not.toBeInTheDocument();
     });
 
-    it('shows Create, Load, Running tabs', () => {
+    it('shows Create, Saved, Load, Running tabs', () => {
       mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
       fireEvent.click(screen.getByTitle('Create, load, or monitor simulations'));
       expect(screen.getByText('Create')).toBeInTheDocument();
+      expect(screen.getByText('Saved')).toBeInTheDocument();
       expect(screen.getByText('Load')).toBeInTheDocument();
       expect(screen.getByText('Running')).toBeInTheDocument();
     });

@@ -341,7 +341,19 @@ async def get_simulation_job(request: Request, run_id: int):
 async def list_scenarios():
     """List available built-in scenario YAML files."""
     scenarios_dir = PROJECT_ROOT / "scenarios"
+    logger.info(
+        f"Scanning scenarios: PROJECT_ROOT={PROJECT_ROOT}, "
+        f"scenarios_dir={scenarios_dir}, exists={scenarios_dir.is_dir()}"
+    )
+
     if not scenarios_dir.is_dir():
+        alt = Path.cwd() / "scenarios"
+        logger.info(f"Trying fallback: {alt}, exists={alt.is_dir()}")
+        if alt.is_dir():
+            scenarios_dir = alt
+
+    if not scenarios_dir.is_dir():
+        logger.warning(f"Scenarios directory not found at {scenarios_dir}")
         return {"scenarios": []}
 
     results = []
@@ -356,4 +368,268 @@ async def list_scenarios():
         except Exception as e:
             logger.warning(f"Skipping scenario {f.name}: {e}")
 
+    logger.info(f"Found {len(results)} scenarios")
     return {"scenarios": results}
+
+
+def _resolve_scenarios_dir() -> Path | None:
+    """Find the scenarios directory, with fallback."""
+    d = PROJECT_ROOT / "scenarios"
+    if d.is_dir():
+        return d
+    alt = Path.cwd() / "scenarios"
+    if alt.is_dir():
+        return alt
+    return None
+
+
+@simulation_jobs_router.get("/scenarios/{filename}")
+async def get_scenario_detail(filename: str):
+    """Return full content of a built-in scenario YAML file."""
+    scenarios_dir = _resolve_scenarios_dir()
+    if not scenarios_dir:
+        raise HTTPException(status_code=404, detail="Scenarios directory not found")
+
+    path = scenarios_dir / filename
+    if not path.is_file() or not path.suffix == ".yaml":
+        raise HTTPException(status_code=404, detail=f"Scenario {filename} not found")
+
+    try:
+        data = yaml.safe_load(path.read_text())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse scenario: {e}")
+
+    return {
+        "filename": filename,
+        "name": data.get("name", path.stem),
+        "description": (data.get("description", "") or "").strip(),
+        "weather_events": data.get("weather_events", []),
+        "runway_events": data.get("runway_events", []),
+        "ground_events": data.get("ground_events", []),
+        "traffic_modifiers": data.get("traffic_modifiers", []),
+    }
+
+
+# ── Draft Management (Lakebase + Delta backup) ────────────────────────
+
+_DRAFTS_DIR = f"/Volumes/{_UC_CATALOG}/{_UC_SCHEMA}/{_UC_VOLUME}/drafts"
+
+
+class SimulationDraft(BaseModel):
+    name: str
+    display_name: str
+    airport: str
+    arrivals: int = 500
+    departures: int = 500
+    duration_hours: int = 24
+    time_step_seconds: float = 2.0
+    seed: Optional[int] = None
+    scenario_name: Optional[str] = None
+    custom_scenario: Optional[CustomScenario] = None
+    skip_positions: bool = False
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class SaveDraftRequest(BaseModel):
+    display_name: str
+    airport: str
+    arrivals: int = 500
+    departures: int = 500
+    duration_hours: int = 24
+    time_step_seconds: float = 2.0
+    seed: Optional[int] = None
+    scenario_name: Optional[str] = None
+    custom_scenario: Optional[CustomScenario] = None
+    skip_positions: bool = False
+
+
+def _slugify(name: str) -> str:
+    import re
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug[:80] or "draft"
+
+
+def _get_lakebase():
+    from app.backend.services.lakebase_service import get_lakebase_service
+    return get_lakebase_service()
+
+
+def _sync_draft_to_delta(draft_dict: dict, user_token: str | None, delete: bool = False):
+    """Background sync of draft to Delta table for backup."""
+    import json as _json
+
+    def _do_sync():
+        name = draft_dict.get("name", "")
+        if delete:
+            def _del(w):
+                w.statement_execution.execute_statement(
+                    warehouse_id=os.getenv("DATABRICKS_SQL_WAREHOUSE_ID", ""),
+                    statement=f"DELETE FROM {_UC_CATALOG}.{_UC_SCHEMA}.simulation_drafts WHERE name = '{name}'",
+                    wait_timeout="30s",
+                )
+            _sdk_call(_del, user_token, timeout=15)
+        else:
+            custom = draft_dict.get("custom_scenario")
+            custom_str = _json.dumps(custom) if custom else None
+
+            def _upsert(w):
+                cols = "name, display_name, airport, arrivals, departures, duration_hours, time_step_seconds, seed, scenario_name, custom_scenario, skip_positions, created_at, updated_at"
+                vals = ", ".join([
+                    f"'{draft_dict['name']}'",
+                    f"'{draft_dict['display_name']}'",
+                    f"'{draft_dict['airport']}'",
+                    str(draft_dict.get('arrivals', 500)),
+                    str(draft_dict.get('departures', 500)),
+                    str(draft_dict.get('duration_hours', 24)),
+                    str(draft_dict.get('time_step_seconds', 2.0)),
+                    str(draft_dict.get('seed') or 'NULL'),
+                    f"'{draft_dict.get('scenario_name') or ''}'",
+                    f"'{(custom_str or '').replace(chr(39), chr(39)+chr(39))}'" if custom_str else "NULL",
+                    str(draft_dict.get('skip_positions', False)).lower(),
+                    f"'{draft_dict.get('created_at', '')}'",
+                    f"'{draft_dict.get('updated_at', '')}'",
+                ])
+                sql = f"""
+                    MERGE INTO {_UC_CATALOG}.{_UC_SCHEMA}.simulation_drafts AS t
+                    USING (SELECT {vals}) AS s({cols})
+                    ON t.name = s.name
+                    WHEN MATCHED THEN UPDATE SET *
+                    WHEN NOT MATCHED THEN INSERT *
+                """
+                w.statement_execution.execute_statement(
+                    warehouse_id=os.getenv("DATABRICKS_SQL_WAREHOUSE_ID", ""),
+                    statement=sql,
+                    wait_timeout="30s",
+                )
+            _sdk_call(_upsert, user_token, timeout=15)
+
+    threading.Thread(target=_do_sync, daemon=True).start()
+
+
+def _migrate_volume_drafts_to_lakebase(user_token: str | None):
+    """One-time migration: read YAML drafts from UC Volume into Lakebase."""
+    lakebase = _get_lakebase()
+
+    def _list_volume(w):
+        try:
+            entries = list(w.files.list_directory_contents(_DRAFTS_DIR))
+        except Exception:
+            return []
+        drafts = []
+        for entry in entries:
+            if not entry.path.endswith(".yaml"):
+                continue
+            try:
+                resp = w.files.download(entry.path)
+                content = resp.contents.read().decode("utf-8")
+                data = yaml.safe_load(content)
+                drafts.append(data)
+            except Exception as e:
+                logger.warning("Skipping volume draft %s: %s", entry.path, e)
+        return drafts
+
+    volume_drafts = _sdk_call(_list_volume, user_token, timeout=20)
+    if not volume_drafts:
+        return 0
+
+    migrated = 0
+    for d in volume_drafts:
+        if lakebase.upsert_simulation_draft(d):
+            migrated += 1
+    logger.info("Migrated %d drafts from UC Volume to Lakebase", migrated)
+    return migrated
+
+
+@simulation_jobs_router.get("/drafts")
+async def list_drafts(request: Request):
+    """List all saved simulation drafts from Lakebase."""
+    lakebase = _get_lakebase()
+    drafts = lakebase.list_simulation_drafts()
+
+    if not drafts:
+        user_token = _extract_user_token(request)
+        migrated = _migrate_volume_drafts_to_lakebase(user_token)
+        if migrated > 0:
+            drafts = lakebase.list_simulation_drafts()
+
+    return {"drafts": drafts}
+
+
+@simulation_jobs_router.post("/drafts")
+async def save_draft(request: Request, body: SaveDraftRequest):
+    """Save a new simulation draft to Lakebase (+ async Delta backup)."""
+    from datetime import datetime, timezone
+
+    name = _slugify(body.display_name)
+    now = datetime.now(timezone.utc).isoformat()
+
+    draft = SimulationDraft(
+        name=name,
+        display_name=body.display_name,
+        airport=body.airport,
+        arrivals=body.arrivals,
+        departures=body.departures,
+        duration_hours=body.duration_hours,
+        time_step_seconds=body.time_step_seconds,
+        seed=body.seed,
+        scenario_name=body.scenario_name,
+        custom_scenario=body.custom_scenario,
+        skip_positions=body.skip_positions,
+        created_at=now,
+        updated_at=now,
+    )
+    draft_dict = draft.model_dump(mode="json")
+
+    lakebase = _get_lakebase()
+    if not lakebase.upsert_simulation_draft(draft_dict):
+        raise HTTPException(status_code=500, detail="Failed to save draft")
+
+    _sync_draft_to_delta(draft_dict, _extract_user_token(request))
+    return draft_dict
+
+
+@simulation_jobs_router.put("/drafts/{name}")
+async def update_draft(request: Request, name: str, body: SaveDraftRequest):
+    """Update an existing simulation draft in Lakebase (+ async Delta backup)."""
+    from datetime import datetime, timezone
+
+    lakebase = _get_lakebase()
+    now = datetime.now(timezone.utc).isoformat()
+
+    existing = lakebase.get_simulation_draft(name)
+    created_at = existing["created_at"] if existing else now
+
+    draft = SimulationDraft(
+        name=name,
+        display_name=body.display_name,
+        airport=body.airport,
+        arrivals=body.arrivals,
+        departures=body.departures,
+        duration_hours=body.duration_hours,
+        time_step_seconds=body.time_step_seconds,
+        seed=body.seed,
+        scenario_name=body.scenario_name,
+        custom_scenario=body.custom_scenario,
+        skip_positions=body.skip_positions,
+        created_at=created_at,
+        updated_at=now,
+    )
+    draft_dict = draft.model_dump(mode="json")
+
+    if not lakebase.upsert_simulation_draft(draft_dict):
+        raise HTTPException(status_code=500, detail="Failed to update draft")
+
+    _sync_draft_to_delta(draft_dict, _extract_user_token(request))
+    return draft_dict
+
+
+@simulation_jobs_router.delete("/drafts/{name}")
+async def delete_draft(request: Request, name: str):
+    """Delete a simulation draft from Lakebase (+ async Delta cleanup)."""
+    lakebase = _get_lakebase()
+    if not lakebase.delete_simulation_draft(name):
+        raise HTTPException(status_code=500, detail="Failed to delete draft")
+
+    _sync_draft_to_delta({"name": name}, _extract_user_token(request), delete=True)
+    return {"deleted": name}

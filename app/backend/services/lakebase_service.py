@@ -2150,6 +2150,149 @@ class LakebaseService:
             return []
 
 
+    # ── Simulation Drafts ──────────────────────────────────────────────
+
+    def _ensure_simulation_drafts_table(self) -> bool:
+        if not self.is_available:
+            return False
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS simulation_drafts (
+                            name VARCHAR(100) PRIMARY KEY,
+                            display_name VARCHAR(200) NOT NULL,
+                            airport VARCHAR(10) NOT NULL,
+                            arrivals INT DEFAULT 500,
+                            departures INT DEFAULT 500,
+                            duration_hours INT DEFAULT 24,
+                            time_step_seconds FLOAT DEFAULT 2.0,
+                            seed INT,
+                            scenario_name VARCHAR(200),
+                            custom_scenario JSONB,
+                            skip_positions BOOLEAN DEFAULT FALSE,
+                            created_at TIMESTAMPTZ DEFAULT NOW(),
+                            updated_at TIMESTAMPTZ DEFAULT NOW()
+                        )
+                    """)
+                    conn.commit()
+                    return True
+        except Exception as e:
+            logger.warning("Failed to create simulation_drafts table: %s", e)
+            self._invalidate_credentials_if_auth_error(e)
+            return False
+
+    def list_simulation_drafts(self) -> list[dict]:
+        if not self.is_available:
+            return []
+        self._ensure_simulation_drafts_table()
+        try:
+            with self._get_read_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT * FROM simulation_drafts ORDER BY updated_at DESC"
+                    )
+                    rows = cur.fetchall()
+                    result = []
+                    for row in rows:
+                        d = dict(row)
+                        if d.get("created_at"):
+                            d["created_at"] = d["created_at"].isoformat()
+                        if d.get("updated_at"):
+                            d["updated_at"] = d["updated_at"].isoformat()
+                        result.append(d)
+                    return result
+        except Exception as e:
+            logger.warning("Failed to list simulation drafts: %s", e)
+            self._invalidate_credentials_if_auth_error(e)
+            return []
+
+    def get_simulation_draft(self, name: str) -> dict | None:
+        if not self.is_available:
+            return None
+        self._ensure_simulation_drafts_table()
+        try:
+            with self._get_read_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT * FROM simulation_drafts WHERE name = %s", (name,)
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        return None
+                    d = dict(row)
+                    if d.get("created_at"):
+                        d["created_at"] = d["created_at"].isoformat()
+                    if d.get("updated_at"):
+                        d["updated_at"] = d["updated_at"].isoformat()
+                    return d
+        except Exception as e:
+            logger.warning("Failed to get simulation draft %s: %s", name, e)
+            self._invalidate_credentials_if_auth_error(e)
+            return None
+
+    def upsert_simulation_draft(self, draft: dict) -> bool:
+        if not self.is_available:
+            return False
+        self._ensure_simulation_drafts_table()
+        try:
+            import json as _json
+            custom = draft.get("custom_scenario")
+            custom_json = _json.dumps(custom) if custom else None
+
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO simulation_drafts
+                            (name, display_name, airport, arrivals, departures,
+                             duration_hours, time_step_seconds, seed, scenario_name,
+                             custom_scenario, skip_positions, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (name) DO UPDATE SET
+                            display_name = EXCLUDED.display_name,
+                            airport = EXCLUDED.airport,
+                            arrivals = EXCLUDED.arrivals,
+                            departures = EXCLUDED.departures,
+                            duration_hours = EXCLUDED.duration_hours,
+                            time_step_seconds = EXCLUDED.time_step_seconds,
+                            seed = EXCLUDED.seed,
+                            scenario_name = EXCLUDED.scenario_name,
+                            custom_scenario = EXCLUDED.custom_scenario,
+                            skip_positions = EXCLUDED.skip_positions,
+                            updated_at = EXCLUDED.updated_at
+                    """, (
+                        draft["name"], draft["display_name"], draft["airport"],
+                        draft.get("arrivals", 500), draft.get("departures", 500),
+                        draft.get("duration_hours", 24), draft.get("time_step_seconds", 2.0),
+                        draft.get("seed"), draft.get("scenario_name"),
+                        custom_json, draft.get("skip_positions", False),
+                        draft.get("created_at"), draft.get("updated_at"),
+                    ))
+                    conn.commit()
+                    return True
+        except Exception as e:
+            logger.warning("Failed to upsert simulation draft %s: %s", draft.get("name"), e)
+            self._invalidate_credentials_if_auth_error(e)
+            return False
+
+    def delete_simulation_draft(self, name: str) -> bool:
+        if not self.is_available:
+            return False
+        self._ensure_simulation_drafts_table()
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM simulation_drafts WHERE name = %s", (name,)
+                    )
+                    conn.commit()
+                    return True
+        except Exception as e:
+            logger.warning("Failed to delete simulation draft %s: %s", name, e)
+            self._invalidate_credentials_if_auth_error(e)
+            return False
+
+
 # Singleton instance
 _lakebase_service: Optional[LakebaseService] = None
 
