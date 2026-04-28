@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Demo as 24h Simulation Replay
 
 ## Context

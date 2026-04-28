@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Plan: Improve SFO Fallback Taxi Waypoints
 
 **Status:** Backlog

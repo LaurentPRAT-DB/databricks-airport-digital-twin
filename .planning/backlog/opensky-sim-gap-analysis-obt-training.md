@@ -1,3 +1,9 @@
+---
+status: backlog
+area: data
+related: []
+---
+
 # Simulation Data vs OpenSky Recorded Data — Gap Analysis for OBT Training
 
 **Status:** Backlog

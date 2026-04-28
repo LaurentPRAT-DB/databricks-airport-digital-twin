@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Airport Digital Twin — Event Catalog
 
 Complete list of every event recorded during simulation. Use this to understand

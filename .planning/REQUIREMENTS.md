@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Requirements: Airport Digital Twin
 
 **Defined:** 2026-03-05

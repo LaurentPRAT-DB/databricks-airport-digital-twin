@@ -1,3 +1,9 @@
+---
+status: backlog
+area: pipeline
+related: []
+---
+
 # Sync Lakebase Data to Lakehouse (Delta) + Fix DLT Pipeline
 
 ## Context

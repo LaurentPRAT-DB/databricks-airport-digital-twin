@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Plan: Remove Hardcoded SFO Coordinates, Use Dynamic Airport Center Everywhere
 
 **Status:** Fix

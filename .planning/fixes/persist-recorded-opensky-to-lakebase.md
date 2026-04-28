@@ -1,3 +1,9 @@
+---
+status: done
+area: data
+related: []
+---
+
 # Plan: Persist Recorded OpenSky Data to Lakebase for ML Training
 
 **Status:** Fix

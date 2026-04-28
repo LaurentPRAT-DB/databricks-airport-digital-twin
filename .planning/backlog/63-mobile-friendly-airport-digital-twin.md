@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # Mobile-Friendly Airport Digital Twin
 
 ## Context

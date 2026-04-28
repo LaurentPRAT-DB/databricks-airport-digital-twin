@@ -1,3 +1,9 @@
+---
+status: done
+area: deployment
+related: []
+---
+
 # Summary: 05-02 Platform Integration
 
 ## Completed: 2026-03-06

@@ -1,3 +1,12 @@
+---
+status: done
+area: simulation
+related:
+  - fix-go-around-display-clustered-markers-grouped-table.md
+  - fix-go-around-trajectory-heading-overflow.md
+  - fix-unrealistic-go-around-trajectory-lines.md
+---
+
 # Plan: Fix go-around trajectory display for post-go-around flights
 
 ## Context

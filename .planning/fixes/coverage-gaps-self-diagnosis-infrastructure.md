@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Plan: Coverage Gaps Analysis + Claude Code Self-Diagnosis Infrastructure
 
 ## Context

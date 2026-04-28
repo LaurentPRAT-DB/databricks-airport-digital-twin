@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Strategic Gap 6: BHS Physics Module
 
 **Validation tests blocked:** B02 (BHS Throughput Under Load), B03 (Transfer Baggage Connection)

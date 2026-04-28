@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Plan: Performance Optimization (Priority 1 + 2)
 
 **Phase:** 17 — Post-v1

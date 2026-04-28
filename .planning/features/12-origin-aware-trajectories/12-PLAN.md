@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Plan: Origin-Aware Trajectory Generation
 
 **Phase:** 12 — Post-v1

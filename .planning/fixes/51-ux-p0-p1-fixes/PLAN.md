@@ -1,3 +1,9 @@
+---
+status: done
+area: ux
+related: []
+---
+
 # P0+P1 UX Fixes — Implementation Plan
 
 ## Context

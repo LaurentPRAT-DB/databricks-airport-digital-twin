@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Trajectory Coherence Unit Tests
 
 ## Context

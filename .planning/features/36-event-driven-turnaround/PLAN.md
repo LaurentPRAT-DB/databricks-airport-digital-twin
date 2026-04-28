@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Plan: Event-Driven Turnaround Simulation
 
 ## Context

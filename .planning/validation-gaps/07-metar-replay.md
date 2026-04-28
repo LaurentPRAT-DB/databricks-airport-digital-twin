@@ -1,3 +1,9 @@
+---
+status: backlog
+area: data
+related: []
+---
+
 # Strategic Gap 7: METAR Historical Replay
 
 **Validation tests blocked:** D01 (Weather Event Replay)

@@ -1,3 +1,9 @@
+---
+status: done
+area: ml
+related: []
+---
+
 # Paper Analysis: ML for Predicting Off-Block Delays at CDG
 
 **Source:** Falque, Mazure, Tabia — *Data & Knowledge Engineering* 152 (2024) 102303

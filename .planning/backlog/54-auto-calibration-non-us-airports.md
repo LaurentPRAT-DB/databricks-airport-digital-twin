@@ -1,3 +1,9 @@
+---
+status: backlog
+area: data
+related: []
+---
+
 # Plan: Auto-Calibration for Non-US Airports
 
 ## Context

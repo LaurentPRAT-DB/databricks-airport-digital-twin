@@ -1,3 +1,9 @@
+---
+status: active
+area: data
+related: []
+---
+
 # Calibration System — Status, Quality & Roadmap
 
 **Date:** 2026-03-15

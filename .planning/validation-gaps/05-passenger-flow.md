@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Strategic Gap 5: Passenger Flow Module
 
 **Validation tests blocked:** F01 (Checkpoint Throughput), F02 (Terminal Dwell Time), F03 (Congestion Hotspots), F04 (Retail Diversion), D02 (Mass Re-accommodation), D03 (Evacuation), R03 (Check-in Desk)

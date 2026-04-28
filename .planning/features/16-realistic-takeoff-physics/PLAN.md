@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Plan: Realistic Takeoff Physics, Regulations & Safety
 
 **Phase:** 16 — Post-v1

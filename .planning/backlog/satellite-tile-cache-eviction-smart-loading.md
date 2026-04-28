@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # Satellite Tile Cache Eviction — Smart Cache-First Loading + Staleness Notification
 
 ## Context

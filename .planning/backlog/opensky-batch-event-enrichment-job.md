@@ -1,3 +1,9 @@
+---
+status: backlog
+area: pipeline
+related: []
+---
+
 # Plan: Batch OpenSky Event Enrichment Job
 
 **Status:** Backlog

@@ -1,3 +1,9 @@
+---
+status: done
+area: ml
+related: []
+---
+
 # Plan: OBT Model — 8 Improvements (P1 to P4)
 
 ## Context

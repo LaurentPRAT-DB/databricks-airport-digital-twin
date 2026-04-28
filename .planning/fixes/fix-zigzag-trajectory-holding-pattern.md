@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Fix Zigzag Trajectory in Holding Pattern
 
 ## Context

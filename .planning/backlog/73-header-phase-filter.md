@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # Header Redesign: Compact Legend with Phase Filtering
 
 **Status:** NOT YET IMPLEMENTED (backlog)

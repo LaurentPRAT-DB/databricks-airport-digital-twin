@@ -1,3 +1,9 @@
+---
+status: backlog
+area: data
+related: []
+---
+
 # Problem: Long Simulation Persistence + Navigation
 
 ## Current State of Simulation Persistence

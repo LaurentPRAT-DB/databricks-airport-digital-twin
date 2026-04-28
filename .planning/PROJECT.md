@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Airport Digital Twin
 
 ## What This Is

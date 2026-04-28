@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Realistic Flight Trajectories with OpenAP
 
 ## Context

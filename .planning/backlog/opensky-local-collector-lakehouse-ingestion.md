@@ -1,3 +1,9 @@
+---
+status: backlog
+area: pipeline
+related: []
+---
+
 # Plan: OpenSky Local Collector + Lakehouse Ingestion Pipeline
 
 **Status:** Backlog

@@ -1,3 +1,9 @@
+---
+status: backlog
+area: ml
+related: []
+---
+
 # Supervisor Agent: MCP + Genie Combined
 
 **Created:** 2026-03-30

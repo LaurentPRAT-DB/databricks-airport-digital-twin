@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # Fix 4 P1 UX Issues — Implementation Plan
 
 ## Context

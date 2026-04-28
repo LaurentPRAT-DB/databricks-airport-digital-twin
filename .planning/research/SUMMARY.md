@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Project Research Summary
 
 **Project:** Airport Digital Twin

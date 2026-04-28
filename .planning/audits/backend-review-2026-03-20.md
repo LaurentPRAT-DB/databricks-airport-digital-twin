@@ -1,3 +1,9 @@
+---
+status: archived
+area: infrastructure
+related: []
+---
+
 # Backend Engineering Review — Airport Digital Twin
 **Date:** 2026-03-20
 **Author:** Claude (Backend Engineer review)

@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Plan: Aviation Procedure Rule Validation Tests
 
 ## Context

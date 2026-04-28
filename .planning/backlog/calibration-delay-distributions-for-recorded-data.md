@@ -1,3 +1,9 @@
+---
+status: backlog
+area: data
+related: []
+---
+
 # Plan: Use Calibration Delay Distributions for Recorded OpenSky Data
 
 **Status:** Backlog

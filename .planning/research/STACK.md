@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Technology Stack
 
 **Project:** Airport Digital Twin

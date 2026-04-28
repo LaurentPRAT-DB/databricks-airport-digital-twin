@@ -1,3 +1,9 @@
+---
+status: backlog
+area: ml
+related: []
+---
+
 # Fine-Tuning YOLO for Satellite Aircraft Detection on Databricks
 
 ## Current State

@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Fix: Trajectory Not Visible + Heading >360
 
 ## Context

@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Genie Chat — Response Hardening & UI Improvements
 
 ## Context

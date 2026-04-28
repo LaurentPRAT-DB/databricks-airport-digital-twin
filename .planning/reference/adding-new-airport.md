@@ -1,3 +1,9 @@
+---
+status: active
+area: data
+related: []
+---
+
 # Adding a New Airport — Configuration Checklist
 
 When adding a new airport to the digital twin, several files need to be updated to ensure the airport gets the same level of configuration and synthetic data quality as existing airports. The system has two tiers of airport support:

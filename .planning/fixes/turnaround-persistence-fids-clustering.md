@@ -1,3 +1,9 @@
+---
+status: done
+area: data
+related: []
+---
+
 # Fix: Turnaround Event Persistence + FIDS Time Clustering
 
 ## Context

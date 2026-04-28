@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Roadmap: Airport Digital Twin
 
 ## Overview

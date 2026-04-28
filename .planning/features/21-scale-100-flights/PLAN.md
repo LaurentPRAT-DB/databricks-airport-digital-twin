@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Phase 21: Scale to 100 Flights
 
 ## Goal

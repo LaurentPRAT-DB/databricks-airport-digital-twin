@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # Configurable Gate Time Multiplier — UI + API
 
 ## Context

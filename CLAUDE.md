@@ -126,3 +126,46 @@ data/              # Local calibration profiles (dev fallback; production uses U
 scripts/           # CLI tools (build profiles, batch sims)
 configs/           # Simulation scenario configs
 ```
+
+## Project Knowledge
+
+Before implementing a fix or feature, search `.planning/` for existing analysis — most problems have prior context documented.
+
+```bash
+grep -rl "<keyword>" .planning/
+```
+
+All planning files have YAML frontmatter with `status`, `area`, and `related` fields for targeted lookups:
+
+```bash
+grep -rl "area: simulation" .planning/    # all simulation-related docs
+grep -rl "area: ml" .planning/            # all ML-related docs
+grep -rl "status: active" .planning/      # currently in-progress work
+```
+
+### Planning directories
+
+| Directory | Files | Contents |
+|-----------|-------|---------|
+| `.planning/research/` | 6 | Architecture decisions, tech stack rationale, domain pitfalls |
+| `.planning/milestones/` | 29 | Original 5-phase build plans with validation reports |
+| `.planning/features/` | 30 | Feature implementation plans (numbered 06-37) |
+| `.planning/fixes/` | 27 | Bug investigations with root cause analysis |
+| `.planning/backlog/` | 59 | Proposed but not yet planned features |
+| `.planning/test/` | 8 | Test plans and validation strategies |
+| `.planning/audits/` | 30 | Code review and UX audit reports |
+| `.planning/reference/` | 4 | ML model registry, calibration status, airport onboarding |
+| `.planning/validation-gaps/` | 3 | Known gaps in validation coverage |
+
+### Technical documentation
+
+| File | When to consult |
+|------|----------------|
+| `docs/SPECIFICATION.md` | Full as-built technical spec (20 sections) |
+| `docs/DATA_DICTIONARY.md` | Table schemas, field definitions |
+| `docs/ML_MODELS.md` | ML model documentation |
+| `docs/PIPELINE.md` | End-to-end data pipeline |
+| `docs/SECURITY_AUDIT.md` | Known vulnerabilities (3 high, 4 medium) |
+| `docs/USER_GUIDE.md` | End-user feature guide |
+| `docs/SYNTHETIC_DATA_GENERATION.md` | How synthetic flight data is generated |
+| `docs/OBT_PIPELINE.md` | Off-Block Time model training pipeline |

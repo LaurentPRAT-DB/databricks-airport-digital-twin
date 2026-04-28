@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Plan: Calibrate Taxi Speed to Real-World Aviation Standards
 
 **Phase:** 10 — Post-v1

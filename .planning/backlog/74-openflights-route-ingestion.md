@@ -1,3 +1,9 @@
+---
+status: backlog
+area: pipeline
+related: []
+---
+
 # OpenFlights Route Data Ingestion for Accurate FIDS
 
 ## Context

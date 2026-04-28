@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Phase 2: Backend API + 2D Visualization - Research
 
 **Researched:** 2026-03-05

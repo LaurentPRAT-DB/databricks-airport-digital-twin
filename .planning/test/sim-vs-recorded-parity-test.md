@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Simulation vs Recorded Data Parity Test
 
 ## Context

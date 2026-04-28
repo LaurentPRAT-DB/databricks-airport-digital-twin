@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Genie Chat — Test Report
 
 **Date:** 2026-03-24

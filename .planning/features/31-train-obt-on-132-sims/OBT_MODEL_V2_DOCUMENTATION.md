@@ -1,3 +1,9 @@
+---
+status: done
+area: ml
+related: []
+---
+
 # OBT Forecasting Model v2 — Complete Technical Documentation
 
 **Repository:** [github.com/LaurentPRAT-DB/databricks-airport-digital-twin](https://github.com/LaurentPRAT-DB/databricks-airport-digital-twin)

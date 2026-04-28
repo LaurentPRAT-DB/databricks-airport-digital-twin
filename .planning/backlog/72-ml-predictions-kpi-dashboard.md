@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # Add ML Predictions KPI Dashboard
 
 ## Context

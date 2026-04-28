@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Plan: Test Single-Flight Tracking Features
 
 **Status:** Backlog

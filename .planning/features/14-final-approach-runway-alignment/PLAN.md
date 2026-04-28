@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Plan: Realistic Final Approach with Runway Alignment
 
 **Phase:** 14 — Post-v1

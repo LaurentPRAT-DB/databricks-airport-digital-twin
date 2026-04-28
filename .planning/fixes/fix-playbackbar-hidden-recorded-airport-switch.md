@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Fix: PlaybackBar hidden when loading recorded data for a different airport
 
 ## Context

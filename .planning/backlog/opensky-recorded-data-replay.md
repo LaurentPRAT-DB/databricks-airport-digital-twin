@@ -1,3 +1,9 @@
+---
+status: backlog
+area: pipeline
+related: []
+---
+
 # Plan: OpenSky Recorded Data Replay — Backend API + Frontend UI
 
 **Status:** Backlog

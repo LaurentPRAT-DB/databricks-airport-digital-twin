@@ -1,3 +1,12 @@
+---
+status: done
+area: frontend
+related:
+  - fix-go-around-trajectory-heading-overflow.md
+  - fix-go-around-trajectory-post-go-around-approaching.md
+  - fix-unrealistic-go-around-trajectory-lines.md
+---
+
 # Fix Go-Around Display: Clustered Markers + Grouped Report Table
 
 ## Context

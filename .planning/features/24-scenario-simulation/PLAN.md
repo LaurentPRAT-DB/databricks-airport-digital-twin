@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Phase 24: Scenario-Based Airport Simulation
 
 ## Goal

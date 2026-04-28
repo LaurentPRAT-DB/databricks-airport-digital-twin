@@ -1,3 +1,9 @@
+---
+status: backlog
+area: ml
+related: []
+---
+
 # Plan: Add MCP Server to Airport Digital Twin
 
 ## Context

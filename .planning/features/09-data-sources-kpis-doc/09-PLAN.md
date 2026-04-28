@@ -1,3 +1,9 @@
+---
+status: done
+area: data
+related: []
+---
+
 # Plan: Airport Open Data Sources & KPI Reference Document
 
 **Phase:** 09 — Post-v1

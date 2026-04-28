@@ -1,3 +1,12 @@
+---
+status: done
+area: simulation
+related:
+  - fix-go-around-display-clustered-markers-grouped-table.md
+  - fix-go-around-trajectory-post-go-around-approaching.md
+  - fix-unrealistic-go-around-trajectory-lines.md
+---
+
 # Fix Go-Around Trajectory + Heading >360° Bug
 
 ## Context

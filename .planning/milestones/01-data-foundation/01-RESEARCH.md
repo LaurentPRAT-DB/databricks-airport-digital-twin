@@ -1,3 +1,9 @@
+---
+status: done
+area: data
+related: []
+---
+
 # Phase 1: Data Foundation - Research
 
 **Researched:** 2026-03-05

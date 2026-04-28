@@ -1,3 +1,9 @@
+---
+status: backlog
+area: pipeline
+related: []
+---
+
 # Fix Codebase Structural Gaps + Regression Tests
 
 ## Context

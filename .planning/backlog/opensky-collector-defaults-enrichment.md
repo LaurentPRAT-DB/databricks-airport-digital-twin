@@ -1,3 +1,9 @@
+---
+status: backlog
+area: pipeline
+related: []
+---
+
 # Plan: Improve OpenSky Collector Defaults and Enrichment Strategies
 
 **Status:** Backlog

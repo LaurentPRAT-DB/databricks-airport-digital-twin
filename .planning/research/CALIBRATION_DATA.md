@@ -1,3 +1,9 @@
+---
+status: done
+area: data
+related: []
+---
+
 # Calibration Data Acquisition for Non-US Airports
 
 ## Problem Statement

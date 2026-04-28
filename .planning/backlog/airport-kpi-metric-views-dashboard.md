@@ -1,3 +1,9 @@
+---
+status: backlog
+area: data
+related: []
+---
+
 # Plan: Airport KPI Metric Views + Lakeview Dashboard
 
 ## Context

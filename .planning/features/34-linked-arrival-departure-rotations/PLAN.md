@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Plan: Linked Arrival-Departure Rotations in Schedule Generation
 
 ## Context

@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Phase 22: Scale to 500 Flights
 
 ## Goal

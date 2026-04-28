@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Phase 23: Simulation Mode — Deterministic Accelerated Simulation Engine
 
 ## Goal

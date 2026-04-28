@@ -1,3 +1,9 @@
+---
+status: done
+area: ml
+related: []
+---
+
 # Fix: CatBoost Model Registration to Unity Catalog
 
 **Status:** Fix

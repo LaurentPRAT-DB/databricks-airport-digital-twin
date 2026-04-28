@@ -1,3 +1,9 @@
+---
+status: backlog
+area: ml
+related: []
+---
+
 # Plan: Aircraft Removal from Satellite Imagery via Inpainting
 
 ## Context

@@ -1,3 +1,9 @@
+---
+status: backlog
+area: data
+related: []
+---
+
 # Plan: OBT Model Evaluation Notebook (Databricks-native)
 
 **Status:** Backlog

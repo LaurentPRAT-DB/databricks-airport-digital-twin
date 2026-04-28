@@ -1,3 +1,9 @@
+---
+status: backlog
+area: infrastructure
+related: []
+---
+
 # Infrastructure Inventory & Scaling Estimate
 
 ## 1. Airplane 3D Model Files

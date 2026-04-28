@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Phase 27: Simulation Video Renderer — Server-side Headless Capture
 
 ## Goal

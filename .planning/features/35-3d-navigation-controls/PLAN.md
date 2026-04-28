@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Plan: 3D Navigation Controls
 
 ## Context

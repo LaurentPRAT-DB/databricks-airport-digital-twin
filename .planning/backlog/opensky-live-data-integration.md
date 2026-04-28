@@ -1,3 +1,9 @@
+---
+status: backlog
+area: pipeline
+related: []
+---
+
 # Plan: OpenSky Live Data Integration
 
 **Status:** Backlog

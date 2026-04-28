@@ -1,3 +1,9 @@
+---
+status: active
+area: ml
+related: []
+---
+
 # ML Models in Airport Digital Twin
 
 ## Model Registry (src/ml/registry.py)

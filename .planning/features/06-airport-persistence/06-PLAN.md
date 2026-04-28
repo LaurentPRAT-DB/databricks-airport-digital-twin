@@ -1,3 +1,9 @@
+---
+status: done
+area: data
+related: []
+---
+
 # Phase 6: Airport Configuration Persistence
 
 ## Goal

@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Phase 13: Airport Pre-load, Cache Status & Region Grouping — Test Report
 
 **Date:** 2026-03-11

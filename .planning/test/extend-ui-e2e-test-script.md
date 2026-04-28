@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Plan: Extend UI E2E Test Script
 
 ## Context

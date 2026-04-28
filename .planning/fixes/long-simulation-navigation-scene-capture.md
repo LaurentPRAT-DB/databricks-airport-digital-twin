@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Plan: Long Simulation Navigation + Scene Capture
 
 ## Context

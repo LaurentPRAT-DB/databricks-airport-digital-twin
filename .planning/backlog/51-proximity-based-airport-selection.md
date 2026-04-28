@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Fix: Proximity-based fallback for origin/destination airport selection
 
 ## Context

@@ -1,3 +1,9 @@
+---
+status: done
+area: ml
+related: []
+---
+
 # Fix: Replace COCO YOLO with DOTA-trained OBB model for satellite aircraft detection
 
 ## Context

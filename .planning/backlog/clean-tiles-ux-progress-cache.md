@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # Plan: Improve Clean Tiles UX: Background Processing + Cache Status
 
 **Status:** Backlog

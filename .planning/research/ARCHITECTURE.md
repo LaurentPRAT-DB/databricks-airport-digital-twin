@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Architecture Patterns
 
 **Domain:** Airport Digital Twin Demo

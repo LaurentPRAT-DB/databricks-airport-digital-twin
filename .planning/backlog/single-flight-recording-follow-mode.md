@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # Plan: Single-Flight Recording & Follow Mode
 
 **Status:** Done (verified 2026-04-06 — all 4 features already implemented)

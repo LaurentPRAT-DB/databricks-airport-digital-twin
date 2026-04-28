@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Domain Pitfalls: Airport Digital Twin Demo
 
 **Domain:** Airport Digital Twin / Databricks Demo Application

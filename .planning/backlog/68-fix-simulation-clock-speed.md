@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Fix Simulation Clock Speed
 
 ## Context

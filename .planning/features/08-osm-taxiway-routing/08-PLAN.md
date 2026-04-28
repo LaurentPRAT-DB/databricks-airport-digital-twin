@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Plan: OSM Taxiway Routing for Realistic Ground Movement
 
 **Phase:** 08 — Post-v1

@@ -1,3 +1,9 @@
+---
+status: done
+area: ml
+related: []
+---
+
 # Phase 28: Calibrate, Not Fabricate — Real-Data-Driven Synthetic Flight Generation
 
 ## Goal

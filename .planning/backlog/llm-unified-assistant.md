@@ -1,3 +1,9 @@
+---
+status: backlog
+area: ml
+related: []
+---
+
 # Plan: LLM-Powered Unified Assistant (Genie + MCP Tools)
 
 ## Context

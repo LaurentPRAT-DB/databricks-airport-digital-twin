@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Airport Digital Twin — Tester's Event Guide
 
 What you can see, where you see it, and what to verify.

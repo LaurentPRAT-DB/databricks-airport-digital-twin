@@ -1,3 +1,9 @@
+---
+status: backlog
+area: data
+related: []
+---
+
 # Plan: Airport KPIs + Databricks Metric Views
 
 ## Available Data for KPIs

@@ -1,3 +1,9 @@
+---
+status: done
+area: deployment
+related: []
+---
+
 # Fix: Async airport activation to survive proxy timeout
 
 ## Context

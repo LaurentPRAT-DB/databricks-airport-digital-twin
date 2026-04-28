@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # UI Exerciser Script — Playwright E2E against deployed Databricks App
 
 ## Context

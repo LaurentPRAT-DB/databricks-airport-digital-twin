@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Plan: Per-User Airport Usage Tracking & Lakebase Pre-warming
 
 ## Context

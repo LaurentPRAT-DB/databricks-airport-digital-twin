@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Feature Landscape
 
 **Domain:** Airport Digital Twin Demo Application

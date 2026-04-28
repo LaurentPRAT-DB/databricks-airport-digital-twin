@@ -1,3 +1,9 @@
+---
+status: backlog
+area: data
+related: []
+---
+
 # Plan: Lakebase Read Replica Auto-Discovery
 
 **Status:** Backlog

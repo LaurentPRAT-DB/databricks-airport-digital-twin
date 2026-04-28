@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Unify Demo and Simulation: Single Synthetic Data Path
 
 ## Context

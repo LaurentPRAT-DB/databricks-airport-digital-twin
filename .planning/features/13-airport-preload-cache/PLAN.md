@@ -1,3 +1,9 @@
+---
+status: done
+area: infrastructure
+related: []
+---
+
 # Phase 13: Airport Pre-load, New Airports, and Cache Status
 
 ## Context

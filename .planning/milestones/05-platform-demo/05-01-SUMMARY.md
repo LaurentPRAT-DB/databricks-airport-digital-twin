@@ -1,3 +1,9 @@
+---
+status: done
+area: deployment
+related: []
+---
+
 # Summary: 05-01 Demo Reliability & Health Check
 
 ## Completed: 2026-03-06

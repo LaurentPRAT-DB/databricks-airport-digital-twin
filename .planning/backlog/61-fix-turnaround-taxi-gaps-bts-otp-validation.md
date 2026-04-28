@@ -1,3 +1,9 @@
+---
+status: backlog
+area: data
+related: []
+---
+
 # Fix Turnaround & Taxi Time Gaps + Add BTS OTP Validation Pipeline
 
 ## Context

@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Plan: Simulation Skill + Video Capture + Diagnostic Logging + Domain Expert Tests
 
 ## Context

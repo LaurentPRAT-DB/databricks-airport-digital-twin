@@ -1,3 +1,9 @@
+---
+status: done
+area: data
+related: []
+---
+
 # Fix: Snap Parked Aircraft to Gate Positions in Recorded Data
 
 **Status:** Fix

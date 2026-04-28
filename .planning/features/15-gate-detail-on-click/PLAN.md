@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Plan: Gate Detail on Click with Flight Info
 
 ## Context

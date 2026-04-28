@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # UX Fixes: Silhouettes, Turnaround Speed, Loading Indicator, Airline Realism, Terminal Mapping, Baggage Display
 
 ## Context

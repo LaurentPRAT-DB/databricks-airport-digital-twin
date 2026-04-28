@@ -1,3 +1,9 @@
+---
+status: done
+area: data
+related: []
+---
+
 # Close Recorded Data Parity Gap — Derive scenario_events + Richer Summary
 
 ## Context

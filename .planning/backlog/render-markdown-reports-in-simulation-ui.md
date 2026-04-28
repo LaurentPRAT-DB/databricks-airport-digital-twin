@@ -1,3 +1,9 @@
+---
+status: backlog
+area: frontend
+related: []
+---
+
 # Plan: Render markdown reports in the simulation report UI
 
 ## Context

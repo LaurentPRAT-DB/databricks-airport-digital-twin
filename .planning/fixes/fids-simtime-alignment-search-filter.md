@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Plan: FIDS Sim-Time Alignment + Search Filter
 
 ## Context

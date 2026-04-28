@@ -1,3 +1,9 @@
+---
+status: done
+area: data
+related: []
+---
+
 # Plan: Integration Tests for Baggage DLT Pipeline on Databricks
 
 **Phase:** 07 — Post-v1

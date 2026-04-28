@@ -1,3 +1,9 @@
+---
+status: done
+area: frontend
+related: []
+---
+
 # Fix: Turnaround Departure Info + Baggage Carousel Clarity
 
 ## Context

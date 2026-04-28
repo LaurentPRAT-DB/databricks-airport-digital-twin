@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Plan: Airport-Aware Synthetic Flight Generation
 
 ## Context

@@ -1,3 +1,9 @@
+---
+status: backlog
+area: pipeline
+related: []
+---
+
 # Plan: OpenSky Event Inference Pipeline
 
 **Status:** Backlog

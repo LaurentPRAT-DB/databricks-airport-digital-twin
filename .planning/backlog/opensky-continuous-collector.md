@@ -1,3 +1,9 @@
+---
+status: backlog
+area: pipeline
+related: []
+---
+
 # Plan: Continuous OpenSky ADS-B Data Collector for ML Training
 
 **Status:** Backlog

@@ -1,3 +1,9 @@
+---
+status: backlog
+area: simulation
+related: []
+---
+
 # Operational Review: Simulation vs Reality Gap Analysis
 
 **Date:** 2026-03-22

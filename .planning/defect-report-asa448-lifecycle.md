@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Simulation Defect Report: ASA448 Full Lifecycle Analysis
 
 **Flight:** ASA448 (sim00056) | **Aircraft:** A319

@@ -1,3 +1,9 @@
+---
+status: done
+area: simulation
+related: []
+---
+
 # Trajectory Validation Test Report
 
 ## Context
