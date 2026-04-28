@@ -58,6 +58,19 @@ vi.mock('../../context/FlightContext', () => ({
   useFlightContext: () => mockFlightContext,
 }));
 
+vi.mock('../../hooks/useSimulationJobs', () => ({
+  useSimulationJobs: () => ({
+    jobs: [],
+    isLoadingJobs: false,
+    jobsError: null,
+    scenarios: [],
+    isLoadingScenarios: false,
+    createJob: vi.fn().mockResolvedValue({ run_id: 1 }),
+    isCreating: false,
+    createError: null,
+  }),
+}));
+
 // ── Default props ───────────────────────────────────────────────────
 
 function defaultProps() {
@@ -106,7 +119,7 @@ describe('SimulationControls', () => {
       render(
         <SimulationControls {...defaultProps()} demoReady={false} backendReady={false} />
       );
-      expect(screen.getByTitle('Load a simulation file')).toBeInTheDocument();
+      expect(screen.getByTitle('Create, load, or monitor simulations')).toBeInTheDocument();
     });
 
     it('shows playback bar when simulation is active and playing', () => {
@@ -394,47 +407,34 @@ describe('SimulationControls', () => {
     });
   });
 
-  describe('file picker', () => {
-    it('opens file picker when Simulation button clicked', () => {
+  describe('simulation manager', () => {
+    it('opens simulation manager when Simulation button clicked', () => {
       mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
-      fireEvent.click(screen.getByTitle('Load a simulation file'));
-      expect(screen.getByText('Load Simulation')).toBeInTheDocument();
+      fireEvent.click(screen.getByTitle('Create, load, or monitor simulations'));
+      expect(screen.getByText('Simulation Manager')).toBeInTheDocument();
     });
 
-    it('closes file picker on close button', () => {
+    it('closes simulation manager on close button', () => {
       mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
-      fireEvent.click(screen.getByTitle('Load a simulation file'));
-      expect(screen.getByText('Load Simulation')).toBeInTheDocument();
+      fireEvent.click(screen.getByTitle('Create, load, or monitor simulations'));
+      expect(screen.getByText('Simulation Manager')).toBeInTheDocument();
 
       fireEvent.click(screen.getByText('\u00d7'));
-      expect(screen.queryByText('Load Simulation')).not.toBeInTheDocument();
+      expect(screen.queryByText('Simulation Manager')).not.toBeInTheDocument();
     });
 
-    it('renders file list and calls loadFile on click', () => {
-      mockSim = createMockSim({
-        availableFiles: [
-          {
-            filename: 'sim_sfo.json',
-            airport: 'SFO',
-            total_flights: 100,
-            arrivals: 50,
-            departures: 50,
-            duration_hours: 24,
-            size_kb: 500,
-          },
-        ],
-      });
+    it('shows Create, Load, Running tabs', () => {
+      mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
-      fireEvent.click(screen.getByTitle('Load a simulation file'));
-      expect(screen.getByText('Load Simulation')).toBeInTheDocument();
-
-      fireEvent.click(screen.getByTitle('sim_sfo.json'));
-      expect(mockSim.loadFile).toHaveBeenCalledWith('sim_sfo.json', 0, 24);
+      fireEvent.click(screen.getByTitle('Create, load, or monitor simulations'));
+      expect(screen.getByText('Create')).toBeInTheDocument();
+      expect(screen.getByText('Load')).toBeInTheDocument();
+      expect(screen.getByText('Running')).toBeInTheDocument();
     });
   });
 
@@ -530,7 +530,7 @@ describe('SimulationControls', () => {
       mockFlightContext.dataMode = 'live';
       render(<SimulationControls {...defaultProps()} />);
 
-      expect(screen.queryByTitle('Load a simulation file')).not.toBeInTheDocument();
+      expect(screen.queryByTitle('Create, load, or monitor simulations')).not.toBeInTheDocument();
     });
 
     it('hides playback bar in live mode even when sim is active', () => {

@@ -13,6 +13,7 @@ import type { DataMode } from '../../context/FlightContext';
 import { TimeWindowPicker } from './TimeWindowPicker';
 import { SceneCapture } from '../SceneCapture/SceneCapture';
 import { SimulationReport } from './SimulationReport';
+import SimulationManager from './SimulationManager';
 
 const SPEED_OPTIONS: PlaybackSpeed[] = [0.25, 0.5, 1, 2, 4, 10, 30, 60];
 
@@ -719,6 +720,7 @@ export function SimulationControls({
   const sim = useSimulationReplay();
   const { dataMode, flights: contextFlights, lastUpdated: contextLastUpdated } = useFlightContext();
   const [showPicker, setShowPicker] = useState(false);
+  const [showManager, setShowManager] = useState(false);
   const [showWindowPicker, setShowWindowPicker] = useState(false);
   const [windowPickerFile, setWindowPickerFile] = useState<string | null>(null);
   const [windowPickerMetadata, setWindowPickerMetadata] = useState<SimulationMetadata | null>(null);
@@ -954,14 +956,14 @@ export function SimulationControls({
         <>
           {renderHeaderButton()}
 
-          {/* Load simulation file button */}
+          {/* Simulation manager button */}
           <button
             onClick={() => {
               sim.fetchFiles();
-              setShowPicker(true);
+              setShowManager(true);
             }}
             className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-500 px-3 py-1.5 rounded-lg text-sm transition-colors"
-            title="Load a simulation file"
+            title="Create, load, or monitor simulations"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -971,7 +973,7 @@ export function SimulationControls({
         </>
       )}
 
-      {/* File picker modal */}
+      {/* File picker modal (legacy, kept for direct access) */}
       {showPicker && (
         <FilePicker
           files={sim.availableFiles}
@@ -980,6 +982,24 @@ export function SimulationControls({
           onLoad={handleLoad}
           onSelectForWindow={handleSelectForWindow}
           onClose={() => setShowPicker(false)}
+        />
+      )}
+
+      {/* Simulation Manager modal */}
+      {showManager && (
+        <SimulationManager
+          onClose={() => setShowManager(false)}
+          onLoad={(filename) => {
+            setShowManager(false);
+            handleLoad(filename);
+          }}
+          onSelectForWindow={(filename) => {
+            setShowManager(false);
+            handleSelectForWindow(filename);
+          }}
+          files={sim.availableFiles}
+          isLoadingSimulation={sim.isLoading}
+          isFetchingFiles={sim.isFetchingFiles}
         />
       )}
 

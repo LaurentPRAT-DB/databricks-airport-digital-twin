@@ -24,6 +24,7 @@ from app.backend.api.genie import genie_router
 from app.backend.api.inpainting import inpainting_router
 from app.backend.api.mcp import mcp_router
 from app.backend.api.assistant import assistant_router
+from app.backend.api.simulation_jobs import simulation_jobs_router
 from app.backend.demo_config import (
     DEMO_MODE, DEFAULT_AIRPORT_ICAO, DEFAULT_AIRPORT_IATA, DEFAULT_FLIGHT_COUNT,
 )
@@ -474,6 +475,7 @@ app.include_router(genie_router)
 app.include_router(inpainting_router)
 app.include_router(mcp_router)
 app.include_router(assistant_router)
+app.include_router(simulation_jobs_router)
 
 
 @app.get("/health")
