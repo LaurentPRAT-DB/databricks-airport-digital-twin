@@ -44,12 +44,18 @@ def _make_workspace_client(user_token: str | None = None):
     return WorkspaceClient()
 
 
+_BUNDLE_WS_ROOT = os.getenv(
+    "BUNDLE_WORKSPACE_ROOT",
+    "/Workspace/Users/laurent.prat@databricks.com/.bundle/airport-digital-twin/dev/files",
+)
+
+
 def _get_notebook_path() -> str:
     """Derive the workspace path for the simulation runner notebook."""
-    ws_path = str(PROJECT_ROOT / "databricks" / "notebooks" / "run_simulation_airport.py")
-    if ws_path.startswith("/Workspace"):
-        ws_path = ws_path[len("/Workspace"):]
-    return ws_path
+    ws_root = _BUNDLE_WS_ROOT
+    if ws_root.startswith("/Workspace"):
+        ws_root = ws_root[len("/Workspace"):]
+    return f"{ws_root}/databricks/notebooks/run_simulation_airport.py"
 
 
 # ── Request / Response Models ────────────────────────────────────────
@@ -257,10 +263,10 @@ async def create_simulation_job(request: Request, body: CreateSimulationRequest)
         params["skip_positions"] = "true"
 
     if body.scenario_name:
-        scenario_ws_path = str(PROJECT_ROOT / "scenarios" / body.scenario_name)
-        if scenario_ws_path.startswith("/Workspace"):
-            scenario_ws_path = scenario_ws_path[len("/Workspace"):]
-        params["scenario_file"] = scenario_ws_path
+        ws_root = _BUNDLE_WS_ROOT
+        if ws_root.startswith("/Workspace"):
+            ws_root = ws_root[len("/Workspace"):]
+        params["scenario_file"] = f"{ws_root}/scenarios/{body.scenario_name}"
     elif body.custom_scenario:
         vol_path = _write_custom_scenario_to_volume(body.custom_scenario, user_token)
         if not vol_path:

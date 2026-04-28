@@ -65,6 +65,10 @@ env:
   - name: INPAINTING_ENDPOINT_NAME
     value: "airport-dt-aircraft-inpainting-dev"
 
+  # Bundle workspace root (where DABs deploys files — used for notebook job paths)
+  - name: BUNDLE_WORKSPACE_ROOT
+    value: "/Workspace/Users/laurent.prat@databricks.com/.bundle/airport-digital-twin/dev/files"
+
   # Genie Space for Airport Operations Assistant
   - name: GENIE_SPACE_ID
     value: "01f12612fa6314ae943d0526f5ae3a00"
