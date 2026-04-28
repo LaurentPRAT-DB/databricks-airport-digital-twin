@@ -632,12 +632,16 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
             onSaveDraft(params);
           }}
           disabled={isSaving || !airport}
-          className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
+          className={`flex-1 py-2.5 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
+            editingDraft
+              ? 'bg-green-600 hover:bg-green-500 text-white'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+          }`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
           </svg>
-          {isSaving ? 'Saving...' : 'Save Draft'}
+          {isSaving ? 'Saving...' : editingDraft ? 'Save' : 'Save Draft'}
         </button>
         <button
           onClick={handleSubmit}
