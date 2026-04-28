@@ -54,10 +54,10 @@ export interface AirlineConfig {
  */
 export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   // Boeing narrow body (wingspan ~35.8m)
-  // boeing-737.glb has internal node scales [1,17,1.91] + quaternion rotation — effective forward is +X, needs -π/2 to align to +Z
-  'B737': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: -Math.PI / 2, z: 0 } },
-  'B738': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: -Math.PI / 2, z: 0 } },
-  'B739': { url: '/models/aircraft/boeing-737.glb', scale: 1.08 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: -Math.PI / 2, z: 0 } },
+  // boeing-737.glb internal transforms orient fuselage along Z (34.9m), faces +Z like Airbus models
+  'B737': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'B738': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
+  'B739': { url: '/models/aircraft/boeing-737.glb', scale: 1.08 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
 
   // Airbus narrow body (wingspan ~34-36m)
   // airbus_a320.glb native wingspan 34.2 units (1:1 meters)
