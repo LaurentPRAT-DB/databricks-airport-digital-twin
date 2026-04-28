@@ -55,7 +55,7 @@ def _get_notebook_path() -> str:
     ws_root = _BUNDLE_WS_ROOT
     if ws_root.startswith("/Workspace"):
         ws_root = ws_root[len("/Workspace"):]
-    return f"{ws_root}/databricks/notebooks/run_simulation_airport.py"
+    return f"{ws_root}/databricks/notebooks/run_simulation_airport"
 
 
 # ── Request / Response Models ────────────────────────────────────────
