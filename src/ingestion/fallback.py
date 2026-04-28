@@ -805,6 +805,7 @@ NM_TO_DEG = 1.0 / 60.0
 MIN_APPROACH_SEPARATION_DEG = 3.0 * NM_TO_DEG  # 3 NM minimum on approach
 MIN_TAXI_SEPARATION_DEG = 0.001  # ~100m for taxi operations (FAA visual separation ~60-90m)
 MIN_TAXI_SEPARATION_ARRIVAL_DEG = 0.0006  # ~60m for arriving aircraft (ATC gives inbound priority)
+CROSSING_ZONE_DEG = 0.002  # ~200m — detect perpendicular taxiway crossing conflicts
 MIN_GATE_SEPARATION_DEG = 0.010  # ~800m in 3D scale for gate area (prevents overlap)
 # Aircraft fuselage half-lengths in meters (nose-to-center), by ICAO type designator.
 # Used to compute how far to offset parked aircraft from the gate/jetbridge point
@@ -2791,6 +2792,38 @@ def _taxi_speed_factor(state: FlightState) -> float:
                     must_yield = state.icao24 > other.icao24
                 if must_yield:
                     head_on_hold = True
+
+        # Crossing conflict: perpendicular paths converging on same point.
+        # Only triggers when both aircraft are actively taxiing on waypoint
+        # routes and the other is actually moving — avoids false positives
+        # from parked/stopped aircraft with stale headings.
+        if (dist < CROSSING_ZONE_DEG
+            and state.velocity > 2 and other.velocity > 2
+            and state.taxi_route and other.taxi_route
+            and other.phase in (FlightPhase.TAXI_TO_GATE, FlightPhase.TAXI_TO_RUNWAY)
+        ):
+            crossing_hdg_diff = abs(((state.heading - other.heading + 180) % 360) - 180)
+            if 60 < crossing_hdg_diff < 120:
+                # Use actual positions to check convergence (not heading vectors)
+                rel_lat = other.latitude - state.latitude
+                rel_lon = other.longitude - state.longitude
+                # Project: is the other aircraft ahead of me?
+                dot_me = rel_lon * fwd_x + rel_lat * fwd_y
+                # Project: am I ahead of the other?
+                other_hdg_rad = math.radians(other.heading)
+                dot_other = -rel_lon * math.sin(other_hdg_rad) + -rel_lat * math.cos(other_hdg_rad)
+                if dot_me > 0 and dot_other > 0:  # both see each other ahead — true crossing
+                    state_pri = 1 if state.phase == FlightPhase.TAXI_TO_GATE else 0
+                    other_pri = 1 if other.phase == FlightPhase.TAXI_TO_GATE else 0
+                    if state_pri != other_pri:
+                        crossing_yield = state_pri < other_pri
+                    else:
+                        crossing_yield = state.icao24 > other.icao24
+                    if crossing_yield:
+                        if dist < sep_threshold:
+                            return 0.0
+                        ratio = (dist - sep_threshold) / (CROSSING_ZONE_DEG - sep_threshold)
+                        min_factor = min(min_factor, 0.3 + 0.7 * ratio)
 
         if dist < slow_zone:
             dlat = other.latitude - state.latitude
