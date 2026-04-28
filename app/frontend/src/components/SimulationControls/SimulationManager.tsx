@@ -291,6 +291,11 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
       setScenarioDetail(null);
       return;
     }
+    // Auto-set airport from scenario filename (e.g. "bos_noreaster.yaml" → "BOS")
+    const airportCode = selectedScenario.split('_')[0]?.toUpperCase();
+    if (airportCode && airportCode.length === 3) {
+      setAirport(airportCode);
+    }
     let cancelled = false;
     setLoadingDetail(true);
     fetchScenarioDetail(selectedScenario)
