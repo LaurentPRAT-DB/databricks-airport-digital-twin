@@ -439,13 +439,13 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </button>
         </div>
 
-        {/* Body — flex child that can shrink; dashboard tab flexes, analysis tab scrolls */}
-        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col px-6 py-4">
+        {/* Body — flex child that can shrink; each tab handles its own overflow */}
+        <div className="flex-1 min-h-0 flex flex-col px-6 py-4">
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
             hasAnalysisReport ? (
-              <div className="overflow-y-auto markdown-report">
+              <div className="overflow-y-auto flex-1 min-h-0 markdown-report">
                 <Markdown remarkPlugins={[remarkGfm]}>{sim.markdownReport!}</Markdown>
               </div>
             ) : (
