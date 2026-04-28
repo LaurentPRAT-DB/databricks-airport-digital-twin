@@ -1,3 +1,9 @@
+---
+status: backlog
+area: infrastructure
+related: []
+---
+
 # Plan: Move calibration profiles to UC Volume + deployment audit
 
 ## Context
