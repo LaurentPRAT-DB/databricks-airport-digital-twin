@@ -131,6 +131,16 @@ function LoadingScreen({ airportCode, statusMessage, initSteps }: {
               )}
             </div>
           ))}
+          {/* Total init time when all steps are done */}
+          {steps.every((s) => s.status !== 'running') && (
+            <div className="flex items-center gap-2 py-1 text-xs font-mono border-t border-slate-700 mt-1 pt-1">
+              <span className="w-4 text-center flex-shrink-0 text-emerald-400">&#8721;</span>
+              <span className="flex-1 text-emerald-300">Total init</span>
+              <span className="text-emerald-400 font-semibold flex-shrink-0">
+                {formatDuration(steps.reduce((sum, s) => sum + (s.duration_ms || 0), 0))}
+              </span>
+            </div>
+          )}
           {/* Detail for the latest completed or running step */}
           {(() => {
             const reversed = [...steps].reverse();
@@ -584,6 +594,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [backendReady, setBackendReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Initializing');
   const [initSteps, setInitSteps] = useState<InitStep[]>([]);
+  const [initTimings, setInitTimings] = useState<Record<string, number | string> | null>(null);
   const [, setSimulationActive] = useState(false);
   const [simTime, setSimTime] = useState<string | null>(null);
   const [openskyAvailable, setOpenskyAvailable] = useState(false);
@@ -696,6 +707,23 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
         setBackendReady(true);
         initializeDefaultAirport();
         if (data.debug_client_logs) debugLogger.enable();
+        if (data.debug_client_logs) {
+          const timings = data.init_timings as Record<string, number | string> | undefined;
+          if (timings) setInitTimings(timings);
+          const steps = data.init_steps as InitStep[] | undefined;
+          console.group('%c[Airport Digital Twin] Init timings', 'color: #10b981; font-weight: bold');
+          if (steps) {
+            for (const s of steps) {
+              const icon = s.status === 'done' ? '✓' : s.status === 'error' ? '!' : '∙';
+              const ms = s.duration_ms > 0 ? `${s.duration_ms}ms` : '';
+              console.log(`  ${icon} ${s.label}: ${ms} ${s.detail || ''}`);
+            }
+          }
+          if (timings) {
+            console.log(`  ∑ Total: ${typeof timings.total_ready === 'number' ? `${(timings.total_ready * 1000).toFixed(0)}ms` : timings.total_ready}`);
+          }
+          console.groupEnd();
+        }
       }
       if (data.opensky_available === true) {
         setOpenskyAvailable(true);
@@ -838,7 +866,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <Header onShowFIDS={() => setShowFIDS(true)} onShowKPI={() => setShowKPI(true)} simulationControls={simulationControlsNode} dataModeToggle={dataModeToggleNode} />
+      <Header onShowFIDS={() => setShowFIDS(true)} onShowKPI={() => setShowKPI(true)} simulationControls={simulationControlsNode} dataModeToggle={dataModeToggleNode} initTimings={initTimings} />
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
       {showKPI && <KPIDashboard onClose={() => setShowKPI(false)} />}
       <GenieChat />

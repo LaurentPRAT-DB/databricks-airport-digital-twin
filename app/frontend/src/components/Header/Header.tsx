@@ -13,9 +13,10 @@ interface HeaderProps {
   onShowKPI?: () => void;
   simulationControls?: ReactNode;
   dataModeToggle?: ReactNode;
+  initTimings?: Record<string, number | string> | null;
 }
 
-export default function Header({ onShowFIDS, onShowKPI, simulationControls, dataModeToggle }: HeaderProps) {
+export default function Header({ onShowFIDS, onShowKPI, simulationControls, dataModeToggle, initTimings }: HeaderProps) {
   const { error, setSelectedFlight } = useFlightContext();
   const { currentAirport, isLoading: isLoadingAirport, error: airportError, loadAirport, switchProgress } = useAirportConfigContext();
   const { isDark, toggle: toggleTheme } = useTheme();
@@ -45,6 +46,16 @@ export default function Header({ onShowFIDS, onShowKPI, simulationControls, data
         >
           v{__APP_VERSION__} · #{__BUILD_NUMBER__}
         </span>
+        {initTimings && typeof initTimings.total_ready === 'number' && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/60 text-emerald-400 font-mono"
+            title={Object.entries(initTimings)
+              .map(([k, v]) => `${k}: ${typeof v === 'number' ? `${(v * 1000).toFixed(0)}ms` : v}`)
+              .join('\n')}
+          >
+            init {(initTimings.total_ready as number).toFixed(1)}s
+          </span>
+        )}
 
         {/* Airport Selector */}
         <AirportSelector
