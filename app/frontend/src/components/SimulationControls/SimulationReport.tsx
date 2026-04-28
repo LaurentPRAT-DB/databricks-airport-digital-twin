@@ -440,12 +440,12 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+        <div className="flex-1 min-h-0 flex flex-col px-6 py-4">
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
             hasAnalysisReport ? (
-              <div className="overflow-y-auto markdown-report">
+              <div className="flex-1 min-h-0 overflow-y-auto markdown-report">
                 <Markdown remarkPlugins={[remarkGfm]}>{sim.markdownReport!}</Markdown>
               </div>
             ) : (
@@ -460,7 +460,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           )}
 
           {/* ── Dashboard tab ── */}
-          {activeTab === 'dashboard' && <div className="flex flex-col gap-2">
+          {activeTab === 'dashboard' && <div className="flex flex-col gap-2 min-h-0 flex-1">
           {/* KPI Cards — single compact row */}
           <div className="shrink-0 grid grid-cols-8 gap-1">
             {[
@@ -542,9 +542,9 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </div>
 
           {/* Event table */}
-          <div className="rounded-lg border border-slate-200">
+          <div className="rounded-lg border border-slate-200 flex-1 min-h-0 overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-slate-100">
+              <thead className="sticky top-0 bg-slate-100 z-10">
                 <tr>
                   <th className="text-left px-3 py-2 text-[10px] text-slate-500 uppercase tracking-wider w-24">Time</th>
                   <th className="text-left px-3 py-2 text-[10px] text-slate-500 uppercase tracking-wider w-32">Category</th>
