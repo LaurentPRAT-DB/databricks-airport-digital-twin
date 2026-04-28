@@ -439,13 +439,13 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </button>
         </div>
 
-        {/* Body — flex child that can shrink; each tab handles its own overflow */}
-        <div className="flex-1 min-h-0 flex flex-col px-6 py-4">
+        {/* Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
             hasAnalysisReport ? (
-              <div className="overflow-y-auto flex-1 min-h-0 markdown-report">
+              <div className="overflow-y-auto markdown-report">
                 <Markdown remarkPlugins={[remarkGfm]}>{sim.markdownReport!}</Markdown>
               </div>
             ) : (
@@ -460,7 +460,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           )}
 
           {/* ── Dashboard tab ── */}
-          {activeTab === 'dashboard' && <div className="flex flex-col gap-2 min-h-0 flex-1">
+          {activeTab === 'dashboard' && <div className="flex flex-col gap-2">
           {/* KPI Cards — single compact row */}
           <div className="shrink-0 grid grid-cols-8 gap-1">
             {[
@@ -541,8 +541,8 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
             </span>
           </div>
 
-          {/* Event table */}
-          <div className="rounded-lg border border-slate-200 flex-1 min-h-0 overflow-y-auto">
+          {/* Event table — explicit max-height ensures scrolling regardless of flex chain */}
+          <div className="rounded-lg border border-slate-200 overflow-y-auto max-h-[45vh]">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100">
                 <tr>
