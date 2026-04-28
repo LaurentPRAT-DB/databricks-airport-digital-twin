@@ -1,0 +1,8 @@
+# UC Volume for static assets (satellite tiles, 3D models, etc.)
+resources:
+  volumes:
+    static_assets:
+      catalog_name: ${var.catalog}
+      schema_name: ${var.schema}
+      name: static_assets
+      volume_type: MANAGED

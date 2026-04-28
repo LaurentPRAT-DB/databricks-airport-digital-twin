@@ -1,0 +1,8 @@
+# UC Volume for simulation output files (JSON) and saved drafts
+resources:
+  volumes:
+    simulation_data:
+      catalog_name: ${var.catalog}
+      schema_name: ${var.schema}
+      name: simulation_data
+      volume_type: MANAGED

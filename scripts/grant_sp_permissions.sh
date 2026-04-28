@@ -10,8 +10,8 @@
 #
 # DABs manages: SQL warehouse (CAN_USE), serving endpoint (CAN_QUERY)
 #   via resources.apps.airport_digital_twin.resources in app.yml.
-# DABs also manages: volumes (calibration_profiles, demo_simulations, opensky_raw)
-#   via resources/*.yml.
+# DABs also manages: all 5 volumes (calibration_profiles, demo_simulations,
+#   opensky_raw, simulation_data, static_assets) via resources/*.yml.
 # DABs does NOT manage: workspace object permissions, UC grants, secrets,
 #   Lakebase, Genie — those are handled here.
 #
@@ -24,6 +24,7 @@ set -euo pipefail
 # ── Configuration (override via env vars for different workspaces) ───
 APP_SP="${APP_SP:-}"
 BUNDLE_DIR="${BUNDLE_DIR:-}"
+APP_NAME="${APP_NAME:-airport-digital-twin-dev}"
 UC_CATALOG="${UC_CATALOG:-serverless_stable_3n0ihb_catalog}"
 UC_SCHEMA="${UC_SCHEMA:-airport_digital_twin}"
 WAREHOUSE_ID="${WAREHOUSE_ID:-b868e84cedeb4262}"
@@ -34,7 +35,7 @@ PROFILE="${DATABRICKS_PROFILE:-FEVM_SERVERLESS_STABLE}"
 # ── Auto-detect SP and bundle dir from DABs if not set ──────────────
 if [[ -z "$APP_SP" ]]; then
   echo "Auto-detecting app service principal..."
-  APP_SP=$(databricks apps get airport-digital-twin-dev --output json 2>/dev/null \
+  APP_SP=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
     | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null || true)
   if [[ -z "$APP_SP" ]]; then
     echo "ERROR: Could not detect APP_SP. Set APP_SP env var or pass it explicitly."
@@ -45,7 +46,7 @@ fi
 
 if [[ -z "$BUNDLE_DIR" ]]; then
   echo "Auto-detecting bundle workspace directory..."
-  BUNDLE_DIR=$(databricks apps get airport-digital-twin-dev --output json 2>/dev/null \
+  BUNDLE_DIR=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
     | python3 -c "import sys,json; print(json.load(sys.stdin).get('default_source_code_path',''))" 2>/dev/null || true)
   if [[ -z "$BUNDLE_DIR" ]]; then
     echo "ERROR: Could not detect BUNDLE_DIR. Set BUNDLE_DIR env var."
@@ -120,8 +121,15 @@ else
   fail "USE SCHEMA — schema '$UC_SCHEMA' may not exist"
 fi
 
-# Tables: check existence, then grant
-TABLES=(flight_status_gold flight_positions_history simulation_runs simulation_drafts)
+# Tables: check existence, then grant (all tables from airport_tables.py + DLT)
+TABLES=(
+  airport_metadata gates terminals runways taxiways aprons buildings hangars
+  helipads parking_positions osm_runways flight_positions_history
+  flight_phase_transition_history gate_assignment_history ml_prediction_history
+  airport_profiles opensky_phase_transitions opensky_gate_events
+  opensky_enriched_snapshots simulation_runs simulation_drafts
+  flight_status_gold
+)
 for table in "${TABLES[@]}"; do
   fqn="$UC_CATALOG.$UC_SCHEMA.$table"
   if object_exists TABLE "$fqn"; then
@@ -135,8 +143,8 @@ for table in "${TABLES[@]}"; do
   fi
 done
 
-# Volumes: check existence, then grant
-VOLUMES=(simulation_data demo_simulations calibration_profiles static_assets)
+# Volumes: check existence, then grant (all DABs-managed volumes)
+VOLUMES=(simulation_data demo_simulations calibration_profiles static_assets opensky_raw)
 for volume in "${VOLUMES[@]}"; do
   fqn="$UC_CATALOG.$UC_SCHEMA.$volume"
   if object_exists VOLUME "$fqn"; then
@@ -178,7 +186,7 @@ ok "Handled by Databricks Apps platform (OAuth via WorkspaceClient)"
 echo "7. DABs-managed resources (informational)..."
 ok "SQL Warehouse CAN_USE ($WAREHOUSE_ID) — via resources/app.yml"
 ok "Serving endpoint CAN_QUERY — via resources/app.yml"
-ok "Volumes (calibration_profiles, demo_simulations) — via resources/*.yml"
+ok "Volumes (calibration_profiles, demo_simulations, opensky_raw, simulation_data, static_assets) — via resources/*.yml"
 
 # ── Summary ──────────────────────────────────────────────────────────
 echo ""

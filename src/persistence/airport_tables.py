@@ -495,6 +495,30 @@ TBLPROPERTIES ('delta.columnMapping.mode' = 'name')
 COMMENT 'Enriched OpenSky ADS-B snapshots with inferred gate assignments and flight phases'
 """
 
+SIMULATION_RUNS_DDL = """
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.simulation_runs (
+  filename STRING NOT NULL COMMENT 'Simulation output filename',
+  airport STRING NOT NULL COMMENT 'ICAO airport code',
+  scenario_name STRING COMMENT 'Named scenario used',
+  total_flights INT,
+  arrivals INT,
+  departures INT,
+  duration_hours DOUBLE,
+  on_time_pct DOUBLE,
+  cancellation_rate_pct DOUBLE,
+  peak_simultaneous_flights INT,
+  total_go_arounds INT,
+  total_diversions INT,
+  size_bytes BIGINT,
+  created_at TIMESTAMP,
+  volume_path STRING NOT NULL COMMENT 'UC Volume path to simulation file'
+) USING DELTA
+TBLPROPERTIES (
+  'delta.columnMapping.mode' = 'name'
+)
+COMMENT 'Metadata for completed simulation runs'
+"""
+
 SIMULATION_DRAFTS_DDL = """
 CREATE TABLE IF NOT EXISTS {catalog}.{schema}.simulation_drafts (
   name STRING NOT NULL COMMENT 'URL-safe slug derived from display_name',
@@ -539,6 +563,7 @@ ALL_TABLES = [
     ("opensky_phase_transitions", OPENSKY_PHASE_TRANSITIONS_DDL),
     ("opensky_gate_events", OPENSKY_GATE_EVENTS_DDL),
     ("opensky_enriched_snapshots", OPENSKY_ENRICHED_SNAPSHOTS_DDL),
+    ("simulation_runs", SIMULATION_RUNS_DDL),
     ("simulation_drafts", SIMULATION_DRAFTS_DDL),
 ]
 

@@ -1028,11 +1028,16 @@ APPROACH → FINAL → LANDING → TAXI_IN → PARKED → PUSHBACK → TAXI_OUT 
 
 | Resource | File | Purpose |
 |----------|------|---------|
-| App | `resources/app.yml` | Databricks App deployment config |
+| App | `resources/app.yml` | Databricks App + SQL warehouse + serving endpoint permissions |
 | DLT Pipeline | `resources/pipeline.yml` | Medallion pipeline definition |
 | Sync Job | `resources/sync_job.yml` | UC → Lakebase sync job |
 | Integration Tests | `resources/integration_test_job.yml` | Baggage pipeline tests |
 | Lakebase | `resources/lakebase.yml` | Lakebase instance config |
+| Vol: calibration_profiles | `resources/calibration_profiles_volume.yml` | Airport calibration JSON files |
+| Vol: demo_simulations | `resources/demo_volume.yml` | Pre-generated demo data |
+| Vol: opensky_raw | `resources/opensky_volume.yml` | Raw OpenSky ADS-B data |
+| Vol: simulation_data | `resources/simulation_data_volume.yml` | Simulation output files + drafts |
+| Vol: static_assets | `resources/static_assets_volume.yml` | Satellite tiles, 3D models |
 
 ### 15.2 App Configuration (`app.yaml`)
 
@@ -1044,22 +1049,30 @@ env:
   - LAKEBASE_HOST, LAKEBASE_PORT, LAKEBASE_DATABASE, LAKEBASE_SCHEMA
   - DATABRICKS_USE_OAUTH: "true"
   - LAKEBASE_USE_OAUTH: "true"
+  - BUNDLE_WORKSPACE_ROOT  # DABs workspace path for notebook job submission
 ```
 
-### 15.3 Deployment Commands
+### 15.3 Deployment
+
+**Full automated deployment** (single command, no manual intervention):
 
 ```bash
-# Build frontend
-cd app/frontend && npm run build
-
-# Deploy bundle
-databricks bundle deploy --target dev
-
-# Deploy app
-databricks apps deploy airport-digital-twin-dev \
-  --source-code-path /Workspace/Users/<user>/.bundle/airport-digital-twin/dev/files \
-  --profile FEVM_SERVERLESS_STABLE
+./deploy.sh                    # default target: dev
+./deploy.sh --target prod      # specify target
+SKIP_BUILD=1 ./deploy.sh       # skip frontend build
 ```
+
+**What `deploy.sh` does:**
+1. Builds frontend (`npm run build`)
+2. `databricks bundle deploy` — creates app, volumes, jobs, pipelines, endpoints
+3. Creates UC schema + tables via SQL API (DDLs from `src/persistence/airport_tables.py`)
+4. Stops/starts app, waits for RUNNING state
+5. Runs `scripts/grant_sp_permissions.sh` — UC grants, workspace ACLs, secret scope, Genie
+
+**DABs manages:** app, 5 UC volumes, jobs, pipelines, serving endpoints, SQL warehouse CAN_USE, endpoint CAN_QUERY.
+**Post-deploy script manages:** workspace directory CAN_READ, notebook CAN_RUN, UC GRANT (all tables + volumes), secret scope READ, Genie space CAN_USE.
+
+All env vars are overridable: `UC_CATALOG`, `UC_SCHEMA`, `WAREHOUSE_ID`, `GENIE_SPACE_ID`, `SECRET_SCOPE`, `DATABRICKS_PROFILE`, `APP_NAME`.
 
 ### 15.4 Local Development
 

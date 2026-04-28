@@ -61,14 +61,25 @@ databricks bundle run baggage_pipeline_integration_test --target dev  # DLT pipe
 **Always use DABs. Never use `databricks apps deploy` directly.**
 
 ```bash
-# Full deploy sequence
-cd app/frontend && npm run build
-databricks bundle deploy --target dev
+# Full automated deploy (build + DABs + tables + app restart + SP grants)
+./deploy.sh                    # default target: dev
+./deploy.sh --target prod      # specify target
+SKIP_BUILD=1 ./deploy.sh       # skip frontend build
 ```
+
+`deploy.sh` runs these steps in order:
+1. Build frontend (`npm run build`)
+2. `databricks bundle deploy` — creates app, volumes, jobs, pipelines, endpoints
+3. Create UC schema + tables via SQL API (from `airport_tables.py`)
+4. Stop/start app, wait for RUNNING
+5. `scripts/grant_sp_permissions.sh` — UC grants, workspace ACLs, secrets, Genie
+
+**DABs manages:** app, 5 volumes (calibration_profiles, demo_simulations, opensky_raw, simulation_data, static_assets), jobs, pipelines, serving endpoints, SQL warehouse permissions.
+**Post-deploy script manages:** workspace object ACLs, UC GRANT statements, secret scope ACLs, Genie space access.
 
 - Bundle config: `databricks.yml` (profile: `FEVM_SERVERLESS_STABLE`).
 - App config: `app.yaml` (uvicorn, env vars for Databricks SQL + Lakebase).
-- Resource configs: `resources/*.yml` (app, jobs, pipelines, Lakebase).
+- Resource configs: `resources/*.yml` (app, jobs, pipelines, volumes, Lakebase).
 - Target: `dev` (default). Catalog: `serverless_stable_3n0ihb_catalog`, schema: `airport_digital_twin`.
 
 ## Databricks App (APX)
