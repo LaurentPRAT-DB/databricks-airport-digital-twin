@@ -11,7 +11,6 @@ import {
 import { useFlightContext } from '../../context/FlightContext';
 import type { DataMode } from '../../context/FlightContext';
 import { TimeWindowPicker } from './TimeWindowPicker';
-import { SceneCapture } from '../SceneCapture/SceneCapture';
 import { SimulationReport } from './SimulationReport';
 import SimulationManager from './SimulationManager';
 
@@ -438,11 +437,6 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
         {/* Flight count — hidden on mobile */}
         <div className="hidden md:block flex-shrink-0 text-sm text-slate-400">
           <span className="font-mono font-medium text-white">{sim.flights.length}</span> flights
-        </div>
-
-        {/* Scene capture button — hidden on mobile */}
-        <div className="hidden md:block flex-shrink-0">
-          <SceneCapture airport={sim.airport} simTime={sim.currentSimTime} />
         </div>
 
         {/* Report generator button — hidden on mobile */}
