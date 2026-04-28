@@ -271,9 +271,27 @@ async def get_predictions_dashboard(
     flight_service: FlightService = Depends(get_flight_service),
 ) -> PredictionsDashboardResponse:
     """Aggregate predictions dashboard: KPI summary + congestion + delays."""
-    flight_response = await flight_service.get_flights()
-    flight_dicts = [f.model_dump() for f in flight_response.flights]
+    try:
+        flight_response = await flight_service.get_flights()
+        flight_dicts = [f.model_dump() for f in flight_response.flights]
+    except Exception:
+        flight_dicts = []
     total_flights = len(flight_dicts)
+
+    if total_flights == 0:
+        return PredictionsDashboardResponse(
+            kpi_cards=[
+                KPICard(label="On-Time", value="--", color="slate"),
+                KPICard(label="Avg Delay", value="--", color="slate"),
+                KPICard(label="Congestion", value="--", color="slate"),
+                KPICard(label="Bottlenecks", value="--", color="slate"),
+                KPICard(label="Avg Turnaround", value="--", color="slate"),
+                KPICard(label="Active Flights", value="0", color="slate"),
+            ],
+            congestion_areas=[],
+            delay_table=[],
+            total_flights=0,
+        )
 
     predictions = await prediction_service.get_flight_predictions(flight_dicts)
     congestion = await prediction_service.get_congestion(flight_dicts)
