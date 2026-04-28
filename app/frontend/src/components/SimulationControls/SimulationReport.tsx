@@ -377,7 +377,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
-      <div className={`bg-white shadow-2xl border border-slate-200 flex flex-col transition-all duration-200 ${
+      <div className={`bg-white shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-200 ${
         fullscreen
           ? 'w-full h-full max-w-full max-h-full rounded-none'
           : 'w-[900px] max-w-[95vw] max-h-[92vh] rounded-xl'
@@ -439,8 +439,8 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </button>
         </div>
 
-        {/* Body — flex child that can shrink and scroll */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+        {/* Body — flex child that can shrink; dashboard tab flexes, analysis tab scrolls */}
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col px-6 py-4">
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
@@ -460,7 +460,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           )}
 
           {/* ── Dashboard tab ── */}
-          {activeTab === 'dashboard' && <div className="flex flex-col gap-2">
+          {activeTab === 'dashboard' && <div className="flex flex-col gap-2 min-h-0 flex-1">
           {/* KPI Cards — single compact row */}
           <div className="shrink-0 grid grid-cols-8 gap-1">
             {[
@@ -542,7 +542,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </div>
 
           {/* Event table */}
-          <div className="rounded-lg border border-slate-200">
+          <div className="rounded-lg border border-slate-200 flex-1 min-h-0 overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100">
                 <tr>
