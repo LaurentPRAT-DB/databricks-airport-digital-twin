@@ -239,6 +239,7 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
   const [timeStep, setTimeStep] = useState(2.0);
   const [seed, setSeed] = useState('');
   const [skipPositions, setSkipPositions] = useState(false);
+  const [draftName, setDraftName] = useState(editingDraft?.display_name || '');
 
   // Custom scenario state
   const [scenarioName, setScenarioName] = useState('Custom Scenario');
@@ -256,6 +257,7 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
     setTimeStep(editingDraft.time_step_seconds);
     setSeed(editingDraft.seed != null ? String(editingDraft.seed) : '');
     setSkipPositions(editingDraft.skip_positions);
+    setDraftName(editingDraft.display_name);
 
     if (editingDraft.custom_scenario) {
       setScenarioMode('custom');
@@ -601,17 +603,23 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
       {editingDraft && (
         <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           <span className="text-xs text-amber-700">Editing: <strong>{editingDraft.display_name}</strong></span>
-          <button onClick={onClearDraft} className="text-xs text-amber-500 hover:text-amber-700">Clear</button>
+          <button onClick={() => { onClearDraft(); setDraftName(''); }} className="text-xs text-amber-500 hover:text-amber-700">Clear</button>
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="flex gap-2">
+      {/* Save name + action buttons */}
+      <div className="flex gap-2 items-center">
+        <input
+          className={`flex-1 ${inputClass}`}
+          value={draftName}
+          onChange={e => setDraftName(e.target.value)}
+          placeholder="Simulation name..."
+        />
         <button
           onClick={() => {
-            const name = editingDraft?.display_name || `${airport} ${arrivals + departures}f ${durationHours}h`;
+            if (!draftName.trim()) return;
             const params: SaveDraftParams = {
-              display_name: name,
+              display_name: draftName.trim(),
               airport,
               arrivals,
               departures,
@@ -631,17 +639,13 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
             };
             onSaveDraft(params);
           }}
-          disabled={isSaving || !airport}
-          className={`flex-1 py-2.5 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
-            editingDraft
-              ? 'bg-green-600 hover:bg-green-500 text-white'
-              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-          }`}
+          disabled={isSaving || !airport || !draftName.trim()}
+          className="px-4 py-2.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
           </svg>
-          {isSaving ? 'Saving...' : editingDraft ? 'Save' : 'Save Draft'}
+          {isSaving ? 'Saving...' : 'Save'}
         </button>
         <button
           onClick={handleSubmit}
