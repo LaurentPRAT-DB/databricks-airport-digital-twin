@@ -270,10 +270,7 @@ async def create_simulation_job(request: Request, body: CreateSimulationRequest)
         params["skip_positions"] = "true"
 
     if body.scenario_name:
-        ws_root = _BUNDLE_WS_ROOT
-        if ws_root.startswith("/Workspace"):
-            ws_root = ws_root[len("/Workspace"):]
-        params["scenario_file"] = f"{ws_root}/scenarios/{body.scenario_name}"
+        params["scenario_file"] = f"scenarios/{body.scenario_name}"
     elif body.custom_scenario:
         vol_path = _write_custom_scenario_to_volume(body.custom_scenario, user_token)
         if not vol_path:
@@ -717,10 +714,7 @@ async def run_draft(request: Request, name: str):
     scenario_name = existing.get("scenario_name")
     custom_scenario = existing.get("custom_scenario")
     if scenario_name:
-        ws_root = _BUNDLE_WS_ROOT
-        if ws_root.startswith("/Workspace"):
-            ws_root = ws_root[len("/Workspace"):]
-        params["scenario_file"] = f"{ws_root}/scenarios/{scenario_name}"
+        params["scenario_file"] = f"scenarios/{scenario_name}"
     elif custom_scenario:
         cs = CustomScenario(**custom_scenario) if isinstance(custom_scenario, dict) else custom_scenario
         vol_path = _write_custom_scenario_to_volume(cs, user_token)

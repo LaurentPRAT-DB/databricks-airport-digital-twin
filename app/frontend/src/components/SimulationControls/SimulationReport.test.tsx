@@ -126,24 +126,23 @@ describe('SimulationReport', () => {
     }
   });
 
-  it('clicking an event row calls seekToTime and closes', () => {
+  it('clicking an event row expands detail panel with View on Map', () => {
     render(<SimulationReport sim={mockSim} onClose={onClose} />);
     const goAroundEvent = screen.getByText(/UAL100 go-around/);
-    // Click the table row containing this event
     const row = goAroundEvent.closest('tr') || goAroundEvent;
     fireEvent.click(row);
-    expect(mockSim.seekToTime).toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalled();
+    expect(screen.getByText('View on Map')).toBeInTheDocument();
   });
 
-  it('clicking an event selects matching flight', () => {
+  it('View on Map button seeks to event time and closes report', () => {
     render(<SimulationReport sim={mockSim} onClose={onClose} />);
     const goAroundEvent = screen.getByText(/UAL100 go-around/);
     const row = goAroundEvent.closest('tr') || goAroundEvent;
     fireEvent.click(row);
-    expect(mockFlightContext.setSelectedFlight).toHaveBeenCalledWith(
-      expect.objectContaining({ callsign: 'UAL100' })
-    );
+    const viewBtn = screen.getByText('View on Map');
+    fireEvent.click(viewBtn);
+    expect(mockSim.seekToTime).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('renders with empty events', () => {

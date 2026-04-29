@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { UseSimulationReplayResult } from '../../hooks/useSimulationReplay';
+import { UseSimulationReplayResult, ScenarioEvent } from '../../hooks/useSimulationReplay';
 import { useFlightContext } from '../../context/FlightContext';
 import { downloadDataUrl } from '../../utils/sceneCapture';
 import { EVENT_COLORS, EVENT_LABELS } from './SimulationControls';
@@ -11,6 +11,73 @@ type ReportTab = 'dashboard' | 'analysis';
 interface SimulationReportProps {
   sim: UseSimulationReplayResult;
   onClose: () => void;
+  focusEvents?: ScenarioEvent[] | null;
+}
+
+const DETAIL_SKIP_KEYS = new Set(['time', 'event_type', 'description']);
+
+const DETAIL_LABELS: Record<string, string> = {
+  callsign: 'Callsign',
+  icao24: 'ICAO24',
+  attempt: 'Attempt',
+  weather: 'Weather',
+  severity: 'Severity',
+  type: 'Type',
+  visibility_nm: 'Visibility (nm)',
+  ceiling_ft: 'Ceiling (ft)',
+  runway: 'Runway',
+  runway_config: 'Runway Config',
+  reason: 'Reason',
+  target: 'Target',
+  alternate: 'Alternate',
+  start: 'Start',
+  end: 'End',
+  wind_direction: 'Wind Dir',
+};
+
+function EventDetailPanel({ event, onJump }: { event: ScenarioEvent; onJump: () => void }) {
+  const details = Object.entries(event).filter(
+    ([k, v]) => !DETAIL_SKIP_KEYS.has(k) && v !== undefined && v !== null
+  );
+
+  return (
+    <tr>
+      <td colSpan={3} className="px-6 py-3 bg-blue-50/50 border-b border-blue-100">
+        {details.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-2 mb-3">
+            {details.map(([key, value]) => (
+              <div key={key}>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider">{DETAIL_LABELS[key] || key}</span>
+                <div className="text-xs text-slate-800 font-medium">{String(value)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-2 pt-2 border-t border-blue-100/50">
+          <button
+            onClick={onJump}
+            className="px-3 py-1.5 rounded text-[11px] font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors flex items-center gap-1.5"
+            title="Seek simulation to this event and select the flight"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            View on Map
+          </button>
+          <button
+            disabled
+            className="px-3 py-1.5 rounded text-[11px] font-medium bg-slate-100 text-slate-400 cursor-not-allowed flex items-center gap-1.5"
+            title="Coming soon — AI-powered event explanation"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            Explain
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
 }
 
 /** Hex colors for HTML report (matching Tailwind classes). */
@@ -114,6 +181,7 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
               const h = getHour(e.time);
               return h >= fromHour && h < toHour;
             }).length;
+            if (count === 0) return null;
             return (
               <button
                 key={type}
@@ -142,9 +210,11 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
   );
 }
 
-export function SimulationReport({ sim, onClose }: SimulationReportProps) {
+export function SimulationReport({ sim, onClose, focusEvents }: SimulationReportProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const { filteredFlights, setSelectedFlight } = useFlightContext();
+  const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
+  const focusRowRef = useRef<HTMLTableRowElement>(null);
 
   // Handle clicking an event row — seek to event time, select matching flight, close report
   const handleEventClick = useCallback((eventTime: string, description: string) => {
@@ -191,11 +261,9 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
     });
   }, [allEventTypesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Time range filter (hours)
-  const startHour = sim.simStartTime ? getHour(sim.simStartTime) : 0;
-  const endHour = sim.simEndTime ? getHour(sim.simEndTime) : 24;
-  const [fromHour, setFromHour] = useState(startHour);
-  const [toHour, setToHour] = useState(endHour === 0 ? 24 : endHour);
+  // Time range filter (hours) — default to full 0-24 so all events are visible
+  const [fromHour, setFromHour] = useState(0);
+  const [toHour, setToHour] = useState(24);
 
   // Grouping mode
   const [groupBy, setGroupBy] = useState<'time' | 'category' | 'flight'>('time');
@@ -276,6 +344,23 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   const selectAll = useCallback(() => setSelectedTypes(new Set(allEventTypes)), [allEventTypes]);
   const clearAll = useCallback(() => setSelectedTypes(new Set()), []);
 
+  // Build a set of focus event keys for O(1) highlight lookup
+  const focusEventKeys = useMemo(() => {
+    if (!focusEvents?.length) return null;
+    return new Set(focusEvents.map(e => `${e.time}|${e.event_type}|${e.description}`));
+  }, [focusEvents]);
+
+  const eventKey = (e: ScenarioEvent) => `${e.time}|${e.event_type}|${e.description}`;
+
+  // Auto-scroll to first focused event + auto-expand it
+  useEffect(() => {
+    if (!focusEvents?.length) return;
+    setSelectedEventKey(eventKey(focusEvents[0]));
+    const id = requestAnimationFrame(() => {
+      focusRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [focusEvents]);
 
   // Summary data
   const summary = sim.summary as Record<string, unknown> | null;
@@ -376,7 +461,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   }, [sim, summary, filteredEvents, fromHour, toHour]);
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4" onWheel={e => e.stopPropagation()}>
       <div className={`bg-white shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-200 ${
         fullscreen
           ? 'w-full h-full max-w-full max-h-full rounded-none'
@@ -541,8 +626,9 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
             </span>
           </div>
 
-          {/* Event table */}
-          <div className="flex-1 min-h-0 rounded-lg border border-slate-200 overflow-y-auto">
+          {/* Event table — absolute positioning gives a definite pixel height from flex layout */}
+          <div className="flex-1 min-h-0 relative">
+          <div className="absolute inset-0 rounded-lg border border-slate-200 overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100 z-10">
                 <tr>
@@ -590,44 +676,71 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
                         </td>
                         <td className="px-3 py-1.5 text-slate-500 text-xs">{typeSummary}</td>
                       </tr>,
-                      ...(isExpanded ? group.events.map((event, i) => (
-                        <tr
-                          key={`${group.callsign}-${i}`}
-                          onClick={() => handleEventClick(event.time, event.description)}
-                          className="hover:bg-blue-50 cursor-pointer transition-colors border-b border-slate-100"
-                          title="Click to jump to this event"
-                        >
-                          <td className="px-3 py-1.5 text-slate-500 font-mono text-xs pl-6">{fmtTime(event.time)}</td>
-                          <td className="px-3 py-1.5">
-                            <span className="flex items-center gap-1.5 pl-4">
-                              <span className={`w-2 h-2 rounded-sm flex-shrink-0 ${EVENT_COLORS[event.event_type] || 'bg-gray-400'}`} />
-                              <span className="text-slate-700 text-xs">{EVENT_LABELS[event.event_type] || event.event_type}</span>
-                            </span>
-                          </td>
-                          <td className="px-3 py-1.5 text-slate-800 text-xs">{event.description}</td>
-                        </tr>
-                      )) : []),
+                      ...(isExpanded ? group.events.flatMap((event, i) => {
+                        const ek = eventKey(event);
+                        const isFocused = focusEventKeys?.has(ek);
+                        const isSelected = selectedEventKey === ek;
+                        const isFirstFocus = isFocused && focusEvents?.[0] === event;
+                        return [
+                          <tr
+                            key={`${group.callsign}-${i}`}
+                            ref={isFirstFocus ? focusRowRef : undefined}
+                            onClick={() => setSelectedEventKey(prev => prev === ek ? null : ek)}
+                            className={`cursor-pointer transition-colors border-b border-slate-100 ${isFocused ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-blue-50'} ${isSelected ? 'bg-blue-100' : ''}`}
+                            title="Click to expand event details"
+                          >
+                            <td className="px-3 py-1.5 text-slate-500 font-mono text-xs pl-6">{fmtTime(event.time)}</td>
+                            <td className="px-3 py-1.5">
+                              <span className="flex items-center gap-1.5 pl-4">
+                                <span className={`w-2 h-2 rounded-sm flex-shrink-0 ${EVENT_COLORS[event.event_type] || 'bg-gray-400'}`} />
+                                <span className="text-slate-700 text-xs">{EVENT_LABELS[event.event_type] || event.event_type}</span>
+                              </span>
+                            </td>
+                            <td className="px-3 py-1.5 text-slate-800 text-xs flex items-center gap-2">
+                              <span className="flex-1">{event.description}</span>
+                              <svg className={`w-3 h-3 text-slate-400 transition-transform flex-shrink-0 ${isSelected ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </td>
+                          </tr>,
+                          ...(isSelected ? [<EventDetailPanel key={`detail-${group.callsign}-${i}`} event={event} onJump={() => handleEventClick(event.time, event.description)} />] : []),
+                        ];
+                      }) : []),
                     ];
                   })
-                ) : filteredEvents.map((event, i) => (
-                  <tr
-                    key={`${event.time}-${i}`}
-                    onClick={() => handleEventClick(event.time, event.description)}
-                    className="hover:bg-blue-50 cursor-pointer transition-colors border-b border-slate-100"
-                    title="Click to jump to this event"
-                  >
-                    <td className="px-3 py-1.5 text-slate-500 font-mono text-xs">{fmtTime(event.time)}</td>
-                    <td className="px-3 py-1.5">
-                      <span className="flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-sm flex-shrink-0 ${EVENT_COLORS[event.event_type] || 'bg-gray-400'}`} />
-                        <span className="text-slate-700 text-xs">{EVENT_LABELS[event.event_type] || event.event_type}</span>
-                      </span>
-                    </td>
-                    <td className="px-3 py-1.5 text-slate-800 text-xs">{event.description}</td>
-                  </tr>
-                ))}
+                ) : filteredEvents.flatMap((event, i) => {
+                  const ek = eventKey(event);
+                  const isFocused = focusEventKeys?.has(ek);
+                  const isSelected = selectedEventKey === ek;
+                  const isFirstFocus = isFocused && focusEvents?.[0] === event;
+                  return [
+                    <tr
+                      key={`${event.time}-${i}`}
+                      ref={isFirstFocus ? focusRowRef : undefined}
+                      onClick={() => setSelectedEventKey(prev => prev === ek ? null : ek)}
+                      className={`cursor-pointer transition-colors border-b border-slate-100 ${isFocused ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-blue-50'} ${isSelected ? 'bg-blue-100' : ''}`}
+                      title="Click to expand event details"
+                    >
+                      <td className="px-3 py-1.5 text-slate-500 font-mono text-xs">{fmtTime(event.time)}</td>
+                      <td className="px-3 py-1.5">
+                        <span className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-sm flex-shrink-0 ${EVENT_COLORS[event.event_type] || 'bg-gray-400'}`} />
+                          <span className="text-slate-700 text-xs">{EVENT_LABELS[event.event_type] || event.event_type}</span>
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5 text-slate-800 text-xs flex items-center gap-2">
+                        <span className="flex-1">{event.description}</span>
+                        <svg className={`w-3 h-3 text-slate-400 transition-transform flex-shrink-0 ${isSelected ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </td>
+                    </tr>,
+                    ...(isSelected ? [<EventDetailPanel key={`detail-${event.time}-${i}`} event={event} onJump={() => handleEventClick(event.time, event.description)} />] : []),
+                  ];
+                })}
               </tbody>
             </table>
+          </div>
           </div>
 
           </div>}

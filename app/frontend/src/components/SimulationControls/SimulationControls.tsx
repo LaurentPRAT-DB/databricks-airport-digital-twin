@@ -228,6 +228,7 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
   }, []);
 
   const [showReport, setShowReport] = useState(false);
+  const [focusEvents, setFocusEvents] = useState<ScenarioEvent[] | null>(null);
   const progressPct = sim.totalFrames > 0
     ? (sim.currentFrameIndex / (sim.totalFrames - 1)) * 100
     : 0;
@@ -344,6 +345,8 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
                 onClick={(e) => {
                   e.stopPropagation();
                   sim.seekToTime(cluster.events[0].time);
+                  setFocusEvents(cluster.events);
+                  setShowReport(true);
                 }}
               >
                 {cluster.events.length === 1 ? (
@@ -441,7 +444,7 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
 
         {/* Report generator button — hidden on mobile */}
         <button
-          onClick={() => setShowReport(true)}
+          onClick={() => { setFocusEvents(null); setShowReport(true); }}
           className="hidden md:flex flex-shrink-0 px-2 py-1 rounded text-xs font-medium bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors items-center gap-1"
           title="Generate simulation report"
         >
@@ -462,7 +465,7 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
       </div>
 
       {/* Report modal */}
-      {showReport && <SimulationReport sim={sim} onClose={() => setShowReport(false)} />}
+      {showReport && <SimulationReport sim={sim} onClose={() => { setShowReport(false); setFocusEvents(null); }} focusEvents={focusEvents} />}
     </div>
   );
 }
