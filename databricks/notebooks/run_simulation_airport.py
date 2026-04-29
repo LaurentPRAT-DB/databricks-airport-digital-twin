@@ -88,12 +88,11 @@ config["output_file"] = local_output
 print(f"Local output:  {local_output}")
 print(f"Volume target: {volume_output}")
 
-# Write a temporary config file for the CLI to read
-config_file = f"configs/_run_{airport.lower()}.yaml"
-config_path = os.path.join(bundle_root, config_file)
-os.makedirs(os.path.dirname(config_path), exist_ok=True)
-with open(config_path, "w") as f:
+# Write a temporary config file for the CLI to read (use /tmp to avoid WSFS async flush issues)
+config_file = f"/tmp/_run_{airport.lower()}.yaml"
+with open(config_file, "w") as f:
     yaml.dump(config, f, default_flow_style=False)
+config_path = config_file
 print(f"Generated config: {config_path}")
 
 scenario_file = config.get("scenario_file")

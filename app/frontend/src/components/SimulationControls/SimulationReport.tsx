@@ -440,7 +440,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+        <div className={`flex-1 min-h-0 px-6 py-4 ${activeTab === 'dashboard' ? 'flex flex-col' : 'overflow-y-auto'}`}>
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
@@ -460,7 +460,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           )}
 
           {/* ── Dashboard tab ── */}
-          {activeTab === 'dashboard' && <div className="flex flex-col gap-2">
+          {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col gap-2">
           {/* KPI Cards — single compact row */}
           <div className="shrink-0 grid grid-cols-8 gap-1">
             {[
@@ -542,7 +542,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </div>
 
           {/* Event table */}
-          <div className="rounded-lg border border-slate-200" style={{ overflowY: 'auto', maxHeight: 'calc(92vh - 350px)' }}>
+          <div className="flex-1 min-h-0 rounded-lg border border-slate-200 overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100 z-10">
                 <tr>
