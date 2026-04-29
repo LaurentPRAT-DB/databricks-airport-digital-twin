@@ -748,14 +748,16 @@ function RunningTab({ jobs, isLoading, onLoadResult }: {
 
 // ── Saved Tab ──────────────────────────────────────────────────────
 
-function SavedTab({ drafts, isLoading, onEdit, onRun, onDelete, isRunning, isDeleting }: {
+function SavedTab({ drafts, isLoading, onEdit, onRun, onDelete, onLoadResult, isRunning, isDeleting, jobs }: {
   drafts: SimulationDraft[];
   isLoading: boolean;
   onEdit: (draft: SimulationDraft) => void;
   onRun: (draft: SimulationDraft) => void;
   onDelete: (name: string) => void;
+  onLoadResult: (filename: string) => void;
   isRunning: boolean;
   isDeleting: boolean;
+  jobs: SimulationJob[];
 }) {
   if (isLoading) {
     return (
@@ -789,14 +791,28 @@ function SavedTab({ drafts, isLoading, onEdit, onRun, onDelete, isRunning, isDel
             ? draft.scenario_name.replace('.yaml', '')
             : 'No scenario';
         const totalFlights = draft.arrivals + draft.departures;
+        const job = draft.run_id ? jobs.find(j => j.run_id === draft.run_id) : null;
+        const isActive = job && ['PENDING', 'QUEUED', 'RUNNING', 'BLOCKED'].includes(job.status);
         return (
           <div key={draft.name} className="border border-slate-200 rounded-lg px-4 py-3 hover:border-slate-300 transition-colors">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-2">
                 <span className="font-medium text-sm text-slate-800">{draft.display_name}</span>
-                <span className="ml-2 text-xs text-slate-400">{draft.airport}</span>
+                <span className="text-xs text-slate-400">{draft.airport}</span>
+                {job && <StatusBadge status={job.status} />}
+                {job && isActive && (
+                  <span className="text-xs text-slate-400 font-mono">{formatElapsed(job.elapsed_seconds)}</span>
+                )}
               </div>
               <div className="flex items-center gap-1">
+                {job?.status === 'SUCCESS' && job.output_file && (
+                  <button
+                    onClick={() => onLoadResult(job.output_file!)}
+                    className="px-2 py-1 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-medium transition-colors"
+                  >
+                    Load
+                  </button>
+                )}
                 <button
                   onClick={() => onEdit(draft)}
                   className="px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded transition-colors"
@@ -806,7 +822,7 @@ function SavedTab({ drafts, isLoading, onEdit, onRun, onDelete, isRunning, isDel
                 </button>
                 <button
                   onClick={() => onRun(draft)}
-                  disabled={isRunning}
+                  disabled={isRunning || !!isActive}
                   className="px-2 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded text-xs font-medium transition-colors"
                 >
                   Run
@@ -937,6 +953,7 @@ export default function SimulationManager({
     saveDraft, isSaving,
     updateDraft, isUpdating,
     deleteDraft, isDeleting,
+    runDraft, isRunningDraft,
   } = useSimulationDrafts();
 
   const activeJobCount = useMemo(
@@ -973,21 +990,8 @@ export default function SimulationManager({
   };
 
   const handleRunDraft = async (draft: SimulationDraft) => {
-    const params: CreateSimulationParams = {
-      airport: draft.airport,
-      arrivals: draft.arrivals,
-      departures: draft.departures,
-      duration_hours: draft.duration_hours,
-      time_step_seconds: draft.time_step_seconds,
-      skip_positions: draft.skip_positions,
-      run_name: draft.display_name,
-    };
-    if (draft.seed != null) params.seed = draft.seed;
-    if (draft.scenario_name) params.scenario_name = draft.scenario_name;
-    if (draft.custom_scenario) params.custom_scenario = draft.custom_scenario;
-
     try {
-      await createJob(params);
+      await runDraft(draft.name);
       setActiveTab('running');
     } catch {
       // Error handled by mutation state
@@ -1072,8 +1076,10 @@ export default function SimulationManager({
                 onEdit={handleEditDraft}
                 onRun={handleRunDraft}
                 onDelete={handleDeleteDraft}
-                isRunning={isCreating}
+                onLoadResult={handleLoadResult}
+                isRunning={isRunningDraft}
                 isDeleting={isDeleting}
+                jobs={jobs}
               />
             )}
             {activeTab === 'load' && (

@@ -19,11 +19,12 @@ export interface SimulationDraft {
     traffic_modifiers: Record<string, unknown>[];
   } | null;
   skip_positions: boolean;
+  run_id: number | null;
   created_at: string;
   updated_at: string;
 }
 
-export type SaveDraftParams = Omit<SimulationDraft, 'name' | 'created_at' | 'updated_at'>;
+export type SaveDraftParams = Omit<SimulationDraft, 'name' | 'run_id' | 'created_at' | 'updated_at'>;
 
 async function fetchDrafts(): Promise<SimulationDraft[]> {
   const res = await fetch('/api/simulation/drafts');
@@ -68,6 +69,17 @@ async function deleteDraft(name: string): Promise<void> {
   }
 }
 
+async function runDraft(name: string): Promise<SimulationDraft> {
+  const res = await fetch(`/api/simulation/drafts/${encodeURIComponent(name)}/run`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(err.detail || 'Failed to run draft');
+  }
+  return res.json();
+}
+
 export function useSimulationDrafts() {
   const queryClient = useQueryClient();
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['simulation-drafts'] });
@@ -82,6 +94,13 @@ export function useSimulationDrafts() {
   const saveMutation = useMutation({ mutationFn: saveDraft, onSuccess: invalidate });
   const updateMutation = useMutation({ mutationFn: updateDraft, onSuccess: invalidate });
   const deleteMutation = useMutation({ mutationFn: deleteDraft, onSuccess: invalidate });
+  const runMutation = useMutation({
+    mutationFn: runDraft,
+    onSuccess: () => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ['simulation-jobs'] });
+    },
+  });
 
   return {
     drafts,
@@ -92,5 +111,7 @@ export function useSimulationDrafts() {
     isUpdating: updateMutation.isPending,
     deleteDraft: deleteMutation.mutateAsync,
     isDeleting: deleteMutation.isPending,
+    runDraft: runMutation.mutateAsync,
+    isRunningDraft: runMutation.isPending,
   };
 }

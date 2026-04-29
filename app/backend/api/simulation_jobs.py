@@ -304,30 +304,35 @@ async def create_simulation_job(request: Request, body: CreateSimulationRequest)
     if run_id is None:
         raise HTTPException(status_code=500, detail="Failed to submit simulation job")
 
+    lakebase = _get_lakebase()
+    lakebase.insert_simulation_run(run_id, run_name, body.airport)
+
     logger.info(f"Submitted simulation job run_id={run_id}: {run_name}")
     return {"run_id": run_id, "run_name": run_name}
 
 
 @simulation_jobs_router.get("/jobs")
 async def list_simulation_jobs(request: Request):
-    """List recent simulation runs (SUBMIT_RUN type, last 20)."""
-    from databricks.sdk.service.jobs import RunType
-
+    """List simulation runs tracked in the runs registry."""
     user_token = _extract_user_token(request)
+    lakebase = _get_lakebase()
+    known_ids = set(lakebase.list_simulation_run_ids())
+
+    if not known_ids:
+        return {"jobs": []}
 
     def _list(w):
-        runs = list(w.jobs.list_runs(
-            run_type=RunType.SUBMIT_RUN,
-            expand_tasks=False,
-            limit=20,
-        ))
-        return [
-            _format_run(r)
-            for r in runs
-            if r.run_name and r.run_name.startswith("Simulation ")
-        ]
+        results = []
+        for rid in known_ids:
+            try:
+                run = w.jobs.get_run(rid)
+                results.append(_format_run(run))
+            except Exception:
+                pass
+        results.sort(key=lambda j: j.start_time or 0, reverse=True)
+        return results
 
-    jobs = _sdk_call(_list, user_token, timeout=15)
+    jobs = _sdk_call(_list, user_token, timeout=30)
     if jobs is None:
         return {"jobs": [], "error": "Could not connect to Databricks"}
 
@@ -440,6 +445,7 @@ class SimulationDraft(BaseModel):
     scenario_name: Optional[str] = None
     custom_scenario: Optional[CustomScenario] = None
     skip_positions: bool = False
+    run_id: Optional[int] = None
     created_at: str = ""
     updated_at: str = ""
 
@@ -646,3 +652,77 @@ async def delete_draft(request: Request, name: str):
 
     _sync_draft_to_delta({"name": name}, _extract_user_token(request), delete=True)
     return {"deleted": name}
+
+
+@simulation_jobs_router.post("/drafts/{name}/run")
+async def run_draft(request: Request, name: str):
+    """Run a saved draft: create a Databricks job and store its run_id on the draft."""
+    from databricks.sdk.service.jobs import SubmitTask, NotebookTask, Source
+    from datetime import datetime, timezone
+
+    lakebase = _get_lakebase()
+    existing = lakebase.get_simulation_draft(name)
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Draft '{name}' not found")
+
+    user_token = _extract_user_token(request)
+    notebook_path = _get_notebook_path()
+
+    params = {
+        "airport": existing["airport"],
+        "arrivals": str(existing.get("arrivals", 500)),
+        "departures": str(existing.get("departures", 500)),
+        "duration_hours": str(existing.get("duration_hours", 24)),
+        "time_step_seconds": str(existing.get("time_step_seconds", 2.0)),
+        "output_file": f"simulation_output/sim_{existing['airport'].lower()}_{int(time.time())}.json",
+    }
+    seed = existing.get("seed")
+    if seed is not None:
+        params["seed"] = str(seed)
+    if existing.get("skip_positions"):
+        params["skip_positions"] = "true"
+
+    scenario_name = existing.get("scenario_name")
+    custom_scenario = existing.get("custom_scenario")
+    if scenario_name:
+        ws_root = _BUNDLE_WS_ROOT
+        if ws_root.startswith("/Workspace"):
+            ws_root = ws_root[len("/Workspace"):]
+        params["scenario_file"] = f"{ws_root}/scenarios/{scenario_name}"
+    elif custom_scenario:
+        cs = CustomScenario(**custom_scenario) if isinstance(custom_scenario, dict) else custom_scenario
+        vol_path = _write_custom_scenario_to_volume(cs, user_token)
+        if not vol_path:
+            raise HTTPException(status_code=500, detail="Failed to write custom scenario to Volume")
+        params["scenario_file"] = vol_path
+
+    total_flights = existing.get("arrivals", 500) + existing.get("departures", 500)
+    run_name = existing.get("display_name") or f"Simulation {existing['airport']} {total_flights}f"
+
+    task = SubmitTask(
+        task_key="run_simulation",
+        notebook_task=NotebookTask(
+            notebook_path=notebook_path,
+            base_parameters=params,
+            source=Source.WORKSPACE,
+        ),
+    )
+
+    def _submit(w):
+        waiter = w.jobs.submit(run_name=run_name, tasks=[task], timeout_seconds=7200)
+        return waiter.run_id
+
+    run_id = _sdk_call(_submit, user_token, timeout=30)
+    if run_id is None:
+        raise HTTPException(status_code=500, detail="Failed to submit simulation job")
+
+    lakebase.insert_simulation_run(run_id, run_name, existing["airport"])
+
+    now = datetime.now(timezone.utc).isoformat()
+    existing["run_id"] = run_id
+    existing["updated_at"] = now
+    lakebase.upsert_simulation_draft(existing)
+    _sync_draft_to_delta(existing, user_token)
+
+    logger.info(f"Submitted draft run run_id={run_id}: {run_name} (draft={name})")
+    return existing

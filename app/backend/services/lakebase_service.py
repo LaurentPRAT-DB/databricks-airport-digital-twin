@@ -2171,10 +2171,14 @@ class LakebaseService:
                             scenario_name VARCHAR(200),
                             custom_scenario JSONB,
                             skip_positions BOOLEAN DEFAULT FALSE,
+                            run_id BIGINT,
                             created_at TIMESTAMPTZ DEFAULT NOW(),
                             updated_at TIMESTAMPTZ DEFAULT NOW()
                         )
                     """)
+                    cur.execute(
+                        "ALTER TABLE simulation_drafts ADD COLUMN IF NOT EXISTS run_id BIGINT"
+                    )
                     conn.commit()
                     return True
         except Exception as e:
@@ -2246,8 +2250,8 @@ class LakebaseService:
                         INSERT INTO simulation_drafts
                             (name, display_name, airport, arrivals, departures,
                              duration_hours, time_step_seconds, seed, scenario_name,
-                             custom_scenario, skip_positions, created_at, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                             custom_scenario, skip_positions, run_id, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (name) DO UPDATE SET
                             display_name = EXCLUDED.display_name,
                             airport = EXCLUDED.airport,
@@ -2259,6 +2263,7 @@ class LakebaseService:
                             scenario_name = EXCLUDED.scenario_name,
                             custom_scenario = EXCLUDED.custom_scenario,
                             skip_positions = EXCLUDED.skip_positions,
+                            run_id = EXCLUDED.run_id,
                             updated_at = EXCLUDED.updated_at
                     """, (
                         draft["name"], draft["display_name"], draft["airport"],
@@ -2266,6 +2271,7 @@ class LakebaseService:
                         draft.get("duration_hours", 24), draft.get("time_step_seconds", 2.0),
                         draft.get("seed"), draft.get("scenario_name"),
                         custom_json, draft.get("skip_positions", False),
+                        draft.get("run_id"),
                         draft.get("created_at"), draft.get("updated_at"),
                     ))
                     conn.commit()
@@ -2291,6 +2297,63 @@ class LakebaseService:
             logger.warning("Failed to delete simulation draft %s: %s", name, e)
             self._invalidate_credentials_if_auth_error(e)
             return False
+
+    # ── Simulation Runs Registry ─────────────────────────────────────────
+
+    def _ensure_simulation_runs_table(self) -> bool:
+        if not self.is_available:
+            return False
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS simulation_runs (
+                            run_id BIGINT PRIMARY KEY,
+                            run_name VARCHAR(300) NOT NULL,
+                            airport VARCHAR(10) NOT NULL,
+                            created_at TIMESTAMPTZ DEFAULT NOW()
+                        )
+                    """)
+                    conn.commit()
+                    return True
+        except Exception as e:
+            logger.warning("Failed to create simulation_runs table: %s", e)
+            self._invalidate_credentials_if_auth_error(e)
+            return False
+
+    def insert_simulation_run(self, run_id: int, run_name: str, airport: str) -> bool:
+        if not self.is_available:
+            return False
+        self._ensure_simulation_runs_table()
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO simulation_runs (run_id, run_name, airport) VALUES (%s, %s, %s) ON CONFLICT (run_id) DO NOTHING",
+                        (run_id, run_name, airport),
+                    )
+                    conn.commit()
+                    return True
+        except Exception as e:
+            logger.warning("Failed to insert simulation run %s: %s", run_id, e)
+            self._invalidate_credentials_if_auth_error(e)
+            return False
+
+    def list_simulation_run_ids(self) -> list[int]:
+        if not self.is_available:
+            return []
+        self._ensure_simulation_runs_table()
+        try:
+            with self._get_read_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT run_id FROM simulation_runs ORDER BY created_at DESC LIMIT 50"
+                    )
+                    return [row[0] for row in cur.fetchall()]
+        except Exception as e:
+            logger.warning("Failed to list simulation run ids: %s", e)
+            self._invalidate_credentials_if_auth_error(e)
+            return []
 
 
 # Singleton instance
