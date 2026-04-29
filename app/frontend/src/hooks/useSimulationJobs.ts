@@ -65,6 +65,15 @@ export async function fetchScenarioDetail(filename: string): Promise<ScenarioDet
   return res.json();
 }
 
+async function deleteJob(run_id: number): Promise<{ deleted: number; was_cancelled: boolean }> {
+  const res = await fetch(`/api/simulation/jobs/${run_id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(err.detail || 'Failed to delete simulation job');
+  }
+  return res.json();
+}
+
 async function createJob(params: CreateSimulationParams): Promise<{ run_id: number }> {
   const res = await fetch('/api/simulation/jobs', {
     method: 'POST',
@@ -109,6 +118,14 @@ export function useSimulationJobs() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: deleteJob,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['simulation-jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['simulation-drafts'] });
+    },
+  });
+
   return {
     jobs,
     isLoadingJobs,
@@ -118,5 +135,7 @@ export function useSimulationJobs() {
     createJob: createMutation.mutateAsync,
     isCreating: createMutation.isPending,
     createError: createMutation.error,
+    deleteJob: deleteMutation.mutateAsync,
+    isDeleting: deleteMutation.isPending,
   };
 }

@@ -2339,6 +2339,24 @@ class LakebaseService:
             self._invalidate_credentials_if_auth_error(e)
             return False
 
+    def delete_simulation_run(self, run_id: int) -> bool:
+        if not self.is_available:
+            return False
+        self._ensure_simulation_runs_table()
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM simulation_runs WHERE run_id = %s",
+                        (run_id,),
+                    )
+                    conn.commit()
+                    return True
+        except Exception as e:
+            logger.warning("Failed to delete simulation run %s: %s", run_id, e)
+            self._invalidate_credentials_if_auth_error(e)
+            return False
+
     def list_simulation_run_ids(self) -> list[int]:
         if not self.is_available:
             return []

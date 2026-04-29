@@ -355,6 +355,38 @@ async def get_simulation_job(request: Request, run_id: int):
     return job.model_dump()
 
 
+_ACTIVE_STATUSES = {"PENDING", "QUEUED", "RUNNING", "BLOCKED"}
+
+
+@simulation_jobs_router.delete("/jobs/{run_id}")
+async def delete_simulation_job(request: Request, run_id: int):
+    """Cancel (if active) and remove a simulation run from the registry."""
+    user_token = _extract_user_token(request)
+
+    def _get_and_cancel(w):
+        run = w.jobs.get_run(run_id)
+        formatted = _format_run(run)
+        if formatted.status in _ACTIVE_STATUSES:
+            w.jobs.cancel_run(run_id)
+        return formatted
+
+    job = _sdk_call(_get_and_cancel, user_token, timeout=30)
+    was_active = job.status in _ACTIVE_STATUSES if job else False
+
+    lakebase = _get_lakebase()
+    lakebase.delete_simulation_run(run_id)
+
+    # Clear run_id from any draft that references this run
+    drafts = lakebase.list_simulation_drafts()
+    for d in drafts:
+        if d.get("run_id") == run_id:
+            d["run_id"] = None
+            lakebase.upsert_simulation_draft(d)
+
+    logger.info("Deleted simulation job run_id=%s (was_active=%s)", run_id, was_active)
+    return {"deleted": run_id, "was_cancelled": was_active}
+
+
 @simulation_jobs_router.get("/scenarios")
 async def list_scenarios():
     """List available built-in scenario YAML files."""

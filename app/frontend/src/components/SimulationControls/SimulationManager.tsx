@@ -679,11 +679,33 @@ function CreateTab({ scenarios, isLoadingScenarios, onSubmit, isCreating, onSave
 
 // ── Running Tab ─────────────────────────────────────────────────────
 
-function RunningTab({ jobs, isLoading, onLoadResult }: {
+const ACTIVE_JOB_STATUSES = ['PENDING', 'QUEUED', 'RUNNING', 'BLOCKED'];
+
+function RunningTab({ jobs, isLoading, onLoadResult, onDeleteJob, isDeletingJob }: {
   jobs: SimulationJob[];
   isLoading: boolean;
   onLoadResult: (filename: string) => void;
+  onDeleteJob: (runId: number) => void;
+  isDeletingJob: boolean;
 }) {
+  const [confirmingDelete, setConfirmingDelete] = useState<number | null>(null);
+
+  const handleDelete = (job: SimulationJob) => {
+    const isActive = ACTIVE_JOB_STATUSES.includes(job.status);
+    if (isActive) {
+      setConfirmingDelete(job.run_id);
+    } else {
+      onDeleteJob(job.run_id);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (confirmingDelete != null) {
+      onDeleteJob(confirmingDelete);
+      setConfirmingDelete(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8 gap-3 text-slate-400">
@@ -707,6 +729,28 @@ function RunningTab({ jobs, isLoading, onLoadResult }: {
 
   return (
     <div className="space-y-2">
+      {/* Confirmation banner */}
+      {confirmingDelete != null && (
+        <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
+          <span className="text-xs text-red-700">This will cancel the running job. Continue?</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setConfirmingDelete(null)}
+              className="px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded transition-colors"
+            >
+              No
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={isDeletingJob}
+              className="px-3 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded text-xs font-medium transition-colors"
+            >
+              {isDeletingJob ? 'Cancelling...' : 'Yes, cancel & delete'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {jobs.map(job => (
         <div key={job.run_id} className="border border-slate-200 rounded-lg px-4 py-3 hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
@@ -737,6 +781,20 @@ function RunningTab({ jobs, isLoading, onLoadResult }: {
                   </svg>
                 </a>
               )}
+              <button
+                onClick={() => handleDelete(job)}
+                disabled={isDeletingJob}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  confirmingDelete === job.run_id
+                    ? 'bg-red-100 text-red-600'
+                    : 'text-red-400 hover:bg-red-50 hover:text-red-600'
+                } disabled:opacity-50`}
+                title={ACTIVE_JOB_STATUSES.includes(job.status) ? 'Cancel & delete' : 'Delete'}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
             </div>
           </div>
           <div className="text-xs text-slate-500 mt-1">{job.airport}</div>
@@ -947,7 +1005,7 @@ export default function SimulationManager({
 }) {
   const [activeTab, setActiveTab] = useState<Tab>('create');
   const [editingDraft, setEditingDraft] = useState<SimulationDraft | null>(null);
-  const { jobs, isLoadingJobs, scenarios, isLoadingScenarios, createJob, isCreating } = useSimulationJobs();
+  const { jobs, isLoadingJobs, scenarios, isLoadingScenarios, createJob, isCreating, deleteJob, isDeleting: isDeletingJob } = useSimulationJobs();
   const {
     drafts, isLoadingDrafts,
     saveDraft, isSaving,
@@ -1002,6 +1060,14 @@ export default function SimulationManager({
     try {
       await deleteDraft(name);
       if (editingDraft?.name === name) setEditingDraft(null);
+    } catch {
+      // Error handled by mutation state
+    }
+  };
+
+  const handleDeleteJob = async (runId: number) => {
+    try {
+      await deleteJob(runId);
     } catch {
       // Error handled by mutation state
     }
@@ -1096,6 +1162,8 @@ export default function SimulationManager({
                 jobs={jobs}
                 isLoading={isLoadingJobs}
                 onLoadResult={handleLoadResult}
+                onDeleteJob={handleDeleteJob}
+                isDeletingJob={isDeletingJob}
               />
             )}
           </div>

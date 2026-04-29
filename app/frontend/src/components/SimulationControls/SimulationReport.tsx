@@ -280,47 +280,6 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
   // Summary data
   const summary = sim.summary as Record<string, unknown> | null;
 
-  // ── DEBUG: scroll diagnostics ──
-  const tableContainerRef = useRef<HTMLDivElement>(null);
-  const dashboardRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [scrollDiag, setScrollDiag] = useState<string>('');
-
-  useEffect(() => {
-    if (activeTab !== 'dashboard') return;
-
-    const getDims = (label: string, el: HTMLElement | null) => {
-      if (!el) return `${label}: null`;
-      const cs = getComputedStyle(el);
-      return `${label} | cH=${el.clientHeight} sH=${el.scrollHeight} oY=${cs.overflowY} h=${cs.height} maxH=${cs.maxHeight} flex=${cs.flex} scroll=${el.scrollHeight > el.clientHeight}`;
-    };
-
-    const id = setTimeout(() => {
-      const tc = tableContainerRef.current;
-      const lines = [
-        `events=${filteredEvents.length}`,
-        getDims('tbl', tc),
-        getDims('dash', dashboardRef.current),
-        getDims('body', bodyRef.current),
-      ];
-      if (tc) {
-        const table = tc.querySelector('table');
-        if (table) lines.push(`<table> sH=${table.scrollHeight} containerCH=${tc.clientHeight}`);
-      }
-      const msg = lines.join(' | ');
-      setScrollDiag(msg);
-      console.log('[SCROLL-DIAG]', msg);
-
-      fetch('/api/debug/client-logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: [{ source: 'SCROLL-DIAG', level: 'info', message: msg }] }),
-      }).catch(() => {});
-    }, 500);
-
-    return () => clearTimeout(id);
-  }, [activeTab, filteredEvents.length, fullscreen]);
-
   // Generate and download HTML report
   const downloadReport = useCallback(() => {
     const kpis = [
@@ -481,7 +440,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
         </div>
 
         {/* Body */}
-        <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
@@ -501,13 +460,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           )}
 
           {/* ── Dashboard tab ── */}
-          {activeTab === 'dashboard' && <div ref={dashboardRef} className="flex flex-col gap-2">
-          {/* DEBUG banner — visible scroll diagnostics */}
-          {scrollDiag && (
-            <div className="shrink-0 bg-amber-50 border border-amber-200 rounded px-2 py-1 text-[9px] font-mono text-amber-800 break-all">
-              {scrollDiag}
-            </div>
-          )}
+          {activeTab === 'dashboard' && <div className="flex flex-col gap-2">
           {/* KPI Cards — single compact row */}
           <div className="shrink-0 grid grid-cols-8 gap-1">
             {[
@@ -589,7 +542,7 @@ export function SimulationReport({ sim, onClose }: SimulationReportProps) {
           </div>
 
           {/* Event table */}
-          <div ref={tableContainerRef} className="rounded-lg border border-slate-200" style={{ overflowY: 'auto', maxHeight: 'calc(92vh - 350px)' }}>
+          <div className="rounded-lg border border-slate-200" style={{ overflowY: 'auto', maxHeight: 'calc(92vh - 350px)' }}>
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100 z-10">
                 <tr>
