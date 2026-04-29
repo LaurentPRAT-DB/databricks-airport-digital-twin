@@ -75,8 +75,11 @@ def main() -> None:
     engine = SimulationEngine(config)
     recorder = engine.run()
 
-    # Write output
-    config_dict = config.model_dump(mode="json")
+    # Write output (compatible with both Pydantic v1 and v2)
+    if hasattr(config, "model_dump"):
+        config_dict = config.model_dump(mode="json")
+    else:
+        config_dict = config.dict()
     recorder.write_output(config.output_file, config_dict)
 
     # Print summary

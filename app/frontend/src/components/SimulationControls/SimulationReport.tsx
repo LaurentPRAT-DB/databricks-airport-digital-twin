@@ -525,7 +525,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
         </div>
 
         {/* Body */}
-        <div className={`flex-1 min-h-0 px-6 py-4 ${activeTab === 'dashboard' ? 'flex flex-col' : 'overflow-y-auto'}`}>
+        <div className={`flex-1 min-h-0 px-6 py-4 overflow-hidden ${activeTab === 'dashboard' ? 'flex flex-col' : 'overflow-y-auto'}`}>
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
@@ -545,7 +545,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
           )}
 
           {/* ── Dashboard tab ── */}
-          {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col gap-2">
+          {activeTab === 'dashboard' && <div className="flex-1 min-h-0 overflow-hidden flex flex-col gap-2">
           {/* KPI Cards — single compact row */}
           <div className="shrink-0 grid grid-cols-8 gap-1">
             {[
@@ -626,9 +626,8 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
             </span>
           </div>
 
-          {/* Event table — absolute positioning gives a definite pixel height from flex layout */}
-          <div className="flex-1 min-h-0 relative">
-          <div className="absolute inset-0 rounded-lg border border-slate-200 overflow-y-auto">
+          {/* Event table */}
+          <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-slate-200">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100 z-10">
                 <tr>
@@ -740,7 +739,6 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
                 })}
               </tbody>
             </table>
-          </div>
           </div>
 
           </div>}

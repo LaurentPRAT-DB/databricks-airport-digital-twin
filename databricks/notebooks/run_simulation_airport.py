@@ -6,8 +6,8 @@
 
 # COMMAND ----------
 
-# Only the 3 third-party packages the simulation CLI actually imports
-%pip install pyyaml pydantic Faker --quiet
+# Third-party packages the simulation CLI needs (pydantic>=2 for model_dump)
+%pip install pyyaml "pydantic>=2" Faker --quiet
 
 # COMMAND ----------
 
@@ -276,11 +276,25 @@ for f in [config_path, local_output]:
 
 # Exit with status
 success = result.returncode == 0
-dbutils.notebook.exit(json.dumps({
+exit_payload = {
     "status": "PASS" if success else "FAIL",
     "airport": airport,
     "elapsed_sec": round(elapsed, 1),
     "output_file": volume_output,
     "total_flights": summary.get("total_flights", 0) if success else 0,
     "on_time_pct": summary.get("on_time_pct", 0) if success else 0,
-}))
+}
+
+if not success:
+    stderr_tail = (result.stderr or "")[-500:]
+    stdout_tail = (result.stdout or "")[-500:]
+    exit_payload["stderr"] = stderr_tail
+    exit_payload["stdout_tail"] = stdout_tail
+    exit_payload["returncode"] = result.returncode
+    # Raise so Databricks job shows FAILED (not misleading SUCCESS)
+    raise RuntimeError(
+        f"Simulation FAILED for {airport} (exit code {result.returncode}). "
+        f"Result: {json.dumps(exit_payload)}"
+    )
+
+dbutils.notebook.exit(json.dumps(exit_payload))
