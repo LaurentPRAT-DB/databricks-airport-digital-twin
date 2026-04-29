@@ -1767,6 +1767,22 @@ async def post_client_logs(request: Request) -> dict:
     if lakebase.is_available:
         lakebase.insert_client_logs(entries)
 
+    # Persist to UC Volume debug log (readable via `databricks fs cat`)
+    _uc_catalog = os.getenv("DATABRICKS_CATALOG", "")
+    _uc_schema = os.getenv("DATABRICKS_SCHEMA", "")
+    if _uc_catalog and _uc_schema:
+        try:
+            from datetime import datetime as _dt
+            debug_dir = f"/Volumes/{_uc_catalog}/{_uc_schema}/simulation_data/debug"
+            os.makedirs(debug_dir, exist_ok=True)
+            log_path = f"{debug_dir}/client_debug.log"
+            with open(log_path, "a") as f:
+                ts = _dt.utcnow().isoformat(timespec="seconds")
+                for entry in entries:
+                    f.write(f"[{ts}] [{entry.get('source', '?')}] {entry.get('message', '')}\n")
+        except Exception:
+            pass
+
     return {"accepted": len(entries)}
 
 
