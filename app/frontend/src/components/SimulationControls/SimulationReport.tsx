@@ -215,6 +215,35 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
   const { filteredFlights, setSelectedFlight } = useFlightContext();
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
   const focusRowRef = useRef<HTMLTableRowElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(false);
+
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Block wheel events from reaching Leaflet map behind the modal
+  useEffect(() => {
+    const el = modalRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => { e.stopPropagation(); e.preventDefault(); };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
+
+  // Track scroll state on the event table container
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const update = () => {
+      setCanScrollUp(el.scrollTop > 4);
+      setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => { el.removeEventListener('scroll', update); ro.disconnect(); };
+  }, []);
 
   // Handle clicking an event row — seek to event time, select matching flight, close report
   const handleEventClick = useCallback((eventTime: string, description: string) => {
@@ -461,7 +490,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
   }, [sim, summary, filteredEvents, fromHour, toHour]);
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4" onWheel={e => e.stopPropagation()}>
+    <div ref={modalRef} className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4" onPointerDown={e => e.stopPropagation()} onMouseMove={e => e.stopPropagation()}>
       <div className={`bg-white shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-200 ${
         fullscreen
           ? 'w-full h-full max-w-full max-h-full rounded-none'
@@ -627,7 +656,22 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
           </div>
 
           {/* Event table */}
-          <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-slate-200">
+          <div className="relative flex-1 min-h-0">
+            {filteredEvents.length > 0 && (
+              <div className="absolute top-1 right-3 z-20 flex flex-col gap-1">
+                <button
+                  onClick={e => { e.stopPropagation(); tableScrollRef.current?.scrollBy({ top: -120, behavior: 'smooth' }); }}
+                  className={`w-6 h-6 rounded bg-slate-700/70 text-white text-xs flex items-center justify-center hover:bg-slate-600 transition-opacity ${canScrollUp ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}
+                  title="Scroll up"
+                >▲</button>
+                <button
+                  onClick={e => { e.stopPropagation(); tableScrollRef.current?.scrollBy({ top: 120, behavior: 'smooth' }); }}
+                  className={`w-6 h-6 rounded bg-slate-700/70 text-white text-xs flex items-center justify-center hover:bg-slate-600 transition-opacity ${canScrollDown ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}
+                  title="Scroll down"
+                >▼</button>
+              </div>
+            )}
+            <div ref={tableScrollRef} className="max-h-[calc(92vh-340px)] overflow-y-auto rounded-lg border border-slate-200">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100 z-10">
                 <tr>
@@ -739,6 +783,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
                 })}
               </tbody>
             </table>
+            </div>
           </div>
 
           </div>}
