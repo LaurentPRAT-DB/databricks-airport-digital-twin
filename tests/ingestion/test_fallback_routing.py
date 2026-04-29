@@ -9,6 +9,8 @@ import math
 from unittest.mock import patch, MagicMock
 import pytest
 
+import src.ingestion.fallback as _fb_mod
+
 from src.ingestion.fallback import (
     _get_taxi_waypoints_arrival,
     _get_taxi_waypoints_departure,
@@ -18,6 +20,7 @@ from src.ingestion.fallback import (
     _distance_between,
     _calculate_heading,
     _taxi_speed_factor,
+    _smooth_sharp_turns,
     FlightPhase,
     FlightState,
     TAXI_WAYPOINTS_ARRIVAL,
@@ -36,11 +39,38 @@ from src.ingestion.fallback import (
     _release_runway,
     get_gates,
     _get_departure_runway_name,
+    reset_airport_offset,
 )
 
 # The functions use lazy imports: `from app.backend.services.airport_config_service import get_airport_config_service`
 # We need to patch at the source module level.
 _SERVICE_PATCH = "app.backend.services.airport_config_service.get_airport_config_service"
+
+
+# ---------------------------------------------------------------------------
+# Global state isolation — undo apply_airport_offset from earlier test modules
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _reset_fallback_globals():
+    """Ensure fallback.py globals are at SFO defaults before routing tests run.
+
+    Trajectory coherence tests simulate non-SFO airports which call
+    apply_airport_offset(), mutating module-level coordinate globals.  This
+    fixture restores SFO defaults so routing tests see consistent values.
+    """
+    reset_airport_offset()
+    _fb_mod._calibration_taxi_in_target_s = 0.0
+    _fb_mod._calibration_taxi_in_waypoint_s = 0.0
+    _fb_mod._calibration_taxi_out_target_s = 0.0
+    _fb_mod._calibration_taxi_out_waypoint_s = 0.0
+    _fb_mod._loaded_gates = None
+    _fb_mod._current_airport_iata = "SFO"
+    yield
+    reset_airport_offset()
+    _fb_mod._loaded_gates = None
+    _fb_mod._current_airport_iata = "SFO"
 
 
 # ---------------------------------------------------------------------------
@@ -1415,3 +1445,71 @@ class TestHeadOnTaxiConflict:
 
         factor = _taxi_speed_factor(a)
         assert factor == 1.0, f"Far apart aircraft should be clear, got {factor}"
+
+
+# ============================================================================
+# Smooth Sharp Turns
+# ============================================================================
+
+
+def _turn_angle_at(route, i):
+    """Compute turn angle at route[i] given triplet route[i-1], route[i], route[i+1]."""
+    a_lon, a_lat = route[i - 1][:2]
+    b_lon, b_lat = route[i][:2]
+    c_lon, c_lat = route[i + 1][:2]
+    ba = (a_lon - b_lon, a_lat - b_lat)
+    bc = (c_lon - b_lon, c_lat - b_lat)
+    len_ba = math.sqrt(ba[0] ** 2 + ba[1] ** 2)
+    len_bc = math.sqrt(bc[0] ** 2 + bc[1] ** 2)
+    if len_ba < 1e-10 or len_bc < 1e-10:
+        return 0.0
+    dot = (ba[0] * bc[0] + ba[1] * bc[1]) / (len_ba * len_bc)
+    dot = max(-1.0, min(1.0, dot))
+    return 180.0 - math.degrees(math.acos(dot))
+
+
+class TestSmoothSharpTurns:
+    """Validate corner-rounding waypoint insertion."""
+
+    def test_straight_route_unchanged(self):
+        route = [(-122.38, 37.61), (-122.37, 37.61), (-122.36, 37.61)]
+        result = _smooth_sharp_turns(route)
+        assert result == route
+
+    def test_90_degree_turn_gets_arc_points(self):
+        route = [(-122.38, 37.61), (-122.37, 37.61), (-122.37, 37.62)]
+        result = _smooth_sharp_turns(route, max_turn_angle=60)
+        assert len(result) > 3
+        assert result[0] == route[0]
+        assert result[-1] == route[-1]
+
+    def test_180_degree_reversal_gets_arc_points(self):
+        route = [(-122.38, 37.61), (-122.37, 37.61), (-122.38, 37.61)]
+        result = _smooth_sharp_turns(route, max_turn_angle=60)
+        assert len(result) >= 5
+
+    def test_mild_turn_below_threshold_unchanged(self):
+        route = [(-122.380, 37.610), (-122.370, 37.611), (-122.360, 37.612)]
+        result = _smooth_sharp_turns(route, max_turn_angle=60)
+        assert len(result) == 3
+
+    def test_two_point_route_unchanged(self):
+        route = [(-122.38, 37.61), (-122.37, 37.62)]
+        result = _smooth_sharp_turns(route)
+        assert result == route
+
+    def test_single_point_route_unchanged(self):
+        route = [(-122.38, 37.61)]
+        result = _smooth_sharp_turns(route)
+        assert result == route
+
+    def test_empty_route_unchanged(self):
+        result = _smooth_sharp_turns([])
+        assert result == []
+
+    def test_output_turns_reduced(self):
+        route = [(-122.38, 37.61), (-122.37, 37.61), (-122.37, 37.62)]
+        result = _smooth_sharp_turns(route, max_turn_angle=60, arc_points=4)
+        for i in range(1, len(result) - 1):
+            angle = _turn_angle_at(result, i)
+            assert angle <= 90, f"Turn at index {i} is {angle:.1f}° (expected <= 90°)"

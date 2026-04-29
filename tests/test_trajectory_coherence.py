@@ -239,6 +239,30 @@ class TestT02ApproachAltitude:
         if checked == 0:
             pytest.skip("No flights with approach data")
 
+    def test_approach_descent_step_within_limit(self, traces):
+        """Between consecutive approach snapshots, descent steps should be ≤ 700ft.
+
+        At 20 ft/s max descent rate and 30s snapshots: 20*30 = 600ft max.
+        Go-around climbs (altitude increasing) are excluded — they use a
+        different rate and are not part of the normal descent profile.
+        """
+        violations = []
+        for icao24, trace in traces.items():
+            approach = _phase_positions(trace, "approaching")
+            for i in range(1, len(approach)):
+                prev_alt = approach[i - 1]["altitude"]
+                curr_alt = approach[i]["altitude"]
+                descent = prev_alt - curr_alt
+                if descent > 700:
+                    violations.append(
+                        f"{icao24}: {descent:.0f}ft descent step at position {i}"
+                    )
+                    break
+        assert len(violations) == 0, (
+            f"T02 FAIL: {len(violations)} approach descent steps > 700ft:\n"
+            + "\n".join(violations[:5])
+        )
+
 
 # ============================================================================
 # T03 — Landing Roll on Runway
@@ -500,6 +524,26 @@ class TestT07DepartureClimb:
             )
         if checked == 0:
             pytest.skip("No flights with departure data")
+
+    def test_departure_climb_step_within_limit(self, traces):
+        """Between consecutive departure snapshots, climb steps should be ≤ 1300ft.
+
+        At 2500 fpm max climb and 30s snapshots: 2500/60*30 = 1250ft max.
+        """
+        violations = []
+        for icao24, trace in traces.items():
+            departing = _phase_positions(trace, "departing")
+            for i in range(1, len(departing)):
+                climb = departing[i]["altitude"] - departing[i - 1]["altitude"]
+                if climb > 1300:
+                    violations.append(
+                        f"{icao24}: {climb:.0f}ft climb step at position {i}"
+                    )
+                    break
+        assert len(violations) == 0, (
+            f"T07 FAIL: {len(violations)} departure climb steps > 1300ft:\n"
+            + "\n".join(violations[:5])
+        )
 
     def test_departure_speed_realistic(self, traces):
         """Departure speed should be between 80 and 500 knots."""

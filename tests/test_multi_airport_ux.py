@@ -322,9 +322,11 @@ class TestFlightDetailMulti:
         type_speeds = defaultdict(list)
         for icao24, trace in traces.items():
             approach = _phase_positions(trace, "approaching")
-            if len(approach) >= 3:
+            if len(approach) >= 5:
                 aircraft_type = approach[-1].get("aircraft_type", "UNK")
-                avg_speed = sum(s["velocity"] for s in approach[-3:]) / 3
+                mid = len(approach) // 2
+                sample = approach[max(0, mid - 2):mid + 3]
+                avg_speed = sum(s["velocity"] for s in sample) / len(sample)
                 type_speeds[aircraft_type].append(avg_speed)
         if len(type_speeds) >= 2:
             means = {t: sum(v)/len(v) for t, v in type_speeds.items() if v}

@@ -1272,6 +1272,63 @@ def _generate_taxi_spine(
     return pts
 
 
+def _smooth_sharp_turns(
+    route: List[tuple],
+    max_turn_angle: float = 60.0,
+    arc_radius_deg: float = 0.0004,
+    arc_points: int = 3,
+) -> List[tuple]:
+    """Insert rounding waypoints at sharp turns in a taxi route.
+
+    For each consecutive triplet (A, B, C) where the turn angle at B exceeds
+    max_turn_angle, replaces B with arc points that smoothly round the corner.
+    """
+    if len(route) < 3:
+        return list(route)
+
+    result = [route[0]]
+    for i in range(1, len(route) - 1):
+        a_lon, a_lat = route[i - 1][:2]
+        b_lon, b_lat = route[i][:2]
+        c_lon, c_lat = route[i + 1][:2]
+
+        ba_lon, ba_lat = a_lon - b_lon, a_lat - b_lat
+        bc_lon, bc_lat = c_lon - b_lon, c_lat - b_lat
+        len_ba = math.sqrt(ba_lon ** 2 + ba_lat ** 2)
+        len_bc = math.sqrt(bc_lon ** 2 + bc_lat ** 2)
+
+        if len_ba < 1e-10 or len_bc < 1e-10:
+            result.append(route[i])
+            continue
+
+        ba_lon /= len_ba
+        ba_lat /= len_ba
+        bc_lon /= len_bc
+        bc_lat /= len_bc
+
+        dot = ba_lon * bc_lon + ba_lat * bc_lat
+        dot = max(-1.0, min(1.0, dot))
+        interior_angle = math.degrees(math.acos(dot))
+        turn_angle = 180.0 - interior_angle
+
+        if turn_angle <= max_turn_angle:
+            result.append(route[i])
+            continue
+
+        radius = min(arc_radius_deg, len_ba * 0.4, len_bc * 0.4)
+        entry = (b_lon + ba_lon * radius, b_lat + ba_lat * radius)
+        exit_pt = (b_lon + bc_lon * radius, b_lat + bc_lat * radius)
+
+        for j in range(arc_points):
+            t = (j + 1) / (arc_points + 1)
+            lon = entry[0] * (1 - t) + exit_pt[0] * t
+            lat = entry[1] * (1 - t) + exit_pt[1] * t
+            result.append((lon, lat))
+
+    result.append(route[-1])
+    return result
+
+
 def _get_arrival_runway_endpoints() -> tuple:
     """Get arrival runway (threshold, far_end) as (lon, lat) tuples.
 
@@ -1374,7 +1431,7 @@ def _build_arrival_taxi_route(
         route.append((apron_lon, apron_lat))
     route.append((gate_lon, gate_lat))
 
-    return route
+    return _smooth_sharp_turns(route)
 
 
 def _build_departure_taxi_route(
@@ -1431,7 +1488,7 @@ def _build_departure_taxi_route(
     route.append(hold_line)
     route.append(dep_rwy)
 
-    return route
+    return _smooth_sharp_turns(route)
 
 # ============================================================================
 # ILS APPROACH PATH - Runway 28L
@@ -4013,11 +4070,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     if state.altitude >= state.go_around_target_alt:
                         state.go_around_target_alt = 0.0  # Done climbing, resume descent
                 else:
-                    # Altitude from profile — use OpenAP vertical rate (ft/min→ft/s)
-                    # instead of flat 500/tick for smooth, realistic descent.
-                    # Floor at 25 ft/s (~1500 fpm) to maintain approach separation.
+                    # Altitude from profile — use OpenAP vertical rate (ft/min→ft/s).
+                    # Bounded to 12-20 ft/s (720-1200 fpm) to match realistic
+                    # ILS glideslope rates and keep 30s snapshot jumps ≤ 600ft.
                     state.go_around_target_alt = 0.0
-                    descent_fps = max(25.0, min(30.0, abs(prof_vr) / 60.0)) if prof_vr else 25.0
+                    descent_fps = max(12.0, min(20.0, abs(prof_vr) / 60.0)) if prof_vr else 12.0
                     effective_target = min(prof_alt, target_alt)
                     prev_alt = state.altitude
                     state.altitude = max(float(DECISION_HEIGHT_FT), _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
@@ -4721,7 +4778,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
             # Climb rate capped at realistic values (prof_vr is ft/min from OpenAP)
             max_climb_fpm = abs(prof_vr) if prof_vr and prof_vr > 0 else 2500
-            max_climb_fpm = min(max_climb_fpm, 3500)  # hard cap for narrow-body
+            max_climb_fpm = min(max_climb_fpm, 2500)  # hard cap — keeps 30s snapshot jumps ≤ 1250ft
             alt_step = max_climb_fpm / 60.0 * dt
             # During departure, altitude must never decrease (monotonic climb).
             # Waypoints may have lower altitudes from SID constraints, but the
@@ -4753,7 +4810,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 else:
                     state.velocity = max(target_spd, state.velocity - max_accel)
                 climb_fpm = prof_vr if prof_vr > 0 else 1500
-                climb_fpm = min(climb_fpm, 3500)  # hard cap for narrow-body
+                climb_fpm = min(climb_fpm, 2500)  # hard cap — keeps 30s snapshot jumps ≤ 1250ft
                 state.vertical_rate = climb_fpm
                 state.altitude += climb_fpm / 60.0 * dt
                 # Continue on departure heading
