@@ -114,11 +114,11 @@ export function position3DToLatLon(
  * Convert compass heading to scene rotation (radians around Y axis).
  *
  * Scene coordinate system: north = -Z, east = +X.
- * GLTF models face +Z by default; models with a different native forward
- * use rotationOffset.y to align to +Z before this rotation is applied.
+ * GLTF models face -Z by default (nose toward negative Z); models with a
+ * different native forward use rotationOffset.y to align to -Z first.
  */
 export function headingToRotation(heading: number | null): number {
-  return (180 - (heading || 0)) * Math.PI / 180;
+  return -(heading || 0) * Math.PI / 180;
 }
 
 /**

@@ -54,7 +54,7 @@ export interface AirlineConfig {
  */
 export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   // Boeing narrow body (wingspan ~35.8m)
-  // boeing-737.glb internal transforms orient fuselage along Z (34.9m), faces +Z like Airbus models
+  // boeing-737.glb internal node transforms orient fuselage along Z, nose at -Z
   'B737': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
   'B738': { url: '/models/aircraft/boeing-737.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
   'B739': { url: '/models/aircraft/boeing-737.glb', scale: 1.08 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
@@ -78,7 +78,7 @@ export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   'B777': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
   'B787': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
 
-  // Fighter jets (from fighter jet collection GLB — units are ~10x real meters, face +Z natively)
+  // Fighter jets (from fighter jet collection GLB — units are ~10x real meters, nose at -Z)
   // F-14 Tomcat: real wingspan 19.5m, model Y span ~196 units → scale 19.5/196 ≈ 0.0995
   'F14': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 }, nodePrefix: 'F-14' },
   // F-15 Eagle: real wingspan 13.1m, model Y span ~131 → scale 13.1/131 ≈ 0.1
@@ -93,8 +93,8 @@ export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   'F35': { url: '/models/aircraft/free_-_fighter_jet_collection_-_low_poly.glb', scale: 0.081 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 }, nodePrefix: 'F-35' },
 
   // Generic fallback - generic-jet.glb native 2.0 units, target 35m wingspan
-  // Native forward is -X, needs π/2 to align to +Z
-  'DEFAULT': { url: '/models/aircraft/generic-jet.glb', scale: 17.5 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 } },
+  // Native forward is -X, needs -π/2 to align nose to -Z
+  'DEFAULT': { url: '/models/aircraft/generic-jet.glb', scale: 17.5 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: -Math.PI / 2, z: 0 } },
 };
 
 /**
