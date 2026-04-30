@@ -143,7 +143,7 @@ class DemoSimulationService:
             self._demo_files[airport_icao] = static
             return static
 
-        from app.backend.demo_config import icao_to_iata
+        from src.calibration.profile import _icao_to_iata as icao_to_iata
         from src.simulation.config import SimulationConfig
         from src.simulation.engine import SimulationEngine
 

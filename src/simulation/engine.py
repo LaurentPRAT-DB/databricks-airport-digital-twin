@@ -538,6 +538,12 @@ class SimulationEngine:
         # Only inject for Ukrainian airports (country code UA in airport table)
         from src.ingestion.airport_table import AIRPORTS as _apt
         entry = _apt.get(self.config.airport)
+        if not entry:
+            # config.airport might be ICAO — reverse-lookup
+            for iata, e in _apt.items():
+                if e[2] == self.config.airport:
+                    entry = e
+                    break
         if not entry or entry[3] != "UA":
             return
 
