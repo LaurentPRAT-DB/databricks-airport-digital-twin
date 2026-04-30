@@ -13,7 +13,6 @@ interface SimulationReportProps {
   sim: UseSimulationReplayResult;
   onClose: () => void;
   focusEvents?: ScenarioEvent[] | null;
-  isolated?: boolean;
 }
 
 const DETAIL_SKIP_KEYS = new Set(['time', 'event_type', 'description']);
@@ -183,7 +182,6 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
               const h = getHour(e.time);
               return h >= fromHour && h < toHour;
             }).length;
-            if (count === 0) return null;
             return (
               <button
                 key={type}
@@ -212,7 +210,7 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
   );
 }
 
-export function SimulationReport({ sim, onClose, focusEvents, isolated }: SimulationReportProps) {
+export function SimulationReport({ sim, onClose, focusEvents }: SimulationReportProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const { filteredFlights, setSelectedFlight } = useFlightContext();
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
@@ -223,50 +221,16 @@ export function SimulationReport({ sim, onClose, focusEvents, isolated }: Simula
 
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Block wheel events from reaching Leaflet map — but allow internal scrolling
+  // Block wheel events from reaching Leaflet map
   useEffect(() => {
     const el = modalRef.current;
     if (!el) return;
-    let wheelLogCounter = 0;
     const handler = (e: WheelEvent) => {
+      // stopPropagation alone prevents Leaflet from zooming.
+      // Do NOT call preventDefault — that kills native scroll inside the modal.
       e.stopPropagation();
-
-      // Find the nearest scrollable ancestor of the event target
-      let target = e.target as HTMLElement | null;
-      let foundScrollable = false;
-      while (target && target !== el) {
-        const style = getComputedStyle(target);
-        const isScrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
-        if (isScrollable) {
-          foundScrollable = true;
-          if (target.scrollHeight > target.clientHeight) {
-            const atTop = target.scrollTop <= 0 && e.deltaY < 0;
-            const atBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 1 && e.deltaY > 0;
-            if (!atTop && !atBottom) {
-              // Scroll container has room — let browser handle it
-              return;
-            }
-            if (++wheelLogCounter % 10 === 1) {
-              debugLog('debug', 'ReportScroll', 'wheel boundary hit', {
-                atTop, atBottom, deltaY: e.deltaY,
-                scrollTop: target.scrollTop, clientH: target.clientHeight, scrollH: target.scrollHeight,
-              });
-            }
-          }
-          break;
-        }
-        target = target.parentElement;
-      }
-      // Only block when we're NOT in a scrollable zone, or at its boundary
-      if (!foundScrollable || (target && target.scrollHeight <= target.clientHeight)) {
-        // No scrollable child or not enough content — block to prevent map zoom
-        e.preventDefault();
-        return;
-      }
-      // At scroll boundary — block to prevent map zoom
-      e.preventDefault();
     };
-    el.addEventListener('wheel', handler, { passive: false });
+    el.addEventListener('wheel', handler, { passive: true });
     return () => el.removeEventListener('wheel', handler);
   }, []);
 
@@ -571,18 +535,8 @@ export function SimulationReport({ sim, onClose, focusEvents, isolated }: Simula
     URL.revokeObjectURL(url);
   }, [sim, summary, filteredEvents, fromHour, toHour]);
 
-  // Log isolated mode activation
-  useEffect(() => {
-    if (isolated) {
-      debugLog('info', 'ReportScroll', 'isolated mode active — no map overlay');
-    }
-  }, [isolated]);
-
   return (
-    <div ref={modalRef} className={isolated
-      ? "w-full h-screen flex items-center justify-center bg-slate-100 p-4"
-      : "fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4"
-    } onPointerDown={e => { if (!isolated) e.stopPropagation(); }} onMouseMove={e => { if (!isolated) e.stopPropagation(); }}>
+    <div ref={modalRef} className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4" onPointerDown={e => e.stopPropagation()} onMouseMove={e => e.stopPropagation()}>
       <div className={`bg-white shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-200 ${
         fullscreen
           ? 'w-full h-full max-w-full max-h-full rounded-none'

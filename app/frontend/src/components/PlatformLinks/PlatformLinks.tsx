@@ -21,13 +21,6 @@ function buildLinks(cfg: PlatformConfig): PlatformLink[] {
   const w = cfg.workspace_url;
   return [
     {
-      id: 'scroll-debug',
-      label: 'Report (Isolated)',
-      icon: '🔍',
-      url: `${window.location.origin}${window.location.pathname}?report-isolated=1`,
-      description: 'Open report in isolated mode for scroll debugging',
-    },
-    {
       id: 'dashboard',
       label: 'Flight Dashboard',
       icon: '📊',
