@@ -1325,6 +1325,37 @@ class LakebaseService:
             self._invalidate_credentials_if_auth_error(e)
             return []
 
+    def get_cached_airport_metadata(self) -> list[dict]:
+        """Get ICAO code + basic metadata from config_json for all cached airports.
+
+        Returns:
+            List of dicts with keys: icao_code, name, iata, updated_at.
+        """
+        if not self.is_available:
+            return []
+
+        try:
+            self._ensure_airport_config_table()
+
+            with self._get_read_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT icao_code,
+                               config_json->>'airportName' as name,
+                               config_json->>'iataCode' as iata,
+                               updated_at
+                        FROM airport_config_cache
+                        ORDER BY icao_code
+                        """
+                    )
+                    return [dict(row) for row in cur.fetchall()]
+
+        except Exception as e:
+            logger.warning(f"Failed to get cached airport metadata: {e}")
+            self._invalidate_credentials_if_auth_error(e)
+            return []
+
     # =========================================================================
     # GSE Turnaround Operations (airport-scoped)
     # =========================================================================

@@ -159,3 +159,82 @@ class TestOSMConverterCenter:
 
         config = converter.to_config(doc)
         assert "center" not in config
+
+
+# ==============================================================================
+# Cached airport config validation
+# ==============================================================================
+
+ALL_CACHED_AIRPORTS = [
+    "KSFO", "KJFK", "KLAX", "KORD", "KATL", "KDFW", "KDEN", "KMIA", "KSEA",
+    "SBGR", "MMMX",
+    "EGLL", "LFPG", "EHAM", "EDDF", "LEMD", "LIRF", "LSGG", "LGAV",
+    "OMAA", "OMDB",
+    "RJTT", "VHHH", "WSSS", "ZBAA", "RKSI", "VTBS",
+    "FAOR", "GMMN",
+]
+
+
+class TestCachedAirportConfigValidation:
+    """Validate that all cached airport configs have usable geometry.
+
+    These tests load the airport config service with each cached airport
+    and verify it has gates or terminals with valid geo coordinates,
+    so the frontend map can recenter correctly.
+    """
+
+    @pytest.fixture
+    def service(self):
+        from app.backend.services.airport_config_service import AirportConfigService
+        return AirportConfigService()
+
+    @pytest.mark.parametrize("icao", ALL_CACHED_AIRPORTS)
+    def test_config_has_valid_geometry(self, service, icao):
+        """Each cached airport must have gates or terminals with geo coordinates."""
+        loaded = service.initialize_from_lakehouse(icao_code=icao, fallback_to_osm=True)
+        assert loaded, f"Failed to load config for {icao}"
+
+        config = service.get_config()
+        assert config, f"Empty config for {icao}"
+
+        gates = config.get("gates", [])
+        terminals = config.get("terminals", [])
+
+        geo_items = []
+        for g in gates:
+            geo = g.get("geo", {})
+            lat = float(geo.get("latitude", 0) or 0)
+            lon = float(geo.get("longitude", 0) or 0)
+            if lat != 0 and lon != 0:
+                geo_items.append((lat, lon))
+
+        for t in terminals:
+            geo = t.get("geo", {})
+            lat = float(geo.get("latitude", 0) or 0)
+            lon = float(geo.get("longitude", 0) or 0)
+            if lat != 0 and lon != 0:
+                geo_items.append((lat, lon))
+
+        assert len(geo_items) > 0, (
+            f"{icao}: no gates or terminals with valid geo coordinates. "
+            f"Gates: {len(gates)}, Terminals: {len(terminals)}"
+        )
+
+    @pytest.mark.parametrize("icao", ALL_CACHED_AIRPORTS)
+    def test_config_has_icao_code(self, service, icao):
+        """Each config must include its ICAO code."""
+        loaded = service.initialize_from_lakehouse(icao_code=icao, fallback_to_osm=True)
+        assert loaded
+
+        config = service.get_config()
+        assert config.get("icaoCode") == icao
+
+    @pytest.mark.parametrize("icao", ALL_CACHED_AIRPORTS)
+    def test_config_has_runways(self, service, icao):
+        """Each airport should have at least one runway."""
+        loaded = service.initialize_from_lakehouse(icao_code=icao, fallback_to_osm=True)
+        assert loaded
+
+        config = service.get_config()
+        runways = config.get("osmRunways", [])
+        assert len(runways) > 0, f"{icao}: no runways found"

@@ -6,7 +6,7 @@
  * Groups airports by region with cache status indicators.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 interface AirportInfo {
   icao: string;
@@ -34,7 +34,6 @@ export default function AirportSelector({
   const [customIcao, setCustomIcao] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [airports, setAirports] = useState<AirportInfo[]>([]);
-  const [preloading, setPreloading] = useState(false);
   const [reloading, setReloading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -101,6 +100,8 @@ export default function AirportSelector({
     setIsOpen(false);
     try {
       await onAirportChange(icaoCode);
+      // Refresh list — newly loaded airports appear in the cache
+      await fetchCacheStatus();
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load airport');
     }
@@ -111,25 +112,6 @@ export default function AirportSelector({
     if (code.length >= 3) {
       setCustomIcao('');
       await handleSelect(code);
-    }
-  };
-
-  const handlePreloadAll = async () => {
-    setPreloading(true);
-    try {
-      const res = await fetch('/api/airports/preload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(null),
-      });
-      if (res.ok) {
-        // Refresh cache status after preload
-        await fetchCacheStatus();
-      }
-    } catch {
-      // Silently fail
-    } finally {
-      setPreloading(false);
     }
   };
 
@@ -153,9 +135,34 @@ export default function AirportSelector({
     }
   };
 
+  // Search filter
+  const [filter, setFilter] = useState('');
+  const filterInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset filter when dropdown opens, focus input
+  useEffect(() => {
+    if (isOpen) {
+      setFilter('');
+      setTimeout(() => filterInputRef.current?.focus(), 50);
+    }
+  }, [isOpen]);
+
+  // Filtered airports based on search input
+  const filteredAirports = useMemo(() => {
+    if (!filter.trim()) return airports;
+    const q = filter.trim().toLowerCase();
+    return airports.filter(
+      (a) =>
+        a.icao.toLowerCase().includes(q) ||
+        a.iata.toLowerCase().includes(q) ||
+        a.name.toLowerCase().includes(q) ||
+        a.city.toLowerCase().includes(q)
+    );
+  }, [airports, filter]);
+
   // Group airports by region
   const groupedAirports = REGION_ORDER.reduce<Record<string, AirportInfo[]>>((acc, region) => {
-    const regionAirports = airports.filter((a) => a.region === region);
+    const regionAirports = filteredAirports.filter((a) => a.region === region);
     if (regionAirports.length > 0) {
       acc[region] = regionAirports;
     }
@@ -168,7 +175,6 @@ export default function AirportSelector({
     ? `${currentInfo.icao} (${currentInfo.iata})`
     : currentAirport || 'Select Airport';
 
-  const cachedCount = airports.filter((a) => a.cached).length;
   const totalCount = airports.length;
 
   return (
@@ -245,25 +251,43 @@ export default function AirportSelector({
 
       {isOpen && (
         <div className="absolute top-full left-0 mt-1 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden z-[1100]">
-          {/* Custom ICAO input */}
+          {/* Search / custom ICAO input */}
           <div className="p-2 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
             <div className="flex gap-1">
-              <input
-                type="text"
-                value={customIcao}
-                onChange={(e) => setCustomIcao(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === 'Enter' && handleCustomSubmit()}
-                placeholder="Enter ICAO code..."
-                maxLength={4}
-                className="flex-1 px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded font-mono text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 placeholder:text-slate-400"
-              />
-              <button
-                onClick={handleCustomSubmit}
-                disabled={customIcao.trim().length < 3}
-                className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-500"
-              >
-                Load
-              </button>
+              <div className="relative flex-1">
+                <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  ref={filterInputRef}
+                  type="text"
+                  value={filter || customIcao}
+                  onChange={(e) => {
+                    const v = e.target.value.toUpperCase();
+                    setFilter(v);
+                    setCustomIcao(v);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (filteredAirports.length === 1) {
+                        handleSelect(filteredAirports[0].icao);
+                      } else {
+                        handleCustomSubmit();
+                      }
+                    }
+                  }}
+                  placeholder="Search airport or enter ICAO..."
+                  className="w-full pl-7 pr-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 placeholder:text-slate-400"
+                />
+              </div>
+              {customIcao.trim().length >= 3 && filteredAirports.length === 0 && (
+                <button
+                  onClick={handleCustomSubmit}
+                  className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Load
+                </button>
+              )}
             </div>
           </div>
 
@@ -291,12 +315,8 @@ export default function AirportSelector({
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`w-2 h-2 rounded-full flex-shrink-0 ${airport.cached ? 'bg-green-500' : 'bg-slate-300'}`}
-                          title={airport.cached ? 'Cached (fast switch)' : 'Not cached (will fetch from OSM)'}
-                        />
                         <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{airport.icao}</span>
-                        <span className="text-slate-500 dark:text-slate-400 text-sm">({airport.iata})</span>
+                        {airport.iata && <span className="text-slate-500 dark:text-slate-400 text-sm">({airport.iata})</span>}
                       </div>
                       {airport.icao === currentAirport && (
                         <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
@@ -314,27 +334,11 @@ export default function AirportSelector({
             ))}
           </div>
 
-          {/* Pre-load all button */}
+          {/* Footer with airport count */}
           <div className="p-2 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
-            <button
-              onClick={handlePreloadAll}
-              disabled={preloading || cachedCount === totalCount}
-              className="w-full px-3 py-1.5 text-xs font-medium rounded transition-colors
-                bg-slate-200 hover:bg-slate-300 text-slate-700
-                disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed
-                flex items-center justify-center gap-2"
-            >
-              {preloading ? (
-                <>
-                  <span className="w-3 h-3 rounded-full border-2 border-slate-400 border-t-transparent animate-spin" />
-                  Pre-loading...
-                </>
-              ) : cachedCount === totalCount && totalCount > 0 ? (
-                <>All {totalCount} airports cached</>
-              ) : (
-                <>Pre-load All ({cachedCount}/{totalCount} cached)</>
-              )}
-            </button>
+            <div className="text-xs text-slate-500 dark:text-slate-400 text-center">
+              {totalCount} airport{totalCount !== 1 ? 's' : ''} cached
+            </div>
           </div>
         </div>
       )}

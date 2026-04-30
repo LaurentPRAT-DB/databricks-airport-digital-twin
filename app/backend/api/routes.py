@@ -185,6 +185,83 @@ WELL_KNOWN_AIRPORT_INFO: dict[str, dict] = {
 }
 
 
+_COUNTRY_TO_REGION: dict[str, str] = {
+    # Americas
+    **{c: "Americas" for c in [
+        "US", "CA", "MX", "BR", "AR", "CL", "CO", "PE", "VE", "EC", "UY", "PY",
+        "BO", "CR", "PA", "CU", "DO", "PR", "JM", "TT", "BS", "BB", "HN", "GT",
+        "SV", "NI", "BZ", "HT", "AW", "CW", "BM", "KY", "AG", "GY", "SR",
+    ]},
+    # Europe
+    **{c: "Europe" for c in [
+        "GB", "FR", "DE", "NL", "ES", "IT", "PT", "CH", "AT", "BE", "SE", "NO",
+        "DK", "FI", "IE", "PL", "CZ", "GR", "RO", "HU", "HR", "BG", "RS", "SK",
+        "UA", "IS", "LT", "LV", "EE", "SI", "LU", "MT", "CY", "AL", "BA", "ME",
+        "MK", "MD", "BY", "XK", "GI", "TR",
+    ]},
+    # Middle East
+    **{c: "Middle East" for c in [
+        "AE", "SA", "QA", "KW", "BH", "OM", "JO", "LB", "IQ", "IR", "IL", "YE",
+    ]},
+    # Asia-Pacific
+    **{c: "Asia-Pacific" for c in [
+        "JP", "CN", "KR", "IN", "SG", "TH", "MY", "ID", "PH", "VN", "TW", "HK",
+        "AU", "NZ", "PK", "BD", "LK", "NP", "MM", "KH", "LA", "BN", "MV", "FJ",
+        "PG", "MN", "KZ", "UZ",
+    ]},
+    # Africa
+    **{c: "Africa" for c in [
+        "ZA", "MA", "EG", "NG", "KE", "ET", "GH", "TZ", "SN", "CI", "CM", "DZ",
+        "TN", "LY", "AO", "MZ", "MG", "MU", "RW", "UG", "ZW", "BW", "NA", "GA",
+    ]},
+}
+
+
+def _derive_airport_info(icao: str, name: str | None, iata: str | None) -> dict:
+    """Derive full airport metadata from ICAO code and optional name/IATA."""
+    from src.ingestion.airport_table import AIRPORTS as _AIRPORT_TABLE
+
+    # Try well-known first (rich, hand-curated metadata)
+    if icao in WELL_KNOWN_AIRPORT_INFO:
+        info = WELL_KNOWN_AIRPORT_INFO[icao]
+        return {
+            "icao": icao,
+            "iata": info["iata"],
+            "name": info["name"],
+            "city": info["city"],
+            "region": info["region"],
+            "cached": True,
+        }
+
+    # Try airport_table for IATA/country lookup
+    resolved_iata = iata or ""
+    country = ""
+    if not resolved_iata:
+        # Reverse lookup: find IATA from ICAO in airport_table
+        for _iata, (_lat, _lon, _icao, _cc) in _AIRPORT_TABLE.items():
+            if _icao == icao:
+                resolved_iata = _iata
+                country = _cc
+                break
+    else:
+        entry = _AIRPORT_TABLE.get(resolved_iata)
+        if entry:
+            country = entry[3]
+
+    region = _COUNTRY_TO_REGION.get(country, "Other")
+    display_name = name or icao
+    city = f"{country}" if country else ""
+
+    return {
+        "icao": icao,
+        "iata": resolved_iata,
+        "name": display_name,
+        "city": city,
+        "region": region,
+        "cached": True,
+    }
+
+
 @router.get("/flights", response_model=FlightListResponse)
 async def get_flights(
     count: int = Query(default=DEFAULT_FLIGHT_COUNT, ge=1, le=500, description="Number of flights"),
@@ -1581,24 +1658,37 @@ async def delete_airport(icao_code: str) -> dict:
 @router.get("/airports/preload/status", tags=["airport"])
 async def preload_status() -> dict:
     """
-    Check which well-known airports are cached in the lakehouse.
+    List airports available in the cache (Lakebase).
 
-    Returns metadata and cache status for all well-known airports.
+    Returns only airports that have been loaded and cached.
+    The list grows dynamically as new airports are activated via custom ICAO input.
     """
-    service = get_airport_config_service()
-    persisted = service.list_persisted_airports()
-    persisted_codes = {a.get("icao_code", a.get("icaoCode", "")).upper() for a in persisted}
+    from app.backend.services.lakebase_service import get_lakebase_service
+
+    lakebase = get_lakebase_service()
+    cached_meta = lakebase.get_cached_airport_metadata()
 
     airports = []
-    for icao, info in WELL_KNOWN_AIRPORT_INFO.items():
-        airports.append({
-            "icao": icao,
-            "iata": info["iata"],
-            "name": info["name"],
-            "city": info["city"],
-            "region": info["region"],
-            "cached": icao in persisted_codes,
-        })
+    for row in cached_meta:
+        info = _derive_airport_info(
+            icao=row["icao_code"],
+            name=row.get("name"),
+            iata=row.get("iata"),
+        )
+        airports.append(info)
+
+    # Fallback: if Lakebase is unavailable, fall back to well-known list
+    # with cached=false so the UI still shows something.
+    if not airports and not lakebase.is_available:
+        for icao, info in WELL_KNOWN_AIRPORT_INFO.items():
+            airports.append({
+                "icao": icao,
+                "iata": info["iata"],
+                "name": info["name"],
+                "city": info["city"],
+                "region": info["region"],
+                "cached": False,
+            })
 
     return {"airports": airports}
 

@@ -193,18 +193,28 @@ export function useAirportConfig(): UseAirportConfigReturn {
           }
           const data = msg.data ?? {};
           if (data.config && Object.keys(data.config).length > 0) {
+            const cfgPayload = data.config as AirportConfig;
             setConfig((prev) => ({
               ...prev,
-              ...data.config,
-              sources: (data.config.sources as AirportConfig['sources']) || prev.sources,
+              ...cfgPayload,
+              sources: (cfgPayload.sources as AirportConfig['sources']) || prev.sources,
               lastUpdated: new Date().toISOString(),
             }));
             if (data.icaoCode) {
               setCurrentAirport(data.icaoCode);
               prevAirportRef.current = data.icaoCode;
-              configCache.set(data.icaoCode, { config: data.config, lastUpdated: new Date().toISOString() } as ConfigResponse);
-              setCachedConfig(data.icaoCode, data.config).catch(() => {});
+              configCache.set(data.icaoCode, { config: cfgPayload, lastUpdated: new Date().toISOString() } as ConfigResponse);
+              setCachedConfig(data.icaoCode, cfgPayload).catch(() => {});
             }
+            // Validate: if config lacks geometry, fetch via REST as fallback
+            if (!isConfigValid(cfgPayload) && data.icaoCode) {
+              fetchAndApplyConfig(data.icaoCode).catch(() => {});
+            }
+          } else if (data.icaoCode) {
+            // Empty config in WS — fetch it from REST
+            setCurrentAirport(data.icaoCode);
+            prevAirportRef.current = data.icaoCode;
+            fetchAndApplyConfig(data.icaoCode).catch(() => {});
           }
           setIsLoading(false);
           return;
@@ -356,6 +366,45 @@ export function useAirportConfig(): UseAirportConfigReturn {
   }, []);
 
   /**
+   * Validate that a config object has enough geometry for the map to recenter.
+   * Returns true if at least one gate or terminal has valid geo coordinates.
+   */
+  const isConfigValid = useCallback((cfg: AirportConfig): boolean => {
+    const gates = cfg.gates || [];
+    const terminals = cfg.terminals || [];
+    const hasGeoGate = gates.some(
+      (g) => g.geo && Number(g.geo.latitude) && Number(g.geo.longitude)
+    );
+    if (hasGeoGate) return true;
+    const hasGeoTerminal = terminals.some(
+      (t) => t.geo && Number(t.geo.latitude) && Number(t.geo.longitude)
+    );
+    return hasGeoTerminal;
+  }, []);
+
+  /**
+   * Fetch config from backend REST API and apply it.
+   * Returns true if config was successfully fetched and validated.
+   */
+  const fetchAndApplyConfig = useCallback(async (icao: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/api/airport/config`);
+      if (!res.ok) return false;
+      const data = await res.json();
+      const cfg = data?.config;
+      if (cfg && Object.keys(cfg).length > 0) {
+        setConfig((prev) => ({ ...prev, ...cfg, lastUpdated: new Date().toISOString() }));
+        configCache.set(icao, data);
+        setCachedConfig(icao, cfg).catch(() => {});
+        return true;
+      }
+    } catch {
+      // Network failure — non-critical
+    }
+    return false;
+  }, []);
+
+  /**
    * Load airport (lakehouse first, OSM fallback, auto-persists)
    */
   const loadAirport = useCallback(async (icaoCode: string) => {
@@ -370,7 +419,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
     if (configCache.has(icaoCode)) {
       const cached = configCache.get(icaoCode)!;
       const configData = cached.config as AirportConfig & { icaoCode?: string };
-      if (configData && Object.keys(configData).length > 0) {
+      if (configData && Object.keys(configData).length > 0 && isConfigValid(configData)) {
         setConfig((prev) => ({
           ...prev,
           ...configData,
@@ -386,7 +435,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
         const idbCached = await getCachedConfig(icaoCode);
         if (idbCached && typeof idbCached === 'object') {
           const configData = idbCached as AirportConfig & { icaoCode?: string };
-          if (Object.keys(configData).length > 0) {
+          if (Object.keys(configData).length > 0 && isConfigValid(configData)) {
             setConfig((prev) => ({
               ...prev,
               ...configData,
@@ -419,11 +468,16 @@ export function useAirportConfig(): UseAirportConfigReturn {
 
       if (response.status === 200) {
         // Already active — backend returned the normalized ICAO code.
-        // Update currentAirport to the canonical ICAO code and stop loading.
         const data = await response.json();
         const normalizedIcao = data.icaoCode || icaoCode;
         setCurrentAirport(normalizedIcao);
         prevAirportRef.current = normalizedIcao;
+
+        // Validate we have usable config; fetch from backend if not.
+        if (!hasCachedConfig) {
+          await fetchAndApplyConfig(normalizedIcao);
+        }
+
         setIsLoading(false);
         return;
       }
@@ -441,26 +495,17 @@ export function useAirportConfig(): UseAirportConfigReturn {
         if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
         loadingTimeoutRef.current = setTimeout(async () => {
           loadingTimeoutRef.current = null;
-          // REST fallback: check if backend actually switched
-          try {
-            const res = await fetch(`${API_BASE}/api/airport/config`);
-            if (res.ok) {
-              const data = await res.json();
-              const cfg = data?.config;
-              if (cfg && Object.keys(cfg).length > 0) {
-                setConfig((prev) => ({ ...prev, ...cfg, lastUpdated: new Date().toISOString() }));
-                setCurrentAirport(normalizedIcao);
-                prevAirportRef.current = normalizedIcao;
-                configCache.set(normalizedIcao, data);
-                setCachedConfig(normalizedIcao, cfg).catch(() => {});
-                setIsLoading(false);
-                return;
-              }
+          const fetched = await fetchAndApplyConfig(normalizedIcao);
+          if (fetched) {
+            setCurrentAirport(normalizedIcao);
+            prevAirportRef.current = normalizedIcao;
+            setIsLoading(false);
+          } else {
+            setIsLoading(false);
+            setError('Airport switch timed out — config not received');
+            if (prevAirportRef.current) {
+              setCurrentAirport(prevAirportRef.current);
             }
-          } catch { /* fallthrough to revert */ }
-          setIsLoading(false);
-          if (prevAirportRef.current) {
-            setCurrentAirport(prevAirportRef.current);
           }
         }, 60_000);
         return;
@@ -490,7 +535,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
       }
       throw err;
     }
-  }, [currentAirport]);
+  }, [currentAirport, isConfigValid, fetchAndApplyConfig]);
 
   /**
    * Fetch default airport from backend config and load it.
