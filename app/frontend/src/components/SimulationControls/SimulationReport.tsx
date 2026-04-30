@@ -543,7 +543,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
           : 'w-[900px] max-w-[95vw] h-[92vh] rounded-xl'
       }`}>
         {/* Header */}
-        <div className={`flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 ${fullscreen ? '' : 'rounded-t-xl'}`}>
+        <div className={`shrink-0 flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 ${fullscreen ? '' : 'rounded-t-xl'}`}>
           <div>
             <h2 className="text-lg font-bold text-slate-900">
               {sim.scenarioName || `${sim.airport} Simulation Report`}
@@ -573,7 +573,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
         </div>
 
         {/* Tab bar */}
-        <div className="flex border-b border-slate-200 px-6">
+        <div className="shrink-0 flex border-b border-slate-200 px-6">
           <button
             onClick={() => setActiveTab('dashboard')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -600,7 +600,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
         </div>
 
         {/* Body */}
-        <div className={`flex-1 min-h-0 px-6 py-4 overflow-hidden ${activeTab === 'dashboard' ? 'flex flex-col' : 'overflow-y-auto'}`}>
+        <div ref={tableScrollRef} className="flex-1 min-h-0 px-6 py-4 overflow-y-auto flex flex-col">
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
@@ -620,7 +620,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
           )}
 
           {/* ── Dashboard tab ── */}
-          {activeTab === 'dashboard' && <div className="flex-1 min-h-0 overflow-hidden flex flex-col gap-2">
+          {activeTab === 'dashboard' && <div className="flex flex-col gap-2">
           {/* KPI Cards — single compact row */}
           <div className="shrink-0 grid grid-cols-8 gap-1">
             {[
@@ -702,7 +702,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
           </div>
 
           {/* Event table */}
-          <div ref={tableScrollRef} className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-slate-200 relative">
+          <div className="rounded-lg border border-slate-200 relative">
             {filteredEvents.length > 0 && (
               <div className="sticky top-1 float-right mr-1 z-20 flex flex-col gap-1">
                 <button
@@ -852,7 +852,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200 bg-slate-50 rounded-b-xl">
+        <div className="shrink-0 flex items-center justify-between px-6 py-3 border-t border-slate-200 bg-slate-50 rounded-b-xl">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-sm text-slate-700 transition-colors"
