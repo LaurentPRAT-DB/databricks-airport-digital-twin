@@ -233,27 +233,37 @@ export function SimulationReport({ sim, onClose, focusEvents, isolated }: Simula
 
       // Find the nearest scrollable ancestor of the event target
       let target = e.target as HTMLElement | null;
+      let foundScrollable = false;
       while (target && target !== el) {
-        const { overflowY } = getComputedStyle(target);
-        const isScrollable = overflowY === 'auto' || overflowY === 'scroll';
-        if (isScrollable && target.scrollHeight > target.clientHeight) {
-          const atTop = target.scrollTop <= 0 && e.deltaY < 0;
-          const atBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 1 && e.deltaY > 0;
-          if (!atTop && !atBottom) {
-            return;
-          }
-          // Log boundary hit (throttled: every 10th event)
-          if (++wheelLogCounter % 10 === 1) {
-            debugLog('debug', 'ReportScroll', 'wheel boundary hit', {
-              atTop, atBottom, deltaY: e.deltaY,
-              scrollTop: target.scrollTop, clientH: target.clientHeight, scrollH: target.scrollHeight,
-              targetClass: target.className.slice(0, 60),
-            });
+        const style = getComputedStyle(target);
+        const isScrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
+        if (isScrollable) {
+          foundScrollable = true;
+          if (target.scrollHeight > target.clientHeight) {
+            const atTop = target.scrollTop <= 0 && e.deltaY < 0;
+            const atBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 1 && e.deltaY > 0;
+            if (!atTop && !atBottom) {
+              // Scroll container has room — let browser handle it
+              return;
+            }
+            if (++wheelLogCounter % 10 === 1) {
+              debugLog('debug', 'ReportScroll', 'wheel boundary hit', {
+                atTop, atBottom, deltaY: e.deltaY,
+                scrollTop: target.scrollTop, clientH: target.clientHeight, scrollH: target.scrollHeight,
+              });
+            }
           }
           break;
         }
         target = target.parentElement;
       }
+      // Only block when we're NOT in a scrollable zone, or at its boundary
+      if (!foundScrollable || (target && target.scrollHeight <= target.clientHeight)) {
+        // No scrollable child or not enough content — block to prevent map zoom
+        e.preventDefault();
+        return;
+      }
+      // At scroll boundary — block to prevent map zoom
       e.preventDefault();
     };
     el.addEventListener('wheel', handler, { passive: false });
