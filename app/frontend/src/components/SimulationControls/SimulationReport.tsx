@@ -574,7 +574,7 @@ export function SimulationReport({ sim, onClose, focusEvents, isolated }: Simula
       : "fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4"
     } onPointerDown={e => { if (!isolated) e.stopPropagation(); }} onMouseMove={e => { if (!isolated) e.stopPropagation(); }}>
       <div className={`bg-white shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-200 ${
-        fullscreen || isolated
+        fullscreen
           ? 'w-full h-full max-w-full max-h-full rounded-none'
           : 'w-[900px] max-w-[95vw] h-[92vh] rounded-xl'
       }`}>
@@ -771,7 +771,7 @@ export function SimulationReport({ sim, onClose, focusEvents, isolated }: Simula
                 >▼</button>
               </div>
             )}
-            <div ref={tableScrollRef} className="max-h-[calc(92vh-340px)] overflow-y-auto rounded-lg border border-slate-200">
+            <div ref={tableScrollRef} className="absolute inset-0 overflow-y-auto rounded-lg border border-slate-200">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100 z-10">
                 <tr>
