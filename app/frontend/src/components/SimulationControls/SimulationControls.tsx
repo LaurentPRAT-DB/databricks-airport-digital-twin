@@ -464,8 +464,8 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
         </button>
       </div>
 
-      {/* Report modal */}
-      {showReport && <SimulationReport sim={sim} onClose={() => { setShowReport(false); setFocusEvents(null); }} focusEvents={focusEvents} />}
+      {/* Report modal (isolated mode via ?report-isolated=1 removes map overlay for scroll debugging) */}
+      {showReport && <SimulationReport sim={sim} onClose={() => { setShowReport(false); setFocusEvents(null); }} focusEvents={focusEvents} isolated={new URLSearchParams(window.location.search).has('report-isolated')} />}
     </div>
   );
 }
@@ -1027,7 +1027,7 @@ export function SimulationControls({
       )}
 
       {/* Batch mode report — auto-shown when loading a file with no position data */}
-      {showBatchReport && <SimulationReport sim={sim} onClose={() => setShowBatchReport(false)} />}
+      {showBatchReport && <SimulationReport sim={sim} onClose={() => setShowBatchReport(false)} isolated={new URLSearchParams(window.location.search).has('report-isolated')} />}
 
       {/* Playback bar — active replay in simulation or recorded mode */}
       {dataMode !== 'live' && sim.isActive && !sim.switchPaused && <PlaybackBar sim={sim} isRecorded={dataMode === 'recorded'} />}

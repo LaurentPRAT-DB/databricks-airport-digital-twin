@@ -1778,8 +1778,11 @@ async def post_client_logs(request: Request) -> dict:
             log_path = f"{debug_dir}/client_debug.log"
             with open(log_path, "a") as f:
                 ts = _dt.utcnow().isoformat(timespec="seconds")
+                import json as _json
                 for entry in entries:
-                    f.write(f"[{ts}] [{entry.get('source', '?')}] {entry.get('message', '')}\n")
+                    meta = entry.get("metadata")
+                    meta_str = f" | {_json.dumps(meta, default=str)}" if meta else ""
+                    f.write(f"[{ts}] [{entry.get('level', 'info')}] [{entry.get('source', '?')}] {entry.get('message', '')}{meta_str}\n")
         except Exception:
             pass
 

@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { UseSimulationReplayResult, ScenarioEvent } from '../../hooks/useSimulationReplay';
 import { useFlightContext } from '../../context/FlightContext';
 import { downloadDataUrl } from '../../utils/sceneCapture';
+import { debugLog } from '../../utils/debugLogger';
 import { EVENT_COLORS, EVENT_LABELS } from './SimulationControls';
 
 type ReportTab = 'dashboard' | 'analysis';
@@ -12,6 +13,7 @@ interface SimulationReportProps {
   sim: UseSimulationReplayResult;
   onClose: () => void;
   focusEvents?: ScenarioEvent[] | null;
+  isolated?: boolean;
 }
 
 const DETAIL_SKIP_KEYS = new Set(['time', 'event_type', 'description']);
@@ -210,7 +212,7 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
   );
 }
 
-export function SimulationReport({ sim, onClose, focusEvents }: SimulationReportProps) {
+export function SimulationReport({ sim, onClose, focusEvents, isolated }: SimulationReportProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const { filteredFlights, setSelectedFlight } = useFlightContext();
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
@@ -221,16 +223,44 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
 
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Block wheel events from reaching Leaflet map behind the modal
+  // Block wheel events from reaching Leaflet map — but allow internal scrolling
   useEffect(() => {
     const el = modalRef.current;
     if (!el) return;
-    const handler = (e: WheelEvent) => { e.stopPropagation(); e.preventDefault(); };
+    let wheelLogCounter = 0;
+    const handler = (e: WheelEvent) => {
+      e.stopPropagation();
+
+      // Find the nearest scrollable ancestor of the event target
+      let target = e.target as HTMLElement | null;
+      while (target && target !== el) {
+        const { overflowY } = getComputedStyle(target);
+        const isScrollable = overflowY === 'auto' || overflowY === 'scroll';
+        if (isScrollable && target.scrollHeight > target.clientHeight) {
+          const atTop = target.scrollTop <= 0 && e.deltaY < 0;
+          const atBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 1 && e.deltaY > 0;
+          if (!atTop && !atBottom) {
+            return;
+          }
+          // Log boundary hit (throttled: every 10th event)
+          if (++wheelLogCounter % 10 === 1) {
+            debugLog('debug', 'ReportScroll', 'wheel boundary hit', {
+              atTop, atBottom, deltaY: e.deltaY,
+              scrollTop: target.scrollTop, clientH: target.clientHeight, scrollH: target.scrollHeight,
+              targetClass: target.className.slice(0, 60),
+            });
+          }
+          break;
+        }
+        target = target.parentElement;
+      }
+      e.preventDefault();
+    };
     el.addEventListener('wheel', handler, { passive: false });
     return () => el.removeEventListener('wheel', handler);
   }, []);
 
-  // Track scroll state on the event table container
+  // Track scroll state on the event table container + diagnostic logging
   useEffect(() => {
     const el = tableScrollRef.current;
     if (!el) return;
@@ -240,9 +270,51 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
     };
     update();
     el.addEventListener('scroll', update, { passive: true });
-    const ro = new ResizeObserver(update);
+    const ro = new ResizeObserver(() => {
+      update();
+      debugLog('info', 'ReportScroll', 'resize observed', {
+        clientHeight: el.clientHeight,
+        scrollHeight: el.scrollHeight,
+        overflowActive: el.scrollHeight > el.clientHeight,
+        computedMaxHeight: getComputedStyle(el).maxHeight,
+        computedOverflowY: getComputedStyle(el).overflowY,
+      });
+    });
     ro.observe(el);
     return () => { el.removeEventListener('scroll', update); ro.disconnect(); };
+  }, []);
+
+  // One-shot DOM snapshot on mount for scroll chain diagnostics
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      const scrollEl = tableScrollRef.current;
+      const modal = modalRef.current;
+      if (!scrollEl || !modal) return;
+
+      const innerPanel = modal.querySelector('[class*="flex-1 min-h-0 px-6"]') as HTMLElement | null;
+      const dims = (el: HTMLElement | null, label: string) => {
+        if (!el) return { label, missing: true };
+        return {
+          label,
+          clientH: el.clientHeight,
+          scrollH: el.scrollHeight,
+          offsetH: el.offsetHeight,
+          maxH: getComputedStyle(el).maxHeight,
+          overflowY: getComputedStyle(el).overflowY,
+          display: getComputedStyle(el).display,
+          flexGrow: getComputedStyle(el).flexGrow,
+        };
+      };
+
+      debugLog('info', 'ReportScroll', 'mount snapshot', {
+        modal: dims(modal, 'modal'),
+        body: dims(innerPanel, 'body'),
+        scrollContainer: dims(scrollEl, 'scrollContainer'),
+        viewport: `${window.innerWidth}x${window.innerHeight}`,
+        scrollable: scrollEl.scrollHeight > scrollEl.clientHeight,
+      });
+    });
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   // Handle clicking an event row — seek to event time, select matching flight, close report
@@ -489,10 +561,20 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
     URL.revokeObjectURL(url);
   }, [sim, summary, filteredEvents, fromHour, toHour]);
 
+  // Log isolated mode activation
+  useEffect(() => {
+    if (isolated) {
+      debugLog('info', 'ReportScroll', 'isolated mode active — no map overlay');
+    }
+  }, [isolated]);
+
   return (
-    <div ref={modalRef} className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4" onPointerDown={e => e.stopPropagation()} onMouseMove={e => e.stopPropagation()}>
+    <div ref={modalRef} className={isolated
+      ? "w-full h-screen flex items-center justify-center bg-slate-100 p-4"
+      : "fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4"
+    } onPointerDown={e => { if (!isolated) e.stopPropagation(); }} onMouseMove={e => { if (!isolated) e.stopPropagation(); }}>
       <div className={`bg-white shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-200 ${
-        fullscreen
+        fullscreen || isolated
           ? 'w-full h-full max-w-full max-h-full rounded-none'
           : 'w-[900px] max-w-[95vw] h-[92vh] rounded-xl'
       }`}>
@@ -660,12 +742,30 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
             {filteredEvents.length > 0 && (
               <div className="absolute top-1 right-3 z-20 flex flex-col gap-1">
                 <button
-                  onClick={e => { e.stopPropagation(); tableScrollRef.current?.scrollBy({ top: -120, behavior: 'smooth' }); }}
+                  onClick={e => {
+                    e.stopPropagation();
+                    const el = tableScrollRef.current;
+                    if (el) {
+                      debugLog('info', 'ReportScroll', 'arrow-up clicked', {
+                        scrollTop: el.scrollTop, clientH: el.clientHeight, scrollH: el.scrollHeight,
+                      });
+                      el.scrollBy({ top: -120, behavior: 'smooth' });
+                    }
+                  }}
                   className={`w-6 h-6 rounded bg-slate-700/70 text-white text-xs flex items-center justify-center hover:bg-slate-600 transition-opacity ${canScrollUp ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}
                   title="Scroll up"
                 >▲</button>
                 <button
-                  onClick={e => { e.stopPropagation(); tableScrollRef.current?.scrollBy({ top: 120, behavior: 'smooth' }); }}
+                  onClick={e => {
+                    e.stopPropagation();
+                    const el = tableScrollRef.current;
+                    if (el) {
+                      debugLog('info', 'ReportScroll', 'arrow-down clicked', {
+                        scrollTop: el.scrollTop, clientH: el.clientHeight, scrollH: el.scrollHeight,
+                      });
+                      el.scrollBy({ top: 120, behavior: 'smooth' });
+                    }
+                  }}
                   className={`w-6 h-6 rounded bg-slate-700/70 text-white text-xs flex items-center justify-center hover:bg-slate-600 transition-opacity ${canScrollDown ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}
                   title="Scroll down"
                 >▼</button>
