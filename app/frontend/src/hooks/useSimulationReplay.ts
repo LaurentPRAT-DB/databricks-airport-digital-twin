@@ -589,32 +589,43 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const seekToFlight = useCallback((isoTime: string, icao24: string, callsign?: string): boolean => {
     if (!simData || simData.frame_timestamps.length === 0) return false;
     const targetMs = new Date(isoTime).getTime();
-    // Find closest frame index to event time
     let centerIdx = 0;
     let bestDiff = Infinity;
     for (let i = 0; i < simData.frame_timestamps.length; i++) {
       const diff = Math.abs(new Date(simData.frame_timestamps[i]).getTime() - targetMs);
       if (diff < bestDiff) { bestDiff = diff; centerIdx = i; }
     }
-    // Search outward from center for a frame containing the target flight
-    // Skip enroute-phase matches — they get filtered out of rendered flights
     const maxSearch = 30;
     for (let offset = 0; offset <= maxSearch; offset++) {
       for (const idx of offset === 0 ? [centerIdx] : [centerIdx - offset, centerIdx + offset]) {
         if (idx < 0 || idx >= simData.frame_timestamps.length) continue;
         const ts = simData.frame_timestamps[idx];
         const snapshots = simData.frames[ts] || [];
-        const found = snapshots.some(s =>
+        const match = snapshots.find(s =>
           s.phase !== 'enroute' &&
           (s.icao24 === icao24 || (callsign && s.callsign?.replace(/\s+/g, '') === callsign))
         );
-        if (found) {
+        if (match) {
+          debugLog('info', 'seekToFlight', 'found flight', {
+            icao24, callsign, offset, frameIdx: idx, phase: match.phase,
+            totalFrames: simData.frame_timestamps.length,
+          });
           seekTo(idx);
           return true;
         }
       }
     }
-    // Fallback: seek to closest time even if flight isn't found
+    const centerTs = simData.frame_timestamps[centerIdx];
+    const centerSnaps = simData.frames[centerTs] || [];
+    const anyMatch = centerSnaps.find(s =>
+      s.icao24 === icao24 || (callsign && s.callsign?.replace(/\s+/g, '') === callsign)
+    );
+    debugLog('warn', 'seekToFlight', 'flight not found in ±30 frames', {
+      icao24, callsign, centerIdx, centerTime: centerTs,
+      totalFrames: simData.frame_timestamps.length,
+      nearestMatchPhase: anyMatch?.phase ?? 'absent',
+      flightsAtCenter: centerSnaps.length,
+    });
     seekTo(centerIdx);
     return false;
   }, [simData, seekTo]);

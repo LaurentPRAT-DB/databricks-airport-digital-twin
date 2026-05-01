@@ -323,14 +323,21 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
     return () => clearTimeout(timer);
   }, []);
 
-  // Handle "View on Map" — seek to a frame containing the flight, close report, then select it
+  // Handle "View on Map" — pause, seek to a frame containing the flight, close report, select it
   const handleEventClick = useCallback((event: ScenarioEvent) => {
     const eventCallsign = (event.callsign as string) || extractCallsign(event.description) || '';
     const eventIcao24 = event.icao24 as string | undefined;
 
-    // seekToFlight searches nearby frames for one where the flight is visible (not enroute)
+    debugLog('info', 'ReportNav', 'View on Map clicked', {
+      eventType: event.event_type, eventCallsign, eventIcao24, eventTime: event.time,
+    });
+
+    // Pause so the user can inspect the flight at the event moment
+    sim.pause();
+
+    let found = false;
     if (eventIcao24 || eventCallsign) {
-      sim.seekToFlight(event.time, eventIcao24 || '', eventCallsign || undefined);
+      found = sim.seekToFlight(event.time, eventIcao24 || '', eventCallsign || undefined);
     } else {
       sim.seekToTime(event.time);
     }
@@ -347,12 +354,17 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
         );
         if (flight) {
           setSelectedFlight(flight);
+          debugLog('info', 'ReportNav', 'flight selected', {
+            icao24: flight.icao24, callsign: flight.callsign, seekFound: found,
+          });
         } else {
           debugLog('warn', 'ReportNav', 'flight not found after seek', {
-            eventCallsign, eventIcao24, eventTime: event.time, availableFlights: flights.length,
+            eventCallsign, eventIcao24, eventTime: event.time,
+            seekFound: found, availableFlights: flights.length,
+            flightIds: flights.slice(0, 5).map(f => `${f.callsign}/${f.icao24}`),
           });
         }
-      }, 200);
+      }, 300);
     }
   }, [sim, setSelectedFlight, onClose]);
 
