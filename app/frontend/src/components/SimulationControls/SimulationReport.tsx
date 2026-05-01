@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { UseSimulationReplayResult, ScenarioEvent } from '../../hooks/useSimulationReplay';
@@ -575,8 +576,8 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
     URL.revokeObjectURL(url);
   }, [sim, summary, filteredEvents, fromHour, toHour]);
 
-  return (
-    <div ref={modalRef} className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4" onPointerDown={e => e.stopPropagation()} onMouseMove={e => e.stopPropagation()}>
+  return createPortal(
+    <div ref={modalRef} className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
       <div className={`bg-white shadow-2xl border border-slate-200 flex flex-col overflow-hidden transition-all duration-200 ${
         fullscreen
           ? 'w-full h-full max-w-full max-h-full rounded-none'
@@ -910,6 +911,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
