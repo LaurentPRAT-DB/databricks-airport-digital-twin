@@ -78,13 +78,14 @@ export const AIRCRAFT_MODELS: Record<string, AircraftModelConfig> = {
   'B777': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.03 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
   'B787': { url: '/models/aircraft/cathay_pacific_airbus_a330-300.glb', scale: 1.0 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
 
-  // Fighter jets (individual GLBs split from collection — units are ~10x real meters, nose at -Z)
-  'F14': { url: '/models/aircraft/fighter-f14.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'F15': { url: '/models/aircraft/fighter-f15.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'F16': { url: '/models/aircraft/fighter-f16.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'F18': { url: '/models/aircraft/fighter-f18.glb', scale: 0.088 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'F22': { url: '/models/aircraft/fighter-f22.glb', scale: 0.1 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
-  'F35': { url: '/models/aircraft/fighter-f35.glb', scale: 0.081 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: 0, z: 0 } },
+  // Fighter jets (individual GLBs split from collection — nose at +X, rotate +π/2 Y to align nose to -Z)
+  // Scale bumped 2x vs real for visual clarity at airport zoom levels
+  'F14': { url: '/models/aircraft/fighter-f14.glb', scale: 0.2 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 } },
+  'F15': { url: '/models/aircraft/fighter-f15.glb', scale: 0.2 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 } },
+  'F16': { url: '/models/aircraft/fighter-f16.glb', scale: 0.2 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 } },
+  'F18': { url: '/models/aircraft/fighter-f18.glb', scale: 0.18 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 } },
+  'F22': { url: '/models/aircraft/fighter-f22.glb', scale: 0.2 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 } },
+  'F35': { url: '/models/aircraft/fighter-f35.glb', scale: 0.16 * METERS_TO_SCENE_UNITS * AIRCRAFT_VISUAL_SCALE, rotationOffset: { x: 0, y: Math.PI / 2, z: 0 } },
 
   // Generic fallback - generic-jet.glb native 2.0 units, target 35m wingspan
   // Native forward is -X, needs -π/2 to align nose to -Z
