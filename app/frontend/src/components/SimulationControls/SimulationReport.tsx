@@ -214,6 +214,8 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
 export function SimulationReport({ sim, onClose, focusEvents }: SimulationReportProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const { filteredFlights, setSelectedFlight } = useFlightContext();
+  const flightsRef = useRef(filteredFlights);
+  flightsRef.current = filteredFlights;
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
   const focusRowRef = useRef<HTMLTableRowElement>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
@@ -321,24 +323,36 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
     return () => clearTimeout(timer);
   }, []);
 
-  // Handle clicking an event row — seek to event time, select matching flight, close report
-  const handleEventClick = useCallback((eventTime: string, description: string) => {
+  // Handle "View on Map" — seek to event time, close report, then select flight after frame updates
+  const handleEventClick = useCallback((event: ScenarioEvent) => {
+    // Extract identifiers from event fields (preferred) or description (fallback)
+    const eventCallsign = (event.callsign as string) || extractCallsign(event.description) || '';
+    const eventIcao24 = event.icao24 as string | undefined;
+
     // Seek simulation to event time
-    sim.seekToTime(eventTime);
+    sim.seekToTime(event.time);
 
-    // Try to find and select the matching flight by callsign
-    const callsign = extractCallsign(description);
-    if (callsign) {
-      const flight = filteredFlights.find(
-        f => f.callsign?.replace(/\s+/g, '') === callsign
-      );
-      if (flight) {
-        setSelectedFlight(flight);
-      }
-    }
-
+    // Close report so the frame renders with new flight positions
     onClose();
-  }, [sim, filteredFlights, setSelectedFlight, onClose]);
+
+    // After frame settles, find flight by icao24/callsign in the updated flight list
+    if (eventCallsign || eventIcao24) {
+      setTimeout(() => {
+        const flights = flightsRef.current;
+        const flight = flights.find(f =>
+          (eventIcao24 && f.icao24 === eventIcao24) ||
+          (eventCallsign && f.callsign?.replace(/\s+/g, '') === eventCallsign)
+        );
+        if (flight) {
+          setSelectedFlight(flight);
+        } else {
+          debugLog('warn', 'ReportNav', 'flight not found after seek', {
+            eventCallsign, eventIcao24, eventTime: event.time, availableFlights: flights.length,
+          });
+        }
+      }, 200);
+    }
+  }, [sim, setSelectedFlight, onClose]);
 
   // All unique event types present in the data
   const allEventTypes = useMemo(() => {
@@ -839,7 +853,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
                               </svg>
                             </td>
                           </tr>,
-                          ...(isSelected ? [<EventDetailPanel key={`detail-${group.callsign}-${i}`} event={event} onJump={() => handleEventClick(event.time, event.description)} />] : []),
+                          ...(isSelected ? [<EventDetailPanel key={`detail-${group.callsign}-${i}`} event={event} onJump={() => handleEventClick(event)} />] : []),
                         ];
                       }) : []),
                     ];
@@ -871,7 +885,7 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
                         </svg>
                       </td>
                     </tr>,
-                    ...(isSelected ? [<EventDetailPanel key={`detail-${event.time}-${i}`} event={event} onJump={() => handleEventClick(event.time, event.description)} />] : []),
+                    ...(isSelected ? [<EventDetailPanel key={`detail-${event.time}-${i}`} event={event} onJump={() => handleEventClick(event)} />] : []),
                   ];
                 })}
               </tbody>
