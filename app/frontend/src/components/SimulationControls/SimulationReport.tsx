@@ -236,17 +236,6 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
     }
   }, []);
 
-  // Also stop propagation on the modal for any events that might bubble to document listeners
-  useEffect(() => {
-    const el = modalRef.current;
-    if (!el) return;
-    const stop = (e: Event) => { e.stopPropagation(); };
-    const events = ['wheel', 'mousedown', 'mouseup', 'mousemove', 'click', 'dblclick', 'contextmenu', 'pointerdown', 'pointermove', 'pointerup'] as const;
-    for (const evt of events) {
-      el.addEventListener(evt, stop, { passive: true } as AddEventListenerOptions);
-    }
-    return () => { for (const evt of events) el.removeEventListener(evt, stop); };
-  }, []);
 
   // ── Scroll state tracking ──
   useEffect(() => {
