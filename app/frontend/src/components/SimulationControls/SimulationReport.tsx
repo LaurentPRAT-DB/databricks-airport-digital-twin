@@ -323,19 +323,21 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
     return () => clearTimeout(timer);
   }, []);
 
-  // Handle "View on Map" — seek to event time, close report, then select flight after frame updates
+  // Handle "View on Map" — seek to a frame containing the flight, close report, then select it
   const handleEventClick = useCallback((event: ScenarioEvent) => {
-    // Extract identifiers from event fields (preferred) or description (fallback)
     const eventCallsign = (event.callsign as string) || extractCallsign(event.description) || '';
     const eventIcao24 = event.icao24 as string | undefined;
 
-    // Seek simulation to event time
-    sim.seekToTime(event.time);
+    // seekToFlight searches nearby frames for one where the flight is visible (not enroute)
+    if (eventIcao24 || eventCallsign) {
+      sim.seekToFlight(event.time, eventIcao24 || '', eventCallsign || undefined);
+    } else {
+      sim.seekToTime(event.time);
+    }
 
-    // Close report so the frame renders with new flight positions
     onClose();
 
-    // After frame settles, find flight by icao24/callsign in the updated flight list
+    // After frame settles, find and select the flight in the rendered list
     if (eventCallsign || eventIcao24) {
       setTimeout(() => {
         const flights = flightsRef.current;

@@ -186,6 +186,7 @@ export interface UseSimulationReplayResult {
   seekTo: (frameIndex: number) => void;
   seekToPercent: (pct: number) => void;
   seekToTime: (isoTime: string) => void;
+  seekToFlight: (isoTime: string, icao24: string, callsign?: string) => boolean;
   stop: () => void;
   fetchFiles: () => Promise<void>;
   pauseForSwitch: () => void;
@@ -585,6 +586,39 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     seekTo(bestIdx);
   }, [simData, seekTo]);
 
+  const seekToFlight = useCallback((isoTime: string, icao24: string, callsign?: string): boolean => {
+    if (!simData || simData.frame_timestamps.length === 0) return false;
+    const targetMs = new Date(isoTime).getTime();
+    // Find closest frame index to event time
+    let centerIdx = 0;
+    let bestDiff = Infinity;
+    for (let i = 0; i < simData.frame_timestamps.length; i++) {
+      const diff = Math.abs(new Date(simData.frame_timestamps[i]).getTime() - targetMs);
+      if (diff < bestDiff) { bestDiff = diff; centerIdx = i; }
+    }
+    // Search outward from center for a frame containing the target flight
+    // Skip enroute-phase matches — they get filtered out of rendered flights
+    const maxSearch = 30;
+    for (let offset = 0; offset <= maxSearch; offset++) {
+      for (const idx of offset === 0 ? [centerIdx] : [centerIdx - offset, centerIdx + offset]) {
+        if (idx < 0 || idx >= simData.frame_timestamps.length) continue;
+        const ts = simData.frame_timestamps[idx];
+        const snapshots = simData.frames[ts] || [];
+        const found = snapshots.some(s =>
+          s.phase !== 'enroute' &&
+          (s.icao24 === icao24 || (callsign && s.callsign?.replace(/\s+/g, '') === callsign))
+        );
+        if (found) {
+          seekTo(idx);
+          return true;
+        }
+      }
+    }
+    // Fallback: seek to closest time even if flight isn't found
+    seekTo(centerIdx);
+    return false;
+  }, [simData, seekTo]);
+
   const stop = useCallback(() => {
     wantsAutoPlayRef.current = false;
     setIsPlaying(false);
@@ -776,6 +810,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     seekTo,
     seekToPercent,
     seekToTime,
+    seekToFlight,
     stop,
     fetchFiles,
     pauseForSwitch,
