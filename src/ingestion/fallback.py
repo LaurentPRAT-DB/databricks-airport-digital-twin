@@ -1711,21 +1711,29 @@ def _entry_direction_quadrant(entry_dir: float) -> str:
 _STAR_CORRIDORS = {
     "NORTH": {
         "name": "BDEGA",          # Real SFO STAR from Point Reyes (north Pacific)
+        "transition_distances": [0.40, 0.33, 0.26],
+        "transition_altitudes": [12000, 9500, 7500],
         "base_distances": [0.20, 0.16, 0.12, 0.07],
         "base_altitudes": [6000, 4500, 3200, 2500],
     },
     "EAST": {
         "name": "DYAMD",          # Real SFO STAR from Central Valley
+        "transition_distances": [0.34, 0.27, 0.21],
+        "transition_altitudes": [11000, 8500, 6500],
         "base_distances": [0.14, 0.11, 0.08, 0.05],
         "base_altitudes": [4800, 3800, 3000, 2500],
     },
     "SOUTH": {
         "name": "SERFR",          # Real SFO STAR from Monterey Bay (SE)
+        "transition_distances": [0.38, 0.30, 0.24],
+        "transition_altitudes": [11500, 9000, 7000],
         "base_distances": [0.18, 0.14, 0.10, 0.06],
         "base_altitudes": [5500, 4200, 3200, 2500],
     },
     "WEST": {
         "name": "OCEANIC",        # Trans-Pacific arrivals over the ocean
+        "transition_distances": [0.44, 0.36, 0.28],
+        "transition_altitudes": [13000, 10000, 8000],
         "base_distances": [0.22, 0.17, 0.12, 0.07],
         "base_altitudes": [7000, 5000, 3500, 2500],
     },
@@ -1794,21 +1802,32 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
             pt = _point_on_circle(rwy_lat, rwy_lon, approach_course, dist)
             final_wps.append((pt[1], pt[0], alt))
 
-    # Phase 1: STAR corridor — distinct per quadrant, converges to final approach fix
+    # Phase 0+1: STAR corridor with transition — distinct per quadrant
     quadrant = _entry_direction_quadrant(entry_dir)
     corridor = _STAR_CORRIDORS[quadrant]
     anchor_lat, anchor_lon = final_wps[0][1], final_wps[0][0]
+
+    # Phase 0: Transition — extends approach for stacked/high-altitude aircraft
+    transition_dists = corridor.get("transition_distances", [])
+    transition_alts = corridor.get("transition_altitudes", [])
+    transition_wps = []
+    for i, (dist, alt) in enumerate(zip(transition_dists, transition_alts)):
+        blend = 0.25 * (i / max(1, len(transition_dists) - 1))
+        bearing = entry_dir + _shortest_angle_diff(entry_dir, approach_course) * blend
+        pt = _point_on_circle(anchor_lat, anchor_lon, bearing, dist)
+        transition_wps.append((pt[1], pt[0], alt))
+
+    # Phase 1: STAR corridor — converges to final approach fix
     base_distances = corridor["base_distances"]
     base_altitudes = corridor["base_altitudes"]
-
     base_wps = []
     for i, (dist, alt) in enumerate(zip(base_distances, base_altitudes)):
-        blend = i / len(base_distances)  # 0→0.75
+        blend = 0.25 + 0.75 * (i / max(1, len(base_distances) - 1))
         bearing = entry_dir + _shortest_angle_diff(entry_dir, approach_course) * blend
         pt = _point_on_circle(anchor_lat, anchor_lon, bearing, dist)
         base_wps.append((pt[1], pt[0], alt))
 
-    return base_wps + final_wps
+    return transition_wps + base_wps + final_wps
 
 
 def _get_runway_heading() -> Optional[float]:
@@ -3610,7 +3629,11 @@ def _create_new_flight(
 
     if phase == FlightPhase.APPROACHING:
         # Start on approach from the origin direction WITH PROPER WAKE TURBULENCE SEPARATION
-        base_wp = _get_approach_waypoints(origin)[0]
+        approach_wps_full = _get_approach_waypoints(origin)
+        # Skip transition waypoints (high-altitude lead-in) for the spawn point;
+        # first aircraft starts at the STAR corridor entry, not 24 NM out.
+        n_trans = len(approach_wps_full) - 11  # 11 = base(4) + final(7)
+        base_wp = approach_wps_full[max(0, n_trans)]
         center = get_airport_center()
 
         # Find how many aircraft are already approaching
@@ -3672,8 +3695,14 @@ def _create_new_flight(
         # to avoid the visible speed jump on the first tick when the profile
         # overrides the initial velocity.
         _total_wps = len(approach_wps) if approach_wps else 1
-        _spawn_progress = best_wp_idx / max(1, _total_wps - 1)
-        _prof_progress = 0.5 + 0.5 * _spawn_progress
+        _n_transition = _total_wps - 11
+        if _n_transition > 0 and best_wp_idx < _n_transition:
+            _t = best_wp_idx / max(1, _n_transition)
+            _prof_progress = 0.30 + 0.20 * _t
+        else:
+            _base_idx = best_wp_idx - max(0, _n_transition)
+            _base_total = _total_wps - max(0, _n_transition)
+            _prof_progress = 0.50 + 0.50 * (_base_idx / max(1, _base_total - 1))
         _dp = get_descent_profile(aircraft_type)
         _prof_alt, _prof_spd, _prof_vr = interpolate_profile(_dp, _prof_progress)
         vref = VREF_SPEEDS.get(aircraft_type, _DEFAULT_VREF)
@@ -4014,11 +4043,18 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 # --- OpenAP-based descent profile ---
                 total_wps = len(approach_wps)
                 progress = state.waypoint_index / max(1, total_wps - 1)
-                # Map approach progress (0=far out, 1=threshold) to descent
-                # profile progress (0=TOD, 1=touchdown).  Approach waypoints
-                # only cover the last ~15 NM, which is roughly the final 50%
-                # of a full descent.  We map [0,1] → [0.5, 1.0].
-                profile_progress = 0.5 + 0.5 * progress
+                # Map approach progress to descent profile progress.
+                # Transition waypoints (first ~3) cover the high-altitude
+                # descent segment [0.30, 0.50]; base+final waypoints cover
+                # the standard approach segment [0.50, 1.0].
+                n_transition = len(approach_wps) - 11  # 11 = original base(4) + final(7)
+                if n_transition > 0 and state.waypoint_index < n_transition:
+                    t = state.waypoint_index / max(1, n_transition)
+                    profile_progress = 0.30 + 0.20 * t
+                else:
+                    base_idx = state.waypoint_index - max(0, n_transition)
+                    base_total = total_wps - max(0, n_transition)
+                    profile_progress = 0.50 + 0.50 * (base_idx / max(1, base_total - 1))
                 desc_prof = get_descent_profile(state.aircraft_type)
                 prof_alt, prof_spd, prof_vr = interpolate_profile(desc_prof, profile_progress)
 
@@ -4075,7 +4111,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     # ILS glideslope rates and keep 30s snapshot jumps ≤ 600ft.
                     state.go_around_target_alt = 0.0
                     descent_fps = max(12.0, min(20.0, abs(prof_vr) / 60.0)) if prof_vr else 12.0
-                    effective_target = min(prof_alt, target_alt)
+                    effective_target = min(prof_alt, target_alt, state.altitude)
                     prev_alt = state.altitude
                     state.altitude = max(float(DECISION_HEIGHT_FT), _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
                     # Set vertical_rate to match actual altitude direction (O05 fix):

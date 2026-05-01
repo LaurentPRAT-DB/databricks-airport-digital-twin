@@ -667,12 +667,15 @@ class TestApproachGlideslope:
             )
 
     def test_dynamic_approach_starts_below_5000ft(self):
-        """Base leg should start at ~4800 ft (3° GS at 15 NM), not 6000 ft."""
+        """STAR corridor entry (after transition) should start at ~4800 ft (3° GS at 15 NM)."""
         wps = _get_approach_waypoints("DEN")
         if not wps:
             pytest.skip("No runway data")
-        assert wps[0][2] <= 5000, (
-            f"First approach wp should be <=5,000 ft, got {wps[0][2]} ft"
+        # Skip transition waypoints (first 3); STAR corridor entry is index 3
+        n_transition = len(wps) - 11  # 11 = base(4) + final(7)
+        star_entry = wps[n_transition]
+        assert star_entry[2] <= 5000, (
+            f"STAR corridor entry wp should be <=5,000 ft, got {star_entry[2]} ft"
         )
 
 

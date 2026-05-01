@@ -1375,11 +1375,11 @@ class TestFinalApproachRunwayAlignment:
         )
 
     def test_approach_has_two_phases(self):
-        """Approach should have base leg (blended) + final (runway-aligned) phases."""
+        """Approach should have transition + base leg (blended) + final (runway-aligned) phases."""
         wps = _get_approach_waypoints("JFK")
 
-        # Total should be 11 waypoints (4 base + 7 final)
-        assert len(wps) == 11, f"Expected 11 waypoints, got {len(wps)}"
+        # Total should be 14 waypoints (3 transition + 4 base + 7 final)
+        assert len(wps) == 14, f"Expected 14 waypoints, got {len(wps)}"
 
         # Altitude should monotonically decrease
         for i in range(1, len(wps)):
@@ -1389,10 +1389,10 @@ class TestFinalApproachRunwayAlignment:
             )
 
     def test_approach_starts_at_correct_altitude_ends_near_threshold(self):
-        """First waypoint at STAR corridor altitude (4500-5500ft), last at runway threshold."""
+        """First waypoint at transition altitude (8000-13000ft), last at runway threshold."""
         wps = _get_approach_waypoints("ORD")
-        # STAR corridors have different start altitudes per quadrant (4500-5500ft)
-        assert 4000 <= wps[0][2] <= 6000, f"Expected 4000-6000ft start, got {wps[0][2]}"
+        # Transition waypoints start at 8000-13000ft depending on quadrant
+        assert 6000 <= wps[0][2] <= 13000, f"Expected 6000-13000ft start, got {wps[0][2]}"
         assert wps[-1][2] <= 50, f"Expected <=50ft at threshold, got {wps[-1][2]}"
 
     def test_final_approach_fix_at_approximately_6nm(self):
@@ -1401,9 +1401,8 @@ class TestFinalApproachRunwayAlignment:
         0.10° ≈ 6 NM at mid-latitudes.
         """
         wps = _get_approach_waypoints("SEA")
-        # The 5th waypoint (index 4) is the first final-approach waypoint
-        # at distance 0.10° from center
-        faf = wps[4]  # First final approach waypoint
+        # The FAF is the first final-approach waypoint (index 7: 3 transition + 4 base)
+        faf = wps[7]  # First final approach waypoint
         threshold = wps[-1]  # Airport center
         dist_deg = math.sqrt(
             (faf[0] - threshold[0]) ** 2 + (faf[1] - threshold[1]) ** 2
@@ -1417,7 +1416,7 @@ class TestFinalApproachRunwayAlignment:
         """Final approach segment should approximate a 3° glideslope (~318 ft/NM)."""
         wps = _get_approach_waypoints("DEN")
         # Check overall final approach gradient from FAF (1600ft, 0.10° out) to threshold (50ft)
-        faf = wps[4]       # 1600ft at 0.10° from threshold
+        faf = wps[7]       # 1600ft at 0.10° from threshold (index 7: 3 transition + 4 base)
         threshold = wps[-1]  # 50ft at threshold
 
         dist_deg = math.sqrt((faf[0] - threshold[0]) ** 2 + (faf[1] - threshold[1]) ** 2)
