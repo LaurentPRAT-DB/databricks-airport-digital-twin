@@ -4035,6 +4035,14 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             target = (wp[1], wp[0])  # lat, lon
             target_alt = wp[2]
 
+            # Skip waypoints whose altitude is above current altitude
+            # (happens after go-around re-entry at low altitude)
+            while target_alt > state.altitude + 200 and state.waypoint_index < len(approach_wps) - 1:
+                state.waypoint_index += 1
+                wp = approach_wps[state.waypoint_index]
+                target = (wp[1], wp[0])
+                target_alt = wp[2]
+
             # CHECK SEPARATION before moving
             has_separation = _check_approach_separation(state)
             queue_pos = _get_approach_queue_position(state.icao24)
@@ -4111,7 +4119,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     # ILS glideslope rates and keep 30s snapshot jumps ≤ 600ft.
                     state.go_around_target_alt = 0.0
                     descent_fps = max(12.0, min(20.0, abs(prof_vr) / 60.0)) if prof_vr else 12.0
-                    effective_target = min(prof_alt, target_alt, state.altitude)
+                    effective_target = min(prof_alt, target_alt)
                     prev_alt = state.altitude
                     state.altitude = max(float(DECISION_HEIGHT_FT), _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
                     # Set vertical_rate to match actual altitude direction (O05 fix):
