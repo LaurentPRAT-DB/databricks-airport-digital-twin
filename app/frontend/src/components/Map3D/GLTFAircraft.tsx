@@ -46,16 +46,20 @@ interface ErrorBoundaryState {
 }
 
 class GLTFErrorBoundary extends Component<
-  { children: ReactNode; fallback: ReactNode },
+  { children: ReactNode; fallback: ReactNode; modelUrl?: string },
   ErrorBoundaryState
 > {
-  constructor(props: { children: ReactNode; fallback: ReactNode }) {
+  constructor(props: { children: ReactNode; fallback: ReactNode; modelUrl?: string }) {
     super(props);
     this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(): ErrorBoundaryState {
     return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.warn('[GLTFAircraft] Model load failed, using fallback. URL:', this.props.modelUrl, 'Error:', error.message);
   }
 
   render() {
@@ -84,16 +88,22 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false, flightPhase
     // If nodePrefix is set, hide non-matching top-level nodes and auto-center
     if (modelConfig.nodePrefix) {
       const box = new THREE.Box3();
+      let matchedNodes = 0;
+      let hiddenNodes = 0;
       clone.traverse((child) => {
         // Find the GLTF_SceneRootNode level — its children are the individual models
         if (child.children && child.children.length > 5) {
           for (const grandchild of child.children) {
             if (grandchild.name && !grandchild.name.startsWith(modelConfig.nodePrefix!)) {
               grandchild.visible = false;
+              hiddenNodes++;
+            } else if (grandchild.name) {
+              matchedNodes++;
             }
           }
         }
       });
+      console.debug(`[GLTFAircraft] nodePrefix="${modelConfig.nodePrefix}" matched=${matchedNodes} hidden=${hiddenNodes}`);
       // Compute bounding box of visible geometry and re-center
       clone.traverse((child) => {
         if (child instanceof THREE.Mesh && child.visible && child.geometry) {
@@ -185,7 +195,7 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false, flightPhase
     });
 
     return clone;
-  }, [scene, airline, selected, flightPhase]);
+  }, [scene, modelConfig, airline, selected, flightPhase]);
 
   const { scale, rotationOffset } = modelConfig;
 
@@ -250,7 +260,7 @@ export function GLTFAircraft(props: GLTFAircraftProps) {
   );
 
   return (
-    <GLTFErrorBoundary fallback={fallbackAircraft}>
+    <GLTFErrorBoundary fallback={fallbackAircraft} modelUrl={props.modelConfig.url}>
       <Suspense fallback={<LoadingPlaceholder />}>
         <GLTFAircraftInner {...props} />
       </Suspense>
