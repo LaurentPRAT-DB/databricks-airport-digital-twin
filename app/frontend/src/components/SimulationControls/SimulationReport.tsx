@@ -221,74 +221,114 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
 
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Block wheel events from reaching Leaflet map
+  // ── Event isolation: disable pointer events on map while report is open ──
+  useEffect(() => {
+    const mapEl = document.querySelector('.leaflet-container') as HTMLElement | null;
+    if (mapEl) {
+      const prev = mapEl.style.pointerEvents;
+      mapEl.style.pointerEvents = 'none';
+      debugLog('info', 'ReportEvent', 'map pointer-events disabled');
+      return () => {
+        mapEl.style.pointerEvents = prev;
+        debugLog('info', 'ReportEvent', 'map pointer-events restored');
+      };
+    }
+  }, []);
+
+  // Also stop propagation on the modal for any events that might bubble to document listeners
   useEffect(() => {
     const el = modalRef.current;
     if (!el) return;
-    const handler = (e: WheelEvent) => {
-      // stopPropagation alone prevents Leaflet from zooming.
-      // Do NOT call preventDefault — that kills native scroll inside the modal.
-      e.stopPropagation();
-    };
-    el.addEventListener('wheel', handler, { passive: true });
-    return () => el.removeEventListener('wheel', handler);
+    const stop = (e: Event) => { e.stopPropagation(); };
+    const events = ['wheel', 'mousedown', 'mouseup', 'mousemove', 'click', 'dblclick', 'contextmenu', 'pointerdown', 'pointermove', 'pointerup'] as const;
+    for (const evt of events) {
+      el.addEventListener(evt, stop, { passive: true } as AddEventListenerOptions);
+    }
+    return () => { for (const evt of events) el.removeEventListener(evt, stop); };
   }, []);
 
-  // Track scroll state on the event table container + diagnostic logging
+  // ── Scroll state tracking ──
   useEffect(() => {
     const el = tableScrollRef.current;
     if (!el) return;
     const update = () => {
-      setCanScrollUp(el.scrollTop > 4);
-      setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+      const up = el.scrollTop > 4;
+      const down = el.scrollTop + el.clientHeight < el.scrollHeight - 4;
+      setCanScrollUp(up);
+      setCanScrollDown(down);
     };
     update();
     el.addEventListener('scroll', update, { passive: true });
-    const ro = new ResizeObserver(() => {
-      update();
-      debugLog('info', 'ReportScroll', 'resize observed', {
-        clientHeight: el.clientHeight,
-        scrollHeight: el.scrollHeight,
-        overflowActive: el.scrollHeight > el.clientHeight,
-        computedMaxHeight: getComputedStyle(el).maxHeight,
-        computedOverflowY: getComputedStyle(el).overflowY,
-      });
-    });
+    const ro = new ResizeObserver(() => update());
     ro.observe(el);
     return () => { el.removeEventListener('scroll', update); ro.disconnect(); };
   }, []);
 
-  // One-shot DOM snapshot on mount for scroll chain diagnostics
+  // ── Full diagnostic snapshot on mount (delayed for layout to settle) ──
   useEffect(() => {
-    const raf = requestAnimationFrame(() => {
+    const timer = setTimeout(() => {
       const scrollEl = tableScrollRef.current;
       const modal = modalRef.current;
       if (!scrollEl || !modal) return;
 
-      const innerPanel = modal.querySelector('[class*="flex-1 min-h-0 px-6"]') as HTMLElement | null;
       const dims = (el: HTMLElement | null, label: string) => {
         if (!el) return { label, missing: true };
+        const cs = getComputedStyle(el);
         return {
           label,
           clientH: el.clientHeight,
           scrollH: el.scrollHeight,
           offsetH: el.offsetHeight,
-          maxH: getComputedStyle(el).maxHeight,
-          overflowY: getComputedStyle(el).overflowY,
-          display: getComputedStyle(el).display,
-          flexGrow: getComputedStyle(el).flexGrow,
+          boundingH: Math.round(el.getBoundingClientRect().height),
+          maxH: cs.maxHeight,
+          minH: cs.minHeight,
+          height: cs.height,
+          overflowY: cs.overflowY,
+          display: cs.display,
+          flexGrow: cs.flexGrow,
+          flexShrink: cs.flexShrink,
+          flexBasis: cs.flexBasis,
+          position: cs.position,
+          zIndex: cs.zIndex,
+          pointerEvents: cs.pointerEvents,
         };
       };
 
-      debugLog('info', 'ReportScroll', 'mount snapshot', {
-        modal: dims(modal, 'modal'),
-        body: dims(innerPanel, 'body'),
-        scrollContainer: dims(scrollEl, 'scrollContainer'),
+      // Walk up from scroll container to modal, capturing each ancestor
+      const chain: ReturnType<typeof dims>[] = [];
+      let cursor: HTMLElement | null = scrollEl;
+      let depth = 0;
+      while (cursor && cursor !== modal && depth < 8) {
+        chain.push(dims(cursor, `depth-${depth}(${cursor.tagName}.${cursor.className.split(' ')[0]})`));
+        cursor = cursor.parentElement;
+        depth++;
+      }
+      chain.push(dims(modal, 'modal'));
+
+      debugLog('info', 'ReportDiag', 'mount snapshot', {
         viewport: `${window.innerWidth}x${window.innerHeight}`,
         scrollable: scrollEl.scrollHeight > scrollEl.clientHeight,
+        canScrollDown: scrollEl.scrollTop + scrollEl.clientHeight < scrollEl.scrollHeight - 4,
+        chain,
       });
-    });
-    return () => cancelAnimationFrame(raf);
+
+      // Check if map is receiving pointer events through the modal
+      const mapEl = document.querySelector('.leaflet-container') as HTMLElement | null;
+      if (mapEl) {
+        const mapCs = getComputedStyle(mapEl);
+        const modalRect = modal.getBoundingClientRect();
+        const mapRect = mapEl.getBoundingClientRect();
+        debugLog('info', 'ReportDiag', 'layer stacking', {
+          modalZ: getComputedStyle(modal).zIndex,
+          mapZ: mapCs.zIndex,
+          modalRect: { top: modalRect.top, left: modalRect.left, w: modalRect.width, h: modalRect.height },
+          mapRect: { top: mapRect.top, left: mapRect.left, w: mapRect.width, h: mapRect.height },
+          mapPointerEvents: mapCs.pointerEvents,
+          overlaps: !(modalRect.right < mapRect.left || modalRect.left > mapRect.right || modalRect.bottom < mapRect.top || modalRect.top > mapRect.bottom),
+        });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
   }, []);
 
   // Handle clicking an event row — seek to event time, select matching flight, close report
