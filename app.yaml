@@ -57,6 +57,10 @@ env:
   - name: ASSISTANT_MODEL_ENDPOINT
     value: "databricks-claude-sonnet-4-5"
 
+  # Configurable prompt for the Explain button (simulation event explanations)
+  - name: EXPLAIN_PROMPT
+    value: "You are an aviation operations expert analyzing a simulation event. Given the event data below, provide a brief explanation (2-3 sentences) of: 1) What happened and why it's significant 2) The likely cause based on the event context 3) What operational impact this has. Be concise and use aviation terminology where appropriate. Do not use markdown headers."
+
   # App URL for MCP connection auto-registration
   - name: DATABRICKS_APP_URL
     value: "https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.com"

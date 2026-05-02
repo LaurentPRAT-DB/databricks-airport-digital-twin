@@ -24,6 +24,15 @@ assistant_router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 MODEL_ENDPOINT = os.getenv("ASSISTANT_MODEL_ENDPOINT", "databricks-claude-sonnet-4-5")
 MAX_TOOL_ROUNDS = 3  # Prevent infinite tool-call loops
 
+EXPLAIN_PROMPT = os.getenv("EXPLAIN_PROMPT", (
+    "You are an aviation operations expert analyzing a simulation event. "
+    "Given the event data below, provide a brief explanation (2-3 sentences) of: "
+    "1) What happened and why it's significant "
+    "2) The likely cause based on the event context "
+    "3) What operational impact this has. "
+    "Be concise and use aviation terminology where appropriate. Do not use markdown headers."
+))
+
 SYSTEM_PROMPT = """You are the Airport Operations Assistant for a digital twin system. You have access to two types of data:
 
 1. **Real-time operational data** (via tools): Current flights, live weather, ML predictions, congestion, baggage stats, GSE status. Use these tools for anything about the CURRENT state of the airport.
@@ -49,6 +58,10 @@ class AskRequest(BaseModel):
 class FollowupRequest(BaseModel):
     conversation_id: str
     question: str
+
+
+class ExplainRequest(BaseModel):
+    event: dict
 
 
 class AssistantResponse(BaseModel):
@@ -377,5 +390,29 @@ async def followup_assistant(body: FollowupRequest, request: Request):
         return AssistantResponse(
             conversation_id=body.conversation_id,
             answer="The assistant encountered an error. Please try again.",
+            error=str(e),
+        )
+
+
+@assistant_router.post("/explain", response_model=AssistantResponse)
+async def explain_event(body: ExplainRequest, request: Request):
+    """Explain a simulation event using the LLM (no tools, pure inference)."""
+    try:
+        host, token = _get_databricks_auth(request)
+        event_summary = json.dumps(body.event, indent=2, default=str)
+        messages = [
+            {"role": "system", "content": EXPLAIN_PROMPT},
+            {"role": "user", "content": f"Explain this airport simulation event:\n{event_summary}"},
+        ]
+        llm_response = await _call_llm(host, token, messages, tools=[])
+        choices = llm_response.get("choices", [])
+        answer = choices[0]["message"]["content"] if choices else "Unable to generate explanation."
+        return AssistantResponse(answer=answer, sources=["llm"])
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Explain event failed")
+        return AssistantResponse(
+            answer="Unable to explain this event. Please try again.",
             error=str(e),
         )

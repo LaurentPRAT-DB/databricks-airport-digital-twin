@@ -38,6 +38,31 @@ const DETAIL_LABELS: Record<string, string> = {
 };
 
 function EventDetailPanel({ event, onJump }: { event: ScenarioEvent; onJump: () => void }) {
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [isExplaining, setIsExplaining] = useState(false);
+
+  const handleExplain = async () => {
+    setIsExplaining(true);
+    try {
+      const res = await fetch('/api/assistant/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ event }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExplanation(data.answer);
+      } else {
+        setExplanation('Unable to generate explanation. Please try again.');
+      }
+    } catch {
+      setExplanation('Failed to connect to assistant.');
+    } finally {
+      setIsExplaining(false);
+    }
+  };
+
   const details = Object.entries(event).filter(
     ([k, v]) => !DETAIL_SKIP_KEYS.has(k) && v !== undefined && v !== null
   );
@@ -67,16 +92,22 @@ function EventDetailPanel({ event, onJump }: { event: ScenarioEvent; onJump: () 
             View on Map
           </button>
           <button
-            disabled
-            className="px-3 py-1.5 rounded text-[11px] font-medium bg-slate-100 text-slate-400 cursor-not-allowed flex items-center gap-1.5"
-            title="Coming soon — AI-powered event explanation"
+            onClick={handleExplain}
+            disabled={isExplaining}
+            className="px-3 py-1.5 rounded text-[11px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            title="AI-powered event explanation"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
-            Explain
+            {isExplaining ? 'Explaining...' : 'Explain'}
           </button>
         </div>
+        {explanation && (
+          <div className="mt-3 pt-3 border-t border-blue-100/50 text-xs text-slate-700 leading-relaxed">
+            <Markdown remarkPlugins={[remarkGfm]}>{explanation}</Markdown>
+          </div>
+        )}
       </td>
     </tr>
   );
