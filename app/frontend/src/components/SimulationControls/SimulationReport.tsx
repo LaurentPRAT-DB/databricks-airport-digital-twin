@@ -465,11 +465,17 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
     // Pause so the user can inspect the flight at the event moment
     sim.pause();
 
+    // Add time padding before the event so the user sees the lead-up
+    const paddingMs = event.event_type === 'go_around' ? 120_000
+      : event.event_type === 'diversion' ? 60_000
+      : 30_000;
+    const seekTime = new Date(new Date(event.time).getTime() - paddingMs).toISOString();
+
     let found = false;
     if (eventIcao24 || eventCallsign) {
-      found = sim.seekToFlight(event.time, eventIcao24 || '', eventCallsign || undefined);
+      found = sim.seekToFlight(seekTime, eventIcao24 || '', eventCallsign || undefined);
     } else {
-      sim.seekToTime(event.time);
+      sim.seekToTime(seekTime);
     }
 
     onClose();

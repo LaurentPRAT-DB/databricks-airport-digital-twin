@@ -142,7 +142,10 @@ describe('SimulationReport', () => {
     fireEvent.click(row);
     const viewBtn = screen.getByText('View on Map');
     fireEvent.click(viewBtn);
-    expect(mockSim.seekToFlight).toHaveBeenCalled();
+    // Go-around events seek 2 min before to show the approach leading to the event
+    expect(mockSim.seekToFlight).toHaveBeenCalledWith(
+      '2026-04-15T09:28:00.000Z', '', 'UAL100'
+    );
     expect(onClose).toHaveBeenCalled();
   });
 
