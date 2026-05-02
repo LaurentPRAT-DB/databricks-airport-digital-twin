@@ -68,6 +68,7 @@ function createMockSim(overrides: Partial<UseSimulationReplayResult> = {}): UseS
     seekTo: vi.fn(),
     seekToPercent: vi.fn(),
     seekToTime: vi.fn(),
+    seekToFlight: vi.fn().mockReturnValue(true),
     stop: vi.fn(),
     fetchFiles: vi.fn().mockResolvedValue(undefined),
     pauseForSwitch: vi.fn(),
@@ -141,7 +142,7 @@ describe('SimulationReport', () => {
     fireEvent.click(row);
     const viewBtn = screen.getByText('View on Map');
     fireEvent.click(viewBtn);
-    expect(mockSim.seekToTime).toHaveBeenCalled();
+    expect(mockSim.seekToFlight).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
 

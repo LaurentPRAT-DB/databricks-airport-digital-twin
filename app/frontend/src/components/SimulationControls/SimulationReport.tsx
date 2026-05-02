@@ -18,6 +18,17 @@ interface SimulationReportProps {
 
 const DETAIL_SKIP_KEYS = new Set(['time', 'event_type', 'description']);
 
+const KPI_DEFINITIONS: Record<string, string> = {
+  'On-Time': 'Percentage of flights operating within 15 minutes of their scheduled time, including delays and capacity holds.',
+  'Avg Delay': 'Average schedule delay across all flights, in minutes.',
+  'Cancels': 'Number of flights cancelled due to weather, capacity, or operational constraints.',
+  'Go-Arounds': 'Aborted landings where aircraft must circle and re-attempt the approach.',
+  'Diversions': 'Flights redirected to an alternate airport due to weather or runway unavailability.',
+  'Peak': 'Maximum number of aircraft simultaneously active during the simulation.',
+  'Avg Hold': 'Average additional wait time per flight due to runway or airspace capacity constraints.',
+  'Flights': 'Total number of flights in the simulation schedule.',
+};
+
 const DETAIL_LABELS: Record<string, string> = {
   callsign: 'Callsign',
   icao24: 'ICAO24',
@@ -37,12 +48,23 @@ const DETAIL_LABELS: Record<string, string> = {
   wind_direction: 'Wind Dir',
 };
 
+interface ChatMessage {
+  role: 'assistant' | 'user';
+  content: string;
+}
+
 function EventDetailPanel({ event, onJump }: { event: ScenarioEvent; onJump: () => void }) {
-  const [explanation, setExplanation] = useState<string | null>(null);
-  const [isExplaining, setIsExplaining] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [input, setInput] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleExplain = async () => {
-    setIsExplaining(true);
+    setIsLoading(true);
     try {
       const res = await fetch('/api/assistant/explain', {
         method: 'POST',
@@ -52,14 +74,43 @@ function EventDetailPanel({ event, onJump }: { event: ScenarioEvent; onJump: () 
       });
       if (res.ok) {
         const data = await res.json();
-        setExplanation(data.answer);
+        setMessages([{ role: 'assistant', content: data.answer }]);
       } else {
-        setExplanation('Unable to generate explanation. Please try again.');
+        setMessages([{ role: 'assistant', content: 'Unable to generate explanation. Please try again.' }]);
       }
     } catch {
-      setExplanation('Failed to connect to assistant.');
+      setMessages([{ role: 'assistant', content: 'Failed to connect to assistant.' }]);
     } finally {
-      setIsExplaining(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+    const userMsg = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setIsLoading(true);
+    try {
+      const eventSummary = JSON.stringify(event, null, 2);
+      const priorAnalysis = messages.filter(m => m.role === 'assistant').map(m => m.content).join('\n\n');
+      const contextQuestion = `Context — this is about a simulation event:\n${eventSummary}\n\nPrevious analysis:\n${priorAnalysis}\n\nUser question: ${userMsg}`;
+      const res = await fetch('/api/assistant/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ question: contextQuestion }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Unable to respond. Please try again.' }]);
+      }
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Failed to connect to assistant.' }]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -91,21 +142,69 @@ function EventDetailPanel({ event, onJump }: { event: ScenarioEvent; onJump: () 
             </svg>
             View on Map
           </button>
-          <button
-            onClick={handleExplain}
-            disabled={isExplaining}
-            className="px-3 py-1.5 rounded text-[11px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors flex items-center gap-1.5 disabled:opacity-50"
-            title="AI-powered event explanation"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-            {isExplaining ? 'Explaining...' : 'Explain'}
-          </button>
+          {messages.length === 0 && (
+            <button
+              onClick={handleExplain}
+              disabled={isLoading}
+              className="px-3 py-1.5 rounded text-[11px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              title="AI-powered event explanation"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              {isLoading ? 'Explaining...' : 'Explain'}
+            </button>
+          )}
         </div>
-        {explanation && (
-          <div className="mt-3 pt-3 border-t border-blue-100/50 text-xs text-slate-700 leading-relaxed">
-            <Markdown remarkPlugins={[remarkGfm]}>{explanation}</Markdown>
+        {/* Mini-chat */}
+        {messages.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-blue-100/50">
+            <div className="max-h-48 overflow-y-auto space-y-2 mb-2">
+              {messages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] px-2.5 py-1.5 rounded-lg text-xs leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-100 text-slate-700'
+                  }`}>
+                    {msg.role === 'assistant' ? (
+                      <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-slate-100 text-slate-400 px-2.5 py-1.5 rounded-lg text-xs italic">
+                    Thinking...
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSend(); }}
+                placeholder="Ask a follow-up..."
+                disabled={isLoading}
+                className="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+              />
+              <button
+                onClick={handleSend}
+                disabled={isLoading || !input.trim()}
+                className="px-2 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors"
+                title="Send"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </button>
+            </div>
           </div>
         )}
       </td>
@@ -436,6 +535,9 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
   const [expandedFlights, setExpandedFlights] = useState<Set<string>>(new Set());
 
 
+  // KPI help panel toggle
+  const [showKpiHelp, setShowKpiHelp] = useState(false);
+
   // Report tab (Dashboard vs Analysis Report)
   const [activeTab, setActiveTab] = useState<ReportTab>('dashboard');
   const hasAnalysisReport = sim.markdownReport != null;
@@ -710,8 +812,8 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
 
           {/* ── Dashboard tab ── */}
           {activeTab === 'dashboard' && <div className="flex flex-col gap-2">
-          {/* KPI Cards — single compact row */}
-          <div className="shrink-0 grid grid-cols-8 gap-1">
+          {/* KPI Cards — single compact row with info button */}
+          <div className="shrink-0 flex items-stretch gap-1">
             {[
               { label: 'On-Time', value: summary?.on_time_pct != null ? `${summary.on_time_pct}%` : '--', color: (summary?.on_time_pct as number) >= 70 ? 'text-green-600' : 'text-red-600' },
               { label: 'Avg Delay', value: summary?.schedule_delay_min != null ? `${summary.schedule_delay_min}m` : '--', color: 'text-amber-600' },
@@ -722,12 +824,31 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
               { label: 'Avg Hold', value: summary?.avg_capacity_hold_min != null ? `${summary.avg_capacity_hold_min}m` : '--', color: 'text-purple-600' },
               { label: 'Flights', value: `${summary?.total_flights ?? '--'}`, color: 'text-slate-900' },
             ].map(kpi => (
-              <div key={kpi.label} className="bg-slate-100 rounded px-1 py-1 text-center">
+              <div key={kpi.label} className="flex-1 bg-slate-100 rounded px-1 py-1 text-center">
                 <div className={`text-sm font-bold leading-none ${kpi.color}`}>{kpi.value}</div>
                 <div className="text-[8px] text-slate-500 uppercase tracking-wider mt-0.5">{kpi.label}</div>
               </div>
             ))}
+            <button
+              onClick={() => setShowKpiHelp(prev => !prev)}
+              className={`flex items-center justify-center w-7 rounded text-xs font-bold transition-colors ${
+                showKpiHelp ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+              }`}
+              title="Explain KPIs"
+            >
+              ?
+            </button>
           </div>
+          {showKpiHelp && (
+            <div className="shrink-0 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2">
+              {Object.entries(KPI_DEFINITIONS).map(([label, desc]) => (
+                <div key={label} className="flex gap-2">
+                  <span className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider whitespace-nowrap min-w-[60px]">{label}</span>
+                  <span className="text-[11px] text-slate-600">{desc}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Filters */}
           <div className="shrink-0 flex items-end gap-6 relative z-10">
