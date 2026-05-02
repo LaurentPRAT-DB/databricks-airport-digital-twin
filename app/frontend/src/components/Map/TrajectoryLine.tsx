@@ -32,6 +32,25 @@ function splitAtGaps(positions: [number, number][]): [number, number][][] {
   return segments;
 }
 
+/** Chaikin's corner-cutting: smooths sharp turns while preserving straight segments.
+ *  Each iteration replaces each edge midpoint pair with two 25%/75% points. */
+function chaikinSmooth(points: [number, number][], iterations = 2): [number, number][] {
+  if (points.length < 3) return points;
+  let result = points;
+  for (let iter = 0; iter < iterations; iter++) {
+    const smoothed: [number, number][] = [result[0]];
+    for (let i = 0; i < result.length - 1; i++) {
+      const [lat1, lon1] = result[i];
+      const [lat2, lon2] = result[i + 1];
+      smoothed.push([lat1 * 0.75 + lat2 * 0.25, lon1 * 0.75 + lon2 * 0.25]);
+      smoothed.push([lat1 * 0.25 + lat2 * 0.75, lon1 * 0.25 + lon2 * 0.75]);
+    }
+    smoothed.push(result[result.length - 1]);
+    result = smoothed;
+  }
+  return result;
+}
+
 /** Normalize trajectory points from either API or simulation into a common shape. */
 interface NormalizedPoint {
   latitude: number;
@@ -125,9 +144,10 @@ export default function TrajectoryLine() {
   }, [validPoints, selectedFlight?.latitude, selectedFlight?.longitude]);
 
   // Split polylines at large gaps (e.g. go-around enroute segments that are
-  // excluded from the trajectory, causing unrealistic straight-line jumps)
-  const traveledSegments = useMemo(() => splitAtGaps(traveledPositions), [traveledPositions]);
-  const remainingSegments = useMemo(() => splitAtGaps(remainingPositions), [remainingPositions]);
+  // excluded from the trajectory, causing unrealistic straight-line jumps),
+  // then smooth each segment for natural-looking curves at turns.
+  const traveledSegments = useMemo(() => splitAtGaps(traveledPositions).map(s => chaikinSmooth(s)), [traveledPositions]);
+  const remainingSegments = useMemo(() => splitAtGaps(remainingPositions).map(s => chaikinSmooth(s)), [remainingPositions]);
 
   if (!showTrajectory || (traveledSegments.length === 0 && remainingSegments.length === 0)) {
     return null;
