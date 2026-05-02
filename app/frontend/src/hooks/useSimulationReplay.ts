@@ -474,8 +474,10 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     const src = dataSourceRef.current;
     // Filter out departing enroute flights (at cruise altitude, heading away).
     // Keep arriving enroute flights (go-arounds, holding patterns near the airport).
+    // Arrivals have destination_airport = local airport; departures have destination = remote.
+    const localAirport = (simData.config as Record<string, unknown>)?.airport as string | undefined;
     const relevant = snapshots.filter((s) =>
-      s.phase !== 'enroute' || (s.origin_airport && !s.destination_airport)
+      s.phase !== 'enroute' || (localAirport && s.destination_airport === localAirport)
     );
     setFlights(relevant.map((s) => snapshotToFlight(s, src)));
   }, [simData, currentFrameIndex]);
@@ -597,6 +599,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       const diff = Math.abs(new Date(simData.frame_timestamps[i]).getTime() - targetMs);
       if (diff < bestDiff) { bestDiff = diff; centerIdx = i; }
     }
+    const localAirport = (simData.config as Record<string, unknown>)?.airport as string | undefined;
     const maxSearch = 30;
     for (let offset = 0; offset <= maxSearch; offset++) {
       for (const idx of offset === 0 ? [centerIdx] : [centerIdx - offset, centerIdx + offset]) {
@@ -604,7 +607,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
         const ts = simData.frame_timestamps[idx];
         const snapshots = simData.frames[ts] || [];
         const match = snapshots.find(s =>
-          s.phase !== 'enroute' &&
+          (s.phase !== 'enroute' || (localAirport && s.destination_airport === localAirport)) &&
           (s.icao24 === icao24 || (callsign && s.callsign?.replace(/\s+/g, '') === callsign))
         );
         if (match) {
@@ -679,7 +682,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       allowedPhases = ARRIVAL_GROUND;
     } else if (DEPARTURE_GROUND.has(currentPhase)) {
       allowedPhases = DEPARTURE_GROUND;
-    } else if (currentPhase === 'enroute' && currentSnap?.origin_airport && !currentSnap?.destination_airport) {
+    } else if (currentPhase === 'enroute' && currentSnap?.destination_airport === ((simData.config as Record<string, unknown>)?.airport as string | undefined)) {
       // Go-around: arriving enroute flight — show approach + climb as one segment
       allowedPhases = new Set([...ARRIVAL_AIRBORNE, 'enroute']);
     } else if (DEPARTURE_AIRBORNE.has(currentPhase)) {
