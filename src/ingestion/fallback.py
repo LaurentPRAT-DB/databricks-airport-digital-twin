@@ -4051,8 +4051,6 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             )
             _set_phase(state, FlightPhase.ENROUTE)
             state.waypoint_index = 0
-            # Minimum 30s hold before re-entering approach (ATC vectoring delay)
-            state.go_around_hold_until = time.time() + 30.0
 
             logger.info(
                 "GO-AROUND #%d %s (%s): %s at %.0fft → ENROUTE for re-sequence",
@@ -4960,9 +4958,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 (state.latitude, state.longitude), center
             )
             heading_diff = (target_heading - state.heading + 540) % 360 - 180
-            # Turn rate proportional to distance: gentle when close (prevents oscillation),
-            # standard rate when far out. Min 0.5°/dt near airport, 1.5°/dt beyond 5 NM.
-            turn_rate = max(0.5, min(1.5, dist_from_airport / 0.08))
+            if state.go_around_count > 0:
+                # Go-around: standard rate turn (3°/s) for a tight missed approach pattern
+                turn_rate = 3.0
+            else:
+                # Fresh arrival vectoring: gentle proportional turn
+                turn_rate = max(0.5, min(1.5, dist_from_airport / 0.08))
             state.heading += max(-turn_rate, min(turn_rate, heading_diff)) * dt
             state.heading = state.heading % 360
 
@@ -4991,11 +4992,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                               + _count_aircraft_in_phase(FlightPhase.LANDING))
             can_start_approach = approach_count < MAX_APPROACH_AIRCRAFT
 
-            # Go-around hold: wait minimum vectoring time before re-entering approach
-            if state.go_around_hold_until > 0 and time.time() < state.go_around_hold_until:
-                can_start_approach = False
+            # Go-around re-entry: wider radius since aircraft is already close
+            reentry_radius = 0.35 if state.go_around_count > 0 else APPROACH_RADIUS_DEG
 
-            if can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
+            if can_start_approach and dist_from_airport < reentry_radius:
                 # Close enough — transition to approach
                 emit_phase_transition(
                     state.icao24, state.callsign,
