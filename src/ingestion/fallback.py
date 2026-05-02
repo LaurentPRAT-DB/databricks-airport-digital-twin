@@ -1807,13 +1807,49 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     corridor = _STAR_CORRIDORS[quadrant]
     anchor_lat, anchor_lon = final_wps[0][1], final_wps[0][0]
 
-    # Phase 0: Transition — extends approach for stacked/high-altitude aircraft
+    angle_diff = _shortest_angle_diff(entry_dir, approach_course)
+
+    if abs(angle_diff) > 90:
+        # Large angle: aircraft arrives from "wrong side" — use base-turn pattern
+        # (downwind → base → final) like real ATC vectors
+        turn_sign = 1.0 if angle_diff > 0 else -1.0
+        lateral_offset = 0.12  # ~13 km lateral offset for downwind leg
+        perp_bearing = (approach_course + turn_sign * 90) % 360
+        downwind_bearing = (approach_course + 180) % 360  # opposite to approach
+
+        # Downwind leg: 3 waypoints parallel to runway, offset laterally
+        downwind_wps = []
+        downwind_dists = [0.35, 0.25, 0.15]
+        downwind_alts = [8000, 5500, 4000]
+        for dist, alt in zip(downwind_dists, downwind_alts):
+            pt = _point_on_circle(anchor_lat, anchor_lon, downwind_bearing, dist)
+            pt_offset = _point_on_circle(pt[0], pt[1], perp_bearing, lateral_offset)
+            downwind_wps.append((pt_offset[1], pt_offset[0], alt))
+
+        # Base turn: 4 waypoints curving smoothly from perpendicular to approach course
+        # Evenly interpolate bearing from perp_bearing → approach_course
+        turn_angle = _shortest_angle_diff(perp_bearing, approach_course)
+        n_turn = 4
+        turn_dists = [0.10, 0.08, 0.065, 0.055]
+        turn_alts = [3200, 2800, 2400, 2100]
+        turn_wps = []
+        for k in range(n_turn):
+            frac = (k + 1) / (n_turn + 1)
+            brg = (perp_bearing + turn_angle * frac) % 360
+            # Distance from anchor decreases and swings from lateral to along approach course
+            lat_frac = 1.0 - frac
+            pt = _point_on_circle(anchor_lat, anchor_lon, brg, turn_dists[k])
+            turn_wps.append((pt[1], pt[0], turn_alts[k]))
+
+        return downwind_wps + turn_wps + final_wps
+
+    # Small angle (≤90°): gentle curve using current interpolation logic
     transition_dists = corridor.get("transition_distances", [])
     transition_alts = corridor.get("transition_altitudes", [])
     transition_wps = []
     for i, (dist, alt) in enumerate(zip(transition_dists, transition_alts)):
         blend = 0.25 * (i / max(1, len(transition_dists) - 1))
-        bearing = entry_dir + _shortest_angle_diff(entry_dir, approach_course) * blend
+        bearing = entry_dir + angle_diff * blend
         pt = _point_on_circle(anchor_lat, anchor_lon, bearing, dist)
         transition_wps.append((pt[1], pt[0], alt))
 
@@ -1823,7 +1859,7 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     base_wps = []
     for i, (dist, alt) in enumerate(zip(base_distances, base_altitudes)):
         blend = 0.25 + 0.75 * (i / max(1, len(base_distances) - 1))
-        bearing = entry_dir + _shortest_angle_diff(entry_dir, approach_course) * blend
+        bearing = entry_dir + angle_diff * blend
         pt = _point_on_circle(anchor_lat, anchor_lon, bearing, dist)
         base_wps.append((pt[1], pt[0], alt))
 
@@ -3632,7 +3668,7 @@ def _create_new_flight(
         approach_wps_full = _get_approach_waypoints(origin)
         # Skip transition waypoints (high-altitude lead-in) for the spawn point;
         # first aircraft starts at the STAR corridor entry, not 24 NM out.
-        n_trans = len(approach_wps_full) - 11  # 11 = base(4) + final(7)
+        n_trans = max(0, len(approach_wps_full) - 7)  # everything before the 7 final-approach waypoints
         base_wp = approach_wps_full[max(0, n_trans)]
         center = get_airport_center()
 
@@ -3695,7 +3731,7 @@ def _create_new_flight(
         # to avoid the visible speed jump on the first tick when the profile
         # overrides the initial velocity.
         _total_wps = len(approach_wps) if approach_wps else 1
-        _n_transition = _total_wps - 11
+        _n_transition = max(0, _total_wps - 7)
         if _n_transition > 0 and best_wp_idx < _n_transition:
             _t = best_wp_idx / max(1, _n_transition)
             _prof_progress = 0.30 + 0.20 * _t
@@ -4055,7 +4091,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 # Transition waypoints (first ~3) cover the high-altitude
                 # descent segment [0.30, 0.50]; base+final waypoints cover
                 # the standard approach segment [0.50, 1.0].
-                n_transition = len(approach_wps) - 11  # 11 = original base(4) + final(7)
+                n_transition = max(0, len(approach_wps) - 7)
                 if n_transition > 0 and state.waypoint_index < n_transition:
                     t = state.waypoint_index / max(1, n_transition)
                     profile_progress = 0.30 + 0.20 * t
