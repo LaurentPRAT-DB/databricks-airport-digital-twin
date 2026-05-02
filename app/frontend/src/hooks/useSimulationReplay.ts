@@ -62,6 +62,16 @@ export interface PositionSnapshot {
   destination_airport?: string | null;
 }
 
+const GO_AROUND_ALT_CEILING = 6000;
+
+/** Should an enroute snapshot be visible on the map?
+ *  Arriving go-arounds: destination_airport === local, or (legacy data) altitude < 6000 ft. */
+function isLocalEnroute(s: PositionSnapshot, localAirport: string | undefined): boolean {
+  if (localAirport && s.destination_airport === localAirport) return true;
+  if (!s.destination_airport && !s.origin_airport && s.altitude < GO_AROUND_ALT_CEILING) return true;
+  return false;
+}
+
 export interface ScenarioEvent {
   time: string;
   event_type: string;   // "weather" | "runway" | "ground" | "traffic" | "capacity"
@@ -477,7 +487,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     // Arrivals have destination_airport = local airport; departures have destination = remote.
     const localAirport = (simData.config as Record<string, unknown>)?.airport as string | undefined;
     const relevant = snapshots.filter((s) =>
-      s.phase !== 'enroute' || (localAirport && s.destination_airport === localAirport)
+      s.phase !== 'enroute' || isLocalEnroute(s, localAirport)
     );
     setFlights(relevant.map((s) => snapshotToFlight(s, src)));
   }, [simData, currentFrameIndex]);
@@ -607,7 +617,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
         const ts = simData.frame_timestamps[idx];
         const snapshots = simData.frames[ts] || [];
         const match = snapshots.find(s =>
-          (s.phase !== 'enroute' || (localAirport && s.destination_airport === localAirport)) &&
+          (s.phase !== 'enroute' || isLocalEnroute(s, localAirport)) &&
           (s.icao24 === icao24 || (callsign && s.callsign?.replace(/\s+/g, '') === callsign))
         );
         if (match) {
@@ -676,11 +686,9 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     // - Ground departure (pushback/taxi_to_runway) → show taxi-out path
     // - Airborne departure (takeoff/departing/enroute) → show departure trajectory
     let allowedPhases: Set<string>;
-    // Go-around enroute ceiling: enroute frames above this are initial cruise, not go-around
-    const GO_AROUND_ALT_CEILING = 6000;
     const localAirportCfg = (simData.config as Record<string, unknown>)?.airport as string | undefined;
     if (ARRIVAL_AIRBORNE.has(currentPhase) ||
-        (currentPhase === 'enroute' && currentSnap?.destination_airport === localAirportCfg)) {
+        (currentPhase === 'enroute' && currentSnap && isLocalEnroute(currentSnap, localAirportCfg))) {
       // Include enroute so trajectory bridges across go-around interludes
       allowedPhases = new Set([...ARRIVAL_AIRBORNE, 'enroute']);
     } else if (ARRIVAL_GROUND.has(currentPhase)) {
