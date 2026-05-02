@@ -33,8 +33,9 @@ function splitAtGaps(positions: [number, number][]): [number, number][][] {
 }
 
 /** Chaikin's corner-cutting: smooths sharp turns while preserving straight segments.
- *  Each iteration replaces each edge midpoint pair with two 25%/75% points. */
-function chaikinSmooth(points: [number, number][], iterations = 2): [number, number][] {
+ *  Each iteration replaces each edge midpoint pair with two 25%/75% points.
+ *  3 iterations gives smooth arcs even for near-180° reversals (go-arounds). */
+function chaikinSmooth(points: [number, number][], iterations = 3): [number, number][] {
   if (points.length < 3) return points;
   let result = points;
   for (let iter = 0; iter < iterations; iter++) {

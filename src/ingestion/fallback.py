@@ -4928,7 +4928,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # ARRIVING enroute: heading toward airport, transition to approach when close
 
             # Go-around climb: if aircraft just executed a missed approach,
-            # climb to target altitude before resuming normal enroute behavior.
+            # climb to target altitude then fly straight ahead before turning.
             if state.go_around_target_alt > 0 and state.altitude < state.go_around_target_alt:
                 climb_fps = 25.0  # ~1500 ft/min
                 state.altitude = min(state.go_around_target_alt, state.altitude + climb_fps * dt)
@@ -4939,15 +4939,26 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.longitude += math.sin(math.radians(state.heading)) * speed_deg / max(0.01, math.cos(math.radians(state.latitude)))
                 if state.altitude >= state.go_around_target_alt:
                     state.go_around_target_alt = 0.0
+                    # Straight-ahead extension: fly 30s before turning (realistic missed approach)
+                    state.holding_phase_time = -30.0
                 state.heading = state.heading % 360
+                return state
+
+            # Post-climb straight-ahead leg (negative holding_phase_time = extension)
+            if state.holding_phase_time < 0:
+                state.holding_phase_time += dt
+                speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+                state.latitude += math.cos(math.radians(state.heading)) * speed_deg
+                state.longitude += math.sin(math.radians(state.heading)) * speed_deg / max(0.01, math.cos(math.radians(state.latitude)))
+                state.vertical_rate = 0
                 return state
 
             target_heading = _calculate_heading(
                 (state.latitude, state.longitude), center
             )
-            # Gently steer toward target (smooth turns)
+            # Gentle turn back toward airport (1.5°/dt for wider, realistic arc)
             heading_diff = (target_heading - state.heading + 540) % 360 - 180
-            state.heading += max(-3, min(3, heading_diff)) * dt
+            state.heading += max(-1.5, min(1.5, heading_diff)) * dt
             state.heading = state.heading % 360
 
             # Progressive descent & speed envelope for arriving flights
