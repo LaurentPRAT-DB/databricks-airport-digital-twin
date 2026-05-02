@@ -4927,24 +4927,23 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         if _is_arriving_enroute:
             # ARRIVING enroute: heading toward airport, transition to approach when close
 
-            # Go-around climb: if aircraft just executed a missed approach,
-            # climb to target altitude then fly straight ahead before turning.
+            # Go-around missed approach: climb → straight ahead → downwind turn → re-approach.
+            # Realistic pattern: 3+ NM straight ahead, then gradual turn to downwind.
             if state.go_around_target_alt > 0 and state.altitude < state.go_around_target_alt:
                 climb_fps = 25.0  # ~1500 ft/min
                 state.altitude = min(state.go_around_target_alt, state.altitude + climb_fps * dt)
                 state.vertical_rate = 1500
-                # Continue flying forward on current heading during climb
                 speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
                 state.latitude += math.cos(math.radians(state.heading)) * speed_deg
                 state.longitude += math.sin(math.radians(state.heading)) * speed_deg / max(0.01, math.cos(math.radians(state.latitude)))
                 if state.altitude >= state.go_around_target_alt:
                     state.go_around_target_alt = 0.0
-                    # Straight-ahead extension: fly 30s before turning (realistic missed approach)
-                    state.holding_phase_time = -30.0
+                    # Fly straight ahead 60s (~3 NM) before starting the turn
+                    state.holding_phase_time = -60.0
                 state.heading = state.heading % 360
                 return state
 
-            # Post-climb straight-ahead leg (negative holding_phase_time = extension)
+            # Post-climb straight-ahead leg (negative holding_phase_time counts up to 0)
             if state.holding_phase_time < 0:
                 state.holding_phase_time += dt
                 speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
@@ -4956,9 +4955,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             target_heading = _calculate_heading(
                 (state.latitude, state.longitude), center
             )
-            # Gentle turn back toward airport (1.5°/dt for wider, realistic arc)
             heading_diff = (target_heading - state.heading + 540) % 360 - 180
-            state.heading += max(-1.5, min(1.5, heading_diff)) * dt
+            # Turn rate proportional to distance: gentle when close (prevents oscillation),
+            # standard rate when far out. Min 0.5°/dt near airport, 1.5°/dt beyond 5 NM.
+            turn_rate = max(0.5, min(1.5, dist_from_airport / 0.08))
+            state.heading += max(-turn_rate, min(turn_rate, heading_diff)) * dt
             state.heading = state.heading % 360
 
             # Progressive descent & speed envelope for arriving flights
