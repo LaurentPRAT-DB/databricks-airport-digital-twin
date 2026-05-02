@@ -4224,12 +4224,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.heading = _smooth_heading(state.heading, next_hdg, 3.0, dt)
         else:
             # Safety fallback: waypoint exhaustion
-            if state.altitude > 1000:
+            if state.altitude > 1000 and state.go_around_count < 2:
                 # Still too high — go around rather than starting landing from altitude
                 _execute_go_around("high_altitude_at_threshold")
             else:
                 arrival_rwy = _get_arrival_runway_name()
-                if _is_runway_clear(arrival_rwy):
+                runway_ok = _is_runway_clear(arrival_rwy) or state.go_around_count >= 2
+                if runway_ok:
                     emit_phase_transition(
                         state.icao24, state.callsign,
                         FlightPhase.APPROACHING.value, FlightPhase.LANDING.value,
@@ -4240,8 +4241,6 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     state.waypoint_index = 0
                     _occupy_runway(state.icao24, arrival_rwy)
                 else:
-                    # Runway busy at waypoint exhaustion — execute missed approach
-                    # per ICAO Doc 8168: climb to missed approach altitude, re-sequence
                     _execute_go_around("runway_busy_at_threshold")
 
     elif state.phase == FlightPhase.LANDING:
@@ -4990,7 +4989,9 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             # Enforce approach capacity at runtime (max 4 on approach)
             approach_count = (_count_aircraft_in_phase(FlightPhase.APPROACHING)
                               + _count_aircraft_in_phase(FlightPhase.LANDING))
-            can_start_approach = approach_count < MAX_APPROACH_AIRCRAFT
+            # Go-around flights get priority re-entry — they've already been sequenced
+            can_start_approach = (approach_count < MAX_APPROACH_AIRCRAFT
+                                  or state.go_around_count > 0)
 
             # Go-around re-entry: wider radius since aircraft is already close
             reentry_radius = 0.35 if state.go_around_count > 0 else APPROACH_RADIUS_DEG

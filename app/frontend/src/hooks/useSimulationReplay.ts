@@ -65,10 +65,10 @@ export interface PositionSnapshot {
 const GO_AROUND_ALT_CEILING = 6000;
 
 /** Should an enroute snapshot be visible on the map?
- *  Arriving go-arounds: destination_airport === local, or (legacy data) altitude < 6000 ft. */
+ *  Keep flights still in local airspace: go-arounds, diversions climbing out, legacy data. */
 function isLocalEnroute(s: PositionSnapshot, localAirport: string | undefined): boolean {
   if (localAirport && s.destination_airport === localAirport) return true;
-  if (!s.destination_airport && !s.origin_airport && s.altitude < GO_AROUND_ALT_CEILING) return true;
+  if (s.altitude < GO_AROUND_ALT_CEILING) return true;
   return false;
 }
 

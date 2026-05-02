@@ -32,10 +32,41 @@ function splitAtGaps(positions: [number, number][]): [number, number][][] {
   return segments;
 }
 
+/** Perpendicular distance from point to line segment (start→end). */
+function perpendicularDist(point: [number, number], start: [number, number], end: [number, number]): number {
+  const [px, py] = point;
+  const [sx, sy] = start;
+  const [ex, ey] = end;
+  const dx = ex - sx;
+  const dy = ey - sy;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.sqrt((px - sx) ** 2 + (py - sy) ** 2);
+  const t = Math.max(0, Math.min(1, ((px - sx) * dx + (py - sy) * dy) / lenSq));
+  return Math.sqrt((px - (sx + t * dx)) ** 2 + (py - (sy + t * dy)) ** 2);
+}
+
+/** Douglas-Peucker line simplification: removes noise while preserving shape.
+ *  Epsilon in degrees — 0.0001° ≈ 11m, enough to eliminate GPS/sim jitter. */
+function simplify(points: [number, number][], epsilon = 0.0001): [number, number][] {
+  if (points.length < 3) return points;
+  let maxDist = 0;
+  let maxIdx = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const d = perpendicularDist(points[i], points[0], points[points.length - 1]);
+    if (d > maxDist) { maxDist = d; maxIdx = i; }
+  }
+  if (maxDist > epsilon) {
+    const left = simplify(points.slice(0, maxIdx + 1), epsilon);
+    const right = simplify(points.slice(maxIdx), epsilon);
+    return left.slice(0, -1).concat(right);
+  }
+  return [points[0], points[points.length - 1]];
+}
+
 /** Chaikin's corner-cutting: smooths sharp turns while preserving straight segments.
  *  Each iteration replaces each edge midpoint pair with two 25%/75% points.
- *  3 iterations gives smooth arcs even for near-180° reversals (go-arounds). */
-function chaikinSmooth(points: [number, number][], iterations = 3): [number, number][] {
+ *  5 iterations gives smooth arcs even for near-180° reversals (go-arounds). */
+function chaikinSmooth(points: [number, number][], iterations = 5): [number, number][] {
   if (points.length < 3) return points;
   let result = points;
   for (let iter = 0; iter < iterations; iter++) {
@@ -144,11 +175,21 @@ export default function TrajectoryLine() {
     return { traveledPositions: traveled, remainingPositions: remaining };
   }, [validPoints, selectedFlight?.latitude, selectedFlight?.longitude]);
 
+  // Determine if the trajectory is mostly on-ground (taxi) vs airborne.
+  // Ground trajectories are NOT smoothed — smoothing pulls lines through buildings.
+  const avgAltitude = useMemo(() => {
+    if (validPoints.length === 0) return 0;
+    const sum = validPoints.reduce((acc, p) => acc + (p.altitude ?? 0), 0);
+    return sum / validPoints.length;
+  }, [validPoints]);
+  const isGroundTrajectory = avgAltitude < 200;
+
   // Split polylines at large gaps (e.g. go-around enroute segments that are
   // excluded from the trajectory, causing unrealistic straight-line jumps),
   // then smooth each segment for natural-looking curves at turns.
-  const traveledSegments = useMemo(() => splitAtGaps(traveledPositions).map(s => chaikinSmooth(s)), [traveledPositions]);
-  const remainingSegments = useMemo(() => splitAtGaps(remainingPositions).map(s => chaikinSmooth(s)), [remainingPositions]);
+  const smoothSegment = (s: [number, number][]) => isGroundTrajectory ? s : chaikinSmooth(simplify(s));
+  const traveledSegments = useMemo(() => splitAtGaps(traveledPositions).map(smoothSegment), [traveledPositions, isGroundTrajectory]);
+  const remainingSegments = useMemo(() => splitAtGaps(remainingPositions).map(smoothSegment), [remainingPositions, isGroundTrajectory]);
 
   if (!showTrajectory || (traveledSegments.length === 0 && remainingSegments.length === 0)) {
     return null;
