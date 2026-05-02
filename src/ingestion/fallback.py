@@ -4266,10 +4266,14 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             runway_far_end = (fb[1][1], fb[1][0])  # far end (lat, lon)
             rwy_hdg = fb[2]
 
+        # Cap speed at Vref + 10 (stabilized approach).
+        # After go-arounds, aircraft may re-enter approach too fast.
+        vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
+        max_landing_speed = vref + 10
+        if state.velocity > max_landing_speed:
+            state.velocity = max_landing_speed
+
         # Aircraft moves along the runway heading during landing.
-        # Use heading-based movement (not _move_toward) so the aircraft
-        # continues rolling past the runway far-end marker instead of
-        # clamping — real aircraft roll out well past the midpoint.
         speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
         rwy_hdg_rad = math.radians(rwy_hdg)
         state.latitude += speed_deg * math.cos(rwy_hdg_rad)
@@ -4277,20 +4281,20 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         state.heading = rwy_hdg
 
         if state.altitude > 0:
-            # Airborne: descend to touchdown on the glideslope (~750 fpm)
+            # Airborne: descend to touchdown + decelerate during flare
             descent_fpm = 750
             state.altitude = max(0, state.altitude - (descent_fpm / 60.0) * dt)
+            state.velocity = max(vref - 5, state.velocity - 2.0 * dt)
             if state.altitude <= 0:
                 state.altitude = 0
                 state.on_ground = True
                 state.vertical_rate = 0
         else:
-            # On-ground rollout: decelerate from touchdown speed to taxi speed
-            # Typical rollout: 1000-1500m, decel ~4 kts/s (reverse thrust + brakes)
+            # On-ground rollout: decelerate with reverse thrust + brakes (~5 kts/s)
             state.altitude = 0
             state.on_ground = True
             state.vertical_rate = 0
-            state.velocity = max(25, state.velocity - 4.0 * dt)
+            state.velocity = max(25, state.velocity - 5.0 * dt)
 
         # Early runway release: vacate when on ground and past initial rollout
         # Real airports: aircraft clears active runway within ~20-30s via high-speed exit
