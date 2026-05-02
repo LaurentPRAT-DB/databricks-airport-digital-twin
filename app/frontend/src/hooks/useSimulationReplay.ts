@@ -670,21 +670,23 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     const currentPhase = currentSnap?.phase ?? '';
 
     // Pick the right phase set based on current flight phase:
-    // - Airborne arrival (approaching/landing) → show approach trajectory
+    // - Airborne arrival (approaching/landing/go-around enroute) → show full arrival trajectory
     // - Ground arrival (taxi_to_gate) → show taxi-in path
     // - Parked → no trajectory
     // - Ground departure (pushback/taxi_to_runway) → show taxi-out path
     // - Airborne departure (takeoff/departing/enroute) → show departure trajectory
     let allowedPhases: Set<string>;
-    if (ARRIVAL_AIRBORNE.has(currentPhase)) {
-      allowedPhases = ARRIVAL_AIRBORNE;
+    // Go-around enroute ceiling: enroute frames above this are initial cruise, not go-around
+    const GO_AROUND_ALT_CEILING = 6000;
+    const localAirportCfg = (simData.config as Record<string, unknown>)?.airport as string | undefined;
+    if (ARRIVAL_AIRBORNE.has(currentPhase) ||
+        (currentPhase === 'enroute' && currentSnap?.destination_airport === localAirportCfg)) {
+      // Include enroute so trajectory bridges across go-around interludes
+      allowedPhases = new Set([...ARRIVAL_AIRBORNE, 'enroute']);
     } else if (ARRIVAL_GROUND.has(currentPhase)) {
       allowedPhases = ARRIVAL_GROUND;
     } else if (DEPARTURE_GROUND.has(currentPhase)) {
       allowedPhases = DEPARTURE_GROUND;
-    } else if (currentPhase === 'enroute' && currentSnap?.destination_airport === ((simData.config as Record<string, unknown>)?.airport as string | undefined)) {
-      // Go-around: arriving enroute flight — show approach + climb as one segment
-      allowedPhases = new Set([...ARRIVAL_AIRBORNE, 'enroute']);
     } else if (DEPARTURE_AIRBORNE.has(currentPhase)) {
       allowedPhases = DEPARTURE_AIRBORNE;
     } else {
@@ -692,11 +694,18 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       return [];
     }
 
+    // Check if a snapshot is valid for the trajectory segment.
+    // For enroute frames, only include low-altitude ones (go-around pattern)
+    // to avoid pulling in the initial high-altitude cruise phase.
+    const isValidForSegment = (snap: PositionSnapshot): boolean => {
+      if (!allowedPhases.has(snap.phase)) return false;
+      if (snap.phase === 'enroute' && snap.altitude > GO_AROUND_ALT_CEILING) return false;
+      return true;
+    };
+
     // Collect points for the CURRENT continuous segment only.
-    // For flights with go-arounds, there are multiple approach segments
-    // separated by enroute phases. Showing all of them creates a messy
-    // web of overlapping paths. Instead, find the segment that spans the
-    // current frame and return only those points.
+    // The segment spans across go-around enroute interludes (low altitude)
+    // but stops at high-altitude enroute (initial cruise entry).
 
     // Step 1: Scan backward from current frame to find segment start
     let segStart = currentFrameIndex;
@@ -705,7 +714,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       const snapshots = simData.frames[ts];
       if (!snapshots) { segStart = i + 1; break; }
       const snap = snapshots.find(s => s.icao24 === icao24);
-      if (!snap || !allowedPhases.has(snap.phase)) { segStart = i + 1; break; }
+      if (!snap || !isValidForSegment(snap)) { segStart = i + 1; break; }
       segStart = i;
     }
 
@@ -716,7 +725,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       const snapshots = simData.frames[ts];
       if (!snapshots) break;
       const snap = snapshots.find(s => s.icao24 === icao24);
-      if (!snap || !allowedPhases.has(snap.phase)) break;
+      if (!snap || !isValidForSegment(snap)) break;
       segEnd = i;
     }
 
@@ -727,7 +736,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       const snapshots = simData.frames[ts];
       if (!snapshots) continue;
       const snap = snapshots.find(s => s.icao24 === icao24);
-      if (snap && snap.latitude != null && snap.longitude != null && allowedPhases.has(snap.phase)) {
+      if (snap && snap.latitude != null && snap.longitude != null && isValidForSegment(snap)) {
         allPoints.push({
           latitude: snap.latitude,
           longitude: snap.longitude,
