@@ -1069,10 +1069,13 @@ class SimulationEngine:
             self._phase_time[icao24] = ("taxi_to_runway", 0.0)
 
         elif state.phase == FlightPhase.APPROACHING:
-            from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway, VREF_SPEEDS, _get_arrival_runway_name
+            from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway, VREF_SPEEDS, _get_arrival_runway_name, _is_arrival_separation_met
             _arr_rwy = _get_arrival_runway_name()
-            # Priority landing after 2+ go-arounds to prevent infinite loops
-            runway_ok = _is_runway_clear(_arr_rwy) or state.go_around_count >= 2
+            # Priority landing after 2+ go-arounds bypasses runway-clear but not separation
+            runway_ok = (
+                (_is_runway_clear(_arr_rwy) or state.go_around_count >= 2)
+                and _is_arrival_separation_met(_arr_rwy)
+            )
             if runway_ok:
                 # Apply go-around check (same as normal transition)
                 if state.go_around_count < 2 and random.random() < self.capacity.go_around_probability():
@@ -1116,9 +1119,11 @@ class SimulationEngine:
                         if state.go_around_count >= 3:
                             self._divert_flight(icao24, state)
                     else:
+                        from src.ingestion.fallback import _get_runway_state
                         state.phase = FlightPhase.LANDING
                         state.waypoint_index = 0
                         _occupy_runway(icao24, _arr_rwy)
+                        _get_runway_state(_arr_rwy).last_arrival_time = wall_time.time()
                         self._phase_time[icao24] = ("landing", 0.0)
             else:
                 # Runway still blocked — reset timer to check again in 5 min
@@ -1519,3 +1524,67 @@ class SimulationEngine:
         print(f"  Speed: {self.config.effective_duration_hours() * 3600 / max(elapsed_wall, 0.001):.0f}x real-time")
 
         return self.recorder
+
+
+def run_what_if(
+    base_config_dict: dict,
+    modifications: dict,
+) -> dict:
+    """Run a modified simulation and return KPI comparison vs baseline.
+
+    Args:
+        base_config_dict: Original simulation config (from sim output JSON).
+        modifications: Dict of parameter overrides (arrivals, departures,
+            duration_hours, scenario_file, etc.).
+
+    Returns:
+        Dict with baseline_kpis (from base_config_dict["summary"] if present),
+        modified_kpis, and delta for each numeric KPI.
+    """
+    import copy
+
+    baseline_kpis = base_config_dict.get("summary", {})
+
+    mod_config_dict = copy.deepcopy(base_config_dict)
+    for key in ("summary", "schedule", "position_snapshots", "phase_transitions",
+                "gate_events", "scenario_events", "weather_snapshots",
+                "baggage_events", "passenger_events", "bhs_metrics"):
+        mod_config_dict.pop(key, None)
+
+    mod_config_dict.update(modifications)
+    mod_config_dict["skip_positions"] = True
+    mod_config_dict["diagnostics"] = False
+    mod_config_dict["generate_report"] = False
+    mod_config_dict["output_file"] = "/dev/null"
+
+    if "seed" not in modifications:
+        mod_config_dict["seed"] = base_config_dict.get("seed", 42)
+
+    config = SimulationConfig(**{
+        k: v for k, v in mod_config_dict.items()
+        if k in SimulationConfig.model_fields
+    })
+
+    engine = SimulationEngine(config)
+    recorder = engine.run()
+    modified_kpis = recorder.compute_summary(mod_config_dict)
+
+    COMPARE_KEYS = [
+        "on_time_pct", "schedule_delay_min", "avg_capacity_hold_min",
+        "max_capacity_hold_min", "cancellation_rate_pct", "peak_simultaneous_flights",
+        "avg_turnaround_min", "total_go_arounds", "total_diversions",
+        "total_holdings", "total_cancellations",
+    ]
+    delta: dict = {}
+    for key in COMPARE_KEYS:
+        base_val = baseline_kpis.get(key)
+        mod_val = modified_kpis.get(key)
+        if isinstance(base_val, (int, float)) and isinstance(mod_val, (int, float)):
+            delta[key] = round(mod_val - base_val, 2)
+
+    return {
+        "baseline_kpis": {k: baseline_kpis.get(k) for k in COMPARE_KEYS},
+        "modified_kpis": {k: modified_kpis.get(k) for k in COMPARE_KEYS},
+        "delta": delta,
+        "modifications_applied": modifications,
+    }

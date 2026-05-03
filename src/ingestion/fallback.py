@@ -37,6 +37,25 @@ from faker import Faker
 
 from src.ml.gse_model import get_turnaround_timing, get_aircraft_category, PHASE_DEPENDENCIES
 
+from src.ingestion._state import (  # noqa: F401 — re-exported for backward compatibility
+    FlightPhase,
+    FlightState,
+    _FlightStateDict,
+    _flights_by_phase,
+    _flight_states,
+    _last_update,
+    _set_phase,
+    MAX_APPROACH_AIRCRAFT,
+    RunwayState,
+    GateState,
+    GATE_BUFFER_SECONDS,
+    _gate_conflict_count,
+    _runway_states,
+    _runway_28L,
+    _runway_28R,
+    _gate_states,
+)
+
 
 fake = Faker()
 
@@ -868,6 +887,8 @@ DEPARTURE_SEPARATION_S = {
     ("HEAVY", "SMALL"): 120, ("LARGE", "SMALL"): 120,
 }
 DEFAULT_DEPARTURE_SEPARATION_S = 60  # Default same-runway spacing
+
+MIN_ARRIVAL_SEPARATION_S = 60  # Minimum seconds between consecutive landings (same runway)
 
 # Common US airline callsign prefixes with typical aircraft types
 AIRLINE_FLEET = {
@@ -2309,150 +2330,14 @@ def _get_pushback_heading(gate_ref: str) -> float:
     return 180.0  # Default: south
 
 
-class FlightPhase(Enum):
-    """Flight operational phases."""
-    APPROACHING = "approaching"    # Descending toward airport
-    LANDING = "landing"           # Final approach and touchdown
-    TAXI_TO_GATE = "taxi_to_gate" # Taxiing from runway to gate
-    PARKED = "parked"             # At gate
-    PUSHBACK = "pushback"         # Pushing back from gate
-    TAXI_TO_RUNWAY = "taxi_to_runway"  # Taxiing to departure runway
-    TAKEOFF = "takeoff"           # Takeoff roll and initial climb
-    DEPARTING = "departing"       # Climbing out
-    ENROUTE = "enroute"           # Cruising at altitude
-
-
-@dataclass
-class FlightState:
-    """Persistent state for a synthetic flight."""
-    icao24: str
-    callsign: str
-    latitude: float
-    longitude: float
-    altitude: float  # feet
-    velocity: float  # knots
-    heading: float   # degrees
-    vertical_rate: float  # ft/min
-    on_ground: bool
-    phase: FlightPhase
-    aircraft_type: str = "A320"  # ICAO aircraft type code
-    assigned_gate: Optional[str] = None
-    waypoint_index: int = 0
-    phase_progress: float = 0.0  # 0-1 progress through current phase
-    time_at_gate: float = 0.0    # seconds parked
-    origin_airport: Optional[str] = None      # IATA code of origin
-    destination_airport: Optional[str] = None  # IATA code of destination
-    taxi_route: Optional[List] = None          # Cached taxi waypoints [(lon, lat), ...]
-    takeoff_subphase: str = "lineup"           # lineup/roll/rotate/liftoff/initial_climb
-    takeoff_roll_dist_ft: float = 0.0          # Accumulated ground roll distance in feet
-    holding_phase_time: float = 0.0            # Elapsed time in current holding leg (seconds)
-    holding_inbound: bool = True               # True = inbound leg, False = outbound leg
-    go_around_count: int = 0                   # Number of go-arounds for this approach
-    go_around_target_alt: float = 0.0           # Target altitude for current go-around climb
-    gate_retry_at: float = 0.0                 # time.time() when to next retry gate assignment
-    landed_at: float = 0.0                     # time.time() when aircraft touched down (LANDING → TAXI_TO_GATE)
-    parked_since: float = 0.0                  # time.time() when aircraft entered PARKED phase
-    turnaround_phase: str = ""                 # Current turnaround sub-phase (e.g. "deboarding")
-    turnaround_schedule: Optional[Dict] = None # {phase: {"start_offset_s", "duration_s", "done", "started"}}
-    departure_queue_hold_s: float = 0.0        # Remaining departure queue hold (seconds, calibrated)
-    departure_queue_set: bool = False           # True once the hold has been computed
-    arrival_hold_s: float = 0.0                 # Remaining arrival taxi hold (seconds, calibrated)
-    arrival_hold_set: bool = False              # True once the arrival hold has been computed
-    go_around_hold_until: float = 0.0           # time.time() before which aircraft cannot re-enter approach
-    cruise_altitude: float = 0.0               # Target cruise FL (hemispheric rule)
-    star_name: str = ""                          # Assigned STAR procedure name
-    sid_name: str = ""                           # Assigned SID procedure name
-
-
-# Maximum simultaneous aircraft on approach (approach + landing)
-MAX_APPROACH_AIRCRAFT = 8
-
-# Phase index — maintained automatically by _FlightStateDict and _set_phase
-_flights_by_phase: Dict[FlightPhase, Set[str]] = {phase: set() for phase in FlightPhase}
-
-
-class _FlightStateDict(dict):
-    """Dict subclass that auto-syncs _flights_by_phase and _callsigns on insert/delete/clear."""
-
-    _callsigns: Set[str] = set()
-
-    def __setitem__(self, key: str, value: FlightState):
-        old = self.get(key)
-        if old is not None and old is not value:
-            # Different object replacing an existing entry — update the index.
-            # When old IS value (same reference, modified in-place by _update_flight_state),
-            # _set_phase already updated the index, so skip to avoid double-counting.
-            _flights_by_phase[old.phase].discard(key)
-            self._callsigns.discard(old.callsign)
-        super().__setitem__(key, value)
-        _flights_by_phase[value.phase].add(key)
-        self._callsigns.add(value.callsign)
-
-    def __delitem__(self, key: str):
-        old = self.get(key)
-        if old is not None:
-            _flights_by_phase[old.phase].discard(key)
-            self._callsigns.discard(old.callsign)
-        super().__delitem__(key)
-
-    def clear(self):
-        super().clear()
-        for s in _flights_by_phase.values():
-            s.clear()
-        self._callsigns.clear()
-
-
-# Global state storage
-_flight_states: Dict[str, FlightState] = _FlightStateDict()
-_last_update: float = 0.0
-
-
-def _set_phase(state: FlightState, new_phase: FlightPhase):
-    """Update a flight's phase and keep the _flights_by_phase index in sync."""
-    old = state.phase
-    if old != new_phase:
-        _flights_by_phase[old].discard(state.icao24)
-        _flights_by_phase[new_phase].add(state.icao24)
-        state.phase = new_phase
-
 # ============================================================================
 # SEPARATION MANAGEMENT
 # ============================================================================
-
-@dataclass
-class RunwayState:
-    """Tracks runway occupancy for separation."""
-    occupied_by: Optional[str] = None  # icao24 of aircraft on runway
-    last_departure_time: float = 0.0   # Timestamp of last departure
-    last_arrival_time: float = 0.0     # Timestamp of last arrival
-    approach_queue: List[str] = field(default_factory=list)  # Ordered approach sequence
-    departure_queue: List[str] = field(default_factory=list)  # Ordered departure sequence
-    last_departure_type: str = "LARGE"  # Wake category of last departure (FAA 7110.65)
-
-# Minimum gate buffer (seconds) between consecutive occupancies.
-# Real airports require 15-30 min for jetbridge repositioning, FOD check,
-# and pushback clearance before the next aircraft can dock.
-GATE_BUFFER_SECONDS = 15 * 60  # 15 minutes
-
-# Track gate conflicts for validation reporting
-_gate_conflict_count: int = 0
-
-
-@dataclass
-class GateState:
-    """Tracks gate occupancy."""
-    occupied_by: Optional[str] = None  # icao24 of aircraft at gate
-    available_at: float = 0.0          # When gate becomes available (epoch seconds)
-    last_released: float = 0.0         # When gate was last vacated
-
-# Global separation state — dynamic runway dict keyed by name (D1 fix: no more hardcoded "28R")
-_runway_states: Dict[str, RunwayState] = {}
-# Backward-compatible aliases for tests — these are pre-populated entries in _runway_states
-_runway_28L: RunwayState = RunwayState()
-_runway_28R: RunwayState = RunwayState()
-_runway_states["28L"] = _runway_28L
-_runway_states["28R"] = _runway_28R
-_gate_states: Dict[str, GateState] = {}
+# (FlightPhase, FlightState, _FlightStateDict, _flights_by_phase,
+#  _flight_states, _last_update, _set_phase, MAX_APPROACH_AIRCRAFT,
+#  RunwayState, GateState, GATE_BUFFER_SECONDS, _gate_conflict_count,
+#  _runway_states, _runway_28L, _runway_28R, _gate_states
+#  are now imported from src.ingestion._state)
 
 
 def _get_runway_state(runway: str) -> RunwayState:
@@ -2693,6 +2578,17 @@ def _is_runway_clear(runway: str = "") -> bool:
     if recip and recip in _runway_states and _runway_states[recip].occupied_by is not None:
         return False
     return True
+
+
+def _is_arrival_separation_met(runway: str = "") -> bool:
+    """Check if minimum arrival separation time has elapsed since last landing."""
+    if not runway:
+        runway = _get_arrival_runway_name()
+    rs = _get_runway_state(runway)
+    if rs.last_arrival_time == 0.0:
+        return True
+    return (time.time() - rs.last_arrival_time) >= MIN_ARRIVAL_SEPARATION_S
+
 
 def _occupy_runway(icao24: str, runway: str = ""):
     """Mark runway as occupied by aircraft (both designators for same physical runway)."""
@@ -4170,9 +4066,12 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 # exhaustion where the holding pattern handles the wait.
                 if state.altitude <= DECISION_HEIGHT_FT:
                     arrival_rwy = _get_arrival_runway_name()
-                    # Priority landing: after 2+ go-arounds, land regardless of runway state
-                    # to prevent infinite go-around loops at busy airports
-                    runway_ok = _is_runway_clear(arrival_rwy) or state.go_around_count >= 2
+                    # Priority landing: after 2+ go-arounds, bypass runway-clear check
+                    # but still enforce arrival separation to prevent bunched landings
+                    runway_ok = (
+                        (_is_runway_clear(arrival_rwy) or state.go_around_count >= 2)
+                        and _is_arrival_separation_met(arrival_rwy)
+                    )
                     if runway_ok:
                         emit_phase_transition(
                             state.icao24, state.callsign,
@@ -4183,6 +4082,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                         _set_phase(state, FlightPhase.LANDING)
                         state.waypoint_index = 0
                         _occupy_runway(state.icao24, arrival_rwy)
+                        _get_runway_state(arrival_rwy).last_arrival_time = time.time()
                     else:
                         # P2: Runway busy at decision height → go-around
                         _execute_go_around("runway_busy")
@@ -4229,7 +4129,10 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 _execute_go_around("high_altitude_at_threshold")
             else:
                 arrival_rwy = _get_arrival_runway_name()
-                runway_ok = _is_runway_clear(arrival_rwy) or state.go_around_count >= 2
+                runway_ok = (
+                    (_is_runway_clear(arrival_rwy) or state.go_around_count >= 2)
+                    and _is_arrival_separation_met(arrival_rwy)
+                )
                 if runway_ok:
                     emit_phase_transition(
                         state.icao24, state.callsign,
@@ -4240,6 +4143,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     _set_phase(state, FlightPhase.LANDING)
                     state.waypoint_index = 0
                     _occupy_runway(state.icao24, arrival_rwy)
+                    _get_runway_state(arrival_rwy).last_arrival_time = time.time()
                 else:
                     _execute_go_around("runway_busy_at_threshold")
 
