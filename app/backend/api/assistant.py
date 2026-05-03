@@ -416,3 +416,192 @@ async def explain_event(body: ExplainRequest, request: Request):
             answer="Unable to explain this event. Please try again.",
             error=str(e),
         )
+
+
+# --- Report Chat: aviation-expert analysis with what-if simulation ---
+
+REPORT_CHAT_SYSTEM_PROMPT = """You are a senior aviation operations analyst reviewing an airport simulation. You have deep knowledge of FAA and ICAO standards.
+
+## Reference Benchmarks (use for comparison & recommendations)
+
+**Capacity (FAA AC 150/5060-5):**
+- Single runway: 30-40 ops/hr (VFR), 24-30 ops/hr (IFR)
+- Dual parallel (close): 50-60 ops/hr (VFR), 40-50 ops/hr (IFR)
+- IFR capacity is typically 60-75% of VFR capacity
+
+**Separation (FAA 7110.65):**
+- Same runway departures: 60s minimum (120s for heavy behind heavy)
+- Arrival separation: 3 NM (same weight class), 4-6 NM (wake turbulence)
+- Standard rate turn: 3 deg/sec (all phases)
+
+**On-Time Performance:**
+- FAA defines >15 min late as "delayed"
+- Industry benchmark: 75-80% on-time is acceptable
+- Top-performing airports: 82-85% on-time
+- Below 70% indicates significant operational issues
+
+**Go-Arounds & Diversions:**
+- Normal go-around rate: 1-3% of approaches
+- >5% indicates runway/weather issues needing attention
+- Diversions should be <1% in normal conditions
+
+**Turnaround Times (gate):**
+- Narrow-body (A320/B737): 35-50 min
+- Wide-body (B777/A350): 60-90 min
+- Regional jet: 25-35 min
+
+**Taxi Times (BTS benchmarks):**
+- Small airport: 8-12 min taxi-out, 5-8 min taxi-in
+- Large hub: 15-25 min taxi-out, 8-15 min taxi-in
+
+## Your Role
+- Analyze the simulation KPIs against these benchmarks
+- Identify bottlenecks and root causes
+- Provide actionable recommendations with estimated impact
+- When the user asks "what if" questions, use the run_what_if_simulation tool to get quantified answers
+- Present what-if results as clear before/after comparisons
+- Use aviation terminology but explain it for non-experts
+
+## Simulation Context
+{simulation_context}
+"""
+
+WHAT_IF_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "run_what_if_simulation",
+        "description": (
+            "Run a modified simulation to quantify the impact of a proposed change. "
+            "Modifies parameters from the baseline simulation and compares KPIs. "
+            "Use this when the user asks 'what if' questions about changing traffic, "
+            "weather, runway config, or operational procedures. "
+            "Returns baseline vs modified KPIs with deltas."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "arrivals": {
+                    "type": "integer",
+                    "description": "Override number of arriving flights",
+                },
+                "departures": {
+                    "type": "integer",
+                    "description": "Override number of departing flights",
+                },
+                "duration_hours": {
+                    "type": "number",
+                    "description": "Override simulation duration in hours",
+                },
+                "scenario_file": {
+                    "type": "string",
+                    "description": "Path to a different scenario YAML to inject",
+                },
+                "seed": {
+                    "type": "integer",
+                    "description": "Different random seed for stochastic variation",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
+class ReportChatRequest(BaseModel):
+    question: str
+    messages: list[dict] = []
+    simulation_context: dict = {}
+
+
+class ReportChatResponse(BaseModel):
+    answer: str
+    sources: list[str] = []
+    what_if_result: dict | None = None
+    error: str | None = None
+
+
+@assistant_router.post("/report-chat", response_model=ReportChatResponse)
+async def report_chat(body: ReportChatRequest, request: Request):
+    """Chat about a simulation report with aviation expertise and what-if capability."""
+    try:
+        host, token = _get_databricks_auth(request)
+
+        ctx_json = json.dumps(body.simulation_context, indent=2, default=str)[:8000]
+        system_msg = REPORT_CHAT_SYSTEM_PROMPT.replace("{simulation_context}", ctx_json)
+
+        messages = [{"role": "system", "content": system_msg}]
+        for msg in body.messages:
+            if msg.get("role") in ("user", "assistant") and msg.get("content"):
+                messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": body.question})
+
+        tools = [WHAT_IF_TOOL]
+        what_if_result = None
+
+        for round_num in range(3):
+            llm_response = await _call_llm(host, token, messages, tools)
+            choices = llm_response.get("choices", [])
+            if not choices:
+                return ReportChatResponse(
+                    answer="Unable to generate a response.",
+                    error="No choices from LLM",
+                )
+
+            message = choices[0].get("message", {})
+            tool_calls = message.get("tool_calls")
+            finish_reason = choices[0].get("finish_reason", "")
+
+            if not tool_calls or finish_reason == "stop":
+                return ReportChatResponse(
+                    answer=message.get("content", ""),
+                    sources=["llm"] + (["what-if-simulation"] if what_if_result else []),
+                    what_if_result=what_if_result,
+                )
+
+            messages.append(message)
+
+            for tc in tool_calls:
+                func = tc.get("function", {})
+                tool_name = func.get("name", "")
+
+                if tool_name == "run_what_if_simulation":
+                    try:
+                        args = json.loads(func.get("arguments", "{}"))
+                    except json.JSONDecodeError:
+                        args = {}
+
+                    try:
+                        from src.simulation.engine import run_what_if
+                        what_if_result = run_what_if(
+                            body.simulation_context,
+                            args,
+                        )
+                        tool_result = json.dumps(what_if_result, indent=2)
+                    except Exception as e:
+                        logger.exception("What-if simulation failed")
+                        tool_result = json.dumps({
+                            "error": f"Simulation failed: {str(e)}",
+                        })
+                else:
+                    tool_result = json.dumps({"error": f"Unknown tool: {tool_name}"})
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", ""),
+                    "content": tool_result,
+                })
+
+        return ReportChatResponse(
+            answer="Ran out of processing rounds.",
+            sources=["llm"],
+            what_if_result=what_if_result,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Report chat failed")
+        return ReportChatResponse(
+            answer="Unable to respond. Please try again.",
+            error=str(e),
+        )
