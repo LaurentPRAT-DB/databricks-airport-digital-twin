@@ -56,6 +56,23 @@ from src.ingestion._state import (  # noqa: F401 — re-exported for backward co
     _gate_states,
 )
 
+from src.ingestion._geo import (  # noqa: F401 — re-exported for backward compatibility
+    _sanitize_float,
+    _shortest_angle_diff,
+    _calculate_heading,
+    _smooth_heading,
+    _distance_between,
+    _distance_nm,
+    _distance_meters,
+    _move_toward,
+    _interpolate_altitude,
+    _point_on_circle,
+    _offset_position_by_heading,
+    _entry_direction_quadrant,
+    _point_to_segment_distance_m,
+    _point_in_polygon,
+)
+
 from src.ingestion._constants import (  # noqa: F401 — re-exported for backward compatibility
     AIRLINE_TURNAROUND_FACTOR,
     _DEFAULT_AIRLINE_FACTOR,
@@ -104,11 +121,7 @@ from src.ingestion._constants import (  # noqa: F401 — re-exported for backwar
 fake = Faker()
 
 
-def _sanitize_float(val: float, default: float = 0.0) -> float:
-    """Replace NaN/Inf with a safe default."""
-    if val is None or math.isnan(val) or math.isinf(val):
-        return default
-    return val
+# (_sanitize_float now imported from _geo)
 
 
 # (AIRLINE_TURNAROUND_FACTOR, _DEFAULT_AIRLINE_FACTOR now imported from _constants)
@@ -1462,17 +1475,7 @@ def reset_airport_offset() -> None:
     _RWY_10R_LON = _ORIG_RWY_10R_LON
 
 
-def _entry_direction_quadrant(entry_dir: float) -> str:
-    """Classify an entry bearing into a directional quadrant for STAR/SID naming."""
-    normalized = entry_dir % 360
-    if normalized >= 315 or normalized < 45:
-        return "NORTH"
-    elif normalized < 135:
-        return "EAST"
-    elif normalized < 225:
-        return "SOUTH"
-    else:
-        return "WEST"
+# (_entry_direction_quadrant now imported from _geo)
 
 
 # Named STAR procedures by approach quadrant.  Each defines distinct initial
@@ -2153,10 +2156,7 @@ def _get_required_separation(lead_type: str, follow_type: str) -> float:
     )
     return separation_nm * NM_TO_DEG
 
-def _distance_nm(pos1: tuple, pos2: tuple) -> float:
-    """Calculate distance in nautical miles between two positions."""
-    deg_dist = _distance_between(pos1, pos2)
-    return deg_dist / NM_TO_DEG
+# (_distance_nm now imported from _geo)
 
 def _find_aircraft_ahead_on_approach(state: FlightState) -> Optional[FlightState]:
     """Find the aircraft directly ahead on the approach path.
@@ -2575,53 +2575,8 @@ def _get_approach_queue_position(icao24: str) -> int:
     return len(queue)
 
 
-def _shortest_angle_diff(from_deg: float, to_deg: float) -> float:
-    """Signed shortest rotation from *from_deg* to *to_deg* (both 0-360)."""
-    diff = (to_deg - from_deg + 180) % 360 - 180
-    return diff
-
-
-def _calculate_heading(from_pos: tuple, to_pos: tuple) -> float:
-    """Calculate heading (bearing) from one position to another.
-
-    Uses latitude-corrected longitude to account for Mercator distortion.
-    Without this correction, headings are skewed at higher latitudes
-    because 1° of longitude is shorter than 1° of latitude.
-    """
-    lat1, lon1 = from_pos
-    lat2, lon2 = to_pos
-
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-
-    # Scale longitude by cos(latitude) to convert to approximate meters
-    avg_lat = math.radians((lat1 + lat2) / 2)
-    dlon_corrected = dlon * math.cos(avg_lat)
-
-    # Calculate bearing (clockwise from north)
-    angle = math.atan2(dlon_corrected, dlat)
-    heading = math.degrees(angle)
-
-    # Normalize to 0-360
-    return (heading + 360) % 360
-
-
-def _smooth_heading(current: float, target: float, max_rate_per_sec: float, dt: float) -> float:
-    """Limit heading change to a realistic turn rate.
-
-    Standard rate turn = 3 deg/s.  Returns new heading in [0, 360).
-    """
-    diff = (target - current + 540) % 360 - 180  # shortest signed angle
-    max_change = max_rate_per_sec * dt
-    clamped = max(-max_change, min(max_change, diff))
-    return (current + clamped) % 360
-
-
-def _distance_between(pos1: tuple, pos2: tuple) -> float:
-    """Calculate approximate distance in degrees (simplified)."""
-    lat1, lon1 = pos1[:2]
-    lat2, lon2 = pos2[:2]
-    return math.sqrt((lat2 - lat1) ** 2 + (lon2 - lon1) ** 2)
+# (_shortest_angle_diff, _calculate_heading, _smooth_heading,
+#  _distance_between now imported from _geo)
 
 
 def _snap_to_nearest_waypoint(state) -> int:
@@ -2666,37 +2621,7 @@ def _snap_to_nearest_waypoint(state) -> int:
     return best_fwd_idx if best_fwd_idx >= 0 else best_idx
 
 
-def _move_toward(current: tuple, target: tuple, speed_factor: float) -> tuple:
-    """Move current position toward target by speed factor."""
-    lat, lon = current[:2]
-    target_lat, target_lon = target[:2]
-
-    dlat = target_lat - lat
-    dlon = target_lon - lon
-    distance = math.sqrt(dlat ** 2 + dlon ** 2)
-
-    if distance < 0.0001:  # Close enough
-        return target[:2]
-
-    # Move by speed factor (degrees per update)
-    move_dist = min(speed_factor, distance)
-    ratio = move_dist / distance
-
-    new_lat = lat + dlat * ratio
-    new_lon = lon + dlon * ratio
-
-    return (new_lat, new_lon)
-
-
-def _interpolate_altitude(current_alt: float, target_alt: float, rate: float) -> float:
-    """Smoothly change altitude toward target."""
-    if abs(current_alt - target_alt) < 50:
-        return target_alt
-
-    if current_alt < target_alt:
-        return current_alt + rate
-    else:
-        return current_alt - rate
+# (_move_toward, _interpolate_altitude now imported from _geo)
 
 
 def _get_aircraft_type_for_airline(callsign: str, is_international: bool = False) -> str:
@@ -2795,103 +2720,8 @@ def _bearing_to_airport(dest_iata: str) -> float:
     return (bearing + 360) % 360
 
 
-def _point_on_circle(center_lat: float, center_lon: float, bearing_deg: float, radius_deg: float) -> tuple:
-    """Calculate a point at a given bearing and distance from center.
-
-    Args:
-        center_lat, center_lon: Center point in degrees
-        bearing_deg: Bearing in degrees (0=N, 90=E)
-        radius_deg: Distance in degrees
-
-    Returns:
-        (latitude, longitude) tuple
-    """
-    bearing_rad = math.radians(bearing_deg)
-    lat = center_lat + radius_deg * math.cos(bearing_rad)
-    # Adjust longitude for latitude (1 degree longitude is shorter at higher latitudes)
-    lon = center_lon + radius_deg * math.sin(bearing_rad) / math.cos(math.radians(center_lat))
-    return (lat, lon)
-
-
-def _offset_position_by_heading(lat: float, lon: float, heading_deg: float, distance_meters: float) -> tuple:
-    """Move a point away from a heading direction (i.e., pull aircraft back from gate).
-
-    The aircraft nose points at heading_deg (toward the terminal). This function
-    moves the position in the *opposite* direction so the nose reaches the gate
-    point while the fuselage sits on the apron.
-
-    Args:
-        lat, lon: Original position in degrees (gate/jetbridge point)
-        heading_deg: Direction the nose is pointing (toward terminal)
-        distance_meters: How far to pull the aircraft back
-
-    Returns:
-        (latitude, longitude) tuple offset away from the terminal
-    """
-    # Move in the opposite direction of the heading
-    reverse_bearing_rad = math.radians((heading_deg + 180) % 360)
-    # Convert meters to degrees (approximate)
-    distance_deg = distance_meters / 111_000  # ~111 km per degree of latitude
-    new_lat = lat + distance_deg * math.cos(reverse_bearing_rad)
-    new_lon = lon + distance_deg * math.sin(reverse_bearing_rad) / math.cos(math.radians(lat))
-    return (new_lat, new_lon)
-
-
-def _distance_meters(pos1: tuple, pos2: tuple) -> float:
-    """Approximate distance in meters between two (lat, lon) points."""
-    lat1, lon1 = pos1[:2]
-    lat2, lon2 = pos2[:2]
-    dlat = (lat2 - lat1) * 111_000
-    dlon = (lon2 - lon1) * 111_000 * math.cos(math.radians((lat1 + lat2) / 2))
-    return math.sqrt(dlat ** 2 + dlon ** 2)
-
-
-def _point_to_segment_distance_m(px: float, py: float,
-                                  ax: float, ay: float,
-                                  bx: float, by: float) -> float:
-    """Minimum distance in meters from point (px, py) to segment (ax,ay)-(bx,by).
-
-    All coordinates in (lat, lon) degrees.
-    """
-    # Project point onto segment in local meter space
-    cos_lat = math.cos(math.radians(px))
-    # Convert to meters from an arbitrary origin (ax, ay)
-    pxm = (px - ax) * 111_000
-    pym = (py - ay) * 111_000 * cos_lat
-    bxm = (bx - ax) * 111_000
-    bym = (by - ay) * 111_000 * cos_lat
-
-    seg_len_sq = bxm * bxm + bym * bym
-    if seg_len_sq < 1e-10:
-        return math.sqrt(pxm * pxm + pym * pym)
-
-    t = max(0.0, min(1.0, (pxm * bxm + pym * bym) / seg_len_sq))
-    proj_x = t * bxm
-    proj_y = t * bym
-    return math.sqrt((pxm - proj_x) ** 2 + (pym - proj_y) ** 2)
-
-
-def _point_in_polygon(lat: float, lon: float, polygon: list[dict]) -> bool:
-    """Ray-casting point-in-polygon test.
-
-    Returns True if the point (lat, lon) is inside the polygon.
-    Polygon vertices are dicts with 'latitude' and 'longitude' keys.
-    """
-    n = len(polygon)
-    inside = False
-    j = n - 1
-    for i in range(n):
-        # latitude = y-axis, longitude = x-axis
-        yi = float(polygon[i].get("latitude", 0))
-        xi = float(polygon[i].get("longitude", 0))
-        yj = float(polygon[j].get("latitude", 0))
-        xj = float(polygon[j].get("longitude", 0))
-        if ((yi > lat) != (yj > lat)) and (
-            lon < (xj - xi) * (lat - yi) / (yj - yi) + xi
-        ):
-            inside = not inside
-        j = i
-    return inside
+# (_point_on_circle, _offset_position_by_heading, _distance_meters,
+#  _point_to_segment_distance_m, _point_in_polygon now imported from _geo)
 
 
 def _is_gate_inside_terminal(gate_lat: float, gate_lon: float) -> bool:
