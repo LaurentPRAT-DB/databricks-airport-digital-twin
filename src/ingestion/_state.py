@@ -132,6 +132,9 @@ GATE_BUFFER_SECONDS = 15 * 60  # 15 minutes
 # Track gate conflicts for validation reporting
 _gate_conflict_count: int = 0
 
+# Count of currently occupied gates (synced by _recount_occupied_gates)
+_occupied_gate_count: int = 0
+
 
 @dataclass
 class GateState:
