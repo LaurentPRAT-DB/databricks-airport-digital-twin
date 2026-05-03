@@ -1480,7 +1480,7 @@ class TestNoRunwayDisablesTrajectories:
     def test_approach_waypoints_fallback_without_osm(self, _provide_osm_runway_data):
         """No OSM runway → fallback waypoints generated from airport center."""
         from unittest.mock import patch
-        with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
+        with patch("src.ingestion._approach_departure._get_osm_primary_runway", return_value=None):
             wps = _get_approach_waypoints("LAX")
             # Fallback generates waypoints from airport center with default heading
             assert len(wps) > 0
@@ -1490,7 +1490,7 @@ class TestNoRunwayDisablesTrajectories:
     def test_departure_waypoints_fallback_without_osm(self, _provide_osm_runway_data):
         """No OSM runway → fallback waypoints generated from airport center."""
         from unittest.mock import patch
-        with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
+        with patch("src.ingestion._approach_departure._get_osm_primary_runway", return_value=None):
             wps = _get_departure_waypoints("JFK")
             # Fallback generates waypoints from airport center with default heading
             assert len(wps) > 0
@@ -1500,19 +1500,19 @@ class TestNoRunwayDisablesTrajectories:
     def test_runway_threshold_none_without_osm(self, _provide_osm_runway_data):
         """No OSM runway → threshold returns None."""
         from unittest.mock import patch
-        with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
+        with patch("src.ingestion._approach_departure._get_osm_primary_runway", return_value=None):
             assert _get_runway_threshold() is None
 
     def test_runway_heading_none_without_osm(self, _provide_osm_runway_data):
         """No OSM runway → heading returns None."""
         from unittest.mock import patch
-        with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
+        with patch("src.ingestion._approach_departure._get_osm_primary_runway", return_value=None):
             assert _get_runway_heading() is None
 
     def test_departure_runway_none_without_osm(self, _provide_osm_runway_data):
         """No OSM runway → departure runway returns None."""
         from unittest.mock import patch
-        with patch("src.ingestion.fallback._get_osm_primary_runway", return_value=None):
+        with patch("src.ingestion._approach_departure._get_osm_primary_runway", return_value=None):
             assert _get_departure_runway() is None
 
 

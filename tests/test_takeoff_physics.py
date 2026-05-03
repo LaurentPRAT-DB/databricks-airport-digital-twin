@@ -13,6 +13,7 @@ import time
 import pytest
 
 import src.ingestion.fallback as _fallback
+import src.ingestion._approach_departure as _approach_departure
 from src.ingestion.fallback import (
     FlightPhase,
     FlightState,
@@ -456,7 +457,7 @@ class TestDynamicRunwayGeometry:
                 {"latitude": 40.02, "longitude": -74.04},
             ]
         }
-        with patch.object(_fallback, "_get_osm_primary_runway", return_value=mock_runway):
+        with patch.object(_approach_departure, "_get_osm_primary_runway", return_value=mock_runway):
             start, end, heading, length_ft = _get_takeoff_runway_geometry()
             # With OSM data, should NOT return SFO fallback
             assert length_ft > 1000

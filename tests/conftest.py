@@ -29,6 +29,9 @@ def _provide_osm_runway_data():
     runway data can override this fixture or re-patch as needed.
     """
     with patch(
+        "src.ingestion._approach_departure._get_osm_primary_runway",
+        return_value=_SFO_RWY_28L_OSM,
+    ), patch(
         "src.ingestion.fallback._get_osm_primary_runway",
         return_value=_SFO_RWY_28L_OSM,
     ):
