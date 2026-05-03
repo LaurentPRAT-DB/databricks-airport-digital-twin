@@ -214,6 +214,154 @@ function EventDetailPanel({ event, onJump }: { event: ScenarioEvent; onJump: () 
   );
 }
 
+const SUGGESTION_CHIPS = [
+  'What caused the delays?',
+  'How could we improve on-time performance?',
+  'What if we increase traffic by 20%?',
+  'Are go-around rates acceptable?',
+];
+
+function ReportChat({ sim }: { sim: UseSimulationReplayResult }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const simulationContext = useMemo(() => ({
+    config: { airport: sim.airport, duration_hours: sim.simStartTime && sim.simEndTime
+      ? (new Date(sim.simEndTime).getTime() - new Date(sim.simStartTime).getTime()) / 3600000 : 24,
+      start_date: sim.simStartTime, scenario_name: sim.scenarioName },
+    summary: sim.summary || {},
+    scenario_events: sim.scenarioEvents?.slice(0, 50) || [],
+    weather_snapshots: sim.scenarioEvents?.filter(e => e.event_type === 'weather').slice(0, 20) || [],
+  }), [sim.airport, sim.simStartTime, sim.simEndTime, sim.scenarioName, sim.summary, sim.scenarioEvents]);
+
+  const handleSend = async (question?: string) => {
+    const q = question || input.trim();
+    if (!q || isLoading) return;
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: q }]);
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/assistant/report-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          question: q,
+          messages: messages.map(m => ({ role: m.role, content: m.content })),
+          simulation_context: simulationContext,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        let content = data.answer || '';
+        if (data.what_if_result) {
+          const r = data.what_if_result;
+          content += '\n\n**What-If Comparison:**\n\n| KPI | Baseline | Modified | Delta |\n|-----|----------|----------|-------|\n';
+          const labels: Record<string, string> = {
+            on_time_pct: 'On-Time %', schedule_delay_min: 'Avg Delay (min)',
+            avg_capacity_hold_min: 'Avg Hold (min)', peak_simultaneous_flights: 'Peak Flights',
+            total_go_arounds: 'Go-Arounds', total_diversions: 'Diversions',
+            cancellation_rate_pct: 'Cancel Rate %',
+          };
+          for (const [key, label] of Object.entries(labels)) {
+            const base = r.baseline_kpis?.[key];
+            const mod = r.modified_kpis?.[key];
+            const delta = r.delta?.[key];
+            if (base != null && mod != null) {
+              const sign = delta > 0 ? '+' : '';
+              content += `| ${label} | ${typeof base === 'number' ? base.toFixed(1) : base} | ${typeof mod === 'number' ? mod.toFixed(1) : mod} | ${sign}${typeof delta === 'number' ? delta.toFixed(1) : delta} |\n`;
+            }
+          }
+        }
+        setMessages(prev => [...prev, { role: 'assistant', content }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Unable to respond. Please try again.' }]);
+      }
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Failed to connect to assistant.' }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-slate-200 pt-4 mt-4">
+      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+        Ask about this simulation
+      </div>
+
+      {messages.length === 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {SUGGESTION_CHIPS.map(chip => (
+            <button
+              key={chip}
+              onClick={() => handleSend(chip)}
+              disabled={isLoading}
+              className="px-2.5 py-1 text-[11px] bg-blue-50 text-blue-700 rounded-full border border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50"
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {messages.length > 0 && (
+        <div className="max-h-64 overflow-y-auto space-y-2 mb-3">
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[90%] px-3 py-2 rounded-lg text-xs leading-relaxed ${
+                msg.role === 'user'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700'
+              }`}>
+                {msg.role === 'assistant' ? (
+                  <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
+                ) : msg.content}
+              </div>
+            </div>
+          ))}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-slate-100 text-slate-400 px-3 py-2 rounded-lg text-xs italic">
+                Analyzing...
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleSend(); }}
+          placeholder="Ask about KPIs, recommendations, or what-if scenarios..."
+          disabled={isLoading}
+          className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+        />
+        <button
+          onClick={() => handleSend()}
+          disabled={isLoading || !input.trim()}
+          className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors"
+          title="Send"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Hex colors for HTML report (matching Tailwind classes). */
 const EVENT_HEX: Record<string, string> = {
   weather: '#fbbf24',
@@ -715,6 +863,20 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated 
     </tbody>
   </table>
 
+  ${(() => {
+    const analysisMarkdown = generatedReport || sim.markdownReport;
+    if (!analysisMarkdown) return '';
+    const analysisHtml = analysisMarkdown
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/^### (.+)$/gm, '<h3 style="font-size:15px;font-weight:600;margin:20px 0 8px;color:#93c5fd">$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2 style="font-size:18px;font-weight:600;margin:28px 0 10px;color:#60a5fa">$1</h2>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- (.+)$/gm, '<li style="margin-left:20px;margin-bottom:4px">$1</li>')
+      .replace(/\n\n/g, '</p><p style="margin-bottom:12px;line-height:1.6">')
+      .replace(/\n/g, '<br>');
+    return '<h2>LLM Analysis Report</h2><div style="background:#1e293b;border-radius:8px;padding:24px;margin-bottom:24px;line-height:1.6"><p style="margin-bottom:12px;line-height:1.6">' + analysisHtml + '</p></div>';
+  })()}
+
   <div class="footer">
     Generated by Airport Digital Twin Simulation Platform &mdash; ${new Date().toLocaleString()}
   </div>
@@ -727,7 +889,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated 
     const filename = `report_${sim.airport || 'unknown'}_${scenario}_${new Date().toISOString().slice(0, 10)}.html`;
     downloadDataUrl(url, filename);
     URL.revokeObjectURL(url);
-  }, [sim, summary, filteredEvents, fromHour, toHour]);
+  }, [sim, summary, filteredEvents, fromHour, toHour, generatedReport]);
 
   return createPortal(
     <div ref={modalRef} className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
@@ -799,8 +961,11 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
             hasAnalysisReport || generatedReport ? (
-              <div className="flex-1 min-h-0 overflow-y-auto markdown-report">
-                <Markdown remarkPlugins={[remarkGfm]}>{generatedReport || sim.markdownReport!}</Markdown>
+              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+                <div className="markdown-report pb-4">
+                  <Markdown remarkPlugins={[remarkGfm]}>{generatedReport || sim.markdownReport!}</Markdown>
+                </div>
+                <ReportChat sim={sim} />
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-slate-400">
