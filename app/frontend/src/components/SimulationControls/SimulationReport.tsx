@@ -502,8 +502,6 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated 
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
   const focusRowRef = useRef<HTMLTableRowElement>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollUp, setCanScrollUp] = useState(false);
-  const [canScrollDown, setCanScrollDown] = useState(false);
 
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -522,22 +520,6 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated 
   }, []);
 
 
-  // ── Scroll state tracking ──
-  useEffect(() => {
-    const el = tableScrollRef.current;
-    if (!el) return;
-    const update = () => {
-      const up = el.scrollTop > 4;
-      const down = el.scrollTop + el.clientHeight < el.scrollHeight - 4;
-      setCanScrollUp(up);
-      setCanScrollDown(down);
-    };
-    update();
-    el.addEventListener('scroll', update, { passive: true });
-    const ro = new ResizeObserver(() => update());
-    ro.observe(el);
-    return () => { el.removeEventListener('scroll', update); ro.disconnect(); };
-  }, []);
 
   // ── Full diagnostic snapshot on mount (delayed for layout to settle) ──
   useEffect(() => {
@@ -1080,13 +1062,13 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated 
             </button>
           </div>
           {showKpiHelp && (
-            <div className="shrink-0 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2">
-              {Object.entries(KPI_DEFINITIONS).map(([label, desc]) => (
-                <div key={label} className="flex gap-2">
-                  <span className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider whitespace-nowrap min-w-[60px]">{label}</span>
-                  <span className="text-[11px] text-slate-600">{desc}</span>
-                </div>
-              ))}
+            <div className="shrink-0 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+              <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-4 gap-y-1.5 items-baseline">
+                {Object.entries(KPI_DEFINITIONS).map(([label, desc]) => [
+                  <span key={`l-${label}`} className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider whitespace-nowrap">{label}</span>,
+                  <span key={`d-${label}`} className="text-[11px] text-slate-600 leading-tight">{desc}</span>,
+                ])}
+              </div>
             </div>
           )}
 
@@ -1153,38 +1135,6 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated 
 
           {/* Event table */}
           <div className="rounded-lg border border-slate-200 relative">
-            {filteredEvents.length > 0 && (
-              <div className="sticky top-1 float-right mr-1 z-20 flex flex-col gap-1">
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    const el = tableScrollRef.current;
-                    if (el) {
-                      debugLog('info', 'ReportScroll', 'arrow-up clicked', {
-                        scrollTop: el.scrollTop, clientH: el.clientHeight, scrollH: el.scrollHeight,
-                      });
-                      el.scrollBy({ top: -120, behavior: 'smooth' });
-                    }
-                  }}
-                  className={`w-6 h-6 rounded bg-slate-700/70 text-white text-xs flex items-center justify-center hover:bg-slate-600 transition-opacity ${canScrollUp ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}
-                  title="Scroll up"
-                >▲</button>
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    const el = tableScrollRef.current;
-                    if (el) {
-                      debugLog('info', 'ReportScroll', 'arrow-down clicked', {
-                        scrollTop: el.scrollTop, clientH: el.clientHeight, scrollH: el.scrollHeight,
-                      });
-                      el.scrollBy({ top: 120, behavior: 'smooth' });
-                    }
-                  }}
-                  className={`w-6 h-6 rounded bg-slate-700/70 text-white text-xs flex items-center justify-center hover:bg-slate-600 transition-opacity ${canScrollDown ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}
-                  title="Scroll down"
-                >▼</button>
-              </div>
-            )}
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-slate-100 z-10">
                 <tr>
