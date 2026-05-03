@@ -580,6 +580,87 @@ class GenerateReportRequest(BaseModel):
     )
 
 
+class GenerateReportFromDataRequest(BaseModel):
+    """Request body for generating a report from in-memory simulation data."""
+
+    prompt_template: str | None = Field(
+        default=None, description="Custom prompt template (overrides default)"
+    )
+    config: dict = Field(default_factory=dict)
+    summary: dict = Field(default_factory=dict)
+    schedule: list = Field(default_factory=list)
+    scenario_events: list = Field(default_factory=list)
+    weather_snapshots: list = Field(default_factory=list)
+
+
+@simulation_router.post("/report/generate")
+async def generate_report_from_data(
+    request: Request,
+    body: GenerateReportFromDataRequest,
+) -> dict:
+    """Generate an LLM analysis report from in-memory simulation data.
+
+    Used when the simulation is running live (demo mode) and there's no
+    saved JSON file on disk. The frontend sends summary, events, and config
+    directly. If no weather_snapshots are provided, fetches current METAR.
+    """
+    from src.simulation.report_generator import ReportGenerator
+
+    # Get auth for LLM call
+    from app.backend.api.assistant import _get_databricks_auth
+    host, token = _get_databricks_auth(request)
+
+    # If no weather snapshots provided, try to fetch current METAR
+    weather_snapshots = body.weather_snapshots
+    if not weather_snapshots:
+        try:
+            from app.backend.services.weather_service import get_weather_service
+            ws = get_weather_service()
+            airport = body.config.get("airport", "")
+            if airport:
+                weather_resp = ws.get_current_weather(airport)
+                if weather_resp and weather_resp.metar:
+                    m = weather_resp.metar
+                    ceiling = None
+                    for cl in (m.clouds or []):
+                        if cl.coverage.value in ("BKN", "OVC"):
+                            ceiling = cl.altitude_ft
+                            break
+                    weather_snapshots = [{
+                        "time": m.observation_time.isoformat() if m.observation_time else "",
+                        "type": m.flight_category.value.lower() if m.flight_category else "vfr",
+                        "severity": "current",
+                        "visibility_nm": m.visibility_sm,
+                        "ceiling_ft": ceiling,
+                        "wind_speed_kt": m.wind_speed_kts,
+                        "wind_gusts_kt": m.wind_gust_kts,
+                        "wind_direction": m.wind_direction,
+                        "temperature_c": m.temperature_c,
+                        "raw_metar": m.raw_metar,
+                    }]
+        except Exception as e:
+            logger.debug(f"Could not fetch current weather for report: {e}")
+
+    # Reconstruct simulation output structure expected by the report generator
+    simulation_output = {
+        "config": body.config,
+        "summary": body.summary,
+        "schedule": body.schedule,
+        "scenario_events": body.scenario_events,
+        "weather_snapshots": weather_snapshots,
+    }
+
+    generator = ReportGenerator(prompt_template=body.prompt_template)
+
+    try:
+        report_content = await generator.generate(simulation_output, host, token)
+    except Exception as e:
+        logger.exception("Report generation from data failed")
+        raise HTTPException(status_code=502, detail="Report generation failed")
+
+    return {"content": report_content}
+
+
 @simulation_router.post("/report/generate/{filename:path}")
 async def generate_simulation_report(
     request: Request,

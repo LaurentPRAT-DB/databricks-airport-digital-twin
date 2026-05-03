@@ -62,13 +62,18 @@ export interface PositionSnapshot {
   destination_airport?: string | null;
 }
 
+/** Altitude ceiling for trajectory segment filtering (go-around enroute interludes). */
 const GO_AROUND_ALT_CEILING = 6000;
 
 /** Should an enroute snapshot be visible on the map?
- *  Keep flights still in local airspace: go-arounds, diversions climbing out, legacy data. */
+ *  Show flights whose origin or destination is the local airport — they remain
+ *  visible until the backend removes them from simulation frames at EXIT_RADIUS (~30 NM).
+ *  Flights with no airport data (legacy) are also shown since they're still in range. */
 function isLocalEnroute(s: PositionSnapshot, localAirport: string | undefined): boolean {
-  if (localAirport && s.destination_airport === localAirport) return true;
-  if (s.altitude < GO_AROUND_ALT_CEILING) return true;
+  if (!localAirport) return true;
+  if (s.destination_airport === localAirport) return true;
+  if (s.origin_airport === localAirport) return true;
+  if (!s.destination_airport && !s.origin_airport) return true;
   return false;
 }
 

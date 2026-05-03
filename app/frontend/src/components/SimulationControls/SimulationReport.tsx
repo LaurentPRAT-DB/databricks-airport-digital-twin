@@ -814,16 +814,39 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated 
                 )}
                 <button
                   onClick={async () => {
-                    if (!sim.loadedFile || isGenerating) return;
+                    if (isGenerating) return;
                     setIsGenerating(true);
                     setGenerateError(null);
                     try {
-                      const res = await fetch(`/api/simulation/report/generate/${encodeURIComponent(sim.loadedFile)}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({}),
-                      });
+                      let res: Response;
+                      const isLiveOrDemo = !sim.loadedFile || sim.loadedFile.startsWith('demo_');
+                      if (isLiveOrDemo) {
+                        // Live/demo sim: send data directly from memory
+                        const weatherEvents = sim.scenarioEvents
+                          .filter(e => e.event_type === 'weather');
+                        res = await fetch('/api/simulation/report/generate', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({
+                            config: { airport: sim.airport, duration_hours: sim.simStartTime && sim.simEndTime
+                              ? (new Date(sim.simEndTime).getTime() - new Date(sim.simStartTime).getTime()) / 3600000
+                              : 24, start_date: sim.simStartTime },
+                            summary: sim.summary || {},
+                            schedule: sim.schedule || [],
+                            scenario_events: sim.scenarioEvents || [],
+                            weather_snapshots: weatherEvents,
+                          }),
+                        });
+                      } else {
+                        // Saved file: use file-based endpoint
+                        res = await fetch(`/api/simulation/report/generate/${encodeURIComponent(sim.loadedFile!)}`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({}),
+                        });
+                      }
                       if (res.ok) {
                         const data = await res.json();
                         setGeneratedReport(data.content);
@@ -838,7 +861,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated 
                       setIsGenerating(false);
                     }
                   }}
-                  disabled={isGenerating || !sim.loadedFile}
+                  disabled={isGenerating || (!sim.loadedFile && !sim.summary)}
                   className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isGenerating ? (
