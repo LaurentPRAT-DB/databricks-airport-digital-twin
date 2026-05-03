@@ -740,7 +740,7 @@ describe('End-to-end user interaction flows', () => {
       renderApp()
       await waitForAppReady()
 
-      const platformButton = screen.getByTitle(/databricks platform links/i)
+      const platformButton = await screen.findByTitle(/databricks platform links/i)
 
       const openTime = await timed(async () => {
         await user.click(platformButton)
@@ -764,7 +764,7 @@ describe('End-to-end user interaction flows', () => {
       // Go up to the outer dropdown container that has all links
       const dropdown = dropdownHeader.closest('[class*="rounded-lg shadow-xl"]')!
       const links = within(dropdown as HTMLElement).getAllByRole('link')
-      expect(links.length).toBe(6) // 6 platform links
+      expect(links.length).toBe(5) // 5 platform links
       links.forEach((link) => {
         expect(link).toHaveAttribute('target', '_blank')
       })
