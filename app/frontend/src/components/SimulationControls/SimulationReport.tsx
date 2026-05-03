@@ -4,6 +4,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { UseSimulationReplayResult, ScenarioEvent } from '../../hooks/useSimulationReplay';
 import { useFlightContext } from '../../context/FlightContext';
+import type { Flight } from '../../types/flight';
 import { downloadDataUrl } from '../../utils/sceneCapture';
 import { debugLog } from '../../utils/debugLogger';
 import { EVENT_COLORS, EVENT_LABELS } from './SimulationControls';
@@ -14,6 +15,7 @@ interface SimulationReportProps {
   sim: UseSimulationReplayResult;
   onClose: () => void;
   focusEvents?: ScenarioEvent[] | null;
+  onReportGenerated?: (content: string) => void;
 }
 
 const DETAIL_SKIP_KEYS = new Set(['time', 'event_type', 'description']);
@@ -341,9 +343,12 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
   );
 }
 
-export function SimulationReport({ sim, onClose, focusEvents }: SimulationReportProps) {
+export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated }: SimulationReportProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const { filteredFlights, setSelectedFlight } = useFlightContext();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedReport, setGeneratedReport] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const flightsRef = useRef(filteredFlights);
   flightsRef.current = filteredFlights;
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
@@ -471,35 +476,27 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
       : 30_000;
     const seekTime = new Date(new Date(event.time).getTime() - paddingMs).toISOString();
 
-    let found = false;
     if (eventIcao24 || eventCallsign) {
-      found = sim.seekToFlight(seekTime, eventIcao24 || '', eventCallsign || undefined);
+      sim.seekToFlight(seekTime, eventIcao24 || '', eventCallsign || undefined);
     } else {
       sim.seekToTime(seekTime);
     }
 
     onClose();
 
-    // After frame settles, find and select the flight in the rendered list
-    if (eventCallsign || eventIcao24) {
+    // Select the flight immediately by icao24. FlightContext resolves the
+    // actual Flight object from the flights array reactively — no need to wait
+    // for the frame to settle or retry from a stale ref.
+    if (eventIcao24) {
+      setSelectedFlight({ icao24: eventIcao24 } as Flight);
+    } else if (eventCallsign) {
+      // Callsign-only: need to find the flight in the rendered list
       setTimeout(() => {
         const flights = flightsRef.current;
         const flight = flights.find(f =>
-          (eventIcao24 && f.icao24 === eventIcao24) ||
-          (eventCallsign && f.callsign?.replace(/\s+/g, '') === eventCallsign)
+          f.callsign?.replace(/\s+/g, '') === eventCallsign
         );
-        if (flight) {
-          setSelectedFlight(flight);
-          debugLog('info', 'ReportNav', 'flight selected', {
-            icao24: flight.icao24, callsign: flight.callsign, seekFound: found,
-          });
-        } else {
-          debugLog('warn', 'ReportNav', 'flight not found after seek', {
-            eventCallsign, eventIcao24, eventTime: event.time,
-            seekFound: found, availableFlights: flights.length,
-            flightIds: flights.slice(0, 5).map(f => `${f.callsign}/${f.icao24}`),
-          });
-        }
+        if (flight) setSelectedFlight(flight);
       }, 300);
     }
   }, [sim, setSelectedFlight, onClose]);
@@ -801,9 +798,9 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
 
           {/* ── Analysis Report tab ── */}
           {activeTab === 'analysis' && (
-            hasAnalysisReport ? (
+            hasAnalysisReport || generatedReport ? (
               <div className="flex-1 min-h-0 overflow-y-auto markdown-report">
-                <Markdown remarkPlugins={[remarkGfm]}>{sim.markdownReport!}</Markdown>
+                <Markdown remarkPlugins={[remarkGfm]}>{generatedReport || sim.markdownReport!}</Markdown>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-slate-400">
@@ -811,7 +808,56 @@ export function SimulationReport({ sim, onClose, focusEvents }: SimulationReport
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <p className="text-sm font-medium">No analysis report available</p>
-                <p className="text-xs mt-1">Run a batch simulation to generate a detailed analysis report.</p>
+                <p className="text-xs mt-1 mb-4">Generate an AI-powered analysis of this simulation's KPIs, weather, and events.</p>
+                {generateError && (
+                  <p className="text-xs text-red-500 mb-3">{generateError}</p>
+                )}
+                <button
+                  onClick={async () => {
+                    if (!sim.loadedFile || isGenerating) return;
+                    setIsGenerating(true);
+                    setGenerateError(null);
+                    try {
+                      const res = await fetch(`/api/simulation/report/generate/${encodeURIComponent(sim.loadedFile)}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({}),
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        setGeneratedReport(data.content);
+                        onReportGenerated?.(data.content);
+                      } else {
+                        const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+                        setGenerateError(err.detail || `Failed (${res.status})`);
+                      }
+                    } catch (e) {
+                      setGenerateError('Failed to connect to server');
+                    } finally {
+                      setIsGenerating(false);
+                    }
+                  }}
+                  disabled={isGenerating || !sim.loadedFile}
+                  className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGenerating ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Generating Report...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      Generate Analysis Report
+                    </>
+                  )}
+                </button>
               </div>
             )
           )}

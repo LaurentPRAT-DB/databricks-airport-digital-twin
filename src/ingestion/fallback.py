@@ -5130,6 +5130,26 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         state.velocity = 0.0
         state.vertical_rate = 0.0
 
+    # Safety: ground-phase coordinate bounds check.
+    # Taxi/parked/pushback flights must stay within ~3 NM of airport center.
+    # If coordinates drift beyond this (bad waypoint, graph error), reset to gate or center.
+    if state.phase in (FlightPhase.TAXI_TO_GATE, FlightPhase.TAXI_TO_RUNWAY,
+                       FlightPhase.PARKED, FlightPhase.PUSHBACK):
+        center = get_airport_center()
+        ground_dist_sq = (state.latitude - center[0]) ** 2 + (state.longitude - center[1]) ** 2
+        MAX_GROUND_DIST_SQ = 0.05 ** 2  # ~3 NM — no taxi route exceeds this
+        if ground_dist_sq > MAX_GROUND_DIST_SQ:
+            logger.warning(
+                "Ground flight %s at (%.5f, %.5f) is %.2f° from airport center — resetting position",
+                state.icao24, state.latitude, state.longitude, math.sqrt(ground_dist_sq),
+            )
+            gate_pos = get_gates().get(state.assigned_gate) if state.assigned_gate else None
+            if gate_pos:
+                state.latitude, state.longitude = gate_pos
+            else:
+                state.latitude, state.longitude = center
+            state.velocity = 0.0
+
     # Hard safety cap — no commercial aircraft exceeds 600 kts
     state.velocity = min(state.velocity, MAX_VELOCITY_KTS)
 

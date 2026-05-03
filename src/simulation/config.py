@@ -45,6 +45,14 @@ class SimulationConfig(BaseModel):
     diagnostics: bool = Field(
         default=True, description="Enable diagnostic event logging"
     )
+    generate_report: bool = Field(
+        default=False,
+        description="Generate LLM analysis report after simulation completes",
+    )
+    report_prompt_file: Optional[str] = Field(
+        default=None,
+        description="Path to custom report prompt template file (overrides default)",
+    )
 
     def effective_start_time(self) -> datetime:
         """Return start_time, or midnight of start_date, or midnight UTC today."""

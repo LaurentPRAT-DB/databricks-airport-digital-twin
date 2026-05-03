@@ -486,9 +486,40 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     // Keep arriving enroute flights (go-arounds, holding patterns near the airport).
     // Arrivals have destination_airport = local airport; departures have destination = remote.
     const localAirport = (simData.config as Record<string, unknown>)?.airport as string | undefined;
-    const relevant = snapshots.filter((s) =>
-      s.phase !== 'enroute' || isLocalEnroute(s, localAirport)
-    );
+
+    // Airport center for coordinate bounds checking.
+    // New sim files include airport_center in config; older files fall back to
+    // median of parked flights in the current frame.
+    const cfg = simData.config as Record<string, unknown>;
+    const cfgCenter = cfg.airport_center as { latitude: number; longitude: number } | undefined;
+    let centerLat = cfgCenter?.latitude;
+    let centerLon = cfgCenter?.longitude;
+    if (centerLat == null || centerLon == null) {
+      const parked = snapshots.filter(s => s.phase === 'parked' && s.latitude && s.longitude);
+      if (parked.length > 0) {
+        const lats = parked.map(s => s.latitude).sort((a, b) => a - b);
+        const lons = parked.map(s => s.longitude).sort((a, b) => a - b);
+        centerLat = lats[Math.floor(lats.length / 2)];
+        centerLon = lons[Math.floor(lons.length / 2)];
+      }
+    }
+    const MAX_GROUND_DIST = 0.05; // ~3 NM — no airport taxi exceeds this
+
+    const relevant = snapshots.filter((s) => {
+      if (s.phase === 'enroute') return isLocalEnroute(s, localAirport);
+      // Reject ground-phase flights with coordinates far from the airport
+      if (centerLat != null && centerLon != null) {
+        const groundPhases = ['taxi_in', 'taxi_out', 'parked', 'pushback'];
+        if (groundPhases.includes(s.phase)) {
+          const dLat = s.latitude - centerLat;
+          const dLon = s.longitude - centerLon!;
+          if (dLat * dLat + dLon * dLon > MAX_GROUND_DIST * MAX_GROUND_DIST) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
     setFlights(relevant.map((s) => snapshotToFlight(s, src)));
   }, [simData, currentFrameIndex]);
 

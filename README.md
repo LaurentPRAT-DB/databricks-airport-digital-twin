@@ -24,6 +24,7 @@ The Airport Digital Twin merges two complementary engines into a single platform
 | **Two-tier serving** | Lakehouse (Unity Catalog) for governance + Lakebase (PostgreSQL) for <10ms real-time reads |
 | **Live weather** | METAR/TAF — temperature, wind, visibility, flight category |
 | **FIDS** | Arrivals & departures board, just like a real terminal |
+| **LLM-powered reports** | Post-simulation narrative reports: KPIs, weather, events, performance assessment — configurable prompts |
 | **Platform integration** | Lakeview dashboards, Genie NL queries, Unity Catalog, MLflow, Data Lineage |
 | **Data format importers** | AIXM, OSM, IFC, AIDM, FAA NASR, MSFS BGL |
 | **~3,900 tests** | ~3,089 Python + 822 frontend + 3 Databricks workspace jobs |
@@ -533,7 +534,7 @@ graph TB
 | **Baggage** | `GET /api/baggage/stats`, `/baggage/flight/{id}`, `/baggage/alerts` | Baggage tracking |
 | **GSE** | `GET /api/gse/status`, `/turnaround/{icao24}` | Ground equipment and turnaround |
 | **Inpainting** | `POST /api/inpainting/clean-tile`, `/inpainting/status`, `/inpainting/wake` | Satellite tile aircraft removal |
-| **Simulation** | `GET /api/simulation/list`, `/simulation/load/{file}` | Simulation replay files |
+| **Simulation** | `GET /api/simulation/files`, `/simulation/data/{file}`, `/simulation/report/{file}`, `POST /simulation/report/generate/{file}` | Simulation replay + report generation |
 | **Data Ops** | `GET /api/data-ops/dashboard`, `/data-ops/stats`, `/data-ops/sync-status` | Pipeline monitoring |
 | **Assistant** | `POST /api/assistant/chat`, `POST /api/mcp/rpc` | Unified LLM assistant + MCP server |
 | **System** | `GET /health`, `/api/ready`, `/api/debug/logs` | Health checks and diagnostics |
@@ -576,9 +577,149 @@ python -m src.simulation.cli --config configs/simulation_sfo_50_debug.yaml
 
 # Full day simulation
 python -m src.simulation.cli --airport SFO --arrivals 50 --departures 50 --seed 42
+
+# Full day with weather scenario + auto-generate narrative report
+python -m src.simulation.cli --airport SFO --arrivals 250 --departures 250 \
+  --scenario scenarios/sfo_summer_thunderstorm.yaml --report
 ```
 
 The engine manages the full flight lifecycle, runway capacity/sequencing, gate assignments, turnaround events, passenger flow, baggage generation, and weather events. Outputs structured JSON event logs compatible with the frontend replay player.
+
+### Simulation Report Generation
+
+After a simulation completes, an LLM-powered report generator can produce a **narrative markdown analysis** covering KPIs, weather evolution, key operational events, and performance assessment.
+
+#### How It Works
+
+```
+Simulation JSON ──► Report Generator ──► REPORT_*.md
+                          │
+              Configurable prompt template
+           (scenario YAML / file / default)
+```
+
+The report generator:
+1. Extracts KPIs, weather timeline, and scenario events from the simulation output
+2. Renders a configurable prompt template with the structured data
+3. Calls the Databricks Foundation Model endpoint (same as the Unified Assistant)
+4. Returns a professional markdown report
+
+#### CLI Usage
+
+```bash
+# Generate report after simulation (uses default prompt)
+python -m src.simulation.cli --airport SFO --arrivals 50 --departures 50 \
+  --scenario scenarios/sfo_summer_thunderstorm.yaml --report
+
+# Generate report with a custom prompt template
+python -m src.simulation.cli --airport JFK --arrivals 100 --departures 100 \
+  --scenario scenarios/jfk_winter_storm.yaml \
+  --report --report-prompt prompts/custom_ops_briefing.md
+
+# Using YAML config with report enabled
+# (add `generate_report: true` and optionally `report_prompt_file:` to config YAML)
+python -m src.simulation.cli --config configs/simulation_sfo_1000.yaml --report
+```
+
+Output: `REPORT_*.md` saved alongside the simulation JSON (e.g., `simulation_output/REPORT_sfo_1000.md`).
+
+#### On-Demand Generation (Frontend)
+
+In the simulation replay UI, the **Analysis Report** tab shows a "Generate Analysis Report" button when no pre-existing report is found. Clicking it calls the backend API:
+
+```
+POST /api/simulation/report/generate/{filename}
+Body: { "prompt_template": "optional custom prompt override" }
+```
+
+The report is generated, saved (locally + UC Volume), and immediately rendered in the UI.
+
+#### Configurable Prompt Templates
+
+Prompts use `{variable}` placeholders filled from simulation output. Three layers of configurability (highest priority first):
+
+| Priority | Source | Use Case |
+|---|---|---|
+| 1 | Scenario YAML: `report_prompt` | Inline prompt for a specific scenario |
+| 2 | File reference: `report_prompt_file` | Shared template across scenarios (in scenario YAML or config YAML) |
+| 3 | Default: `prompts/simulation_report.md` | Standard operations analyst briefing |
+
+**Available template variables:**
+
+| Variable | Content |
+|---|---|
+| `{airport}` | IATA airport code |
+| `{scenario_name}` | Scenario name (or "Standard Operations") |
+| `{scenario_description}` | Scenario description text |
+| `{duration_hours}` | Simulation duration in hours |
+| `{start_date}` | Simulation date |
+| `{kpis_json}` | Formatted KPI summary (on-time %, delay, cancellations, etc.) |
+| `{weather_timeline}` | Chronological weather events with METAR-style details |
+| `{scenario_events}` | Key events: go-arounds, diversions, runway closures, etc. |
+| `{flight_schedule_summary}` | Flight counts, aircraft mix, peak traffic |
+
+**Example: Custom prompt in scenario YAML**
+
+```yaml
+name: SFO Summer Thunderstorm
+description: Full-day stress scenario with cascading disruptions
+report_prompt: |
+  You are a chief operations officer reviewing simulation results.
+  Write a 3-paragraph executive brief for the board meeting.
+  Focus on financial impact and passenger experience.
+  
+  Airport: {airport} | Scenario: {scenario_name}
+  KPIs: {kpis_json}
+  Events: {scenario_events}
+weather_events:
+  - time: "14:00"
+    type: thunderstorm
+    ...
+```
+
+**Example: Reference an external prompt file**
+
+```yaml
+name: JFK Winter Storm
+report_prompt_file: prompts/regulatory_compliance_report.md
+weather_events:
+  ...
+```
+
+#### LLM Configuration and Dependencies
+
+The report generator uses the **Databricks Foundation Model API** (OpenAI-compatible chat completions) — the same endpoint used by the Unified Assistant.
+
+**Environment variables:**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ASSISTANT_MODEL_ENDPOINT` | `databricks-claude-sonnet-4-5` | Databricks serving endpoint for LLM |
+| `DATABRICKS_HOST` | (from SDK config) | Workspace URL |
+| `DATABRICKS_TOKEN` | (from SDK config) | Auth token (CLI usage) |
+
+**LLM parameters (report generation):**
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| `max_tokens` | 4096 | Reports are 500-800 words, need headroom |
+| `temperature` | 0.3 | Slightly creative narrative while maintaining factual accuracy |
+| `tools` | None | Pure inference, no tool calling |
+
+**Authentication:**
+
+- **In deployed app (Databricks Apps):** Uses the request's OAuth Bearer token (user's session)
+- **CLI usage:** Falls back to `databricks-cli` SDK config (`~/.databrickscfg`) or `DATABRICKS_HOST` + `DATABRICKS_TOKEN` env vars
+
+**Python dependencies** (already in `pyproject.toml`):
+
+| Package | Purpose |
+|---|---|
+| `httpx` | Async HTTP client for FM endpoint calls |
+| `pydantic` | Config models with `generate_report` and `report_prompt_file` fields |
+| `databricks-sdk` | Auth fallback for CLI (extracts host/token from profile) |
+
+**No additional dependencies required** — the report generator reuses the existing `httpx` client and Databricks SDK already used by the assistant service.
 
 ### Test Suite
 
@@ -660,7 +801,7 @@ graph TB
 | `DATABRICKS_CATALOG` | Unity Catalog catalog | For Delta tables |
 | `DATABRICKS_SCHEMA` | Schema name | For Delta tables |
 | `INPAINTING_ENDPOINT_NAME` | Serving endpoint name | For inpainting |
-| `ASSISTANT_MODEL_ENDPOINT` | LLM endpoint for assistant | For chat |
+| `ASSISTANT_MODEL_ENDPOINT` | LLM endpoint for assistant + report generation | For chat and reports |
 | `GENIE_SPACE_ID` | Genie space for NL queries | For assistant |
 | `DEBUG_MODE` | Enable verbose logging | Optional |
 | `DEMO_MODE` | Force synthetic data | Optional |
@@ -689,7 +830,7 @@ graph TB
 app/backend/       # FastAPI app (main.py, routes, middleware, services)
 app/frontend/      # React app (src/, tests/, dist/)
 src/               # Core logic
-  simulation/      #   Flight state machine, capacity, scenario engine
+  simulation/      #   Flight state machine, capacity, scenario engine, report generator
   ml/              #   7 ML models + registry + features + inpainting
   calibration/     #   Profile builder, BTS/OpenSky/OurAirports ingest
   formats/         #   AIXM, OSM, IFC, AIDM, FAA, MSFS importers
@@ -700,6 +841,8 @@ databricks/        # Notebooks (DLT, test runners)
 resources/         # DABs job/pipeline/app YAML configs
 data/              # Local calibration profiles (dev fallback; production uses UC Volume)
 configs/           # Simulation scenario configs
+scenarios/         # Weather disruption scenarios (38 YAML files)
+prompts/           # LLM prompt templates (simulation reports, customizable)
 scripts/           # CLI tools (build profiles, batch sims)
 ```
 
@@ -732,6 +875,7 @@ scripts/           # CLI tools (build profiles, batch sims)
 | [Aircraft Separation](docs/AIRCRAFT_SEPARATION.md) | FAA/ICAO separation standards |
 | [Data Sources & KPIs](docs/AIRPORT_DATA_SOURCES_AND_KPIS.md) | Open aviation data catalog + KPI reference |
 | [Simulation Guide](docs/simulation_user_guide.md) | Run deterministic airport simulations |
+| [Report Prompt Template](prompts/simulation_report.md) | Default LLM prompt for post-simulation narrative reports |
 | [Security Audit](docs/SECURITY_AUDIT.md) | Security review findings |
 | [Delta Sharing](docs/DELTA_SHARING.md) | Cross-organization data sharing |
 | [Development Philosophy](docs/DEVELOPMENT_PHILOSOPHY.md) | Design principles |

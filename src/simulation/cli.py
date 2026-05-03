@@ -3,14 +3,17 @@
 Usage:
     python -m src.simulation.cli --config configs/simulation_sfo_50.yaml
     python -m src.simulation.cli --airport SFO --arrivals 25 --departures 25 --debug
+    python -m src.simulation.cli --airport SFO --arrivals 50 --departures 50 --scenario scenarios/sfo_summer_thunderstorm.yaml --report
 """
 
 import argparse
+import json
 import logging
 import sys
 
 from src.simulation.config import SimulationConfig, load_config
 from src.simulation.engine import SimulationEngine
+from src.ingestion.fallback import get_airport_center
 
 
 def main() -> None:
@@ -32,6 +35,14 @@ def main() -> None:
     parser.add_argument(
         "--skip-positions", action="store_true",
         help="Skip position snapshots to save memory (batch/ML training mode)",
+    )
+    parser.add_argument(
+        "--report", action="store_true",
+        help="Generate LLM analysis report after simulation completes",
+    )
+    parser.add_argument(
+        "--report-prompt", type=str,
+        help="Path to custom report prompt template file",
     )
 
     args = parser.parse_args()
@@ -63,6 +74,10 @@ def main() -> None:
         config.debug = True
     if args.skip_positions:
         config.skip_positions = True
+    if args.report:
+        config.generate_report = True
+    if args.report_prompt:
+        config.report_prompt_file = args.report_prompt
 
     # Configure logging
     level = logging.DEBUG if config.debug else logging.INFO
@@ -80,6 +95,8 @@ def main() -> None:
         config_dict = config.model_dump(mode="json")
     else:
         config_dict = config.dict()
+    center = get_airport_center()
+    config_dict["airport_center"] = {"latitude": center[0], "longitude": center[1]}
     recorder.write_output(config.output_file, config_dict)
 
     # Print summary
@@ -109,6 +126,66 @@ def main() -> None:
         print(f"  Holdings:               {summary.get('total_holdings', 0)}")
         print(f"  Cancellations:          {summary.get('total_cancellations', 0)}")
     print(f"\n  Output: {config.output_file}")
+
+    # Generate report if requested
+    if config.generate_report:
+        _generate_report(config, engine)
+
+
+def _generate_report(config: SimulationConfig, engine: SimulationEngine) -> None:
+    """Generate LLM analysis report after simulation."""
+    from src.simulation.report_generator import (
+        ReportGenerator,
+        derive_report_path,
+        get_databricks_auth,
+    )
+
+    # Determine prompt source: scenario override > config file > default
+    prompt_template = None
+    prompt_file = config.report_prompt_file
+
+    if engine.scenario:
+        if engine.scenario.report_prompt:
+            prompt_template = engine.scenario.report_prompt
+        elif engine.scenario.report_prompt_file and not prompt_file:
+            prompt_file = engine.scenario.report_prompt_file
+
+    try:
+        generator = ReportGenerator(
+            prompt_template=prompt_template,
+            prompt_file=prompt_file,
+        )
+    except FileNotFoundError as e:
+        print(f"\n  Report generation skipped: {e}", file=sys.stderr)
+        return
+
+    # Load the simulation output we just wrote
+    try:
+        with open(config.output_file) as f:
+            simulation_output = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"\n  Report generation failed (cannot read output): {e}", file=sys.stderr)
+        return
+
+    # Get auth and generate
+    try:
+        host, token = get_databricks_auth()
+    except RuntimeError as e:
+        print(f"\n  Report generation skipped (no auth): {e}", file=sys.stderr)
+        return
+
+    try:
+        report_content = generator.generate_sync(simulation_output, host, token)
+    except Exception as e:
+        print(f"\n  Report generation failed: {e}", file=sys.stderr)
+        return
+
+    # Write report
+    report_path = derive_report_path(config.output_file)
+    from pathlib import Path
+    Path(report_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(report_path).write_text(report_content, encoding="utf-8")
+    print(f"  Report: {report_path}")
 
 
 if __name__ == "__main__":

@@ -82,6 +82,12 @@ class SimulationScenario(BaseModel):
     ground_events: list[GroundEvent] = Field(default_factory=list)
     curfew_events: list[CurfewEvent] = Field(default_factory=list)
     traffic_modifiers: list[TrafficModifier] = Field(default_factory=list)
+    report_prompt: str | None = Field(
+        default=None, description="Inline prompt template override for report generation"
+    )
+    report_prompt_file: str | None = Field(
+        default=None, description="Path to custom report prompt template file"
+    )
 
 
 @dataclass

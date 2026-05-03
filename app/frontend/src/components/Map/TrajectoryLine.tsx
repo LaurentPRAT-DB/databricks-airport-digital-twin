@@ -187,9 +187,8 @@ export default function TrajectoryLine() {
   // Split polylines at large gaps (e.g. go-around enroute segments that are
   // excluded from the trajectory, causing unrealistic straight-line jumps),
   // then smooth each segment for natural-looking curves at turns.
-  const smoothSegment = (s: [number, number][]) => isGroundTrajectory ? s : chaikinSmooth(simplify(s));
-  const traveledSegments = useMemo(() => splitAtGaps(traveledPositions).map(smoothSegment), [traveledPositions, isGroundTrajectory]);
-  const remainingSegments = useMemo(() => splitAtGaps(remainingPositions).map(smoothSegment), [remainingPositions, isGroundTrajectory]);
+  const traveledSegments = useMemo(() => splitAtGaps(traveledPositions).map(s => isGroundTrajectory ? s : chaikinSmooth(simplify(s))), [traveledPositions, isGroundTrajectory]);
+  const remainingSegments = useMemo(() => splitAtGaps(remainingPositions).map(s => isGroundTrajectory ? s : chaikinSmooth(simplify(s))), [remainingPositions, isGroundTrajectory]);
 
   if (!showTrajectory || (traveledSegments.length === 0 && remainingSegments.length === 0)) {
     return null;

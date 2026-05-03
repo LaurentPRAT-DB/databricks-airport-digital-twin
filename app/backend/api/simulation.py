@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -569,6 +570,77 @@ async def get_simulation_report(request: Request, filename: str) -> dict:
 
     content = report_path.read_text(encoding="utf-8")
     return {"content": content, "filename": report_name}
+
+
+class GenerateReportRequest(BaseModel):
+    """Request body for on-demand report generation."""
+
+    prompt_template: str | None = Field(
+        default=None, description="Custom prompt template (overrides default)"
+    )
+
+
+@simulation_router.post("/report/generate/{filename:path}")
+async def generate_simulation_report(
+    request: Request,
+    filename: str,
+    body: GenerateReportRequest | None = None,
+) -> dict:
+    """Generate an LLM analysis report for a simulation file on demand.
+
+    Loads the simulation JSON, feeds it through the report generator with a
+    configurable prompt, saves the REPORT_*.md file, and returns the content.
+    """
+    from src.simulation.report_generator import ReportGenerator, derive_report_path
+
+    if "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # Load the simulation data
+    user_token = _extract_user_token(request)
+    data = _load_simulation_from_volume(filename, user_token=user_token)
+    if data is None:
+        data = _load_simulation_local(filename)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Simulation file not found: {filename}")
+
+    # Get auth for LLM call
+    from app.backend.api.assistant import _get_databricks_auth
+    host, token = _get_databricks_auth(request)
+
+    # Build generator with optional custom prompt
+    prompt_template = body.prompt_template if body else None
+    generator = ReportGenerator(prompt_template=prompt_template)
+
+    try:
+        report_content = await generator.generate(data, host, token)
+    except Exception as e:
+        logger.exception("Report generation failed")
+        raise HTTPException(status_code=502, detail=f"Report generation failed: {e}")
+
+    # Derive report filename and save locally
+    base = Path(filename).name
+    if base.startswith("simulation_") and base.endswith(".json"):
+        report_name = "REPORT_" + base[len("simulation_"):-len(".json")] + ".md"
+    else:
+        report_name = "REPORT_" + Path(filename).stem + ".md"
+
+    report_path = PROJECT_ROOT / "simulation_output" / report_name
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(report_content, encoding="utf-8")
+
+    # Also try to upload to UC Volume
+    try:
+        volume_path = f"/Volumes/{_UC_CATALOG}/{_UC_SCHEMA}/{_UC_VOLUME}/{report_name}"
+        w = _make_workspace_client(user_token)
+        if w:
+            import io
+            w.files.upload(volume_path, io.BytesIO(report_content.encode("utf-8")), overwrite=True)
+            logger.info(f"Report uploaded to UC Volume: {volume_path}")
+    except Exception as e:
+        logger.debug(f"Could not upload report to UC Volume: {e}")
+
+    return {"content": report_content, "filename": report_name}
 
 
 @simulation_router.get("/files")
