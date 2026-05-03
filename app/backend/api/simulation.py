@@ -616,16 +616,21 @@ async def generate_simulation_report(
         report_content = await generator.generate(data, host, token)
     except Exception as e:
         logger.exception("Report generation failed")
-        raise HTTPException(status_code=502, detail=f"Report generation failed: {e}")
+        raise HTTPException(status_code=502, detail="Report generation failed")
 
-    # Derive report filename and save locally
+    # Derive report filename — sanitize to prevent path traversal via crafted filenames
+    import re
     base = Path(filename).name
     if base.startswith("simulation_") and base.endswith(".json"):
-        report_name = "REPORT_" + base[len("simulation_"):-len(".json")] + ".md"
+        report_stem = base[len("simulation_"):-len(".json")]
     else:
-        report_name = "REPORT_" + Path(filename).stem + ".md"
+        report_stem = Path(filename).stem
+    report_stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", report_stem)
+    report_name = f"REPORT_{report_stem}.md"
 
     report_path = PROJECT_ROOT / "simulation_output" / report_name
+    if not report_path.resolve().is_relative_to((PROJECT_ROOT / "simulation_output").resolve()):
+        raise HTTPException(status_code=400, detail="Invalid filename")
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report_content, encoding="utf-8")
 

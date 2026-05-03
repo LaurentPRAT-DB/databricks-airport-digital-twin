@@ -160,13 +160,11 @@ def _render_prompt(
         "flight_schedule_summary": _format_schedule_summary(schedule, summary),
     }
 
-    try:
-        return template.format(**variables)
-    except KeyError as e:
-        logger.warning(f"Prompt template has unknown variable: {e}")
-        for key in variables:
-            template = template.replace(f"{{{key}}}", variables[key] if isinstance(variables[key], str) else str(variables[key]))
-        return template
+    # Use safe string substitution to prevent format string attacks
+    # (str.format can access object attributes via {var.__class__} etc.)
+    for key, value in variables.items():
+        template = template.replace(f"{{{key}}}", str(value) if not isinstance(value, str) else value)
+    return template
 
 
 async def _call_llm(host: str, token: str, messages: list[dict]) -> str:
