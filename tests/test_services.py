@@ -233,33 +233,33 @@ class TestScheduleService:
 class TestWeatherService:
     """Tests for Weather service."""
 
-    def test_get_current_weather_default_station(self):
+    async def test_get_current_weather_default_station(self):
         """Test get_current_weather with default station."""
         from app.backend.services.weather_service import get_weather_service
 
         service = get_weather_service()
-        result = service.get_current_weather()
+        result = await service.get_current_weather()
 
         assert result is not None
         assert result.metar is not None
         assert result.station == "KSFO"
 
-    def test_get_current_weather_custom_station(self):
+    async def test_get_current_weather_custom_station(self):
         """Test get_current_weather with custom station."""
         from app.backend.services.weather_service import get_weather_service
 
         service = get_weather_service()
-        result = service.get_current_weather(station="KLAX")
+        result = await service.get_current_weather(station="KLAX")
 
         assert result is not None
         assert result.station == "KLAX"
 
-    def test_metar_fields_present(self):
+    async def test_metar_fields_present(self):
         """Test that METAR contains all required fields."""
         from app.backend.services.weather_service import get_weather_service
 
         service = get_weather_service()
-        result = service.get_current_weather()
+        result = await service.get_current_weather()
         metar = result.metar
 
         assert metar.station is not None
@@ -537,7 +537,7 @@ class TestServicePerformance:
 
         assert elapsed < 0.5, f"Schedule service took {elapsed:.2f}s (> 0.5s limit)"
 
-    def test_weather_service_response_time(self):
+    async def test_weather_service_response_time(self):
         """Test that weather service responds quickly."""
         import time
         from app.backend.services.weather_service import get_weather_service
@@ -545,7 +545,7 @@ class TestServicePerformance:
         service = get_weather_service()
 
         start = time.time()
-        service.get_current_weather()
+        await service.get_current_weather()
         elapsed = time.time() - start
 
         assert elapsed < 0.5, f"Weather service took {elapsed:.2f}s (> 0.5s limit)"
@@ -585,7 +585,7 @@ class TestServicePerformance:
 class TestWeatherServiceLakebaseFallback:
     """Tests for Weather service Lakebase-first pattern."""
 
-    def test_weather_service_tries_lakebase_first(self):
+    async def test_weather_service_tries_lakebase_first(self):
         """Test that weather service tries Lakebase before generator."""
         from app.backend.services.weather_service import WeatherService
         from datetime import datetime, timezone
@@ -615,12 +615,12 @@ class TestWeatherServiceLakebaseFallback:
             return_value=mock_lakebase,
         ):
             service = WeatherService()
-            result = service.get_current_weather("KSFO")
+            result = await service.get_current_weather("KSFO")
 
         mock_lakebase.get_weather.assert_called_once_with("KSFO")
         assert "from Lakebase" in result.metar.raw_metar
 
-    def test_weather_service_fallback_to_generator(self):
+    async def test_weather_service_fallback_to_generator(self):
         """Test that weather service falls back to generator when Lakebase unavailable."""
         from app.backend.services.weather_service import WeatherService
 
@@ -632,14 +632,14 @@ class TestWeatherServiceLakebaseFallback:
             return_value=mock_lakebase,
         ):
             service = WeatherService()
-            result = service.get_current_weather("KSFO")
+            result = await service.get_current_weather("KSFO")
 
         # Should still return valid weather from generator
         assert result is not None
         assert result.metar is not None
         assert result.station == "KSFO"
 
-    def test_weather_service_fallback_when_lakebase_returns_none(self):
+    async def test_weather_service_fallback_when_lakebase_returns_none(self):
         """Test fallback when Lakebase returns None."""
         from app.backend.services.weather_service import WeatherService
 
@@ -652,7 +652,7 @@ class TestWeatherServiceLakebaseFallback:
             return_value=mock_lakebase,
         ):
             service = WeatherService()
-            result = service.get_current_weather("KSFO")
+            result = await service.get_current_weather("KSFO")
 
         # Should fall back to generator
         assert result is not None
