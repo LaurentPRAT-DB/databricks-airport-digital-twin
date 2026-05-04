@@ -52,6 +52,11 @@ from src.ingestion.fallback import (
     set_calibration_gate_minutes,
     set_calibration_taxi_out,
     set_calibration_taxi_in,
+    _get_taxi_waypoints_arrival,
+    _distance_between,
+    _KTS_TO_DEG_PER_SEC,
+    TAXI_SPEED_STRAIGHT_KTS,
+    TAXI_SPEED_RAMP_KTS,
 )
 from src.ingestion.schedule_generator import (
     AIRPORT_COORDINATES,
@@ -331,9 +336,16 @@ class SimulationEngine:
         else:
             set_calibration_taxi_out(0.0)
 
-        # Set calibrated taxi-in hold from BTS OTP data
+        # Set calibrated taxi-in hold from BTS OTP data.
+        # Estimate actual waypoint travel time (including congestion) so the
+        # hold doesn't overshoot. Taxi separation adds ~50-150% to bare path
+        # time depending on traffic density.
         if profile.taxi_in_mean_min > 0:
-            set_calibration_taxi_in(profile.taxi_in_mean_min)
+            waypoint_s = self._estimate_taxi_in_travel_s()
+            flights_per_hour = (self.config.arrivals + self.config.departures) / max(self.config.duration_hours, 1)
+            congestion_factor = 1.0 + min(flights_per_hour / 10.0, 2.0)
+            effective_travel_s = waypoint_s * congestion_factor
+            set_calibration_taxi_in(profile.taxi_in_mean_min, waypoint_travel_s=effective_travel_s)
         else:
             set_calibration_taxi_in(0.0)
 
@@ -392,6 +404,46 @@ class SimulationEngine:
         # Drain any leftover events from previous runs
         drain_phase_transitions()
         drain_gate_events()
+
+    def _estimate_taxi_in_travel_s(self, sample_size: int = 10) -> float:
+        """Estimate average taxi-in waypoint travel time by sampling gates.
+
+        Computes the geometric path length for a few random gates at the
+        arrival taxi speed (straight + ramp segments) and returns the mean
+        travel time in seconds. Falls back to 120s if no gates are available.
+        """
+        gates = get_gates()
+        if not gates:
+            return 120.0
+        gate_names = list(gates.keys())
+        rng = random.Random(0)
+        rng.shuffle(gate_names)
+        travel_times: list[float] = []
+        inbound_speed = TAXI_SPEED_STRAIGHT_KTS + 5  # matches fallback.py taxi_to_gate
+        for gname in gate_names[:sample_size]:
+            try:
+                wps = _get_taxi_waypoints_arrival(gname)
+                if not wps or len(wps) < 2:
+                    continue
+                path_deg = 0.0
+                for i in range(len(wps) - 1):
+                    p1 = (wps[i][1], wps[i][0])
+                    p2 = (wps[i + 1][1], wps[i + 1][0])
+                    path_deg += _distance_between(p1, p2)
+                # Add gate approach at ramp speed
+                gate_pos = gates[gname]
+                last_wp = (wps[-1][1], wps[-1][0])
+                gate_dist = _distance_between(last_wp, gate_pos)
+                straight_s = path_deg / max(inbound_speed * _KTS_TO_DEG_PER_SEC, 1e-12)
+                ramp_s = gate_dist / max(TAXI_SPEED_RAMP_KTS * _KTS_TO_DEG_PER_SEC, 1e-12)
+                travel_times.append(straight_s + ramp_s)
+            except Exception:
+                continue
+        if not travel_times:
+            return 120.0
+        avg = sum(travel_times) / len(travel_times)
+        logger.debug(f"Estimated taxi-in travel: {avg:.0f}s ({avg/60:.1f} min) from {len(travel_times)} gates")
+        return avg
 
     def _generate_schedule(self) -> None:
         """Pre-generate the full flight schedule distributed across the duration.
