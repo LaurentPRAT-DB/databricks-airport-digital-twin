@@ -14,6 +14,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.backend.api.routes import router
+from app.backend.api.routes_debug import router as debug_router
+from app.backend.api.routes_baggage import router as baggage_router
+from app.backend.api.routes_gse import router as gse_router
+from app.backend.api.routes_weather import router as weather_router
+from app.backend.api.routes_schedule import router as schedule_router
+from app.backend.api.routes_airport import router as airport_router
 from app.backend.api.websocket import websocket_router
 from app.backend.api.predictions import prediction_router
 from app.backend.api.data_ops import router as data_ops_router
@@ -110,7 +116,7 @@ async def _prewarm_airports_background():
     airport switches near-instant (<1s) instead of 15-18s.
     """
     import time
-    from app.backend.api.routes import WELL_KNOWN_AIRPORT_INFO
+    from app.backend.api.routes_airport import WELL_KNOWN_AIRPORT_INFO
 
     # Brief delay to let the app finish any post-startup work
     await asyncio.sleep(5)
@@ -321,7 +327,7 @@ async def _background_init(app: FastAPI):
         t_weather = time.monotonic()
         try:
             weather_svc = get_weather_service()
-            weather_svc.get_current_weather()
+            await weather_svc.get_current_weather()
             weather_ms = (time.monotonic() - t_weather) * 1000
             logger.info(f"INIT |   Weather cache pre-warmed for {airport_icao}")
             _step(3, "Weather cache", "done", f"METAR/TAF for {airport_icao}", weather_ms)
@@ -465,6 +471,12 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Include routers
 app.include_router(router)
+app.include_router(debug_router)
+app.include_router(baggage_router)
+app.include_router(gse_router)
+app.include_router(weather_router)
+app.include_router(schedule_router)
+app.include_router(airport_router)
 app.include_router(websocket_router)
 app.include_router(prediction_router)
 app.include_router(data_ops_router)

@@ -175,6 +175,7 @@ from src.ingestion._taxi_routing import (  # noqa: F401
 )
 
 from src.ingestion._flight_lifecycle import (  # noqa: F401
+    _current_weather,
     set_calibration_gate_minutes,
     set_calibration_taxi_out,
     set_calibration_taxi_in,

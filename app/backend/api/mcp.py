@@ -467,7 +467,7 @@ async def _execute_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, 
     elif tool_name == "get_weather":
         from app.backend.services.weather_service import get_weather_service
         service = get_weather_service()
-        result = service.get_current_weather()
+        result = await service.get_current_weather()
         return result.model_dump(mode="json")
 
     elif tool_name == "get_delay_predictions":
@@ -571,7 +571,7 @@ async def _execute_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, 
 
     elif tool_name == "list_airports":
         from app.backend.services.airport_config_service import get_airport_config_service
-        from app.backend.api.routes import WELL_KNOWN_AIRPORT_INFO
+        from app.backend.api.routes_airport import WELL_KNOWN_AIRPORT_INFO
         service = get_airport_config_service()
         persisted = service.list_persisted_airports()
         persisted_codes = {a.get("icao_code", a.get("icaoCode", "")).upper() for a in persisted}

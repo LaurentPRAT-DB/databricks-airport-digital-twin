@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.backend.api.routes import _compute_center_from_config
+from app.backend.api.routes_airport import _compute_center_from_config
 
 
 class TestComputeCenterFromConfig:

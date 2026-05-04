@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 
 from app.backend.main import app
-from app.backend.api.routes import _slim_config
+from app.backend.api.routes_airport import _slim_config
 
 
 # =============================================================================
@@ -303,7 +303,7 @@ class TestAirportConfigSlimmed:
     def client(self):
         return TestClient(app)
 
-    @patch("app.backend.api.routes.get_airport_config_service")
+    @patch("app.backend.api.routes_airport.get_airport_config_service")
     def test_config_endpoint_strips_tags(self, mock_svc, client):
         service = MagicMock()
         service.get_config.return_value = {

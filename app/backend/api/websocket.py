@@ -154,6 +154,16 @@ class FlightBroadcaster:
             except Exception:
                 pass
 
+            # Skip fetching while an airport switch is in progress —
+            # coordinates are mid-update and would return stale data.
+            try:
+                from app.backend.api.routes_airport import _activation_lock
+                if _activation_lock.locked():
+                    await asyncio.sleep(interval)
+                    continue
+            except Exception:
+                pass
+
             try:
                 if self._mode == "live":
                     flights_dicts, timestamp = await self._fetch_opensky_flights()
