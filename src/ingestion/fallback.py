@@ -1,43 +1,19 @@
-"""Synthetic flight data generator with realistic stateful movements.
+"""Backward-compatible re-export facade + airport geometry.
 
-Generates persistent flight states with realistic behaviors:
-- Landing approach and touchdown with proper separation
-- Taxi from runway to gate
-- Parked at gate
-- Pushback and taxi to runway
-- Takeoff and departure climb
+All externally-imported symbols are re-exported from their canonical sub-modules.
+Import from here continues to work; new code should import from sub-modules directly.
 
-Aircraft Separation Standards (FAA/ICAO):
-- Approach: 3-6 NM minimum depending on wake turbulence category
-- Runway: Only one aircraft at a time
-- Taxi: ~150-300 ft minimum visual separation
-- Gate: Aircraft dimensions + safety buffer
+Airport geometry (coordinates, gates, offset functions) remains here because
+the mutable variables are reassigned via `global` within the same module.
 """
 
 import logging
 import math
-import random
-import threading
-import time
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any, Optional, Set
-from dataclasses import dataclass, field
-from enum import Enum
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-from src.simulation.diagnostics import diag_log
-
-from src.simulation.openap_profiles import (
-    get_descent_profile,
-    get_climb_profile,
-    interpolate_profile,
-)
-from faker import Faker
-
-from src.ml.gse_model import get_turnaround_timing, get_aircraft_category, PHASE_DEPENDENCIES
-
-from src.ingestion._state import (  # noqa: F401 — re-exported for backward compatibility
+from src.ingestion._state import (  # noqa: F401
     FlightPhase,
     FlightState,
     _FlightStateDict,
@@ -57,7 +33,7 @@ from src.ingestion._state import (  # noqa: F401 — re-exported for backward co
     _gate_states,
 )
 
-from src.ingestion._event_buffers import (  # noqa: F401 — re-exported for backward compatibility
+from src.ingestion._event_buffers import (  # noqa: F401
     emit_phase_transition,
     emit_gate_event,
     emit_prediction,
@@ -69,7 +45,7 @@ from src.ingestion._event_buffers import (  # noqa: F401 — re-exported for bac
     set_suppress_phase_transitions,
 )
 
-from src.ingestion._geo import (  # noqa: F401 — re-exported for backward compatibility
+from src.ingestion._geo import (  # noqa: F401
     _sanitize_float,
     _shortest_angle_diff,
     _calculate_heading,
@@ -86,7 +62,7 @@ from src.ingestion._geo import (  # noqa: F401 — re-exported for backward comp
     _point_in_polygon,
 )
 
-from src.ingestion._constants import (  # noqa: F401 — re-exported for backward compatibility
+from src.ingestion._constants import (  # noqa: F401
     AIRLINE_TURNAROUND_FACTOR,
     _DEFAULT_AIRLINE_FACTOR,
     _AIRLINE_NAMES,
@@ -130,7 +106,7 @@ from src.ingestion._constants import (  # noqa: F401 — re-exported for backwar
     MAX_OVERFLOW_STANDS,
 )
 
-from src.ingestion._runway_ops import (  # noqa: F401 — re-exported for backward compatibility
+from src.ingestion._runway_ops import (  # noqa: F401
     _get_runway_state,
     _get_reciprocal_designator,
     _get_departure_runway_name,
@@ -158,7 +134,7 @@ from src.ingestion._runway_ops import (  # noqa: F401 — re-exported for backwa
     _get_approach_queue_position,
 )
 
-from src.ingestion._approach_departure import (  # noqa: F401 — re-exported for backward compatibility
+from src.ingestion._approach_departure import (  # noqa: F401
     _get_airport_coordinates,
     _bearing_cache,
     _bearing_from_airport,
@@ -180,7 +156,7 @@ from src.ingestion._approach_departure import (  # noqa: F401 — re-exported fo
     _snap_to_nearest_waypoint,
 )
 
-from src.ingestion._taxi_routing import (  # noqa: F401 — re-exported for backward compatibility
+from src.ingestion._taxi_routing import (  # noqa: F401
     _compute_taxiway_line,
     _project_onto_line,
     _t_on_line,
@@ -197,16 +173,6 @@ from src.ingestion._taxi_routing import (  # noqa: F401 — re-exported for back
     _compute_gate_standoff,
     _get_parked_heading,
 )
-
-
-fake = Faker()
-
-
-# (_sanitize_float now imported from _geo)
-
-
-# (AIRLINE_TURNAROUND_FACTOR, _DEFAULT_AIRLINE_FACTOR now imported from _constants)
-
 
 from src.ingestion._flight_lifecycle import (  # noqa: F401
     set_calibration_gate_minutes,
@@ -245,23 +211,15 @@ from src.ingestion._generation import (  # noqa: F401
 
 
 # ============================================================================
-# AIRPORT GEOMETRY - SFO Coordinates (aligned with frontend maps)
+# AIRPORT GEOMETRY
 # ============================================================================
-# These coordinates MUST match the frontend definitions in:
+# Coordinates MUST match frontend definitions in:
 # - app/frontend/src/constants/airportLayout.ts (2D map)
 # - app/frontend/src/constants/airport3D.ts (3D scene)
-#
-# Coordinate system reference:
-# - 2D Map: Direct lat/lon (GeoJSON/Leaflet)
-# - 3D Map: Converted via latLonTo3D() with center (37.6213, -122.379), scale 10000
-# ============================================================================
 
-# Airport center — dynamic, updated when airport switches
-# Default is SFO (matches frontend DEFAULT_CENTER_LAT/LON)
 _airport_center = (37.6213, -122.379)
 _current_airport_iata = "SFO"
 
-# Keep the constant for backward compatibility in tests
 AIRPORT_CENTER = (37.6213, -122.379)
 
 
@@ -276,99 +234,64 @@ def get_current_airport_iata() -> str:
 
 
 def set_airport_center(lat: float, lon: float, iata: str = "SFO") -> None:
-    """Set the current airport center for synthetic flight generation.
-
-    Called when the user switches airports. Updates the center used for
-    spawning flights, generating trajectories, and computing bearings.
-    """
+    """Set the current airport center for synthetic flight generation."""
     global _airport_center, _current_airport_iata
     _airport_center = (lat, lon)
     _current_airport_iata = iata
 
-# Real SFO runway endpoints from FAA Airport/Facility Directory
-# These match the frontend airportLayout.ts polygon coordinates
-# 4 runways: 28L/10R, 28R/10L (parallel E-W), 01L/19R, 01R/19L (crosswind N-S)
 
-# Runway 28L/10R - 11,381 ft (south parallel, extends into bay)
-# Primary landing runway for arrivals from the east
-RUNWAY_28L_THRESHOLD = (-122.358349, 37.611712)   # 28L threshold (west end, touchdown)
-RUNWAY_10R_THRESHOLD = (-122.393105, 37.626291)   # 10R threshold (east end)
+# Runway thresholds (lon, lat) — FAA Airport/Facility Directory
+RUNWAY_28L_THRESHOLD = (-122.358349, 37.611712)
+RUNWAY_10R_THRESHOLD = (-122.393105, 37.626291)
+RUNWAY_28R_THRESHOLD = (-122.357141, 37.613534)
+RUNWAY_10L_THRESHOLD = (-122.393392, 37.628739)
+RUNWAY_01L_THRESHOLD = (-122.381929, 37.607898)
+RUNWAY_19R_THRESHOLD = (-122.369609, 37.626481)
+RUNWAY_01R_THRESHOLD = (-122.380041, 37.606330)
+RUNWAY_19L_THRESHOLD = (-122.366111, 37.627342)
 
-# Runway 28R/10L - 11,870 ft (north parallel, extends into bay)
-# Primary departure runway
-RUNWAY_28R_THRESHOLD = (-122.357141, 37.613534)   # 28R threshold (west end)
-RUNWAY_10L_THRESHOLD = (-122.393392, 37.628739)   # 10L threshold (east end)
-
-# Runway 01L/19R - 7,650 ft (west crosswind)
-RUNWAY_01L_THRESHOLD = (-122.381929, 37.607898)   # 01L threshold (south end)
-RUNWAY_19R_THRESHOLD = (-122.369609, 37.626481)   # 19R threshold (north end)
-
-# Runway 01R/19L - 8,650 ft (east crosswind)
-RUNWAY_01R_THRESHOLD = (-122.380041, 37.606330)   # 01R threshold (south end)
-RUNWAY_19L_THRESHOLD = (-122.366111, 37.627342)   # 19L threshold (north end)
-
-# Legacy aliases for backward compatibility
+# Legacy aliases
 RUNWAY_28L_WEST = RUNWAY_28L_THRESHOLD
 RUNWAY_28L_EAST = RUNWAY_10R_THRESHOLD
 RUNWAY_28R_WEST = RUNWAY_28R_THRESHOLD
 RUNWAY_28R_EAST = RUNWAY_10L_THRESHOLD
 
-# Terminal area - International Terminal (southwest area of airport)
-# Matches frontend airportLayout.ts terminal polygon
 TERMINAL_CENTER = (37.615, -122.391)
 
-# Gate positions - MUST match frontend airportLayout.ts GATE_POSITIONS
-# These are the actual gate locations used in both 2D and 3D visualization
-# NOTE: This is the fallback when no OSM data is imported
 _DEFAULT_GATES = {
-    # International Terminal - Boarding Area G
-    "G1": (37.6145, -122.3955),  # Wide-body capable
+    "G1": (37.6145, -122.3955),
     "G2": (37.6140, -122.3945),
     "G3": (37.6135, -122.3935),
     "G4": (37.6130, -122.3925),
-    # International Terminal - Boarding Area A
-    "A1": (37.6155, -122.3900),  # Wide-body capable
+    "A1": (37.6155, -122.3900),
     "A2": (37.6150, -122.3890),
     "A3": (37.6145, -122.3880),
-    # Domestic Terminal 1 - Boarding Area B
     "B1": (37.6165, -122.3850),
     "B2": (37.6160, -122.3840),
     "B3": (37.6155, -122.3830),
     "B4": (37.6150, -122.3820),
-    # Domestic Terminal 2 - Boarding Area C
     "C1": (37.6175, -122.3800),
     "C2": (37.6170, -122.3790),
     "C3": (37.6165, -122.3780),
-    # Domestic Terminal 3 - Boarding Area E
     "E1": (37.6180, -122.3760),
     "E2": (37.6175, -122.3750),
     "E3": (37.6170, -122.3740),
-    # Domestic Terminal 3 - Boarding Area F
     "F1": (37.6185, -122.3720),
     "F2": (37.6180, -122.3710),
     "F3": (37.6175, -122.3700),
 }
 
-# Cache for dynamically loaded gates
 _loaded_gates: Optional[Dict[str, tuple]] = None
-
-# Minimum gates to avoid constant saturation with moderate flight counts
-# (MIN_GATES_FOR_OPERATIONS, MAX_OVERFLOW_STANDS now imported from _constants)
 
 
 def _generate_default_gates_around_center(center: tuple, count: int = 20) -> Dict[str, tuple]:
-    """Generate default gate positions around the airport center.
-
-    Creates a realistic terminal-like layout with gates arranged in two
-    concourses north of the airport center, each with gates on both sides.
-    """
+    """Generate default gate positions in two concourses north of center."""
     lat, lon = center[0], center[1]
     gates: Dict[str, tuple] = {}
     cos_lat = max(math.cos(math.radians(lat)), 0.01)
 
-    # Two concourses: A (northwest of center) and B (northeast of center)
-    concourse_offset_lat = 0.002  # ~220m north of center
-    concourse_spacing_lon = 0.002 / cos_lat  # ~220m between concourses
+    concourse_offset_lat = 0.002
+    concourse_spacing_lon = 0.002 / cos_lat
 
     prefixes = ["A", "B"]
     for ci, prefix in enumerate(prefixes):
@@ -387,20 +310,15 @@ def _generate_default_gates_around_center(center: tuple, count: int = 20) -> Dic
 
 
 def _generate_overflow_stands(existing_gates: Dict[str, tuple], count: int) -> Dict[str, tuple]:
-    """Generate overflow remote parking positions near the airport apron.
-
-    Places stands in a line south of the terminal area, spaced ~100m apart.
-    These serve as remote parking when all terminal gates are occupied.
-    """
+    """Generate overflow remote parking positions south of terminal area."""
     center = get_airport_center()
     stands = {}
-    # Place overflow stands south of terminal area
-    base_lat = center[0] - 0.005  # ~500m south of center
+    base_lat = center[0] - 0.005
     base_lon = center[1]
-    spacing = 0.001  # ~100m between stands
+    spacing = 0.001
 
     for i in range(min(count, MAX_OVERFLOW_STANDS)):
-        ref = f"R{i+1}"  # R for "Remote"
+        ref = f"R{i+1}"
         if ref not in existing_gates:
             stands[ref] = (base_lat, base_lon + (i - count / 2) * spacing)
 
@@ -408,16 +326,7 @@ def _generate_overflow_stands(existing_gates: Dict[str, tuple], count: int) -> D
 
 
 def get_gates() -> Dict[str, tuple]:
-    """
-    Get gate positions, preferring imported OSM data over defaults.
-
-    Only caches the result once the airport config service reports ready,
-    preventing early calls from permanently locking in a partial gate set.
-    Generates overflow remote stands if total gates are below the minimum.
-
-    Returns:
-        Dictionary mapping gate refs to (latitude, longitude) tuples
-    """
+    """Get gate positions, preferring imported OSM data over defaults."""
     global _loaded_gates
 
     if _loaded_gates is not None:
@@ -425,7 +334,6 @@ def get_gates() -> Dict[str, tuple]:
 
     gates = None
 
-    # Try to load from airport config service
     try:
         from app.backend.services.airport_config_service import get_airport_config_service
         service = get_airport_config_service()
@@ -440,7 +348,6 @@ def get_gates() -> Dict[str, tuple]:
                 lat = geo.get("latitude")
                 lon = geo.get("longitude")
                 if ref and lat and lon:
-                    # Validate gate ID: reject malformed refs
                     ref_str = str(ref)
                     numeric_part = "".join(c for c in ref_str if c.isdigit())
                     if numeric_part and int(numeric_part) > 200:
@@ -451,8 +358,7 @@ def get_gates() -> Dict[str, tuple]:
             if not gates:
                 gates = None
             elif service.config_ready:
-                # Only cache when config is fully loaded
-                pass  # Will cache below after overflow check
+                pass
     except ImportError:
         pass
     except Exception:
@@ -465,12 +371,10 @@ def get_gates() -> Dict[str, tuple]:
         else:
             gates = _generate_default_gates_around_center(get_airport_center())
 
-    # Add overflow stands if total gates are below the minimum
     if len(gates) < MIN_GATES_FOR_OPERATIONS:
         overflow = _generate_overflow_stands(gates, MIN_GATES_FOR_OPERATIONS - len(gates))
         gates.update(overflow)
 
-    # Cache only when service is ready
     try:
         from app.backend.services.airport_config_service import get_airport_config_service
         service = get_airport_config_service()
@@ -483,142 +387,76 @@ def get_gates() -> Dict[str, tuple]:
 
 
 def reload_gates() -> Dict[str, tuple]:
-    """
-    Force reload of gates from airport config service.
-
-    Call this after importing new OSM data to refresh the gate positions.
-    Also invalidates the FIDS schedule cache so schedules regenerate with
-    the new airport's gate names.
-
-    Returns:
-        Updated dictionary mapping gate refs to (latitude, longitude) tuples
-    """
-    global _loaded_gates, _flight_states
+    """Force reload of gates from airport config service."""
+    global _loaded_gates
     _loaded_gates = None
     gates = get_gates()
-    # Reset gate states and flight states to use new gates
     _reset_gate_states()
-    _flight_states.clear()  # Clear flights so they regenerate with new gates
-    # Invalidate FIDS schedule cache so it regenerates with the correct gates
+    _flight_states.clear()
     from src.ingestion.schedule_generator import invalidate_schedule_cache
     invalidate_schedule_cache()
     return gates
 
 
-# Backward compatibility: GATES is now a function call result
-# Code using GATES directly will get the default gates
 GATES = _DEFAULT_GATES
 
 # ============================================================================
-# TAXIWAY WAYPOINTS
+# TAXIWAY WAYPOINTS — fallback when OSM graph not available
 # ============================================================================
-# Routes from runways to gates, aligned with frontend taxiway definitions
-# Coordinates follow actual SFO ground movement paths
 
-# Default arrival/departure taxi waypoints — generated at module load from
-# runway thresholds and terminal center.  These are the fallback when OSM
-# taxiway graph is not available AND no gate ref is provided.
-# Overwritten by apply_airport_offset() for non-SFO airports.
 TAXI_WAYPOINTS_ARRIVAL = [
-    (-122.370, 37.615),    # High-speed exit from 28L (midpoint rollout)
-    (-122.378, 37.616),    # Taxiway intersection
-    (-122.385, 37.617),    # Turn toward terminal complex
-    (-122.390, 37.616),    # Terminal apron entry
+    (-122.370, 37.615),
+    (-122.378, 37.616),
+    (-122.385, 37.617),
+    (-122.390, 37.616),
 ]
 
 TAXI_WAYPOINTS_DEPARTURE = [
-    (-122.390, 37.616),    # Leave terminal apron
-    (-122.385, 37.618),    # Taxiway junction
-    (-122.378, 37.620),    # Join main taxiway
-    (-122.370, 37.622),    # Hold short departure runway
-    (-122.360, 37.614),    # Runway entry point
+    (-122.390, 37.616),
+    (-122.385, 37.618),
+    (-122.378, 37.620),
+    (-122.370, 37.622),
+    (-122.360, 37.614),
 ]
 
-
-
-# (Geometry-derived taxi routing: _compute_taxiway_line, _project_onto_line,
-#  _t_on_line, _generate_taxi_spine, _smooth_sharp_turns now imported from _taxi_routing)
-
-
-# (_get_arrival_runway_endpoints, _get_departure_runway_endpoints
-#  now imported from _approach_departure)
-
-
-
-# (get_terminal_center, _build_arrival_taxi_route, _build_departure_taxi_route
-#  now imported from _taxi_routing)
-
-
 # ============================================================================
-# ILS APPROACH PATH - Runway 28L
+# ILS APPROACH / DEPARTURE PATHS — SFO default (shifted by apply_airport_offset)
 # ============================================================================
-# Standard ILS approach from the east over San Francisco Bay
-# Runway 28L heading: 284° magnetic (298° true)
-# 28L threshold: 37.611712, -122.358349
-#
-# Approach path angles align aircraft with the extended runway centerline
-# The approach course passes over the bay, descending from 6000ft to touchdown
 
-# Calculate approach path aligned with runway centerline
-# Runway centerline vector: from 28L threshold toward 10R threshold
 _RWY_28L_LAT = 37.611712
 _RWY_28L_LON = -122.358349
 _RWY_10R_LAT = 37.626291
 _RWY_10R_LON = -122.393105
 
-# Approach path extends east from 28L threshold, following the extended centerline
-# Each waypoint: (longitude, latitude, altitude_feet)
 APPROACH_WAYPOINTS = [
-    # Initial approach fix - 15 NM east of threshold (~4770 ft on 3° GS)
     (-122.10, 37.58, 4800),
     (-122.15, 37.588, 3800),
-    # Intermediate fix - 10 NM from threshold (~3180 ft on 3° GS)
     (-122.20, 37.595, 3200),
     (-122.24, 37.600, 2500),
-    # Final approach fix - 5 NM from threshold (~1590 ft on 3° GS)
     (-122.28, 37.605, 1600),
     (-122.30, 37.607, 1300),
-    # Glideslope intercept - 3 NM from threshold (~950 ft on 3° GS)
     (-122.32, 37.608, 950),
     (-122.333, 37.609, 630),
-    # Short final - 1 NM from threshold (~318 ft on 3° GS)
     (-122.345, 37.610, 320),
     (-122.352, 37.6109, 160),
-    # Runway 28L threshold (50 ft TCH per 14 CFR 97.3)
     (_RWY_28L_LON, _RWY_28L_LAT, 50),
 ]
-
-# ============================================================================
-# DEPARTURE PATH - Runway 28R
-# ============================================================================
-# Standard departure from runway 28R (north parallel)
-# Initial climb on runway heading, then turn per SID
 
 _RWY_28R_LAT = 37.613534
 _RWY_28R_LON = -122.357141
 
 DEPARTURE_WAYPOINTS = [
-    # Initial climb - runway 28R just after liftoff (~0.5 NM)
     (_RWY_28R_LON + 0.02, _RWY_28R_LAT, 200),
-    # Climbing runway heading (~2 NM, 284° true)
     (-122.32, 37.608, 1000),
-    # Continue climb over bay (~4 NM)
     (-122.28, 37.60, 2000),
-    # Departure fix - climbing to cruise (~10 NM)
     (-122.20, 37.58, 5000),
-    # Enroute - over the bay (~15 NM)
     (-122.10, 37.55, 8000),
 ]
 
 # ============================================================================
 # AIRPORT OFFSET — shift SFO coordinates to target airport
 # ============================================================================
-# In standalone CLI mode (no OSM data), all coordinates are SFO-based.
-# apply_airport_offset() shifts them to center on any target airport.
 
-# (_SFO_CENTER now imported from _constants)
-
-# Save originals for reset
 _ORIG_DEFAULT_GATES = dict(_DEFAULT_GATES)
 _ORIG_RUNWAY_28L_THRESHOLD = RUNWAY_28L_THRESHOLD
 _ORIG_RUNWAY_10R_THRESHOLD = RUNWAY_10R_THRESHOLD
@@ -642,12 +480,7 @@ _ORIG_RWY_10R_LON = _RWY_10R_LON
 
 
 def apply_airport_offset(target_lat: float, target_lon: float) -> None:
-    """Offset all hardcoded SFO coordinates to center on the target airport.
-
-    Called by the simulation engine for non-SFO airports in standalone mode
-    (no OSM data available). Preserves the realistic relative layout (gate
-    spacing, runway angles, taxi routing) while centering at the target airport.
-    """
+    """Offset all hardcoded SFO coordinates to center on the target airport."""
     global _DEFAULT_GATES, GATES
     global RUNWAY_28L_THRESHOLD, RUNWAY_10R_THRESHOLD
     global RUNWAY_28R_THRESHOLD, RUNWAY_10L_THRESHOLD
@@ -663,11 +496,9 @@ def apply_airport_offset(target_lat: float, target_lon: float) -> None:
     lat_off = target_lat - _SFO_CENTER[0]
     lon_off = target_lon - _SFO_CENTER[1]
 
-    # Gates: {ref: (lat, lon)}
     _DEFAULT_GATES = {k: (v[0] + lat_off, v[1] + lon_off) for k, v in _ORIG_DEFAULT_GATES.items()}
     GATES = _DEFAULT_GATES
 
-    # Runways: (lon, lat)
     RUNWAY_28L_THRESHOLD = (_ORIG_RUNWAY_28L_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_28L_THRESHOLD[1] + lat_off)
     RUNWAY_10R_THRESHOLD = (_ORIG_RUNWAY_10R_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_10R_THRESHOLD[1] + lat_off)
     RUNWAY_28R_THRESHOLD = (_ORIG_RUNWAY_28R_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_28R_THRESHOLD[1] + lat_off)
@@ -677,24 +508,19 @@ def apply_airport_offset(target_lat: float, target_lon: float) -> None:
     RUNWAY_01R_THRESHOLD = (_ORIG_RUNWAY_01R_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_01R_THRESHOLD[1] + lat_off)
     RUNWAY_19L_THRESHOLD = (_ORIG_RUNWAY_19L_THRESHOLD[0] + lon_off, _ORIG_RUNWAY_19L_THRESHOLD[1] + lat_off)
 
-    # Legacy aliases
     RUNWAY_28L_WEST = RUNWAY_28L_THRESHOLD
     RUNWAY_28L_EAST = RUNWAY_10R_THRESHOLD
     RUNWAY_28R_WEST = RUNWAY_28R_THRESHOLD
     RUNWAY_28R_EAST = RUNWAY_10L_THRESHOLD
 
-    # Terminal center: (lat, lon)
     TERMINAL_CENTER = (_ORIG_TERMINAL_CENTER[0] + lat_off, _ORIG_TERMINAL_CENTER[1] + lon_off)
 
-    # Taxi waypoints: [(lon, lat), ...]
     TAXI_WAYPOINTS_ARRIVAL = [(wp[0] + lon_off, wp[1] + lat_off) for wp in _ORIG_TAXI_WAYPOINTS_ARRIVAL]
     TAXI_WAYPOINTS_DEPARTURE = [(wp[0] + lon_off, wp[1] + lat_off) for wp in _ORIG_TAXI_WAYPOINTS_DEPARTURE]
 
-    # Approach/departure: [(lon, lat, alt), ...]
     APPROACH_WAYPOINTS = [(wp[0] + lon_off, wp[1] + lat_off, wp[2]) for wp in _ORIG_APPROACH_WAYPOINTS]
     DEPARTURE_WAYPOINTS = [(wp[0] + lon_off, wp[1] + lat_off, wp[2]) for wp in _ORIG_DEPARTURE_WAYPOINTS]
 
-    # Individual runway coordinate floats
     _RWY_28L_LAT = _ORIG_RWY_28L_LAT + lat_off
     _RWY_28L_LON = _ORIG_RWY_28L_LON + lon_off
     _RWY_28R_LAT = _ORIG_RWY_28R_LAT + lat_off
@@ -704,10 +530,7 @@ def apply_airport_offset(target_lat: float, target_lon: float) -> None:
 
 
 def reset_airport_offset() -> None:
-    """Restore all coordinates to their original SFO values.
-
-    Called for test isolation and when switching back to SFO.
-    """
+    """Restore all coordinates to their original SFO values."""
     global _DEFAULT_GATES, GATES
     global RUNWAY_28L_THRESHOLD, RUNWAY_10R_THRESHOLD
     global RUNWAY_28R_THRESHOLD, RUNWAY_10L_THRESHOLD
@@ -745,4 +568,3 @@ def reset_airport_offset() -> None:
     _RWY_28R_LON = _ORIG_RWY_28R_LON
     _RWY_10R_LAT = _ORIG_RWY_10R_LAT
     _RWY_10R_LON = _ORIG_RWY_10R_LON
-
