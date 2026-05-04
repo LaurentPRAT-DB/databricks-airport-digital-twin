@@ -221,7 +221,7 @@ class TestDepartureWaypointsDestination:
         )
         _flight_states["test_dep"] = flight
 
-        with patch("src.ingestion.fallback._get_departure_waypoints") as mock_dep_wps:
+        with patch("src.ingestion._flight_lifecycle._get_departure_waypoints") as mock_dep_wps:
             mock_dep_wps.return_value = [(-122.35, 37.61, 2000)]
             _update_flight_state(flight, 1.0)
             mock_dep_wps.assert_called_with("JFK")

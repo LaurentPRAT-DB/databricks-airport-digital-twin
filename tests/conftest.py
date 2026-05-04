@@ -34,6 +34,9 @@ def _provide_osm_runway_data():
     ), patch(
         "src.ingestion.fallback._get_osm_primary_runway",
         return_value=_SFO_RWY_28L_OSM,
+    ), patch(
+        "src.ingestion._generation._get_osm_primary_runway",
+        return_value=_SFO_RWY_28L_OSM,
     ):
         yield
 
