@@ -297,7 +297,7 @@ class TestDepartureUsesGraph:
 class TestPushbackHeading:
     """Pushback heading = reverse of parked heading (nose away from terminal)."""
 
-    @patch("src.ingestion.fallback._get_parked_heading", return_value=0.0)
+    @patch("src.ingestion._taxi_routing._get_parked_heading", return_value=0.0)
     @patch("src.ingestion.fallback.get_gates")
     def test_pushback_reverses_north_parked(self, mock_get_gates, mock_parked):
         """Aircraft parked facing north → pushback heads south (~180°)."""
@@ -305,7 +305,7 @@ class TestPushbackHeading:
         heading = _get_pushback_heading("G1")
         assert heading == 180.0
 
-    @patch("src.ingestion.fallback._get_parked_heading", return_value=90.0)
+    @patch("src.ingestion._taxi_routing._get_parked_heading", return_value=90.0)
     @patch("src.ingestion.fallback.get_gates")
     def test_pushback_reverses_east_parked(self, mock_get_gates, mock_parked):
         """Aircraft parked facing east → pushback heads west (~270°)."""
@@ -313,7 +313,7 @@ class TestPushbackHeading:
         heading = _get_pushback_heading("G1")
         assert heading == 270.0
 
-    @patch("src.ingestion.fallback._get_parked_heading", return_value=220.0)
+    @patch("src.ingestion._taxi_routing._get_parked_heading", return_value=220.0)
     @patch("src.ingestion.fallback.get_gates")
     def test_pushback_reverses_southwest_parked(self, mock_get_gates, mock_parked):
         """Aircraft parked facing SW (220°) → pushback heads NE (40°)."""
