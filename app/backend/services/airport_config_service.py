@@ -6,6 +6,7 @@ Coordinates between format parsers and the configuration cache.
 Supports persistence to Unity Catalog tables for fast loading.
 """
 
+import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -75,6 +76,20 @@ class AirportConfigService:
         except Exception as e:
             logger.warning("Failed to build taxiway graph: %s", e)
             self._taxiway_graph = None
+
+    def _compute_center_from_config(self) -> tuple[float | None, float | None]:
+        """Derive airport center lat/lon from gate or terminal geometry."""
+        lats, lons = [], []
+        for item in self._current_config.get("gates", []) + self._current_config.get("terminals", []):
+            geo = item.get("geo", {}) if isinstance(item, dict) else {}
+            lat = geo.get("latitude")
+            lon = geo.get("longitude")
+            if lat is not None and lon is not None:
+                lats.append(float(lat))
+                lons.append(float(lon))
+        if not lats:
+            return None, None
+        return sum(lats) / len(lats), sum(lons) / len(lons)
 
     def set_reference_point(self, lat: float, lon: float, alt: float = 0.0) -> None:
         """
@@ -611,6 +626,25 @@ class AirportConfigService:
             return "lakebase_cache"
         logger.info(f"[DIAG] Tier 1 MISS in {time.monotonic() - t0:.3f}s")
 
+        # Tier 1.5: Local file cache (fast dev restarts)
+        local_cache = Path(f"data/cache/airport_{icao_code}.json")
+        if local_cache.exists():
+            t_local = time.monotonic()
+            try:
+                cached = json.loads(local_cache.read_text())
+                self._current_config = cached
+                self._config_ready = True
+                # Derive center from actual geometry (more reliable than stored reference)
+                center_lat, center_lon = self._compute_center_from_config()
+                if center_lat and center_lon:
+                    self.set_reference_point(center_lat, center_lon)
+                elif "reference_lat" in cached and "reference_lon" in cached:
+                    self.set_reference_point(cached["reference_lat"], cached["reference_lon"])
+                logger.info(f"[DIAG] Tier 1.5 local cache HIT in {time.monotonic() - t_local:.3f}s")
+                return "local_cache"
+            except Exception as e:
+                logger.warning(f"[DIAG] Tier 1.5 local cache read failed: {e}")
+
         # Tier 2: Unity Catalog (SQL Warehouse)
         t1 = time.monotonic()
         logger.info(f"Tier 2: Trying Unity Catalog for {icao_code}...")
@@ -650,6 +684,22 @@ class AirportConfigService:
 
                 osm_elapsed = time.monotonic() - t2
                 logger.info(f"[DIAG] Tier 3 OSM fetch done in {osm_elapsed:.3f}s")
+
+                # Update reference point from actual geometry
+                center_lat, center_lon = self._compute_center_from_config()
+                if center_lat and center_lon:
+                    self.set_reference_point(center_lat, center_lon)
+
+                # Save to local file cache for fast dev restarts
+                try:
+                    local_cache.parent.mkdir(parents=True, exist_ok=True)
+                    cache_data = dict(self._current_config)
+                    cache_data["reference_lat"] = self._converter.reference_lat
+                    cache_data["reference_lon"] = self._converter.reference_lon
+                    local_cache.write_text(json.dumps(cache_data, default=str))
+                    logger.info(f"[DIAG] Saved local cache for {icao_code}")
+                except Exception as e:
+                    logger.warning(f"[DIAG] Failed to save local cache: {e}")
 
                 # Persist to both Unity Catalog and Lakebase cache
                 t_persist = time.monotonic()

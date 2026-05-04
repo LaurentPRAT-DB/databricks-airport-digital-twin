@@ -618,7 +618,7 @@ async def generate_report_from_data(
             ws = get_weather_service()
             airport = body.config.get("airport", "")
             if airport:
-                weather_resp = ws.get_current_weather(airport)
+                weather_resp = await ws.get_current_weather(airport)
                 if weather_resp and weather_resp.metar:
                     m = weather_resp.metar
                     ceiling = None

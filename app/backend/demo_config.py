@@ -10,9 +10,30 @@ Environment variables:
 """
 
 import os
+from pathlib import Path
 
 DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "yes")
-DEFAULT_AIRPORT_ICAO: str = os.getenv("DEMO_DEFAULT_AIRPORT", "KSFO")
+
+_LAST_AIRPORT_FILE = Path("data/cache/last_airport.txt")
+
+def _read_last_airport() -> str:
+    try:
+        if _LAST_AIRPORT_FILE.exists():
+            icao = _LAST_AIRPORT_FILE.read_text().strip().upper()
+            if 3 <= len(icao) <= 4 and icao.isalnum():
+                return icao
+    except Exception:
+        pass
+    return os.getenv("DEMO_DEFAULT_AIRPORT", "KSFO")
+
+def save_last_airport(icao: str) -> None:
+    try:
+        _LAST_AIRPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _LAST_AIRPORT_FILE.write_text(icao)
+    except Exception:
+        pass
+
+DEFAULT_AIRPORT_ICAO: str = _read_last_airport()
 try:
     DEFAULT_FLIGHT_COUNT: int = int(os.getenv("DEMO_FLIGHT_COUNT", "100"))
 except (ValueError, TypeError):

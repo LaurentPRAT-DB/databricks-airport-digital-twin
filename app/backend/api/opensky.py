@@ -1,9 +1,13 @@
 """OpenSky Network API endpoints for live ADS-B flight data and recorded replays."""
 
+import asyncio
+import json
 import logging
 import os
 import threading
-from datetime import datetime
+import time as wall_time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -58,12 +62,12 @@ def _get_airport_center(target_icao: str | None = None) -> tuple[float, float]:
 
 
 @opensky_router.get("/flights")
-async def get_opensky_flights() -> dict:
+async def get_opensky_flights(airport: str | None = None) -> dict:
     """Fetch live flights from OpenSky Network for the current airport.
 
     Returns flights in the same schema as /api/flights for easy frontend consumption.
     """
-    lat, lon = _get_airport_center()
+    lat, lon = _get_airport_center(airport)
     opensky = get_opensky_service()
     flights = await opensky.fetch_flights(lat, lon)
 
@@ -192,6 +196,7 @@ async def opensky_diagnostic() -> dict:
 _UC_CATALOG = os.getenv("DATABRICKS_CATALOG", "serverless_stable_3n0ihb_catalog")
 _UC_SCHEMA = os.getenv("DATABRICKS_SCHEMA", "airport_digital_twin")
 _RECORDINGS_TABLE = f"{_UC_CATALOG}.{_UC_SCHEMA}.opensky_states_raw"
+_RECORDING_DIR = Path("data/opensky_raw")
 
 
 def _get_delta_connection():
@@ -681,6 +686,116 @@ def _weather_snapshots_to_scenario_events(weather_snapshots: list[dict]) -> list
     return events
 
 
+# ---------------------------------------------------------------------------
+# Local JSONL recordings (list + replay)
+# NOTE: These routes MUST be defined before /recordings/{airport_icao}/{date}
+# so FastAPI doesn't match "local" as an airport_icao parameter.
+# ---------------------------------------------------------------------------
+
+def _scan_local_recordings() -> list[dict]:
+    """Scan data/opensky_raw/ for JSONL recording files."""
+    if not _RECORDING_DIR.exists():
+        return []
+    results = []
+    for p in sorted(_RECORDING_DIR.glob("*.jsonl"), reverse=True):
+        parts = p.stem.split("_", 1)
+        airport = parts[0] if len(parts) >= 2 else "UNKN"
+        ts_str = parts[1] if len(parts) >= 2 else p.stem
+        line_count = sum(1 for _ in open(p, encoding="utf-8"))  # noqa: SIM115
+        results.append({
+            "filename": p.name,
+            "airport_icao": airport,
+            "timestamp": ts_str,
+            "state_count": line_count,
+            "size_bytes": p.stat().st_size,
+            "data_source": "local",
+        })
+    return results
+
+
+@opensky_router.get("/recordings/local")
+async def list_local_recordings():
+    return _scan_local_recordings()
+
+
+@opensky_router.get("/recordings/local/{filename}")
+async def load_local_recording(filename: str):
+    """Load a local JSONL recording and return replay-compatible frames."""
+    filepath = _RECORDING_DIR / filename
+    if not filepath.exists() or not filepath.suffix == ".jsonl":
+        raise HTTPException(404, f"Recording not found: {filename}")
+
+    rows: list[dict] = []
+    with open(filepath, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+
+    if not rows:
+        raise HTTPException(404, "Recording is empty")
+
+    parts = filepath.stem.split("_", 1)
+    airport = parts[0] if len(parts) >= 2 else "UNKN"
+    date = parts[1] if len(parts) >= 2 else "unknown"
+
+    frames: dict[str, list[dict]] = {}
+    unique_aircraft: set[str] = set()
+    for r in rows:
+        ct = r.get("collection_time", "")
+        icao24 = r.get("icao24", "")
+        unique_aircraft.add(icao24)
+
+        lat = r.get("lat")
+        lon = r.get("lon")
+        alt_m = r.get("baro_altitude")
+        vel_ms = r.get("velocity")
+        vr_ms = r.get("vertical_rate")
+
+        state = {
+            "icao24": icao24,
+            "callsign": r.get("callsign", ""),
+            "latitude": lat,
+            "longitude": lon,
+            "altitude": round(alt_m * M_TO_FT) if alt_m is not None else None,
+            "speed": round(vel_ms * MS_TO_KTS) if vel_ms is not None else None,
+            "heading": r.get("true_track"),
+            "vertical_rate": round(vr_ms * MS_TO_FTMIN) if vr_ms is not None else None,
+            "on_ground": r.get("on_ground", False),
+            "flight_phase": determine_flight_phase(
+                alt_m * M_TO_FT if alt_m else 0,
+                vr_ms * MS_TO_FTMIN if vr_ms else 0,
+                r.get("on_ground", False),
+            ),
+        }
+        frames.setdefault(ct, []).append(state)
+
+    sorted_ts = sorted(frames.keys())
+
+    summary = {
+        "total_aircraft": len(unique_aircraft),
+        "total_states": len(rows),
+        "frame_count": len(sorted_ts),
+    }
+
+    return {
+        "config": {"airport": airport, "source": "opensky_recorded_local", "date": date},
+        "summary": summary,
+        "schedule": [],
+        "frames": {t: frames[t] for t in sorted_ts},
+        "frame_timestamps": sorted_ts,
+        "frame_count": len(sorted_ts),
+        "phase_transitions": [],
+        "gate_events": [],
+        "weather_snapshots": [],
+        "scenario_events": [],
+        "time_window": {
+            "start_time": sorted_ts[0] if sorted_ts else None,
+            "end_time": sorted_ts[-1] if sorted_ts else None,
+        },
+    }
+
+
 @opensky_router.get("/recordings/{airport_icao}/{date}")
 async def get_recording_data(airport_icao: str, date: str) -> dict:
     """Load a recorded OpenSky session as frame-based replay data.
@@ -1069,3 +1184,137 @@ async def _load_recording_from_raw(airport: str, date: str) -> dict:
             "end_time": sorted_timestamps[-1] if sorted_timestamps else None,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Live recording
+# ---------------------------------------------------------------------------
+
+
+class _LiveRecorder:
+    """Records live OpenSky snapshots to a local JSONL file."""
+
+    def __init__(self) -> None:
+        self._task: asyncio.Task | None = None
+        self._file: Any = None
+        self._airport: str = ""
+        self._filename: str = ""
+        self._frame_count: int = 0
+        self._aircraft_seen: set[str] = set()
+        self._start_time: float = 0
+        self._lat: float = 0
+        self._lon: float = 0
+
+    @property
+    def is_recording(self) -> bool:
+        return self._task is not None and not self._task.done()
+
+    def status(self) -> dict:
+        if not self.is_recording:
+            return {"recording": False}
+        elapsed = wall_time.time() - self._start_time
+        return {
+            "recording": True,
+            "airport": self._airport,
+            "filename": self._filename,
+            "frames": self._frame_count,
+            "aircraft_seen": len(self._aircraft_seen),
+            "elapsed_seconds": round(elapsed, 1),
+        }
+
+    async def start(self, airport_icao: str, lat: float, lon: float) -> dict:
+        if self.is_recording:
+            raise HTTPException(400, "Already recording — stop first")
+
+        self._airport = airport_icao
+        self._lat = lat
+        self._lon = lon
+        self._frame_count = 0
+        self._aircraft_seen = set()
+        self._start_time = wall_time.time()
+
+        _RECORDING_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+        self._filename = f"{airport_icao}_{ts}.jsonl"
+        filepath = _RECORDING_DIR / self._filename
+        self._file = open(filepath, "a", encoding="utf-8")  # noqa: SIM115
+
+        self._task = asyncio.create_task(self._record_loop())
+        logger.info("Recording started: %s", self._filename)
+        return {"recording": True, "filename": self._filename}
+
+    async def stop(self) -> dict:
+        if not self.is_recording:
+            raise HTTPException(400, "Not recording")
+
+        self._task.cancel()
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+
+        self._file.close()
+        self._file = None
+        elapsed = wall_time.time() - self._start_time
+        stats = {
+            "recording": False,
+            "filename": self._filename,
+            "frames": self._frame_count,
+            "aircraft_seen": len(self._aircraft_seen),
+            "duration_seconds": round(elapsed, 1),
+        }
+        logger.info("Recording stopped: %s (%d frames)", self._filename, self._frame_count)
+        self._task = None
+        return stats
+
+    async def _record_loop(self) -> None:
+        svc = get_opensky_service()
+        while True:
+            try:
+                states = await svc.fetch_flights(self._lat, self._lon)
+                now_iso = datetime.now(timezone.utc).isoformat()
+                for s in (states or []):
+                    record = {
+                        "icao24": s.get("icao24", ""),
+                        "callsign": (s.get("callsign") or "").strip(),
+                        "lat": s.get("latitude"),
+                        "lon": s.get("longitude"),
+                        "baro_altitude": s.get("baro_altitude"),
+                        "velocity": s.get("velocity"),
+                        "true_track": s.get("true_track"),
+                        "vertical_rate": s.get("vertical_rate"),
+                        "on_ground": s.get("on_ground", False),
+                        "collection_time": now_iso,
+                        "airport_icao": self._airport,
+                        "data_source": "opensky_live",
+                    }
+                    self._file.write(json.dumps(record) + "\n")
+                    self._aircraft_seen.add(record["icao24"])
+                self._file.flush()
+                self._frame_count += 1
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("Record loop error: %s", exc)
+            await asyncio.sleep(10)
+
+
+_recorder = _LiveRecorder()
+
+
+@opensky_router.post("/record/start")
+async def start_recording(airport_icao: str = "KSFO"):
+    cfg = get_airport_config_service()
+    lat = cfg._converter.reference_lat
+    lon = cfg._converter.reference_lon
+    return await _recorder.start(airport_icao, lat, lon)
+
+
+@opensky_router.post("/record/stop")
+async def stop_recording():
+    return await _recorder.stop()
+
+
+@opensky_router.get("/record/status")
+async def recording_status():
+    return _recorder.status()

@@ -158,6 +158,8 @@ class OpenSkyService:
                 if flight:
                     flights.append(flight)
 
+            flights = self._deduplicate(flights)
+
             self._last_fetch_time = time.time()
             self._last_flight_count = len(flights)
             self._last_error = None
@@ -173,6 +175,28 @@ class OpenSkyService:
             self._last_error = str(e)
             logger.warning("OpenSky fetch failed: %s", e)
             return []
+
+    @staticmethod
+    def _deduplicate(flights: list[dict]) -> list[dict]:
+        """Remove duplicate entries for the same physical aircraft.
+
+        OpenSky can report the same callsign under multiple icao24 codes.
+        For each callsign, keep only the entry with the most recent last_seen.
+        Entries without a meaningful callsign (empty or equal to icao24) are
+        kept as-is since they can't be matched.
+        """
+        by_callsign: dict[str, dict] = {}
+        no_callsign: list[dict] = []
+        for f in flights:
+            cs = f.get("callsign", "")
+            icao24 = f.get("icao24", "")
+            if not cs or cs == icao24.upper():
+                no_callsign.append(f)
+                continue
+            existing = by_callsign.get(cs)
+            if existing is None or (f.get("last_seen") or 0) > (existing.get("last_seen") or 0):
+                by_callsign[cs] = f
+        return list(by_callsign.values()) + no_callsign
 
     def _state_to_flight(self, state: list) -> Optional[dict]:
         """Convert an OpenSky state vector to our flight dict format."""

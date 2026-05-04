@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useFlightContext } from '../../context/FlightContext';
 
 interface CloudLayer {
   coverage: string;
@@ -13,6 +14,7 @@ interface METAR {
   visibility_sm: number;
   clouds: CloudLayer[];
   temperature_c: number;
+  dewpoint_c: number;
   flight_category: 'VFR' | 'MVFR' | 'IFR' | 'LIFR';
   raw_metar: string;
 }
@@ -36,6 +38,108 @@ const FLIGHT_CATEGORY_LABELS = {
   LIFR: 'LIFR - Low Instrument',
 };
 
+const CLOUD_MEANINGS: Record<string, string> = {
+  SKC: 'Sky clear', CLR: 'Clear below 12,000 ft',
+  FEW: 'Few (1-2 oktas)', SCT: 'Scattered (3-4 oktas)',
+  BKN: 'Broken (5-7 oktas)', OVC: 'Overcast (8 oktas)',
+};
+
+function parseMetarParts(raw: string): { token: string; meaning: string }[] {
+  const parts: { token: string; meaning: string }[] = [];
+  const tokens = raw.split(/\s+/);
+
+  for (const t of tokens) {
+    // Station
+    if (/^[A-Z]{4}$/.test(t)) {
+      parts.push({ token: t, meaning: `Station ${t}` });
+    // Date/time
+    } else if (/^\d{6}Z$/.test(t)) {
+      const day = t.slice(0, 2);
+      const hh = t.slice(2, 4);
+      const mm = t.slice(4, 6);
+      parts.push({ token: t, meaning: `Day ${day}, ${hh}:${mm} UTC` });
+    // Wind
+    } else if (/^\d{3}\d{2,3}(G\d{2,3})?KT$/.test(t)) {
+      const dir = t.slice(0, 3);
+      const gustMatch = t.match(/(\d{2,3})G(\d{2,3})KT/);
+      if (gustMatch) {
+        parts.push({ token: t, meaning: `Wind ${dir}° at ${gustMatch[1]} kt, gusting ${gustMatch[2]} kt` });
+      } else {
+        const spd = t.match(/\d{3}(\d{2,3})KT/)?.[1];
+        parts.push({ token: t, meaning: `Wind from ${dir}° at ${spd} knots` });
+      }
+    } else if (t === 'VRB') {
+      parts.push({ token: t, meaning: 'Variable wind direction' });
+    // Visibility
+    } else if (/^\d+SM$/.test(t)) {
+      parts.push({ token: t, meaning: `Visibility ${t.replace('SM', '')} statute miles` });
+    // Cloud layers
+    } else if (/^(SKC|CLR|FEW|SCT|BKN|OVC)\d{0,3}$/.test(t)) {
+      const cov = t.slice(0, 3);
+      const alt = t.slice(3);
+      const covText = CLOUD_MEANINGS[cov] || cov;
+      parts.push({ token: t, meaning: alt ? `${covText} at ${Number(alt) * 100} ft` : covText });
+    // Temp/dewpoint
+    } else if (/^M?\d{2}\/M?\d{2}$/.test(t)) {
+      const [temp, dew] = t.split('/').map(v => v.startsWith('M') ? `-${v.slice(1)}` : v);
+      parts.push({ token: t, meaning: `Temp ${temp}°C / Dewpoint ${dew}°C` });
+    // Altimeter
+    } else if (/^A\d{4}$/.test(t)) {
+      const val = `${t.slice(1, 3)}.${t.slice(3)}`;
+      parts.push({ token: t, meaning: `Altimeter ${val} inHg` });
+    }
+  }
+  return parts;
+}
+
+function MetarLegend({ raw }: { raw: string }) {
+  const [show, setShow] = useState(false);
+  const parts = show ? parseMetarParts(raw) : [];
+
+  return (
+    <div className="pt-2 border-t border-slate-700">
+      <button onClick={() => setShow(!show)} className="text-slate-400 text-xs hover:text-slate-300 transition-colors">
+        {show ? 'Hide' : 'Explain'} METAR {show ? '▲' : '▼'}
+      </button>
+      {show && parts.length > 0 && (
+        <div className="text-[10px] text-slate-500 leading-relaxed mt-1 space-y-0.5">
+          {parts.map(({ token, meaning }) => (
+            <div key={token}><span className="text-slate-400 font-mono font-medium">{token}</span> — {meaning}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DewpointInfo({ temp, dewpoint }: { temp: number; dewpoint: number }) {
+  const [show, setShow] = useState(false);
+  const spread = temp - dewpoint;
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-1">
+        <span className="text-slate-400">Dewpoint</span>
+        <button
+          onClick={() => setShow(!show)}
+          className="w-3.5 h-3.5 rounded-full bg-slate-600 text-[9px] text-slate-300 hover:bg-slate-500 flex items-center justify-center leading-none"
+        >?</button>
+      </div>
+      <div className="font-mono">{dewpoint}°C <span className="text-slate-500 text-xs">({spread}° spread)</span></div>
+      {show && (
+        <div className="absolute left-0 top-full mt-1 w-56 bg-slate-900 border border-slate-600 rounded p-2 text-[10px] text-slate-400 leading-relaxed z-50 shadow-lg">
+          <p className="mb-1">Temperature at which air saturates and condensation forms (dew/fog).</p>
+          <ul className="space-y-0.5 list-disc pl-3">
+            <li><span className="text-slate-300">Close to temp</span> — moderate humidity, low cloud bases</li>
+            <li><span className="text-slate-300">Equal to temp</span> — fog/mist likely (100% humidity)</li>
+            <li><span className="text-slate-300">Far below temp</span> — dry air, good visibility</li>
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface WeatherWidgetProps {
   station?: string;
 }
@@ -45,13 +149,15 @@ export default function WeatherWidget({ station }: WeatherWidgetProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const { dataMode } = useFlightContext();
 
   useEffect(() => {
     async function fetchWeather() {
       try {
-        const url = station
-          ? `/api/weather/current?station=${encodeURIComponent(station)}`
-          : '/api/weather/current';
+        const params = new URLSearchParams();
+        if (station) params.set('station', station);
+        if (dataMode === 'live') params.set('live', 'true');
+        const url = `/api/weather/current${params.toString() ? '?' + params.toString() : ''}`;
         const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to fetch weather');
         const data = await response.json();
@@ -65,10 +171,9 @@ export default function WeatherWidget({ station }: WeatherWidgetProps) {
     }
 
     fetchWeather();
-    // Refresh every 5 minutes
     const interval = setInterval(fetchWeather, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [station]);
+  }, [station, dataMode]);
 
   if (loading) {
     return (
@@ -142,6 +247,7 @@ export default function WeatherWidget({ station }: WeatherWidgetProps) {
                 <span className="text-slate-400">Temperature</span>
                 <div className="font-mono">{metar.temperature_c}°C</div>
               </div>
+              <DewpointInfo temp={metar.temperature_c} dewpoint={metar.dewpoint_c} />
               <div>
                 <span className="text-slate-400">Clouds</span>
                 <div className="font-mono text-xs">
@@ -161,6 +267,9 @@ export default function WeatherWidget({ station }: WeatherWidgetProps) {
                 {metar.raw_metar}
               </div>
             </div>
+
+            {/* METAR legend */}
+            <MetarLegend raw={metar.raw_metar} />
           </div>
         </div>
       )}

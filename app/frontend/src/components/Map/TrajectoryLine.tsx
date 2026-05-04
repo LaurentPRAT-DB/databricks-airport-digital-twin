@@ -95,18 +95,19 @@ interface NormalizedPoint {
 export default function TrajectoryLine() {
   const { selectedFlight, showTrajectory, dataSource, simTrajectoryProvider } = useFlightContext();
 
-  // API-based trajectory (for live flights)
-  const usesReplayTrajectory = dataSource === 'simulation' || dataSource === 'opensky_recorded';
+  // Provider-based trajectory (simulation, recorded, and live with accumulated trails)
+  const usesReplayTrajectory = dataSource === 'simulation' || dataSource === 'opensky_recorded' || dataSource === 'opensky';
   const { data: apiTrajectory } = useTrajectory(
     selectedFlight?.icao24 ?? null,
     showTrajectory && !usesReplayTrajectory
   );
 
-  // Replay-based trajectory (from frames — simulation and recorded data)
+  // Replay-based trajectory (from frames — simulation, recorded, and live trails)
   const simPoints = useMemo(() => {
     if (!usesReplayTrajectory || !simTrajectoryProvider || !selectedFlight?.icao24) return null;
     return simTrajectoryProvider(selectedFlight.icao24);
-  }, [usesReplayTrajectory, simTrajectoryProvider, selectedFlight?.icao24]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usesReplayTrajectory, simTrajectoryProvider, selectedFlight?.icao24, selectedFlight?.latitude, selectedFlight?.longitude]);
 
   // Normalize to common point format
   const validPoints: NormalizedPoint[] = useMemo(() => {

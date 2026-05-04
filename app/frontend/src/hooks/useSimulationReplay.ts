@@ -401,15 +401,35 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const fetchRecordings = useCallback(async () => {
     setIsFetchingRecordings(true);
     try {
-      const res = await fetch('/api/opensky/recordings');
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        debugLog('error', 'fetchRecordings', `${res.status} ${res.statusText}: ${body}`);
-        return;
+      const [cloudRes, localRes] = await Promise.all([
+        fetch('/api/opensky/recordings'),
+        fetch('/api/opensky/recordings/local'),
+      ]);
+
+      let cloud: RecordingFile[] = [];
+      if (cloudRes.ok) {
+        const data = await cloudRes.json();
+        cloud = (data.recordings || []).map((r: RecordingFile) => ({ ...r, data_source: r.data_source || 'cloud' }));
       }
-      const data = await res.json();
-      debugLog('info', 'fetchRecordings', `${(data.recordings || []).length} recordings found`);
-      setAvailableRecordings(data.recordings || []);
+
+      let local: RecordingFile[] = [];
+      if (localRes.ok) {
+        const localData = await localRes.json();
+        local = (localData || []).map((r: { filename: string; airport_icao: string; timestamp: string; state_count: number }) => ({
+          airport_icao: r.airport_icao,
+          date: r.filename,
+          aircraft_count: 0,
+          state_count: r.state_count,
+          first_seen: r.timestamp,
+          last_seen: r.timestamp,
+          duration_minutes: 0,
+          data_source: 'local',
+        }));
+      }
+
+      const all = [...local, ...cloud];
+      debugLog('info', 'fetchRecordings', `${all.length} recordings found (${local.length} local, ${cloud.length} cloud)`);
+      setAvailableRecordings(all);
     } catch (err) {
       debugLog('error', 'fetchRecordings', `network error: ${err}`);
     } finally {
@@ -425,8 +445,12 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     dataSourceRef.current = 'opensky_recorded';
     wantsAutoPlayRef.current = true;
     try {
-      debugLog('info', 'loadRecording', `fetching ${airport}/${date}...`);
-      const res = await fetch(`/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`);
+      const isLocal = date.endsWith('.jsonl');
+      const url = isLocal
+        ? `/api/opensky/recordings/local/${encodeURIComponent(date)}`
+        : `/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`;
+      debugLog('info', 'loadRecording', `fetching ${url}...`);
+      const res = await fetch(url);
       if (!res.ok) {
         const body = await res.text().catch(() => '');
         throw new Error(`${res.status} ${res.statusText}: ${body}`);

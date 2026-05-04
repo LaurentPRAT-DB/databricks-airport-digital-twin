@@ -31,7 +31,7 @@ interface AirportMapProps {
  */
 function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | null }) {
   const map = useMap();
-  const { getGates, getTerminals, currentAirport } = useAirportConfigContext();
+  const { getGates, getTerminals, getAirportCenter, currentAirport } = useAirportConfigContext();
 
   // Compute bounding box from terminals/gates for fitBounds
   const bounds = useMemo((): L.LatLngBoundsExpression | null => {
@@ -72,9 +72,14 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
     const airportChanged = prevAirportRef.current !== currentAirport;
     prevAirportRef.current = currentAirport;
 
-    // On airport switch, fit to terminal bounding box
-    if (airportChanged && bounds) {
-      map.flyToBounds(bounds, { duration: 1.5, maxZoom: 16 });
+    // On airport switch, fit to terminal bounding box (or center if no geometry)
+    if (airportChanged) {
+      if (bounds) {
+        map.flyToBounds(bounds, { duration: 1.5, maxZoom: 16 });
+      } else {
+        const center = getAirportCenter();
+        map.flyTo([center.lat, center.lon], 14, { duration: 1.5 });
+      }
       return;
     }
     // If we have a shared viewport from 3D (same airport), restore it
@@ -274,7 +279,7 @@ function InpaintingTileLayer({ airportIcao, onStaleDetected }: { airportIcao?: s
  */
 // Max distance (degrees) from airport center before camera-follow stops panning.
 // ~0.1° ≈ 11km / 6nm — keeps the airport visible while tracking nearby flights.
-const FOLLOW_MAX_DISTANCE_DEG = 0.1;
+const FOLLOW_MAX_DISTANCE_DEG = 0.5;
 
 function FlightFollower() {
   const map = useMap();
@@ -283,14 +288,20 @@ function FlightFollower() {
   const userPannedRef = useRef(false);
   const prevSelectedIdRef = useRef<string | null>(null);
 
-  // Reset follow when a new flight is selected
+  // Fly to flight on initial selection, then track with panTo
   useEffect(() => {
     const id = selectedFlight?.icao24 ?? null;
     if (id !== prevSelectedIdRef.current) {
       userPannedRef.current = false;
       prevSelectedIdRef.current = id;
+
+      // Fly to the newly selected flight
+      if (selectedFlight && selectedFlight.latitude != null && selectedFlight.longitude != null) {
+        const zoom = Math.max(map.getZoom(), 13);
+        map.flyTo([selectedFlight.latitude, selectedFlight.longitude], zoom, { duration: 1 });
+      }
     }
-  }, [selectedFlight?.icao24]);
+  }, [selectedFlight?.icao24, selectedFlight, map]);
 
   // Detect user-initiated pans (dragend) to disable follow
   useMapEvents({
@@ -316,7 +327,6 @@ function FlightFollower() {
     const currentCenter = map.getCenter();
     const dx = Math.abs(currentCenter.lat - latitude);
     const dy = Math.abs(currentCenter.lng - longitude);
-    // Only pan if the flight has moved significantly (avoids jitter on parked flights)
     if (dx > 0.0001 || dy > 0.0001) {
       map.panTo([latitude, longitude], { animate: true, duration: 0.3 });
     }

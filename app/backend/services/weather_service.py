@@ -1,12 +1,15 @@
 """Weather service for aviation METAR/TAF data.
 
 Provides current weather observations and forecasts.
-Reads from Lakebase first for persistence, falls back to generator.
+In live mode, fetches real METAR from aviationweather.gov.
+Otherwise reads from Lakebase first, falls back to synthetic generator.
 """
 
 import logging
 from datetime import datetime, timezone
 from typing import Optional
+
+import httpx
 
 from src.ingestion.weather_generator import (
     generate_metar,
@@ -24,6 +27,66 @@ from app.backend.models.weather import (
 from app.backend.services.lakebase_service import get_lakebase_service
 
 logger = logging.getLogger(__name__)
+
+AVIATION_WEATHER_API = "https://aviationweather.gov/api/data/metar"
+
+
+async def _fetch_live_metar(station: str) -> Optional[dict]:
+    """Fetch real METAR from aviationweather.gov.
+
+    Returns a dict compatible with _dict_to_metar, or None on failure.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                AVIATION_WEATHER_API,
+                params={"ids": station, "format": "json", "taf": "false", "hours": 1},
+            )
+            if resp.status_code != 200:
+                logger.warning("aviationweather.gov returned HTTP %d for %s", resp.status_code, station)
+                return None
+
+            data = resp.json()
+            if not data:
+                return None
+
+            obs = data[0]
+
+            # Map cloud layers
+            clouds = []
+            for c in obs.get("clouds", []):
+                cover = c.get("cover", "")
+                base = c.get("base")
+                if cover in ("SKC", "CLR"):
+                    continue
+                if cover in ("FEW", "SCT", "BKN", "OVC") and base is not None:
+                    clouds.append({"coverage": cover, "altitude_ft": int(base)})
+
+            # Convert altimeter from hPa to inHg (1 hPa = 0.02953 inHg)
+            altim_hpa = obs.get("altim")
+            altimeter_inhg = round(altim_hpa * 0.02953, 2) if altim_hpa else 29.92
+
+            wdir = obs.get("wdir")
+            wind_direction = int(wdir) if wdir and str(wdir).isdigit() else None
+
+            return {
+                "station": obs.get("icaoId", station),
+                "observation_time": obs.get("reportTime", datetime.now(timezone.utc).isoformat()),
+                "wind_direction": wind_direction,
+                "wind_speed_kts": int(obs.get("wspd", 0)),
+                "wind_gust_kts": int(obs["wgst"]) if obs.get("wgst") else None,
+                "visibility_sm": float(obs.get("visib", 10)),
+                "clouds": clouds,
+                "temperature_c": int(obs.get("temp", 15)),
+                "dewpoint_c": int(obs.get("dewp", 10)),
+                "altimeter_inhg": altimeter_inhg,
+                "weather": [],
+                "flight_category": obs.get("fltcat", "VFR"),
+                "raw_metar": obs.get("rawOb", ""),
+            }
+    except Exception as e:
+        logger.warning("Failed to fetch live METAR for %s: %s", station, e)
+        return None
 
 
 def _dict_to_metar(data: dict) -> METAR:
@@ -71,19 +134,29 @@ class WeatherService:
         """Initialize weather service."""
         self._default_station = default_station
 
-    def get_current_weather(self, station: Optional[str] = None) -> WeatherResponse:
+    async def get_current_weather(self, station: Optional[str] = None, live: bool = False) -> WeatherResponse:
         """
         Get current weather observation and forecast.
 
-        Reads from Lakebase first for persistence, falls back to in-memory generator.
+        When live=True, fetches real METAR from aviationweather.gov.
+        Otherwise reads from Lakebase first, falls back to in-memory generator.
 
         Args:
             station: ICAO station identifier (defaults to KSFO)
+            live: If True, fetch real METAR from aviationweather.gov
 
         Returns:
             WeatherResponse with METAR and TAF
         """
         station = station or self._default_station
+
+        if live:
+            live_data = await _fetch_live_metar(station)
+            if live_data:
+                logger.info("Live METAR for %s: %s", station, live_data.get("flight_category"))
+                metar = _dict_to_metar(live_data)
+                return WeatherResponse(metar=metar, taf=None, station=station)
+            logger.warning("Live METAR fetch failed for %s, falling back", station)
 
         # Try Lakebase first (persisted data)
         lakebase = get_lakebase_service()

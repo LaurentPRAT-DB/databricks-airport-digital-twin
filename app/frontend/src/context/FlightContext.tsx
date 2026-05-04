@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useMemo, useCallback, useEffect, u
 import { useFlights } from '../hooks/useFlights';
 import { Flight } from '../types/flight';
 import type { SimTrajectoryPoint, PositionSnapshot } from '../hooks/useSimulationReplay';
+import { useAirportConfigContext } from './AirportConfigContext';
 
 /** Function that extracts trajectory from simulation frames for a given flight. */
 export type SimTrajectoryProvider = (icao24: string) => SimTrajectoryPoint[];
@@ -46,6 +47,8 @@ export function FlightProvider({
 }) {
   const { flights: liveFlights, isLoading, error, lastUpdated, dataSource: liveDataSource } = useFlights();
 
+  const { currentAirport } = useAirportConfigContext();
+
   // Data mode: 'simulation' (default) or 'live' (OpenSky)
   const [dataMode, setDataModeState] = useState<DataMode>('simulation');
   const [openSkyFlights, setOpenSkyFlights] = useState<Flight[]>([]);
@@ -53,19 +56,61 @@ export function FlightProvider({
   const [openSkyLastUpdated, setOpenSkyLastUpdated] = useState<string | null>(null);
   const openSkyIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Live position history for trajectory trails
+  const liveTrailsRef = useRef<Map<string, SimTrajectoryPoint[]>>(new Map());
+  const [trailVersion, setTrailVersion] = useState(0);
+  const MAX_TRAIL_POINTS = 200;
+
   // Fetch OpenSky flights
   const fetchOpenSkyFlights = useCallback(async () => {
     try {
       setOpenSkyLoading(true);
-      const res = await fetch('/api/opensky/flights');
+      const params = currentAirport ? `?airport=${encodeURIComponent(currentAirport)}` : '';
+      const res = await fetch(`/api/opensky/flights${params}`);
       if (res.ok) {
         const data = await res.json();
+        const nowEpoch = Date.now() / 1000;
         const flights: Flight[] = (data.flights || []).map((f: Record<string, unknown>) => ({
           ...f,
           data_source: 'opensky',
           flight_phase: f.flight_phase || 'cruise',
           last_seen: typeof f.last_seen === 'number' ? new Date(Number(f.last_seen) * 1000).toISOString() : String(f.last_seen || ''),
         }));
+
+        // Accumulate position history for trajectory trails
+        const trails = liveTrailsRef.current;
+        const seenIcaos = new Set<string>();
+        for (const f of flights) {
+          const id = f.icao24;
+          seenIcaos.add(id);
+          if (f.latitude == null || f.longitude == null) continue;
+          const point: SimTrajectoryPoint = {
+            latitude: Number(f.latitude),
+            longitude: Number(f.longitude),
+            altitude: Number(f.altitude ?? 0),
+            velocity: Number(f.velocity ?? 0),
+            heading: Number(f.heading ?? 0),
+            on_ground: !!f.on_ground,
+            flight_phase: f.flight_phase || 'cruise',
+            timestamp: nowEpoch,
+          };
+          const trail = trails.get(id);
+          if (trail) {
+            const last = trail[trail.length - 1];
+            if (Math.abs(last.latitude - point.latitude) > 0.0001 || Math.abs(last.longitude - point.longitude) > 0.0001) {
+              trail.push(point);
+              if (trail.length > MAX_TRAIL_POINTS) trail.shift();
+            }
+          } else {
+            trails.set(id, [point]);
+          }
+        }
+        // Prune trails for aircraft no longer visible
+        for (const id of trails.keys()) {
+          if (!seenIcaos.has(id)) trails.delete(id);
+        }
+
+        setTrailVersion(v => v + 1);
         setOpenSkyFlights(flights);
         setOpenSkyLastUpdated(new Date().toISOString());
       }
@@ -74,11 +119,12 @@ export function FlightProvider({
     } finally {
       setOpenSkyLoading(false);
     }
-  }, []);
+  }, [currentAirport]);
 
   // Poll OpenSky when in live mode
   useEffect(() => {
     if (dataMode === 'live') {
+      liveTrailsRef.current.clear();
       fetchOpenSkyFlights();
       openSkyIntervalRef.current = setInterval(fetchOpenSkyFlights, 10000);
       return () => {
@@ -86,9 +132,16 @@ export function FlightProvider({
       };
     } else {
       setOpenSkyFlights([]);
+      liveTrailsRef.current.clear();
       if (openSkyIntervalRef.current) clearInterval(openSkyIntervalRef.current);
     }
   }, [dataMode, fetchOpenSkyFlights]);
+
+  // Live trajectory provider — returns accumulated trail for a given flight
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const liveTrajectoryProvider = useCallback((icao24: string): SimTrajectoryPoint[] => {
+    return [...(liveTrailsRef.current.get(icao24) || [])];
+  }, [trailVersion]);
 
   const setDataMode = useCallback((mode: DataMode) => {
     setDataModeState(mode);
@@ -167,11 +220,11 @@ export function FlightProvider({
     error,
     lastUpdated: dataMode === 'live' ? openSkyLastUpdated : lastUpdated,
     dataSource,
-    simTrajectoryProvider: simTrajectoryProvider ?? null,
+    simTrajectoryProvider: dataMode === 'live' ? liveTrajectoryProvider : (simTrajectoryProvider ?? null),
     simFlightLogProvider: simFlightLogProvider ?? null,
     dataMode,
     setDataMode,
-  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider, simFlightLogProvider, dataMode, setDataMode, openSkyLoading, openSkyLastUpdated]);
+  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider, simFlightLogProvider, dataMode, setDataMode, openSkyLoading, openSkyLastUpdated, liveTrajectoryProvider]);
 
   return (
     <FlightContext.Provider value={contextValue}>

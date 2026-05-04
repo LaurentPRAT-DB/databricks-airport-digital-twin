@@ -505,11 +505,51 @@ function PausedBar({
 }
 
 /** Minimal status bar shown in Live (OpenSky) mode. */
-function LiveBar({ flightCount, lastUpdated }: { flightCount: number; lastUpdated: string | null }) {
+function LiveBar({ flightCount, lastUpdated, airport }: { flightCount: number; lastUpdated: string | null; airport: string }) {
+  const [recording, setRecording] = useState(false);
+  const [recStatus, setRecStatus] = useState<{ frames?: number; elapsed_seconds?: number; filename?: string } | null>(null);
+
   const timeStr = lastUpdated
     ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit' })
     : '--:--';
 
+  useEffect(() => {
+    if (!recording) return;
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch('/api/opensky/record/status');
+        if (res.ok) {
+          const data = await res.json();
+          setRecStatus(data);
+          if (!data.recording) setRecording(false);
+        }
+      } catch { /* ignore */ }
+    }, 2000);
+    return () => clearInterval(poll);
+  }, [recording]);
+
+  const toggleRecording = async () => {
+    if (recording) {
+      const res = await fetch('/api/opensky/record/stop', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setRecStatus(data);
+      }
+      setRecording(false);
+    } else {
+      const res = await fetch(`/api/opensky/record/start?airport_icao=${encodeURIComponent(airport)}`, { method: 'POST' });
+      if (res.ok) {
+        setRecording(true);
+        setRecStatus(null);
+      }
+    }
+  };
+
+  const formatElapsed = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="fixed left-0 right-0 z-[1500] bg-emerald-900/95 backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0">
@@ -519,6 +559,43 @@ function LiveBar({ flightCount, lastUpdated }: { flightCount: number; lastUpdate
           <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
           <span className="text-sm font-semibold uppercase tracking-wider text-emerald-200">Live</span>
         </div>
+
+        {/* Record button + status */}
+        {recording ? (
+          <div className="flex items-center gap-3 bg-red-900/80 border border-red-500/60 px-3 py-1.5 rounded-lg">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.7)]" />
+              <span className="text-sm font-bold text-red-100 uppercase tracking-wide">REC</span>
+            </div>
+            {recStatus?.frames != null && (
+              <div className="text-sm text-red-200 font-mono">
+                {formatElapsed(recStatus.elapsed_seconds || 0)} &middot; {recStatus.frames} frames
+              </div>
+            )}
+            <button
+              onClick={toggleRecording}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/20 hover:bg-white/30 text-white text-xs font-semibold transition-colors"
+            >
+              <div className="w-2.5 h-2.5 rounded-sm bg-white" />
+              Stop
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={toggleRecording}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+          >
+            <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+            Record
+          </button>
+        )}
+
+        {/* Stopped confirmation */}
+        {!recording && recStatus?.filename && (
+          <div className="text-xs text-emerald-300 bg-emerald-900/40 px-2 py-1 rounded">
+            Saved: {recStatus.filename}
+          </div>
+        )}
 
         {/* Spacer */}
         <div className="flex-1" />
@@ -614,17 +691,25 @@ function RecordingPicker({
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-slate-800 dark:text-slate-200">
-                      {r.airport_icao} &mdash; {formatRecordingDate(r.date)}
+                      {r.airport_icao} &mdash; {r.data_source === 'local' ? r.date.replace('.jsonl', '') : formatRecordingDate(r.date)}
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                        {formatDuration(r.duration_minutes)}
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                        r.data_source === 'local'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                          : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                      }`}>
+                        {r.data_source === 'local' ? 'Local' : 'Cloud'}
                       </span>
+                      {r.duration_minutes > 0 && (
+                        <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                          {formatDuration(r.duration_minutes)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                    <span>{r.aircraft_count} aircraft tracked</span>
-                    <span>&middot;</span>
+                    {r.aircraft_count > 0 && <><span>{r.aircraft_count} aircraft tracked</span><span>&middot;</span></>}
                     <span>{r.state_count.toLocaleString()} position snapshots</span>
                     <span>&middot;</span>
                     <span className="text-amber-500">OpenSky ADS-B</span>
@@ -1039,7 +1124,7 @@ export function SimulationControls({
 
       {/* Live status bar — shown in live mode */}
       {dataMode === 'live' && (
-        <LiveBar flightCount={contextFlights.length} lastUpdated={contextLastUpdated} />
+        <LiveBar flightCount={contextFlights.length} lastUpdated={contextLastUpdated} airport={currentAirport || 'KSFO'} />
       )}
 
       {/* Recorded mode controls */}
