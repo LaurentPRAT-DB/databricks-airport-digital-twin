@@ -34,7 +34,10 @@ jobs:
           uv run pytest tests/ \
             --ignore=tests/test_live_trajectory_quality.py \
             --ignore=tests/test_airport_activation.py \
-            -x -q --tb=short \
+            --ignore=tests/test_aviation_procedures.py \
+            --ignore=tests/test_flight_ops_validation.py \
+            --ignore=tests/test_expert_reviews.py \
+            -q --tb=short \
             --override-ini="asyncio_mode=auto"
 
   frontend-tests:

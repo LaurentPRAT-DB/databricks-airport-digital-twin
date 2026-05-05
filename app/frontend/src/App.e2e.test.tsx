@@ -318,7 +318,7 @@ describe('End-to-end user interaction flows', () => {
       // Wait for schedule data to load
       await waitFor(
         () => {
-          expect(screen.getByText(/UAL123/i)).toBeInTheDocument()
+          expect(screen.getAllByText(/UAL123/i).length).toBeGreaterThan(0)
         },
         { timeout: 5000 },
       )
