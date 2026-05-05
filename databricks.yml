@@ -70,8 +70,6 @@ targets:
       schema: "airport_digital_twin"
 
   prod:
-    workspace:
-      host: ${DATABRICKS_HOST}
     variables:
       catalog: "airport_digital_twin"
       schema: "airport_digital_twin"
