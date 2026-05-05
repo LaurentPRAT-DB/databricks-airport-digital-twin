@@ -253,18 +253,16 @@ if $SEED; then
     LB_HOST="${LAKEBASE_HOST:-}"
     LB_EP="$LAKEBASE_ENDPOINT"
     python3 - "$LB_HOST" "$LB_EP" <<'PYEOF'
-import sys, subprocess, json
+import sys, os
 
 lb_host, endpoint = sys.argv[1], sys.argv[2]
 try:
-    result = subprocess.run(
-        ["databricks", "api", "post", "/api/2.0/postgres/generate-database-credential",
-         "--json", json.dumps({"endpoint": endpoint})],
-        capture_output=True, text=True
-    )
-    cred = json.loads(result.stdout)
-    token = cred.get("token", "")
-    user = cred.get("username", "")
+    from databricks.sdk import WorkspaceClient
+    w = WorkspaceClient()
+    cred = w.postgres.generate_database_credential(endpoint=endpoint)
+    me = w.current_user.me()
+    token = cred.token
+    user = me.user_name
 
     if not token:
         print("  [INFO] Could not get Lakebase credential — schema not applied")
