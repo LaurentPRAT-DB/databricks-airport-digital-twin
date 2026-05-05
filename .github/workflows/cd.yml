@@ -81,6 +81,9 @@ jobs:
       - name: Build frontend
         working-directory: app/frontend
         run: |
+          echo "Node: $(node --version), npm: $(npm --version)"
+          echo "which node: $(which node)"
+          echo "npm config get cache: $(npm config get cache)"
           npm ci
           npm run build
 
