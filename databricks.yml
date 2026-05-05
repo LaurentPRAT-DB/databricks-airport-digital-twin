@@ -70,6 +70,8 @@ targets:
       schema: "airport_digital_twin"
 
   prod:
+    workspace:
+      profile: FEVM_SERVERLESS_STABLE
     variables:
       catalog: "serverless_stable_3n0ihb_catalog"
       schema: "airport_digital_twin_prod"
