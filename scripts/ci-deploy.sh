@@ -134,11 +134,23 @@ APP_SP=$(echo "$APP_JSON" | python3 -c "import sys,json; print(json.load(sys.std
 BUNDLE_DIR=$(echo "$APP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('default_source_code_path',''))" 2>/dev/null || true)
 BUNDLE_DIR="${BUNDLE_DIR#/Workspace}"
 
-if [[ -z "$APP_SP" || -z "$BUNDLE_DIR" ]]; then
-  fail "Could not detect app SP or bundle dir"
+# Fallback: derive bundle dir from DABs convention if not in app metadata
+if [[ -z "$BUNDLE_DIR" ]]; then
+  DEPLOYER=$(databricks current-user me --output json 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('userName',''))" 2>/dev/null || true)
+  if [[ -n "$DEPLOYER" ]]; then
+    BUNDLE_DIR="/Users/$DEPLOYER/.bundle/airport-digital-twin/$TARGET/files"
+  fi
+fi
+
+if [[ -z "$APP_SP" ]]; then
+  fail "Could not detect app SP (app may not exist yet)"
   exit 1
 fi
-ok "SP: $APP_SP | Bundle: $BUNDLE_DIR"
+if [[ -z "$BUNDLE_DIR" ]]; then
+  info "Could not determine bundle dir — skipping workspace permissions"
+fi
+ok "SP: $APP_SP | Bundle: ${BUNDLE_DIR:-<unknown>}"
 
 # ── Step 3: Create UC tables ─────────────────────────────────────────
 echo "Step 3: Create UC tables"
