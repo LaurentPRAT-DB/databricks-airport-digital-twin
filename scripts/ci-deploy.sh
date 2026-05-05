@@ -179,11 +179,11 @@ import sys; sys.path.insert(0, '.')
 from src.persistence.airport_tables import ALL_TABLES
 for name, ddl in ALL_TABLES:
     sql = ddl.format(catalog='$UC_CATALOG', schema='$UC_SCHEMA')
-    print(name + '|||' + ' '.join(sql.split()))
+    print(name + '\t' + ' '.join(sql.split()))
 " 2>/dev/null || true)
 
   if [[ -n "$TABLES_SQL" ]]; then
-    while IFS='|||' read -r tname tsql; do
+    while IFS=$'\t' read -r tname tsql; do
       if [[ -z "$tsql" ]]; then continue; fi
       RESULT=$(databricks api post /api/2.0/sql/statements \
         --json "$(jq -n --arg s "$tsql" --arg w "$WAREHOUSE_ID" '{warehouse_id: $w, statement: $s, wait_timeout: "30s"}')" \
