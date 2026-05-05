@@ -7,7 +7,8 @@
 # instead of a local CLI profile.
 #
 # Usage:
-#   scripts/ci-deploy.sh --target prod
+#   scripts/ci-deploy.sh --target prod          # incremental deploy
+#   scripts/ci-deploy.sh --target prod --seed   # first-time deploy (seeds data)
 #
 # Required env vars:
 #   DATABRICKS_HOST, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET
@@ -18,12 +19,24 @@
 #   LAKEBASE_HOST — Lakebase PostgreSQL host (default: dev instance)
 #   LAKEBASE_ENDPOINT_NAME — Lakebase endpoint path (default: dev endpoint)
 #   GENIE_SPACE_ID, SECRET_SCOPE, SKIP_BUILD
+#
+# Flags:
+#   --seed  Upload calibration profiles, 3D models, and apply Lakebase schema.
+#           Required on first deploy to a fresh workspace. Skip on subsequent deploys.
 # ─────────────────────────────────────────────────────────────────────
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TARGET="${1:-prod}"
-[[ "${1:-}" == "--target" ]] && TARGET="${2:-prod}"
+# Parse flags
+TARGET="prod"
+SEED=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --target) TARGET="${2:-prod}"; shift 2 ;;
+    --seed)   SEED=true; shift ;;
+    *)        TARGET="$1"; shift ;;
+  esac
+done
 
 # Validate required env vars
 for var in DATABRICKS_HOST DATABRICKS_CLIENT_ID DATABRICKS_CLIENT_SECRET; do
@@ -133,6 +146,88 @@ for name, ddl in ALL_TABLES:
   fi
 else
   info "Skipping table creation (UC_CATALOG/UC_SCHEMA not set)"
+fi
+
+# ── Step 3b: Seed data (--seed flag) ────────────────────────────────
+if $SEED; then
+  echo "Step 3b: Seed data to UC Volumes"
+
+  VOLUME_BASE="dbfs:/Volumes/$UC_CATALOG/$UC_SCHEMA"
+
+  # Upload calibration profiles (1,183 JSON files)
+  PROFILES_DIR="data/calibration/profiles"
+  if [[ -d "$PROFILES_DIR" ]]; then
+    PROFILE_COUNT=$(find "$PROFILES_DIR" -name "*.json" -type f | wc -l | tr -d ' ')
+    echo "  Uploading $PROFILE_COUNT calibration profiles..."
+    databricks fs cp "$PROFILES_DIR" "$VOLUME_BASE/calibration_profiles" \
+      --recursive --overwrite 2>/dev/null \
+      && ok "Calibration profiles ($PROFILE_COUNT files)" \
+      || fail "Calibration profile upload"
+  else
+    info "No calibration profiles found at $PROFILES_DIR"
+  fi
+
+  # Upload 3D aircraft models (GLB files)
+  MODELS_DIR="app/frontend/dist/models/aircraft"
+  if [[ -d "$MODELS_DIR" ]]; then
+    MODEL_COUNT=$(find "$MODELS_DIR" -name "*.glb" -type f | wc -l | tr -d ' ')
+    echo "  Uploading $MODEL_COUNT 3D models..."
+    databricks fs mkdir "$VOLUME_BASE/static_assets/models/aircraft" 2>/dev/null || true
+    databricks fs cp "$MODELS_DIR" "$VOLUME_BASE/static_assets/models/aircraft" \
+      --recursive --overwrite 2>/dev/null \
+      && ok "3D models ($MODEL_COUNT files)" \
+      || fail "3D model upload"
+  else
+    info "No 3D models found at $MODELS_DIR (run npm build first)"
+  fi
+
+  # Apply Lakebase schema (if Lakebase is configured)
+  if [[ -n "${LAKEBASE_HOST:-}" ]]; then
+    echo "  Applying Lakebase schema..."
+    LB_HOST="${LAKEBASE_HOST:-}"
+    LB_EP="${LAKEBASE_ENDPOINT_NAME:-projects/airport-digital-twin/branches/production/endpoints/primary}"
+    python3 - "$LB_HOST" "$LB_EP" <<'PYEOF'
+import sys, subprocess, json
+
+lb_host, endpoint = sys.argv[1], sys.argv[2]
+try:
+    result = subprocess.run(
+        ["databricks", "api", "post", "/api/2.0/postgres/generate-database-credential",
+         "--json", json.dumps({"endpoint": endpoint})],
+        capture_output=True, text=True
+    )
+    cred = json.loads(result.stdout)
+    token = cred.get("token", "")
+    user = cred.get("username", "")
+
+    if not token:
+        print("  [INFO] Could not get Lakebase credential — schema not applied")
+        sys.exit(0)
+
+    import psycopg2
+
+    with open("scripts/lakebase_schema.sql") as f:
+        schema_sql = f.read()
+
+    conn = psycopg2.connect(
+        host=lb_host, port=5432, dbname="databricks_postgres",
+        user=user, password=token, sslmode="require"
+    )
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute(schema_sql)
+    conn.close()
+    print("  [OK] Lakebase schema applied")
+except Exception as e:
+    print(f"  [INFO] Lakebase schema skipped: {e}")
+PYEOF
+  else
+    info "Lakebase not configured — skipping schema setup"
+  fi
+
+  ok "Seed complete"
+else
+  info "Skipping data seed (use --seed for first-time deploy)"
 fi
 
 # ── Step 4: Stop + start app ─────────────────────────────────────────

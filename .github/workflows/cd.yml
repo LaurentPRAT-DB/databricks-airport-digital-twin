@@ -3,6 +3,12 @@ name: CD
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Seed data (first-time deploy: uploads calibration profiles, 3D models, Lakebase schema)"
+        type: boolean
+        default: false
 
 concurrency:
   group: cd-deploy
@@ -38,6 +44,9 @@ jobs:
           cache: "npm"
           cache-dependency-path: app/frontend/package-lock.json
 
+      - name: Install Python dependencies
+        run: uv sync --all-extras
+
       - name: Install Databricks CLI
         uses: databricks/setup-cli@main
 
@@ -54,7 +63,11 @@ jobs:
         id: deploy
         run: |
           chmod +x scripts/ci-deploy.sh
-          scripts/ci-deploy.sh --target "$TARGET"
+          SEED_FLAG=""
+          if [[ "${{ github.event.inputs.seed }}" == "true" ]]; then
+            SEED_FLAG="--seed"
+          fi
+          scripts/ci-deploy.sh --target "$TARGET" $SEED_FLAG
         env:
           DATABRICKS_WAREHOUSE_ID: ${{ secrets.DATABRICKS_WAREHOUSE_ID }}
           LAKEBASE_HOST: ${{ secrets.LAKEBASE_HOST }}
