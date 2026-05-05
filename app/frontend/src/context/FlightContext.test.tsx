@@ -3,6 +3,7 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
 import { FlightProvider, useFlightContext } from './FlightContext'
+import { AirportConfigProvider } from './AirportConfigContext'
 
 // Wrapper that includes providers
 function createWrapper() {
@@ -15,7 +16,9 @@ function createWrapper() {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <FlightProvider>{children}</FlightProvider>
+        <AirportConfigProvider>
+          <FlightProvider>{children}</FlightProvider>
+        </AirportConfigProvider>
       </QueryClientProvider>
     )
   }

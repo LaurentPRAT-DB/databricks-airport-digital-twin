@@ -48,7 +48,7 @@ class TestAirportTables:
         assert "opensky_phase_transitions" in table_names
         assert "opensky_gate_events" in table_names
         assert "opensky_enriched_snapshots" in table_names
-        assert len(ALL_TABLES) == 19
+        assert len(ALL_TABLES) == 21
 
     def test_metadata_ddl_has_required_columns(self):
         """Verify airport_metadata DDL has required columns."""
