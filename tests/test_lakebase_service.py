@@ -880,6 +880,14 @@ class TestSchemaMigrationRetry:
                 assert service._ml_tables_retries == 3
 
 
+_has_databricks_sdk = True
+try:
+    import databricks.sdk  # noqa: F401
+except ImportError:
+    _has_databricks_sdk = False
+
+
+@pytest.mark.skipif(not _has_databricks_sdk, reason="databricks-sdk not installed")
 class TestLakebaseReadReplica:
     """Tests for read replica auto-discovery and connection routing."""
 
