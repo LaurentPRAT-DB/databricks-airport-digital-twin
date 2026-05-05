@@ -30,6 +30,8 @@ UC_SCHEMA="${UC_SCHEMA:-airport_digital_twin}"
 WAREHOUSE_ID="${WAREHOUSE_ID:-b868e84cedeb4262}"
 GENIE_SPACE_ID="${GENIE_SPACE_ID:-01f12612fa6314ae943d0526f5ae3a00}"
 SECRET_SCOPE="${SECRET_SCOPE:-airport-digital-twin}"
+LAKEBASE_ENDPOINT="${LAKEBASE_ENDPOINT:-projects/airport-digital-twin/branches/production/endpoints/primary}"
+LAKEBASE_HOST="${LAKEBASE_HOST:-ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com}"
 PROFILE="${DATABRICKS_PROFILE:-FEVM_SERVERLESS_STABLE}"
 
 # ── Auto-detect SP and bundle dir from DABs if not set ──────────────
@@ -61,11 +63,15 @@ ok()   { echo "  [OK] $1"; }
 skip() { echo "  [SKIP] $1"; }
 fail() { echo "  [FAIL] $1"; ERRORS=$((ERRORS + 1)); }
 
+# Build profile flag (empty in CI — uses env var auth)
+PROFILE_FLAG=()
+[[ -n "$PROFILE" ]] && PROFILE_FLAG=(--profile "$PROFILE")
+
 # ── Helper: run SQL via Statements API ───────────────────────────────
 run_sql() {
   local stmt="$1"
   databricks api post /api/2.0/sql/statements \
-    --profile "$PROFILE" \
+    "${PROFILE_FLAG[@]}" \
     --json "{\"warehouse_id\":\"$WAREHOUSE_ID\",\"statement\":\"$stmt\",\"wait_timeout\":\"30s\"}" \
     2>/dev/null | grep -q '"SUCCEEDED"'
 }
@@ -160,8 +166,8 @@ done
 
 # ── 4. Secret scope: READ ────────────────────────────────────────────
 echo "4. Secret scope permissions..."
-if databricks secrets list-scopes --profile "$PROFILE" 2>/dev/null | grep -q "$SECRET_SCOPE"; then
-  databricks secrets put-acl "$SECRET_SCOPE" "$APP_SP" READ --profile "$PROFILE" \
+if databricks secrets list-scopes "${PROFILE_FLAG[@]}" 2>/dev/null | grep -q "$SECRET_SCOPE"; then
+  databricks secrets put-acl "$SECRET_SCOPE" "$APP_SP" READ "${PROFILE_FLAG[@]}" \
     > /dev/null 2>&1 && ok "READ on secret scope '$SECRET_SCOPE'" || fail "Could not set ACL on secret scope"
 else
   skip "Secret scope '$SECRET_SCOPE' does not exist — create it if OpenSky credentials are needed"
@@ -171,16 +177,96 @@ fi
 echo "5. Genie space permissions..."
 if [[ -n "$GENIE_SPACE_ID" ]]; then
   databricks api patch "/api/2.0/genie/spaces/$GENIE_SPACE_ID" \
-    --profile "$PROFILE" \
+    "${PROFILE_FLAG[@]}" \
     --json "{\"acl\":{\"principal_type\":\"SERVICE_PRINCIPAL\",\"principal_id\":\"$APP_SP\",\"permission\":\"CAN_USE\"}}" \
     > /dev/null 2>&1 && ok "CAN_USE on Genie space" || skip "Genie space grant (may need manual setup via UI)"
 else
   skip "No GENIE_SPACE_ID configured"
 fi
 
-# ── 6. Lakebase ──────────────────────────────────────────────────────
+# ── 6. Lakebase: role creation + table grants ────────────────────────
 echo "6. Lakebase permissions..."
-ok "Handled by Databricks Apps platform (OAuth via WorkspaceClient)"
+# Use uv run if available (local dev), otherwise plain python3 (CI has deps pre-installed)
+PY_CMD="python3"
+command -v uv > /dev/null 2>&1 && [[ -f "pyproject.toml" ]] && PY_CMD="uv run python3"
+$PY_CMD - "$APP_SP" "$LAKEBASE_ENDPOINT" "$LAKEBASE_HOST" "$PROFILE" <<'PYEOF'
+import sys, os
+
+app_sp = sys.argv[1]
+endpoint = sys.argv[2]
+lb_host = sys.argv[3]
+profile = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+
+# Extract branch from endpoint path
+# e.g. "projects/airport-digital-twin/branches/production/endpoints/primary" -> branch parent
+parts = endpoint.split("/")
+branch_parent = "/".join(parts[:4])  # projects/airport-digital-twin/branches/<branch>
+
+try:
+    from databricks.sdk import WorkspaceClient
+    from databricks.sdk.service.postgres import (
+        Role, RoleRoleSpec, RoleAuthMethod, RoleIdentityType, RoleAttributes
+    )
+
+    w = WorkspaceClient(profile=profile) if profile else WorkspaceClient()
+
+    # Step 6a: Verify branch exists, then create role for SP (idempotent)
+    try:
+        existing_roles = list(w.postgres.list_roles(parent=branch_parent))
+    except Exception as e:
+        if "not found" in str(e).lower():
+            print(f"  [SKIP] Lakebase branch '{branch_parent}' does not exist — run with --seed first")
+            sys.exit(0)
+        raise
+
+    sp_has_role = any(
+        r.status and r.status.postgres_role == app_sp
+        for r in existing_roles
+    )
+
+    if sp_has_role:
+        print(f"  [OK] Lakebase role exists for SP {app_sp[:8]}...")
+    else:
+        role = Role(spec=RoleRoleSpec(
+            postgres_role=app_sp,
+            auth_method=RoleAuthMethod.LAKEBASE_OAUTH_V1,
+            identity_type=RoleIdentityType.SERVICE_PRINCIPAL,
+            attributes=RoleAttributes(bypassrls=False, createdb=False, createrole=False)
+        ))
+        w.postgres.create_role(parent=branch_parent, role=role)
+        print(f"  [OK] Created Lakebase role for SP {app_sp[:8]}...")
+
+    # Step 6b: Grant table permissions via SQL
+    cred = w.postgres.generate_database_credential(endpoint=endpoint)
+    me = w.current_user.me()
+
+    import psycopg2
+    conn = psycopg2.connect(
+        host=lb_host, port=5432, dbname="databricks_postgres",
+        user=me.user_name, password=cred.token, sslmode="require"
+    )
+    conn.autocommit = True
+    cur = conn.cursor()
+
+    cur.execute(f'GRANT USAGE ON SCHEMA public TO "{app_sp}"')
+    cur.execute(f'GRANT CREATE ON SCHEMA public TO "{app_sp}"')
+    cur.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{app_sp}"')
+
+    # Grant on all existing tables
+    cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+    tables = [row[0] for row in cur.fetchall()]
+    for t in tables:
+        cur.execute(f'GRANT ALL PRIVILEGES ON TABLE "{t}" TO "{app_sp}"')
+
+    conn.close()
+    print(f"  [OK] Lakebase SQL grants on {len(tables)} table(s)")
+
+except ImportError as e:
+    print(f"  [SKIP] Lakebase role (missing dependency: {e})")
+except Exception as e:
+    print(f"  [FAIL] Lakebase permissions: {e}")
+    sys.exit(1)
+PYEOF
 
 # ── 7. DABs-managed (informational) ─────────────────────────────────
 echo "7. DABs-managed resources (informational)..."
