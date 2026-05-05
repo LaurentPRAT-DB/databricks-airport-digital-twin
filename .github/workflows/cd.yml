@@ -80,10 +80,9 @@ jobs:
 
       - name: Build frontend
         working-directory: app/frontend
-        env:
-          npm_config_cache: ${{ github.workspace }}/.npm-cache
         run: |
-          npm ci
+          export npm_config_cache="${{ github.workspace }}/.npm-cache"
+          npm ci --ignore-scripts=false --userconfig=/dev/null
           npm run build
 
       - name: Deploy via DABs
