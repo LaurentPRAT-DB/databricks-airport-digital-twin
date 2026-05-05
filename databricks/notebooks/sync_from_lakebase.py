@@ -27,17 +27,28 @@ from pyspark.sql.types import (
     DoubleType, BooleanType, TimestampType, FloatType,
 )
 
-# Configuration
-CATALOG = "serverless_stable_3n0ihb_catalog"
-SCHEMA = "airport_digital_twin"
+# Configuration — read from job parameters (set by DABs), with hardcoded fallback for interactive use
+try:
+    LAKEBASE_ENDPOINT_NAME = dbutils.widgets.get("lakebase_endpoint")
+except Exception:
+    LAKEBASE_ENDPOINT_NAME = "projects/airport-digital-twin/branches/production/endpoints/primary"
 
-# Lakebase Autoscaling configuration
+try:
+    CATALOG = dbutils.widgets.get("target_catalog")
+except Exception:
+    CATALOG = "serverless_stable_3n0ihb_catalog"
+
+try:
+    SCHEMA = dbutils.widgets.get("target_schema")
+except Exception:
+    SCHEMA = "airport_digital_twin"
+
 LAKEBASE_HOST = "ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com"
 LAKEBASE_DATABASE = "databricks_postgres"
-LAKEBASE_ENDPOINT_NAME = "projects/airport-digital-twin/branches/production/endpoints/primary"
 
 print(f"Syncing from Lakebase to {CATALOG}.{SCHEMA}")
 print(f"Lakebase host: {LAKEBASE_HOST}")
+print(f"Lakebase endpoint: {LAKEBASE_ENDPOINT_NAME}")
 
 # COMMAND ----------
 

@@ -64,6 +64,15 @@ GENIE_SPACE_ID="${GENIE_SPACE_ID:-}"
 SECRET_SCOPE="${SECRET_SCOPE:-airport-digital-twin}"
 APP_NAME="${APP_NAME:-airport-digital-twin-$TARGET}"
 
+# Resolve Lakebase branch from bundle variables (for environment isolation)
+LAKEBASE_BRANCH="${LAKEBASE_BRANCH:-}"
+if [[ -z "$LAKEBASE_BRANCH" ]]; then
+  LAKEBASE_BRANCH=$(databricks bundle validate --target "$TARGET" --output json 2>/dev/null \
+    | python3 -c "import sys,json; b=json.load(sys.stdin); print(b.get('variables',{}).get('lakebase_branch',{}).get('value','dev'))" 2>/dev/null) || true
+fi
+LAKEBASE_BRANCH="${LAKEBASE_BRANCH:-$TARGET}"
+LAKEBASE_ENDPOINT="projects/airport-digital-twin/branches/$LAKEBASE_BRANCH/endpoints/primary"
+
 ok()   { echo "  [OK] $1"; }
 fail() { echo "  [FAIL] $1"; }
 info() { echo "  [INFO] $1"; }
@@ -102,21 +111,30 @@ PYEOF
 
 PATCHED=0
 [[ -n "${LAKEBASE_HOST:-}" ]] && patch_env_var "LAKEBASE_HOST" "$LAKEBASE_HOST" && PATCHED=1
-[[ -n "${LAKEBASE_ENDPOINT_NAME:-}" ]] && patch_env_var "LAKEBASE_ENDPOINT_NAME" "$LAKEBASE_ENDPOINT_NAME" && PATCHED=1
 [[ -n "${DATABRICKS_HOST:-}" ]] && patch_env_var "DATABRICKS_HOST" "${DATABRICKS_HOST#https://}" && PATCHED=1
 [[ -n "${UC_CATALOG:-}" ]] && patch_env_var "DATABRICKS_CATALOG" "$UC_CATALOG" && PATCHED=1
 [[ -n "${UC_SCHEMA:-}" ]] && patch_env_var "DATABRICKS_SCHEMA" "$UC_SCHEMA" && PATCHED=1
 [[ -n "${DATABRICKS_WAREHOUSE_ID:-}" ]] && patch_env_var "DATABRICKS_WAREHOUSE_ID" "$DATABRICKS_WAREHOUSE_ID" && PATCHED=1
 [[ -n "${DATABRICKS_WAREHOUSE_ID:-}" ]] && patch_env_var "DATABRICKS_HTTP_PATH" "/sql/1.0/warehouses/$DATABRICKS_WAREHOUSE_ID" && PATCHED=1
 
+# Always patch target-specific Lakebase endpoint and app metadata
+patch_env_var "LAKEBASE_ENDPOINT_NAME" "$LAKEBASE_ENDPOINT" && PATCHED=1
+patch_env_var "DATABRICKS_APP_URL" "https://$APP_NAME-7474645572615955.aws.databricksapps.com" && PATCHED=1
+patch_env_var "BUNDLE_WORKSPACE_ROOT" "/Workspace/Users/laurent.prat@databricks.com/.bundle/airport-digital-twin/$TARGET/files" && PATCHED=1
+
 if [[ $PATCHED -eq 1 ]]; then
-  ok "app.yaml patched for target"
+  ok "app.yaml patched for target (Lakebase branch: $LAKEBASE_BRANCH)"
 else
   info "No overrides — using app.yaml defaults (dev)"
 fi
 
-# ── Step 1a: Create UC schema (must exist before bundle deploy creates volumes) ──
-echo "Step 1: Create UC schema + deploy bundle"
+# ── Step 1a: Create UC catalog + schema (must exist before bundle deploy creates volumes) ──
+echo "Step 1: Create UC catalog/schema + deploy bundle"
+if [[ -n "$UC_CATALOG" ]]; then
+  run_sql "CREATE CATALOG IF NOT EXISTS \`$UC_CATALOG\`" \
+    && ok "Catalog $UC_CATALOG exists" \
+    || info "Could not create catalog (may already exist or insufficient perms)"
+fi
 if [[ -n "$UC_CATALOG" && -n "$UC_SCHEMA" ]]; then
   run_sql "CREATE SCHEMA IF NOT EXISTS \`$UC_CATALOG\`.\`$UC_SCHEMA\`" \
     && ok "Schema $UC_CATALOG.$UC_SCHEMA exists" \
@@ -177,6 +195,17 @@ fi
 
 # ── Step 3b: Seed data (--seed flag) ────────────────────────────────
 if $SEED; then
+  # Ensure Lakebase branch exists (required for env isolation)
+  echo "Step 3b-0: Ensure Lakebase branch '$LAKEBASE_BRANCH' exists"
+  if databricks api get "/api/2.0/postgres/projects/airport-digital-twin/branches/$LAKEBASE_BRANCH" 2>/dev/null | grep -q "name"; then
+    ok "Lakebase branch '$LAKEBASE_BRANCH' exists"
+  else
+    databricks api post "/api/2.0/postgres/projects/airport-digital-twin/branches" \
+      --json "$(jq -n --arg n "$LAKEBASE_BRANCH" --arg p "production" '{name: $n, parent_branch: $p}')" 2>/dev/null \
+      && ok "Created Lakebase branch '$LAKEBASE_BRANCH'" \
+      || info "Could not create branch (may already exist or need manual setup)"
+  fi
+
   echo "Step 3b: Seed data to UC Volumes"
 
   VOLUME_BASE="dbfs:/Volumes/$UC_CATALOG/$UC_SCHEMA"
@@ -210,9 +239,9 @@ if $SEED; then
 
   # Apply Lakebase schema (if Lakebase is configured)
   if [[ -n "${LAKEBASE_HOST:-}" ]]; then
-    echo "  Applying Lakebase schema..."
+    echo "  Applying Lakebase schema (branch: $LAKEBASE_BRANCH)..."
     LB_HOST="${LAKEBASE_HOST:-}"
-    LB_EP="${LAKEBASE_ENDPOINT_NAME:-projects/airport-digital-twin/branches/production/endpoints/primary}"
+    LB_EP="$LAKEBASE_ENDPOINT"
     python3 - "$LB_HOST" "$LB_EP" <<'PYEOF'
 import sys, subprocess, json
 

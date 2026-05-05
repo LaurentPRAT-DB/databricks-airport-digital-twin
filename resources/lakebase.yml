@@ -5,10 +5,21 @@
 # Lakebase Autoscaling Configuration:
 #
 # Project: airport-digital-twin
-# Branch: production (default)
-# Endpoint: primary
 # Database: databricks_postgres (default)
 # Schema: public
+#
+# Branches (environment isolation):
+#   - production: Production data (used by airport-digital-twin-prod app)
+#   - dev: Development data (used by airport-digital-twin-dev app)
+#
+# Each branch has its own endpoint:
+#   projects/airport-digital-twin/branches/<branch>/endpoints/primary
+#
+# Create a new branch:
+#   databricks api post "/api/2.0/postgres/projects/airport-digital-twin/branches" \
+#     --json '{"name": "<branch>", "parent_branch": "production"}'
+#
+# Endpoint (per branch): primary
 #
 # Tables:
 #   - flight_status (see scripts/lakebase_schema.sql)

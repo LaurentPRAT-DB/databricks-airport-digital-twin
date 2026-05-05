@@ -20,6 +20,10 @@ resources:
         - task_key: sync_lakebase_to_delta
           notebook_task:
             notebook_path: ../databricks/notebooks/sync_from_lakebase.py
+            base_parameters:
+              lakebase_endpoint: "projects/airport-digital-twin/branches/${var.lakebase_branch}/endpoints/primary"
+              target_catalog: "${var.catalog}"
+              target_schema: "${var.schema}"
           environment_key: sync_env
 
       # Run every 5 minutes
