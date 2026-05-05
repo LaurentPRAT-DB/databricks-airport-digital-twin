@@ -184,7 +184,16 @@ for name, ddl in ALL_TABLES:
 
   if [[ -n "$TABLES_SQL" ]]; then
     while IFS='|||' read -r tname tsql; do
-      run_sql "$tsql" && ok "Table $tname" || fail "Table $tname"
+      if [[ -z "$tsql" ]]; then continue; fi
+      RESULT=$(databricks api post /api/2.0/sql/statements \
+        --json "$(jq -n --arg s "$tsql" --arg w "$WAREHOUSE_ID" '{warehouse_id: $w, statement: $s, wait_timeout: "30s"}')" \
+        2>&1)
+      if echo "$RESULT" | grep -q '"SUCCEEDED"'; then
+        ok "Table $tname"
+      else
+        ERR=$(echo "$RESULT" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('status',{}).get('error',{}).get('message','unknown')[:150])" 2>/dev/null || echo "$RESULT" | tail -3)
+        fail "Table $tname: $ERR"
+      fi
     done <<< "$TABLES_SQL"
   else
     info "Could not load table DDLs — skipping table creation"
