@@ -39,12 +39,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required env vars
-for var in DATABRICKS_HOST DATABRICKS_CLIENT_ID DATABRICKS_CLIENT_SECRET; do
-  if [[ -z "${!var:-}" ]]; then
-    echo "ERROR: $var is not set"
-    exit 1
-  fi
-done
+if [[ -z "${DATABRICKS_HOST:-}" ]]; then
+  echo "ERROR: DATABRICKS_HOST is not set"
+  exit 1
+fi
+if [[ -z "${DATABRICKS_TOKEN:-}" && ( -z "${DATABRICKS_CLIENT_ID:-}" || -z "${DATABRICKS_CLIENT_SECRET:-}" ) ]]; then
+  echo "ERROR: Set DATABRICKS_TOKEN or both DATABRICKS_CLIENT_ID + DATABRICKS_CLIENT_SECRET"
+  exit 1
+fi
 
 UC_CATALOG="${UC_CATALOG:-airport_digital_twin}"
 UC_SCHEMA="${UC_SCHEMA:-airport_digital_twin}"

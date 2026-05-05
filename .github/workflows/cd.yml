@@ -5,6 +5,13 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      target:
+        description: "Deployment target (dev or prod)"
+        type: choice
+        options:
+          - prod
+          - dev
+        default: prod
       seed:
         description: "Seed data (first-time deploy: uploads calibration profiles, 3D models, Lakebase schema)"
         type: boolean
@@ -18,7 +25,8 @@ env:
   DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
   DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
   DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
-  TARGET: prod
+  DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+  TARGET: ${{ github.event.inputs.target || 'prod' }}
 
 jobs:
   deploy:
