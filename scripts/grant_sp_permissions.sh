@@ -186,9 +186,9 @@ fi
 
 # ── 6. Lakebase: role creation + table grants ────────────────────────
 echo "6. Lakebase permissions..."
-# Use uv run if available (local dev), otherwise plain python3 (CI has deps pre-installed)
-PY_CMD="python3"
-command -v uv > /dev/null 2>&1 && [[ -f "pyproject.toml" ]] && PY_CMD="uv run python3"
+# Use uv run for SDK access (both local and CI — uv sync runs in workflow)
+PY_CMD="uv run python3"
+command -v uv > /dev/null 2>&1 || PY_CMD="python3"
 $PY_CMD - "$APP_SP" "$LAKEBASE_ENDPOINT" "$LAKEBASE_HOST" "$PROFILE" <<'PYEOF'
 import sys, os
 

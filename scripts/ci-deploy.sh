@@ -252,9 +252,9 @@ if $SEED; then
     echo "  Applying Lakebase schema (branch: $LAKEBASE_BRANCH)..."
     LB_HOST="${LAKEBASE_HOST:-}"
     LB_EP="$LAKEBASE_ENDPOINT"
-    # Use uv run to ensure databricks-sdk is available
-    LB_PY="python3"
-    command -v uv > /dev/null 2>&1 && [[ -f "pyproject.toml" ]] && LB_PY="uv run python3"
+    # Use uv run for SDK access
+    LB_PY="uv run python3"
+    command -v uv > /dev/null 2>&1 || LB_PY="python3"
     $LB_PY - "$LB_HOST" "$LB_EP" <<'PYEOF'
 import sys, os
 
