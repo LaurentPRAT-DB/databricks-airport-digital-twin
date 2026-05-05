@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run Python tests
+        run: |
+          uv run pytest tests/ \
+            --ignore=tests/test_live_trajectory_quality.py \
+            --ignore=tests/test_airport_activation.py \
+            -x -q --tb=short \
+            --override-ini="asyncio_mode=auto"
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app/frontend
+        run: npm ci
+
+      - name: Run tests
+        working-directory: app/frontend
+        run: npm run test:run
+
+      - name: TypeScript check
+        working-directory: app/frontend
+        run: npx tsc --noEmit

@@ -1,0 +1,144 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: cd-deploy
+  cancel-in-progress: false
+
+env:
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+  DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+  TARGET: prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      app-url: ${{ steps.deploy.outputs.app_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install Databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Verify auth
+        run: databricks auth env
+
+      - name: Build frontend
+        working-directory: app/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy via DABs
+        id: deploy
+        run: |
+          chmod +x scripts/ci-deploy.sh
+          scripts/ci-deploy.sh --target "$TARGET"
+        env:
+          UC_CATALOG: ${{ secrets.UC_CATALOG }}
+          UC_SCHEMA: ${{ secrets.UC_SCHEMA }}
+          DATABRICKS_WAREHOUSE_ID: ${{ secrets.DATABRICKS_WAREHOUSE_ID }}
+          GENIE_SPACE_ID: ${{ secrets.GENIE_SPACE_ID }}
+          SECRET_SCOPE: ${{ secrets.SECRET_SCOPE }}
+
+  post-deploy-tests:
+    runs-on: ubuntu-latest
+    needs: deploy
+    timeout-minutes: 15
+    if: success()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Run E2E smoke tests
+        id: smoke
+        continue-on-error: true
+        run: |
+          echo "Triggering e2e_smoke_test job..."
+          RUN_OUTPUT=$(databricks bundle run e2e_smoke_test --target "$TARGET" 2>&1) || true
+          echo "$RUN_OUTPUT"
+          if echo "$RUN_OUTPUT" | grep -q "FAILED\|TERMINATED\|ERROR"; then
+            echo "smoke_result=failed" >> "$GITHUB_OUTPUT"
+          else
+            echo "smoke_result=passed" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+          TARGET: prod
+
+      - name: Run integration tests
+        id: integration
+        continue-on-error: true
+        run: |
+          echo "Triggering baggage_pipeline_integration_test job..."
+          RUN_OUTPUT=$(databricks bundle run baggage_pipeline_integration_test --target "$TARGET" 2>&1) || true
+          echo "$RUN_OUTPUT"
+          if echo "$RUN_OUTPUT" | grep -q "FAILED\|TERMINATED\|ERROR"; then
+            echo "integration_result=failed" >> "$GITHUB_OUTPUT"
+          else
+            echo "integration_result=passed" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+          TARGET: prod
+
+      - name: Alert on failure
+        if: steps.smoke.outputs.smoke_result == 'failed' || steps.integration.outputs.integration_result == 'failed'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const smokeResult = '${{ steps.smoke.outputs.smoke_result }}';
+            const integrationResult = '${{ steps.integration.outputs.integration_result }}';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            let body = `## Post-Deploy Test Failure\n\n`;
+            body += `**Commit:** ${context.sha.substring(0, 7)}\n`;
+            body += `**Branch:** main\n`;
+            body += `**Run:** [${context.runId}](${runUrl})\n\n`;
+            body += `| Test | Result |\n|------|--------|\n`;
+            body += `| E2E Smoke Tests | ${smokeResult === 'failed' ? '❌ FAILED' : '✅ Passed'} |\n`;
+            body += `| Integration Tests | ${integrationResult === 'failed' ? '❌ FAILED' : '✅ Passed'} |\n\n`;
+            body += `The deployment to **prod** completed but post-deploy validation failed.\n`;
+            body += `Investigate and fix before considering this release stable.`;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[deploy-failure] Post-deploy tests failed (${context.sha.substring(0, 7)})`,
+              body: body,
+              labels: ['deploy-failure']
+            });
+
+      - name: Fail if tests failed
+        if: steps.smoke.outputs.smoke_result == 'failed' || steps.integration.outputs.integration_result == 'failed'
+        run: |
+          echo "Post-deploy tests failed. See GitHub Issue for details."
+          exit 1

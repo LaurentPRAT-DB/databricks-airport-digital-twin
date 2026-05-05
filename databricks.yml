@@ -68,3 +68,10 @@ targets:
     variables:
       catalog: "serverless_stable_3n0ihb_catalog"
       schema: "airport_digital_twin"
+
+  prod:
+    workspace:
+      host: ${DATABRICKS_HOST}
+    variables:
+      catalog: ${UC_CATALOG}
+      schema: ${UC_SCHEMA}
