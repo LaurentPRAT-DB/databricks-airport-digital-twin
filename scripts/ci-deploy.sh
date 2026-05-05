@@ -252,10 +252,10 @@ if $SEED; then
     echo "  Applying Lakebase schema (branch: $LAKEBASE_BRANCH)..."
     LB_HOST="${LAKEBASE_HOST:-}"
     LB_EP="$LAKEBASE_ENDPOINT"
-    # Use uv run for SDK access
-    LB_PY="uv run python3"
-    command -v uv > /dev/null 2>&1 || LB_PY="python3"
-    $LB_PY - "$LB_HOST" "$LB_EP" <<'PYEOF'
+    # Use uv run for SDK access (heredoc via temp file to avoid stdin issues)
+    _LB_SCRIPT=$(mktemp /tmp/lb_schema_XXXXXX.py)
+    trap "rm -f $_LB_SCRIPT" EXIT
+    cat > "$_LB_SCRIPT" <<'PYEOF'
 import sys, os
 
 lb_host, endpoint = sys.argv[1], sys.argv[2]
@@ -288,6 +288,8 @@ try:
 except Exception as e:
     print(f"  [INFO] Lakebase schema skipped: {e}")
 PYEOF
+    uv run python3 "$_LB_SCRIPT" "$LB_HOST" "$LB_EP"
+    rm -f "$_LB_SCRIPT"
   else
     info "Lakebase not configured — skipping schema setup"
   fi
@@ -303,6 +305,33 @@ echo "Step 4: Deploy app"
 if [[ -z "$BUNDLE_DIR" ]]; then
   fail "BUNDLE_DIR not set — cannot deploy source"
   exit 1
+fi
+
+# Check app state — fresh apps need to be started before deploy
+APP_STATE=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
+  | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null || true)
+info "Current app state: ${APP_STATE:-unknown}"
+
+if [[ "$APP_STATE" != "RUNNING" ]]; then
+  info "App not running — starting compute (required before first deploy)..."
+  databricks apps start "$APP_NAME" 2>&1 | tail -3 || true
+  # Wait for compute to become ACTIVE (app won't be RUNNING until after deploy)
+  START_WAIT=0
+  while [[ $START_WAIT -lt 180 ]]; do
+    COMPUTE_STATE=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('compute_status',{}).get('state',''))" 2>/dev/null || true)
+    if [[ "$COMPUTE_STATE" == "ACTIVE" ]]; then
+      break
+    fi
+    sleep 15
+    START_WAIT=$((START_WAIT + 15))
+    info "Waiting for compute... (${START_WAIT}s, state: ${COMPUTE_STATE:-unknown})"
+  done
+  if [[ "$COMPUTE_STATE" == "ACTIVE" ]]; then
+    ok "Compute active — ready for deploy"
+  else
+    info "Compute in state '$COMPUTE_STATE' after ${START_WAIT}s — attempting deploy anyway..."
+  fi
 fi
 
 # Wait for any existing deployment to finish before deploying new source
