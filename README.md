@@ -25,10 +25,12 @@ The Airport Digital Twin merges three complementary engines into a single platfo
 | **Two-tier serving** | Lakehouse (Unity Catalog) for governance + Lakebase (PostgreSQL) for <10ms real-time reads |
 | **Live weather** | METAR/TAF — temperature, wind, visibility, flight category |
 | **FIDS** | Arrivals & departures board, just like a real terminal |
-| **LLM-powered reports** | Post-simulation narrative reports: KPIs, weather, events, performance assessment — configurable prompts |
+| **LLM-powered reports** | Post-simulation narrative reports with interactive chat: ask follow-up questions, get recommendations with FAA/ICAO benchmarks |
+| **What-if simulation** | Chat can trigger modified simulations — "What if we add 20% more traffic?" → runs headless sim, compares KPIs |
 | **Platform integration** | Lakeview dashboards, Genie NL queries, Unity Catalog, MLflow, Data Lineage |
 | **Data format importers** | AIXM, OSM, IFC, AIDM, FAA NASR, MSFS BGL |
-| **~3,900 tests** | ~3,089 Python + 822 frontend + 3 Databricks workspace jobs |
+| **CI/CD** | GitHub Actions — CI on push (Python + frontend tests), CD on merge to main (DABs deploy + post-deploy verification) |
+| **~4,700 tests** | ~3,747 Python + 971 frontend + 3 Databricks workspace jobs |
 
 ### Who Is This For?
 
@@ -51,7 +53,7 @@ The codebase is organized into clearly separated modules. Each module has a sing
 | **Simulation** | `src/simulation/` | 15 | Physics-based flight state machine, capacity management, scenario engine, video renderer, LLM report generator |
 | **ML** | `src/ml/` | 15 | 7 ML models (delay, gate, congestion, turnaround, OBT, GSE, inpainting) + registry + feature engineering |
 | **Calibration** | `src/calibration/` | 12 | Profile builder, multi-source ingestion (BTS, OpenSky, OurAirports), 1,183 airport profiles |
-| **Ingestion** | `src/ingestion/` | 21 | Flight generation, approach/departure trajectories, taxi routing, schedule/weather/baggage generators, circuit breaker |
+| **Ingestion** | `src/ingestion/` | 22 | Flight generation, approach/departure trajectories, taxi routing, schedule/weather/baggage generators, circuit breaker, shared flight state (`_state.py`) |
 | **Formats** | `src/formats/` | 6 dirs | Data format importers: AIXM, OSM, IFC, AIDM, FAA NASR, MSFS BGL |
 | **Pipelines** | `src/pipelines/` | 7 | DLT Bronze/Silver/Gold definitions for flights and baggage |
 | **Persistence** | `src/persistence/` | 3 | Airport repository, Unity Catalog table management |
@@ -64,7 +66,7 @@ The codebase is organized into clearly separated modules. Each module has a sing
 
 | Module | Path | Files | Purpose |
 |---|---|---|---|
-| **API Routes** | `app/backend/api/` | 18 | FastAPI routers — flights, schedule, weather, predictions, airport, baggage, GSE, simulation, OpenSky, data ops, inpainting, assistant, MCP, debug |
+| **API Routes** | `app/backend/api/` | 20 | FastAPI routers — flights, schedule, weather, predictions, airport, baggage, GSE, simulation, simulation jobs, OpenSky, data ops, inpainting, assistant (report chat + what-if), MCP, debug, Genie |
 | **Services** | `app/backend/services/` | 18 | Business logic singletons — flight data, predictions, weather, airport config, Lakebase, Delta, OpenSky, baggage, GSE, data ops, demo simulation |
 | **Models** | `app/backend/models/` | — | Request/response Pydantic models |
 
@@ -72,14 +74,20 @@ Key API routers:
 
 | Router | File | Endpoints |
 |---|---|---|
-| `routes.py` | Core flight & airport routes | `/api/flights`, `/api/airports`, `/api/airport/config` |
+| `routes.py` | Core flight routes | `/api/flights`, `/api/airports` |
+| `routes_airport.py` | Airport config + imports | `/api/airport/config`, `/api/airport/import/*` |
 | `routes_schedule.py` | FIDS | `/api/schedule/arrivals`, `/api/schedule/departures` |
 | `routes_weather.py` | Weather | `/api/weather/current` |
+| `routes_baggage.py` | Baggage tracking | `/api/baggage/stats`, `/api/baggage/alerts` |
+| `routes_gse.py` | Ground equipment | `/api/gse/status`, `/api/gse/assignments` |
+| `routes_debug.py` | Diagnostics | `/api/debug/logs`, `/api/metrics` |
 | `predictions.py` | ML outputs | `/api/predictions/delays`, `/predictions/gates/{icao24}`, `/predictions/congestion` |
 | `opensky.py` | Live ADS-B + recordings | `/api/opensky/flights`, `/api/opensky/recordings`, `/api/opensky/record/*` |
 | `simulation.py` | Sim replay + reports | `/api/simulation/files`, `/api/simulation/report/generate/{file}` |
+| `simulation_jobs.py` | Background sim runs | `/api/simulation/jobs/*` |
 | `inpainting.py` | Satellite cleanup | `/api/inpainting/clean-tile`, `/api/inpainting/status` |
-| `assistant.py` | LLM chat | `/api/assistant/chat` |
+| `assistant.py` | LLM chat + report chat | `/api/assistant/chat`, `/api/assistant/report-chat` (what-if tool) |
+| `genie.py` | Genie NL queries | `/api/genie/ask` |
 | `mcp.py` | MCP server | `/api/mcp/rpc` (13 tools) |
 | `data_ops.py` | Pipeline monitoring | `/api/data-ops/dashboard`, `/api/data-ops/stats` |
 | `websocket.py` | Real-time push | `/ws` (delta-compressed flight updates) |
@@ -123,11 +131,11 @@ Frontend state management:
 
 | Module | Path | Purpose |
 |---|---|---|
-| **Scripts** | `scripts/` (43 files) | CLI tools — profile building, batch simulations, video rendering, deployment, validation, OpenSky collection |
+| **Scripts** | `scripts/` (37 files) | CLI tools — profile building, batch simulations, video rendering, deployment (ci-deploy.sh, verify-prod.sh), validation, OpenSky collection |
 | **Scenarios** | `scenarios/` (38 YAML) | Weather disruption scenarios (thunderstorms, fog, snow, wind shifts) |
 | **Configs** | `configs/` | Simulation run configurations |
 | **Prompts** | `prompts/` | LLM prompt templates for report generation |
-| **Tests** | `tests/` (99 files) | Python test suite (~3,089 tests) |
+| **Tests** | `tests/` (108 files) | Python test suite (~3,747 tests) |
 | **Databricks** | `databricks/` | Notebooks — DLT pipeline, test runners |
 | **Resources** | `resources/` | DABs YAML configs — app, jobs, pipelines, volumes |
 
@@ -139,11 +147,12 @@ Frontend state management:
 | App files (backend + frontend) | 162 |
 | Source lines (`src/`) | ~37K |
 | App lines (backend + frontend) | ~48K |
-| Test files | 99 |
-| Total tests | ~3,900 |
+| Test files (Python) | 108 |
+| Test files (Frontend) | 44 |
+| Total tests | ~4,718 |
 | Scenario files | 38 |
 | Calibration profiles | 1,183 |
-| Scripts | 43 |
+| Scripts | 37 |
 
 ---
 
@@ -718,8 +727,8 @@ Three layers of prompt configurability:
 
 | Layer | Count | Framework | Command |
 |---|---|---|---|
-| Backend (Python) | ~3,089 | pytest | `uv run pytest tests/ -v` |
-| Frontend (TypeScript) | ~822 | Vitest | `cd app/frontend && npm test -- --run` |
+| Backend (Python) | ~3,747 | pytest | `uv run pytest tests/ -v` |
+| Frontend (TypeScript) | ~971 | Vitest | `cd app/frontend && npm test -- --run` |
 | E2E Smoke (Databricks) | 11 endpoints | DABs job | `databricks bundle run e2e_smoke_test --target dev` |
 | ML Endpoints (Databricks) | 4 models | DABs job | `databricks bundle run ml_endpoint_test --target dev` |
 | Baggage Integration | DLT pipeline | DABs job | `databricks bundle run baggage_pipeline_integration_test --target dev` |
