@@ -252,7 +252,10 @@ if $SEED; then
     echo "  Applying Lakebase schema (branch: $LAKEBASE_BRANCH)..."
     LB_HOST="${LAKEBASE_HOST:-}"
     LB_EP="$LAKEBASE_ENDPOINT"
-    python3 - "$LB_HOST" "$LB_EP" <<'PYEOF'
+    # Use uv run to ensure databricks-sdk is available
+    LB_PY="python3"
+    command -v uv > /dev/null 2>&1 && [[ -f "pyproject.toml" ]] && LB_PY="uv run python3"
+    $LB_PY - "$LB_HOST" "$LB_EP" <<'PYEOF'
 import sys, os
 
 lb_host, endpoint = sys.argv[1], sys.argv[2]
@@ -294,20 +297,24 @@ else
   info "Skipping data seed (use --seed for first-time deploy)"
 fi
 
-# ── Step 4: Deploy source + restart app ──────────────────────────────
-echo "Step 4: Deploy and restart app"
-# For production targets, bundle deploy creates the app but doesn't push source.
-# Explicitly deploy source code from the bundle files path.
+# ── Step 4: Deploy source + start app ─────────────────────────────────
+echo "Step 4: Deploy and start app"
+
+# Deploy source code first (starts the app if stopped)
 if [[ -n "$BUNDLE_DIR" ]]; then
-  databricks apps deploy "$APP_NAME" --source-code-path "/Workspace$BUNDLE_DIR" 2>&1 | tail -3 \
-    && ok "Source deployed to app" \
-    || info "apps deploy returned non-zero (may already be deploying)"
+  databricks apps deploy "$APP_NAME" --source-code-path "/Workspace$BUNDLE_DIR" 2>&1 | tail -5 \
+    && ok "Source deployed (app will start automatically)" \
+    || {
+      # apps deploy may fail if app is in transition — try start as fallback
+      info "apps deploy returned non-zero — trying apps start as fallback"
+      databricks apps start "$APP_NAME" > /dev/null 2>&1 || true
+    }
+else
+  databricks apps start "$APP_NAME" > /dev/null 2>&1 || true
 fi
-databricks apps stop "$APP_NAME" > /dev/null 2>&1 || true
-ok "App stopped"
-databricks apps start "$APP_NAME" > /dev/null 2>&1 || true
 info "App starting..."
 
+# Wait for app to reach RUNNING state
 TIMEOUT=600
 ELAPSED=0
 STATE=""
