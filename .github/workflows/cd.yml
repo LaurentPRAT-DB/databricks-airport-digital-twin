@@ -80,6 +80,8 @@ jobs:
 
       - name: Build frontend
         working-directory: app/frontend
+        env:
+          npm_config_cache: ${{ runner.temp }}/.npm
         run: |
           npm ci
           npm run build
