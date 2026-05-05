@@ -187,8 +187,12 @@ fi
 # ── 6. Lakebase: role creation + table grants ────────────────────────
 echo "6. Lakebase permissions..."
 # Use project venv python for SDK access (.venv created by uv sync)
-PY_CMD=".venv/bin/python"
-[[ -x "$PY_CMD" ]] || PY_CMD="uv run python3"
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PY_CMD="$_SCRIPT_DIR/.venv/bin/python"
+if [[ ! -x "$PY_CMD" ]]; then
+  echo "  [INFO] Venv not found at $PY_CMD — trying uv run"
+  PY_CMD="uv run python3"
+fi
 $PY_CMD - "$APP_SP" "$LAKEBASE_ENDPOINT" "$LAKEBASE_HOST" "$PROFILE" <<'PYEOF'
 import sys, os
 

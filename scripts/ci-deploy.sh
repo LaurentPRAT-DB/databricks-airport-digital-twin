@@ -26,6 +26,7 @@
 # ─────────────────────────────────────────────────────────────────────
 set -euo pipefail
 cd "$(dirname "$0")/.."
+PROJECT_ROOT="$(pwd)"
 
 # Parse flags
 TARGET="prod"
@@ -253,8 +254,11 @@ if $SEED; then
     LB_HOST="${LAKEBASE_HOST:-}"
     LB_EP="$LAKEBASE_ENDPOINT"
     # Use project venv python for SDK access (.venv created by uv sync)
-    VENV_PY=".venv/bin/python"
-    [[ -x "$VENV_PY" ]] || VENV_PY="uv run python3"
+    VENV_PY="$PROJECT_ROOT/.venv/bin/python"
+    if [[ ! -x "$VENV_PY" ]]; then
+      info "Venv not found at $VENV_PY — falling back to uv run"
+      VENV_PY="uv run python3"
+    fi
     _LB_SCRIPT=$(mktemp /tmp/lb_schema_XXXXXX.py)
     trap "rm -f $_LB_SCRIPT" EXIT
     cat > "$_LB_SCRIPT" <<'PYEOF'
