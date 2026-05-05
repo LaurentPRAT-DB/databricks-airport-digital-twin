@@ -61,12 +61,12 @@ jobs:
         with:
           version: "latest"
 
-      - uses: actions/setup-node@v4
-        if: runner.environment == 'github-hosted'
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: app/frontend/package-lock.json
+        env:
+          RUNNER_TOOL_CACHE: /tmp/runner-tool-cache
 
       - name: Install Python dependencies
         run: uv sync --all-extras
@@ -80,8 +80,6 @@ jobs:
 
       - name: Build frontend
         working-directory: app/frontend
-        env:
-          npm_config_cache: ${{ runner.temp }}/.npm
         run: |
           npm ci
           npm run build
