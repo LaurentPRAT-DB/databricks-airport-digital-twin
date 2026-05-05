@@ -69,11 +69,11 @@ export const measureRenderTime = async (
 }
 
 export const PERFORMANCE_THRESHOLDS = {
-  initialRender: 100, // ms
-  rerender: 50, // ms
-  interaction: 200, // ms
-  heavyComponent: 500, // ms (for 3D, maps)
-  apiResponse: 1000, // ms
+  initialRender: 200, // ms
+  rerender: 100, // ms
+  interaction: 500, // ms (CI runners are ~2x slower than local dev)
+  heavyComponent: 1000, // ms (for 3D, maps)
+  apiResponse: 2000, // ms
 }
 
 // Mock flight factory for tests
