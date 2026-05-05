@@ -298,23 +298,19 @@ else
 fi
 
 # ── Step 4: Deploy source + start app ─────────────────────────────────
-echo "Step 4: Deploy and start app"
+echo "Step 4: Deploy app"
 
-# Deploy source code first (starts the app if stopped)
-if [[ -n "$BUNDLE_DIR" ]]; then
-  databricks apps deploy "$APP_NAME" --source-code-path "/Workspace$BUNDLE_DIR" 2>&1 | tail -5 \
-    && ok "Source deployed (app will start automatically)" \
-    || {
-      # apps deploy may fail if app is in transition — try start as fallback
-      info "apps deploy returned non-zero — trying apps start as fallback"
-      databricks apps start "$APP_NAME" > /dev/null 2>&1 || true
-    }
-else
-  databricks apps start "$APP_NAME" > /dev/null 2>&1 || true
+if [[ -z "$BUNDLE_DIR" ]]; then
+  fail "BUNDLE_DIR not set — cannot deploy source"
+  exit 1
 fi
-info "App starting..."
+
+# apps deploy pushes source code and starts the app in one step
+databricks apps deploy "$APP_NAME" --source-code-path "/Workspace$BUNDLE_DIR" 2>&1 | tail -5
+ok "Source deploy initiated"
 
 # Wait for app to reach RUNNING state
+info "Waiting for app to reach RUNNING..."
 TIMEOUT=600
 ELAPSED=0
 STATE=""
