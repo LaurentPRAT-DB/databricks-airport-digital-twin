@@ -80,10 +80,9 @@ jobs:
 
       - name: Build frontend
         working-directory: app/frontend
+        env:
+          npm_config_cache: ${{ github.workspace }}/.npm-cache
         run: |
-          echo "Node: $(node --version), npm: $(npm --version)"
-          echo "which node: $(which node)"
-          echo "npm config get cache: $(npm config get cache)"
           npm ci
           npm run build
 
