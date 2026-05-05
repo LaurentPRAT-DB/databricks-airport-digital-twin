@@ -4,7 +4,7 @@ import { useFlightContext } from '../../context/FlightContext';
 import { useTrajectory } from '../../hooks/useTrajectory';
 
 /** Squared distance between two lat/lon points (cheap, no sqrt needed). */
-function distSq(lat1: number, lon1: number, lat2: number, lon2: number) {
+export function distSq(lat1: number, lon1: number, lat2: number, lon2: number) {
   return (lat1 - lat2) ** 2 + (lon1 - lon2) ** 2;
 }
 
@@ -14,7 +14,7 @@ function distSq(lat1: number, lon1: number, lat2: number, lon2: number) {
 const MAX_GAP_SQ = 0.04 * 0.04; // 0.0016
 
 /** Split a polyline into segments wherever consecutive points are far apart. */
-function splitAtGaps(positions: [number, number][]): [number, number][][] {
+export function splitAtGaps(positions: [number, number][]): [number, number][][] {
   if (positions.length < 2) return positions.length === 0 ? [] : [positions];
   const segments: [number, number][][] = [];
   let current: [number, number][] = [positions[0]];
@@ -33,7 +33,7 @@ function splitAtGaps(positions: [number, number][]): [number, number][][] {
 }
 
 /** Perpendicular distance from point to line segment (start→end). */
-function perpendicularDist(point: [number, number], start: [number, number], end: [number, number]): number {
+export function perpendicularDist(point: [number, number], start: [number, number], end: [number, number]): number {
   const [px, py] = point;
   const [sx, sy] = start;
   const [ex, ey] = end;
@@ -47,7 +47,7 @@ function perpendicularDist(point: [number, number], start: [number, number], end
 
 /** Douglas-Peucker line simplification: removes noise while preserving shape.
  *  Epsilon in degrees — 0.0001° ≈ 11m, enough to eliminate GPS/sim jitter. */
-function simplify(points: [number, number][], epsilon = 0.0001): [number, number][] {
+export function simplify(points: [number, number][], epsilon = 0.0001): [number, number][] {
   if (points.length < 3) return points;
   let maxDist = 0;
   let maxIdx = 0;
@@ -66,7 +66,7 @@ function simplify(points: [number, number][], epsilon = 0.0001): [number, number
 /** Chaikin's corner-cutting: smooths sharp turns while preserving straight segments.
  *  Each iteration replaces each edge midpoint pair with two 25%/75% points.
  *  5 iterations gives smooth arcs even for near-180° reversals (go-arounds). */
-function chaikinSmooth(points: [number, number][], iterations = 5): [number, number][] {
+export function chaikinSmooth(points: [number, number][], iterations = 5): [number, number][] {
   if (points.length < 3) return points;
   let result = points;
   for (let iter = 0; iter < iterations; iter++) {
