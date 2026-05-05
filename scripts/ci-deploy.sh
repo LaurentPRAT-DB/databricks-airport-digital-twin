@@ -142,7 +142,7 @@ if [[ -n "$UC_CATALOG" && -n "$UC_SCHEMA" ]]; then
 fi
 
 # ── Step 1b: DABs bundle deploy ──────────────────────────────────────
-databricks bundle deploy --target "$TARGET" 2>&1 | grep -v "^Warning:" \
+databricks bundle deploy --target "$TARGET" --force-lock 2>&1 | grep -v "^Warning:" \
   && ok "Bundle deployed" \
   || { fail "Bundle deploy failed"; exit 1; }
 
