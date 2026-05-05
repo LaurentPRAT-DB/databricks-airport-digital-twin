@@ -1,6 +1,6 @@
 # Airport Digital Twin
 
-> A real-time airport operations platform built on Databricks — combining physics-based flight simulation with ML-powered predictions, served through interactive 2D/3D visualization across any airport worldwide.
+> A real-time airport operations platform built on Databricks — combining physics-based flight simulation, live ADS-B tracking, and ML-powered predictions, served through interactive 2D/3D visualization across any airport worldwide.
 
 ![Application Overview](docs/screenshots/01-overview.png)
 
@@ -10,13 +10,14 @@
 
 ## What It Does
 
-The Airport Digital Twin merges two complementary engines into a single platform: a **real-time flight simulation** that animates 50+ aircraft through realistic taxi, takeoff, cruise, approach, and landing phases, and an **analytics layer** that scores every flight with ML predictions, processes historical data through DLT pipelines, and serves operational dashboards.
+The Airport Digital Twin merges three complementary engines into a single platform: a **real-time flight simulation** that animates 50+ aircraft through realistic taxi, takeoff, cruise, approach, and landing phases; a **live ADS-B feed** from OpenSky Network with in-app recording and replay; and an **analytics layer** that scores every flight with ML predictions, processes historical data through DLT pipelines, and serves operational dashboards.
 
 ### At a Glance
 
 | Capability | Details |
 |---|---|
 | **Real-time simulation** | Physics-based flight state machine, 50+ concurrent aircraft, WebSocket delta streaming |
+| **Live ADS-B tracking** | OpenSky Network integration with recording and frame-by-frame replay |
 | **2D + 3D visualization** | Leaflet maps with OSM overlays, Three.js 3D with extruded terminal buildings |
 | **Multi-airport** | 12 presets (SFO, JFK, LAX, ORD, ATL, LHR, CDG, AUH, DXB, HND, HKG, SIN) + any ICAO code |
 | **7 ML models** | Delay, gate assignment, congestion, turnaround, off-block time, GSE allocation, aircraft inpainting |
@@ -35,13 +36,118 @@ The Airport Digital Twin merges two complementary engines into a single platform
 |---|---|---|
 | Airport Operators | [Operations & Strategy](#for-airport-operators) | KPIs, dashboards, decision support, daily usage |
 | Data Scientists | [ML & Calibration](#for-data-scientists) | Models, features, calibration pipeline, training |
-| Developers | [Architecture & Deployment](#for-developers) | API, data flow, testing, deployment, infrastructure |
+| Developers | [Architecture & Modules](#for-developers) | Architecture, modules, API, testing, deployment |
 
 ---
 
-## The Dual Engine: Simulation & Analytics
+## Project Modules
 
-The platform isn't just a visualization — it's two engines working in tandem.
+The codebase is organized into clearly separated modules. Each module has a single responsibility and well-defined boundaries.
+
+### Core Logic (`src/`)
+
+| Module | Path | Files | Purpose |
+|---|---|---|---|
+| **Simulation** | `src/simulation/` | 15 | Physics-based flight state machine, capacity management, scenario engine, video renderer, LLM report generator |
+| **ML** | `src/ml/` | 15 | 7 ML models (delay, gate, congestion, turnaround, OBT, GSE, inpainting) + registry + feature engineering |
+| **Calibration** | `src/calibration/` | 12 | Profile builder, multi-source ingestion (BTS, OpenSky, OurAirports), 1,183 airport profiles |
+| **Ingestion** | `src/ingestion/` | 21 | Flight generation, approach/departure trajectories, taxi routing, schedule/weather/baggage generators, circuit breaker |
+| **Formats** | `src/formats/` | 6 dirs | Data format importers: AIXM, OSM, IFC, AIDM, FAA NASR, MSFS BGL |
+| **Pipelines** | `src/pipelines/` | 7 | DLT Bronze/Silver/Gold definitions for flights and baggage |
+| **Persistence** | `src/persistence/` | 3 | Airport repository, Unity Catalog table management |
+| **Inference** | `src/inference/` | 2 | OpenSky event processing |
+| **Routing** | `src/routing/` | 2 | Taxiway graph construction and pathfinding |
+| **Schemas** | `src/schemas/` | 3 | Pydantic models for flights and OpenSky data |
+| **Config** | `src/config/` | — | Shared configuration |
+
+### Backend Application (`app/backend/`)
+
+| Module | Path | Files | Purpose |
+|---|---|---|---|
+| **API Routes** | `app/backend/api/` | 18 | FastAPI routers — flights, schedule, weather, predictions, airport, baggage, GSE, simulation, OpenSky, data ops, inpainting, assistant, MCP, debug |
+| **Services** | `app/backend/services/` | 18 | Business logic singletons — flight data, predictions, weather, airport config, Lakebase, Delta, OpenSky, baggage, GSE, data ops, demo simulation |
+| **Models** | `app/backend/models/` | — | Request/response Pydantic models |
+
+Key API routers:
+
+| Router | File | Endpoints |
+|---|---|---|
+| `routes.py` | Core flight & airport routes | `/api/flights`, `/api/airports`, `/api/airport/config` |
+| `routes_schedule.py` | FIDS | `/api/schedule/arrivals`, `/api/schedule/departures` |
+| `routes_weather.py` | Weather | `/api/weather/current` |
+| `predictions.py` | ML outputs | `/api/predictions/delays`, `/predictions/gates/{icao24}`, `/predictions/congestion` |
+| `opensky.py` | Live ADS-B + recordings | `/api/opensky/flights`, `/api/opensky/recordings`, `/api/opensky/record/*` |
+| `simulation.py` | Sim replay + reports | `/api/simulation/files`, `/api/simulation/report/generate/{file}` |
+| `inpainting.py` | Satellite cleanup | `/api/inpainting/clean-tile`, `/api/inpainting/status` |
+| `assistant.py` | LLM chat | `/api/assistant/chat` |
+| `mcp.py` | MCP server | `/api/mcp/rpc` (13 tools) |
+| `data_ops.py` | Pipeline monitoring | `/api/data-ops/dashboard`, `/api/data-ops/stats` |
+| `websocket.py` | Real-time push | `/ws` (delta-compressed flight updates) |
+
+### Frontend Application (`app/frontend/`)
+
+| Module | Path | Purpose |
+|---|---|---|
+| **Map (2D)** | `components/Map/` | Leaflet map — airport overlay, flight markers, trajectory lines, satellite inpainting |
+| **Map3D** | `components/Map3D/` | Three.js 3D view — aircraft models, extruded terminals, altitude visualization |
+| **SimulationControls** | `components/SimulationControls/` | Play/pause/speed, timeline scrubber, live mode, recording controls, recorded session picker |
+| **FlightList** | `components/FlightList/` | Searchable flight list with phase filtering |
+| **FlightDetail** | `components/FlightDetail/` | Selected flight info, ML predictions, trajectory toggle |
+| **FIDS** | `components/FIDS/` | Arrivals/departures display board |
+| **GateStatus** | `components/GateStatus/` | Terminal gate occupancy and congestion levels |
+| **Weather** | `components/Weather/` | METAR/TAF widget — wind, visibility, flight category |
+| **AirportSelector** | `components/AirportSelector/` | Airport picker — 12 presets + any ICAO code |
+| **Header** | `components/Header/` | App header with mode indicators and navigation |
+| **KPIDashboard** | `components/KPIDashboard/` | Operational KPI cards |
+| **DataOps** | `components/DataOps/` | Pipeline health dashboard |
+| **PlatformLinks** | `components/PlatformLinks/` | Links to Databricks tools (Lakeview, Genie, MLflow, Lineage) |
+| **Baggage** | `components/Baggage/` | Baggage tracking UI |
+| **GenieChat** | `components/GenieChat/` | Natural language query interface |
+| **SceneCapture** | `components/SceneCapture/` | 3D scene screenshot utility |
+
+Frontend state management:
+
+| Context / Hook | Purpose |
+|---|---|
+| `FlightContext` | Flights array, selection, phase filtering, data mode (simulation/live/recorded) |
+| `AirportConfigContext` | Current airport config, gates, terminals, runways from OSM |
+| `CongestionFilterContext` | Congestion area visibility toggles |
+| `ThemeContext` | Light/dark mode |
+| `useSimulationReplay` | Frame-by-frame replay engine for simulation and recorded sessions |
+| `useViewportState` | Syncs center/zoom/bearing between 2D and 3D views |
+| `useWebSocket` | WebSocket connection for live simulation updates |
+| `usePredictions` | ML prediction data per flight |
+| `useTrajectory` | Flight trajectory fetching and display |
+
+### Supporting Modules
+
+| Module | Path | Purpose |
+|---|---|---|
+| **Scripts** | `scripts/` (43 files) | CLI tools — profile building, batch simulations, video rendering, deployment, validation, OpenSky collection |
+| **Scenarios** | `scenarios/` (38 YAML) | Weather disruption scenarios (thunderstorms, fog, snow, wind shifts) |
+| **Configs** | `configs/` | Simulation run configurations |
+| **Prompts** | `prompts/` | LLM prompt templates for report generation |
+| **Tests** | `tests/` (99 files) | Python test suite (~3,089 tests) |
+| **Databricks** | `databricks/` | Notebooks — DLT pipeline, test runners |
+| **Resources** | `resources/` | DABs YAML configs — app, jobs, pipelines, volumes |
+
+### Codebase Stats
+
+| Metric | Count |
+|---|---|
+| Python source files (`src/`) | 110 |
+| App files (backend + frontend) | 162 |
+| Source lines (`src/`) | ~37K |
+| App lines (backend + frontend) | ~48K |
+| Test files | 99 |
+| Total tests | ~3,900 |
+| Scenario files | 38 |
+| Calibration profiles | 1,183 |
+| Scripts | 43 |
+
+---
+
+## The Engines: Simulation, Live Tracking & Analytics
 
 ### Engine 1: Real-Time Flight Simulation
 
@@ -55,7 +161,18 @@ Each phase has realistic dynamics — acceleration curves, altitude profiles, tu
 
 On the backend, the simulation ticks at accelerated speed and the **WebSocket** (`app/backend/api/websocket.py`) pushes **delta-compressed updates** to the frontend — only fields that changed since the last frame are sent, keeping bandwidth under 2 KB/s for 100+ flights.
 
-### Engine 2: Analytics & ML
+### Engine 2: Live ADS-B Tracking & Recording
+
+The platform connects to the **OpenSky Network** for live ADS-B aircraft positions. The live mode:
+
+- Polls OpenSky every 10 seconds for aircraft within the airport's bounding box
+- Accumulates position history client-side for trajectory trails
+- Follows the selected flight on the map (auto-pan with 55km clamp to airport area)
+- Applies flight phase classification (parked/takeoff/climb/cruise/descent/landing) in real time
+
+**In-app recording**: A Record button captures live snapshots to local JSONL files (`data/opensky_raw/`). Recordings are replayable through the same frame-based replay engine used for simulations — no Databricks pipeline needed for local replay.
+
+### Engine 3: Analytics & ML
 
 Every flight in the simulation is simultaneously scored by 7 ML models:
 
@@ -181,7 +298,8 @@ On Databricks:
 6. Hardcoded fallback               → generic defaults
 
 Locally:
-1. Local JSON → 2. Known profiles → 3. OpenFlights → 4. Hardcoded
+1. Local cache (data/cache/)  → fast dev reload
+2. Local JSON → 3. Known profiles → 4. OpenFlights → 5. Hardcoded
 ```
 
 ### DLT Pipeline (Bronze / Silver / Gold)
@@ -324,6 +442,16 @@ The Airport Digital Twin provides a **single-pane-of-glass** for airport operati
 **3D view** — Click **3D** for the Three.js visualization with aircraft at actual altitude and extruded terminal buildings.
 
 ![3D View](docs/screenshots/08-3d-view.png)
+
+**Live ADS-B mode** — Switch to Live to see real aircraft from OpenSky Network. Click Record to capture a session for later replay.
+
+### Three Data Modes
+
+| Mode | Source | Use Case |
+|---|---|---|
+| **Simulation** | Physics engine + synthetic data | Training, demos, what-if analysis |
+| **Live** | OpenSky Network ADS-B | Real-time monitoring, recording |
+| **Recorded** | JSONL files (local) or Delta tables (cloud) | Replay past sessions, analysis |
 
 ### Flight Phase Color Codes
 
@@ -521,24 +649,6 @@ graph TB
     API --> AST
 ```
 
-### API Endpoints (30+)
-
-| Category | Endpoints | Description |
-|---|---|---|
-| **Flights** | `GET /api/flights`, `/flights/{icao24}`, `/flights/{icao24}/trajectory` | Flight positions and trajectories |
-| **Schedule** | `GET /api/schedule/arrivals`, `/schedule/departures` | FIDS arrivals/departures |
-| **Weather** | `GET /api/weather/current` | METAR/TAF data |
-| **Predictions** | `GET /api/predictions/delays`, `/predictions/gates/{icao24}`, `/predictions/congestion`, `/predictions/bottlenecks`, `/predictions/congestion-summary` | ML model outputs |
-| **Airport** | `GET /api/airports`, `POST /airports/{icao}/activate`, `/airport/config` | Airport management, OSM import |
-| **Data Import** | `POST /api/airport/import/{aixm,osm,ifc,aidm,faa,msfs}` | Format-specific importers |
-| **Baggage** | `GET /api/baggage/stats`, `/baggage/flight/{id}`, `/baggage/alerts` | Baggage tracking |
-| **GSE** | `GET /api/gse/status`, `/turnaround/{icao24}` | Ground equipment and turnaround |
-| **Inpainting** | `POST /api/inpainting/clean-tile`, `/inpainting/status`, `/inpainting/wake` | Satellite tile aircraft removal |
-| **Simulation** | `GET /api/simulation/files`, `/simulation/data/{file}`, `/simulation/report/{file}`, `POST /simulation/report/generate/{file}` | Simulation replay + report generation |
-| **Data Ops** | `GET /api/data-ops/dashboard`, `/data-ops/stats`, `/data-ops/sync-status` | Pipeline monitoring |
-| **Assistant** | `POST /api/assistant/chat`, `POST /api/mcp/rpc` | Unified LLM assistant + MCP server |
-| **System** | `GET /health`, `/api/ready`, `/api/debug/logs` | Health checks and diagnostics |
-
 ### WebSocket Protocol
 
 The WebSocket at `/ws` pushes delta-compressed flight updates:
@@ -589,8 +699,6 @@ The engine manages the full flight lifecycle, runway capacity/sequencing, gate a
 
 After a simulation completes, an LLM-powered report generator can produce a **narrative markdown analysis** covering KPIs, weather evolution, key operational events, and performance assessment.
 
-#### How It Works
-
 ```
 Simulation JSON ──► Report Generator ──► REPORT_*.md
                           │
@@ -598,128 +706,13 @@ Simulation JSON ──► Report Generator ──► REPORT_*.md
            (scenario YAML / file / default)
 ```
 
-The report generator:
-1. Extracts KPIs, weather timeline, and scenario events from the simulation output
-2. Renders a configurable prompt template with the structured data
-3. Calls the Databricks Foundation Model endpoint (same as the Unified Assistant)
-4. Returns a professional markdown report
-
-#### CLI Usage
-
-```bash
-# Generate report after simulation (uses default prompt)
-python -m src.simulation.cli --airport SFO --arrivals 50 --departures 50 \
-  --scenario scenarios/sfo_summer_thunderstorm.yaml --report
-
-# Generate report with a custom prompt template
-python -m src.simulation.cli --airport JFK --arrivals 100 --departures 100 \
-  --scenario scenarios/jfk_winter_storm.yaml \
-  --report --report-prompt prompts/custom_ops_briefing.md
-
-# Using YAML config with report enabled
-# (add `generate_report: true` and optionally `report_prompt_file:` to config YAML)
-python -m src.simulation.cli --config configs/simulation_sfo_1000.yaml --report
-```
-
-Output: `REPORT_*.md` saved alongside the simulation JSON (e.g., `simulation_output/REPORT_sfo_1000.md`).
-
-#### On-Demand Generation (Frontend)
-
-In the simulation replay UI, the **Analysis Report** tab shows a "Generate Analysis Report" button when no pre-existing report is found. Clicking it calls the backend API:
-
-```
-POST /api/simulation/report/generate/{filename}
-Body: { "prompt_template": "optional custom prompt override" }
-```
-
-The report is generated, saved (locally + UC Volume), and immediately rendered in the UI.
-
-#### Configurable Prompt Templates
-
-Prompts use `{variable}` placeholders filled from simulation output. Three layers of configurability (highest priority first):
+Three layers of prompt configurability:
 
 | Priority | Source | Use Case |
 |---|---|---|
 | 1 | Scenario YAML: `report_prompt` | Inline prompt for a specific scenario |
-| 2 | File reference: `report_prompt_file` | Shared template across scenarios (in scenario YAML or config YAML) |
+| 2 | File reference: `report_prompt_file` | Shared template across scenarios |
 | 3 | Default: `prompts/simulation_report.md` | Standard operations analyst briefing |
-
-**Available template variables:**
-
-| Variable | Content |
-|---|---|
-| `{airport}` | IATA airport code |
-| `{scenario_name}` | Scenario name (or "Standard Operations") |
-| `{scenario_description}` | Scenario description text |
-| `{duration_hours}` | Simulation duration in hours |
-| `{start_date}` | Simulation date |
-| `{kpis_json}` | Formatted KPI summary (on-time %, delay, cancellations, etc.) |
-| `{weather_timeline}` | Chronological weather events with METAR-style details |
-| `{scenario_events}` | Key events: go-arounds, diversions, runway closures, etc. |
-| `{flight_schedule_summary}` | Flight counts, aircraft mix, peak traffic |
-
-**Example: Custom prompt in scenario YAML**
-
-```yaml
-name: SFO Summer Thunderstorm
-description: Full-day stress scenario with cascading disruptions
-report_prompt: |
-  You are a chief operations officer reviewing simulation results.
-  Write a 3-paragraph executive brief for the board meeting.
-  Focus on financial impact and passenger experience.
-  
-  Airport: {airport} | Scenario: {scenario_name}
-  KPIs: {kpis_json}
-  Events: {scenario_events}
-weather_events:
-  - time: "14:00"
-    type: thunderstorm
-    ...
-```
-
-**Example: Reference an external prompt file**
-
-```yaml
-name: JFK Winter Storm
-report_prompt_file: prompts/regulatory_compliance_report.md
-weather_events:
-  ...
-```
-
-#### LLM Configuration and Dependencies
-
-The report generator uses the **Databricks Foundation Model API** (OpenAI-compatible chat completions) — the same endpoint used by the Unified Assistant.
-
-**Environment variables:**
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `ASSISTANT_MODEL_ENDPOINT` | `databricks-claude-sonnet-4-5` | Databricks serving endpoint for LLM |
-| `DATABRICKS_HOST` | (from SDK config) | Workspace URL |
-| `DATABRICKS_TOKEN` | (from SDK config) | Auth token (CLI usage) |
-
-**LLM parameters (report generation):**
-
-| Parameter | Value | Rationale |
-|---|---|---|
-| `max_tokens` | 4096 | Reports are 500-800 words, need headroom |
-| `temperature` | 0.3 | Slightly creative narrative while maintaining factual accuracy |
-| `tools` | None | Pure inference, no tool calling |
-
-**Authentication:**
-
-- **In deployed app (Databricks Apps):** Uses the request's OAuth Bearer token (user's session)
-- **CLI usage:** Falls back to `databricks-cli` SDK config (`~/.databrickscfg`) or `DATABRICKS_HOST` + `DATABRICKS_TOKEN` env vars
-
-**Python dependencies** (already in `pyproject.toml`):
-
-| Package | Purpose |
-|---|---|
-| `httpx` | Async HTTP client for FM endpoint calls |
-| `pydantic` | Config models with `generate_report` and `report_prompt_file` fields |
-| `databricks-sdk` | Auth fallback for CLI (extracts host/token from profile) |
-
-**No additional dependencies required** — the report generator reuses the existing `httpx` client and Databricks SDK already used by the assistant service.
 
 ### Test Suite
 
@@ -743,9 +736,10 @@ The report generator uses the **Databricks Foundation Model API** (OpenAI-compat
 The application deploys as a **Databricks App** using **Databricks Asset Bundles (DABs)**. Always use DABs — never `databricks apps deploy` directly.
 
 ```bash
-# Build frontend + deploy
-cd app/frontend && npm run build
-databricks bundle deploy --target dev
+# Full automated deploy (build + DABs + tables + app restart + SP grants)
+./deploy.sh                    # default target: dev
+./deploy.sh --target prod      # specify target
+SKIP_BUILD=1 ./deploy.sh       # skip frontend build
 ```
 
 ```mermaid
@@ -824,26 +818,46 @@ graph TB
 | 3D view slow | GPU/WebGL limitations | Reduce window size, use Chrome/Firefox |
 | Stale data (>5 min) | Sync job failing | Check `/api/data-ops/sync-status` |
 
-### Key Directories
+### Directory Structure
 
 ```
-app/backend/       # FastAPI app (main.py, routes, middleware, services)
-app/frontend/      # React app (src/, tests/, dist/)
-src/               # Core logic
-  simulation/      #   Flight state machine, capacity, scenario engine, report generator
-  ml/              #   7 ML models + registry + features + inpainting
-  calibration/     #   Profile builder, BTS/OpenSky/OurAirports ingest
-  formats/         #   AIXM, OSM, IFC, AIDM, FAA, MSFS importers
-  ingestion/       #   Fallback generator, schedule, weather, baggage
-  pipelines/       #   DLT Bronze/Silver/Gold definitions
-tests/             # Python test suite (~3,089 tests)
-databricks/        # Notebooks (DLT, test runners)
-resources/         # DABs job/pipeline/app YAML configs
-data/              # Local calibration profiles (dev fallback; production uses UC Volume)
-configs/           # Simulation scenario configs
-scenarios/         # Weather disruption scenarios (38 YAML files)
-prompts/           # LLM prompt templates (simulation reports, customizable)
-scripts/           # CLI tools (build profiles, batch sims)
+app/
+  backend/
+    api/               # 18 FastAPI route modules
+    services/          # 18 business logic singletons
+    models/            # Pydantic request/response models
+    main.py            # Uvicorn entry point
+  frontend/
+    src/
+      components/      # 17 UI component modules
+      context/         # 4 React contexts (Flight, AirportConfig, Congestion, Theme)
+      hooks/           # 11 custom hooks (WebSocket, simulation replay, predictions)
+      types/           # TypeScript type definitions
+      constants/       # Airport layout constants
+    dist/              # Production build output
+    tests/             # ~822 Vitest tests
+
+src/
+  simulation/          # Flight state machine, capacity, scenarios, video, reports
+  ml/                  # 7 ML models + registry + features + inpainting
+  calibration/         # Profile builder, multi-source ingestion
+  ingestion/           # Flight generation, trajectories, schedules, weather, baggage
+  formats/             # 6 data format importers (AIXM, OSM, IFC, AIDM, FAA, MSFS)
+  pipelines/           # DLT Bronze/Silver/Gold
+  persistence/         # Airport repository, UC table management
+  inference/           # OpenSky event processing
+  routing/             # Taxiway graph pathfinding
+  schemas/             # Pydantic data models
+
+tests/                 # ~3,089 Python tests (99 files)
+databricks/            # Notebooks (DLT pipeline, test runners)
+resources/             # DABs YAML configs (app, jobs, pipelines, volumes)
+data/                  # Local calibration profiles (dev fallback)
+configs/               # Simulation run configurations
+scenarios/             # 38 weather disruption scenario YAMLs
+prompts/               # LLM prompt templates
+scripts/               # 43 CLI tools
+docs/                  # Technical documentation + screenshots
 ```
 
 ---
@@ -894,8 +908,7 @@ scripts/           # CLI tools (build profiles, batch sims)
 ### Deploy to Databricks
 
 ```bash
-cd app/frontend && npm run build
-databricks bundle deploy --target dev
+./deploy.sh  # Build + deploy + restart (default: dev target)
 ```
 
 ### Run Tests
