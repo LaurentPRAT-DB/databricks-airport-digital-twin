@@ -305,6 +305,28 @@ if [[ -z "$BUNDLE_DIR" ]]; then
   exit 1
 fi
 
+# Wait for any existing deployment to finish before deploying new source
+info "Checking for active deployments..."
+DEPLOY_WAIT=0
+while [[ $DEPLOY_WAIT -lt 300 ]]; do
+  DEPLOY_STATE=$(databricks apps list-deployments "$APP_NAME" --output json 2>/dev/null \
+    | python3 -c "
+import sys,json
+data = json.load(sys.stdin)
+deploys = data if isinstance(data, list) else data.get('deployments', [])
+if deploys and deploys[0].get('status',{}).get('state') == 'IN_PROGRESS':
+    print('IN_PROGRESS')
+else:
+    print('READY')
+" 2>/dev/null || echo "READY")
+  if [[ "$DEPLOY_STATE" != "IN_PROGRESS" ]]; then
+    break
+  fi
+  info "Active deployment in progress, waiting... (${DEPLOY_WAIT}s)"
+  sleep 30
+  DEPLOY_WAIT=$((DEPLOY_WAIT + 30))
+done
+
 # apps deploy pushes source code and starts the app in one step
 databricks apps deploy "$APP_NAME" --source-code-path "/Workspace$BUNDLE_DIR" 2>&1 | tail -5
 ok "Source deploy initiated"
