@@ -30,7 +30,7 @@ env:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 20
     outputs:
       app-url: ${{ steps.deploy.outputs.app_url }}
@@ -106,7 +106,7 @@ jobs:
           fi
 
   post-deploy-tests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     needs: deploy
     timeout-minutes: 10
     if: success()
@@ -114,7 +114,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # VPN needed for post-deploy tests too (app URL may be internal)
       - name: Connect VPN
         if: vars.REQUIRES_VPN == 'true'
         uses: ./.github/actions/connect-vpn
