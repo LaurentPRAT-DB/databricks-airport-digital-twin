@@ -72,9 +72,10 @@ run_sql() {
   local stmt="$1"
   local json
   if [[ -n "$WAREHOUSE_ID" ]]; then
-    json="{\"warehouse_id\":\"$WAREHOUSE_ID\",\"statement\":\"$stmt\",\"wait_timeout\":\"30s\"}"
+    json=$(jq -n --arg s "$stmt" --arg w "$WAREHOUSE_ID" \
+      '{warehouse_id: $w, statement: $s, wait_timeout: "30s"}')
   else
-    json="{\"statement\":\"$stmt\",\"wait_timeout\":\"30s\"}"
+    json=$(jq -n --arg s "$stmt" '{statement: $s, wait_timeout: "30s"}')
   fi
   databricks api post /api/2.0/sql/statements \
     --json "$json" \
@@ -256,8 +257,15 @@ else
   info "Skipping data seed (use --seed for first-time deploy)"
 fi
 
-# ── Step 4: Stop + start app ─────────────────────────────────────────
-echo "Step 4: Restart app"
+# ── Step 4: Deploy source + restart app ──────────────────────────────
+echo "Step 4: Deploy and restart app"
+# For production targets, bundle deploy creates the app but doesn't push source.
+# Explicitly deploy source code from the bundle files path.
+if [[ -n "$BUNDLE_DIR" ]]; then
+  databricks apps deploy "$APP_NAME" --source-code-path "/Workspace$BUNDLE_DIR" 2>&1 | tail -3 \
+    && ok "Source deployed to app" \
+    || info "apps deploy returned non-zero (may already be deploying)"
+fi
 databricks apps stop "$APP_NAME" > /dev/null 2>&1 || true
 ok "App stopped"
 databricks apps start "$APP_NAME" > /dev/null 2>&1 || true
