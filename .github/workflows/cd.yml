@@ -81,9 +81,12 @@ jobs:
       - name: Build frontend
         working-directory: app/frontend
         run: |
-          export npm_config_cache="${{ github.workspace }}/.npm-cache"
-          npm ci --ignore-scripts=false --userconfig=/dev/null
-          npm run build
+          if [[ -f dist/index.html ]]; then
+            echo "dist/ already exists — skipping build"
+          else
+            npm ci
+            npm run build
+          fi
 
       - name: Deploy via DABs
         id: deploy
