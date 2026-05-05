@@ -56,9 +56,9 @@ jobs:
           chmod +x scripts/ci-deploy.sh
           scripts/ci-deploy.sh --target "$TARGET"
         env:
-          UC_CATALOG: ${{ secrets.UC_CATALOG }}
-          UC_SCHEMA: ${{ secrets.UC_SCHEMA }}
           DATABRICKS_WAREHOUSE_ID: ${{ secrets.DATABRICKS_WAREHOUSE_ID }}
+          LAKEBASE_HOST: ${{ secrets.LAKEBASE_HOST }}
+          LAKEBASE_ENDPOINT_NAME: ${{ secrets.LAKEBASE_ENDPOINT_NAME }}
           GENIE_SPACE_ID: ${{ secrets.GENIE_SPACE_ID }}
           SECRET_SCOPE: ${{ secrets.SECRET_SCOPE }}
 

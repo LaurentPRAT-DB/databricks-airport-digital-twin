@@ -54,7 +54,7 @@ variables:
   catalog:
     default: "airport_digital_twin"
   schema:
-    default: "default"
+    default: "airport_digital_twin"
   warehouse_id:
     description: "SQL Warehouse ID for the app"
     default: ""
@@ -73,5 +73,5 @@ targets:
     workspace:
       host: ${DATABRICKS_HOST}
     variables:
-      catalog: ${UC_CATALOG}
-      schema: ${UC_SCHEMA}
+      catalog: "airport_digital_twin"
+      schema: "airport_digital_twin"
