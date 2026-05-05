@@ -114,8 +114,15 @@ else
   info "No overrides — using app.yaml defaults (dev)"
 fi
 
-# ── Step 1: DABs bundle deploy ───────────────────────────────────────
-echo "Step 1: DABs bundle deploy"
+# ── Step 1a: Create UC schema (must exist before bundle deploy creates volumes) ──
+echo "Step 1: Create UC schema + deploy bundle"
+if [[ -n "$UC_CATALOG" && -n "$UC_SCHEMA" ]]; then
+  run_sql "CREATE SCHEMA IF NOT EXISTS \`$UC_CATALOG\`.\`$UC_SCHEMA\`" \
+    && ok "Schema $UC_CATALOG.$UC_SCHEMA exists" \
+    || info "Could not create schema (may already exist or insufficient perms)"
+fi
+
+# ── Step 1b: DABs bundle deploy ──────────────────────────────────────
 databricks bundle deploy --target "$TARGET" 2>&1 | grep -v "^Warning:" \
   && ok "Bundle deployed" \
   || { fail "Bundle deploy failed"; exit 1; }
@@ -133,13 +140,9 @@ if [[ -z "$APP_SP" || -z "$BUNDLE_DIR" ]]; then
 fi
 ok "SP: $APP_SP | Bundle: $BUNDLE_DIR"
 
-# ── Step 3: Create UC schema + tables ────────────────────────────────
-echo "Step 3: Create UC schema + tables"
+# ── Step 3: Create UC tables ─────────────────────────────────────────
+echo "Step 3: Create UC tables"
 if [[ -n "$UC_CATALOG" && -n "$UC_SCHEMA" ]]; then
-  run_sql "CREATE SCHEMA IF NOT EXISTS \`$UC_CATALOG\`.\`$UC_SCHEMA\`" \
-    && ok "Schema $UC_CATALOG.$UC_SCHEMA" \
-    || fail "Could not create schema"
-
   TABLES_SQL=$(python3 -c "
 import sys; sys.path.insert(0, '.')
 from src.persistence.airport_tables import ALL_TABLES
