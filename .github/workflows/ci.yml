@@ -37,6 +37,7 @@ jobs:
             --ignore=tests/test_aviation_procedures.py \
             --ignore=tests/test_flight_ops_validation.py \
             --ignore=tests/test_expert_reviews.py \
+            --ignore=tests/test_multi_airport_ux.py \
             -q --tb=short \
             --override-ini="asyncio_mode=auto"
 

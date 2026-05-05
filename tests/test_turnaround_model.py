@@ -1700,7 +1700,7 @@ class TestDayOfWeekVariation:
 
         # Mock to Wednesday
         mock_dt = datetime(2025, 6, 18, 12, 0, tzinfo=timezone.utc)  # Wed
-        with patch("src.ingestion.fallback.datetime") as mock_datetime:
+        with patch("src.ingestion._flight_lifecycle.datetime") as mock_datetime:
             mock_datetime.now.return_value = mock_dt
             mock_datetime.side_effect = lambda *a, **kw: datetime(*a, **kw)
             factor = _get_turnaround_day_of_week_factor()
@@ -1713,7 +1713,7 @@ class TestDayOfWeekVariation:
 
         # Mock to Saturday
         mock_dt = datetime(2025, 6, 21, 12, 0, tzinfo=timezone.utc)  # Sat
-        with patch("src.ingestion.fallback.datetime") as mock_datetime:
+        with patch("src.ingestion._flight_lifecycle.datetime") as mock_datetime:
             mock_datetime.now.return_value = mock_dt
             mock_datetime.side_effect = lambda *a, **kw: datetime(*a, **kw)
             factor = _get_turnaround_day_of_week_factor()

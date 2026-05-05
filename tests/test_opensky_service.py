@@ -388,7 +388,7 @@ class TestGetStatus:
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {
             "time": 1700000000,
-            "states": [_make_state(), _make_state(icao24="def456")],
+            "states": [_make_state(), _make_state(icao24="def456", callsign="DAL789  ")],
         }
 
         with patch.object(service._client, "get", new_callable=AsyncMock, return_value=mock_response):

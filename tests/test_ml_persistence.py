@@ -17,7 +17,7 @@ class TestEventBuffers:
 
     def setup_method(self):
         """Clear all buffers before each test."""
-        from src.ingestion.fallback import (
+        from src.ingestion._event_buffers import (
             _phase_transition_buffer,
             _gate_event_buffer,
             _prediction_buffer,
@@ -133,7 +133,7 @@ class TestPhaseTransitionEmission:
     """Test that phase transitions in _update_flight_state emit events."""
 
     def setup_method(self):
-        from src.ingestion.fallback import (
+        from src.ingestion._event_buffers import (
             _phase_transition_buffer, _gate_event_buffer,
             _phase_transition_lock, _gate_event_lock,
         )
