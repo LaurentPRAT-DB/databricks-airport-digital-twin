@@ -71,5 +71,5 @@ targets:
 
   prod:
     variables:
-      catalog: "airport_digital_twin"
-      schema: "airport_digital_twin"
+      catalog: "serverless_stable_3n0ihb_catalog"
+      schema: "airport_digital_twin_prod"
