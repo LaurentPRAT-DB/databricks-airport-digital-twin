@@ -50,16 +50,19 @@ jobs:
           auth-method: ${{ vars.VPN_AUTH_METHOD || 'password' }}
           totp-secret: ${{ secrets.VPN_TOTP_SECRET }}
 
-      # ── Standard setup ──────────────────────────────────────────
+      # ── Standard setup (skipped on self-hosted — tools pre-installed) ──
       - uses: actions/setup-python@v5
+        if: runner.environment == 'github-hosted'
         with:
           python-version: "3.10"
 
       - uses: astral-sh/setup-uv@v4
+        if: runner.environment == 'github-hosted'
         with:
           version: "latest"
 
       - uses: actions/setup-node@v4
+        if: runner.environment == 'github-hosted'
         with:
           node-version: "20"
           cache: "npm"
@@ -69,6 +72,7 @@ jobs:
         run: uv sync --all-extras
 
       - name: Install Databricks CLI
+        if: runner.environment == 'github-hosted'
         uses: databricks/setup-cli@main
 
       - name: Verify auth
