@@ -219,12 +219,21 @@ class TestTrajectoryGenerator:
             generate_synthetic_flights,
             generate_synthetic_trajectory,
             _flight_states,
+            FlightPhase,
         )
 
         # Generate flights
-        generate_synthetic_flights(count=5, bbox=sfo_bbox)
+        generate_synthetic_flights(count=10, bbox=sfo_bbox)
 
-        icao24 = list(_flight_states.keys())[0]
+        # Pick a non-parked flight (parked returns empty trajectory by design)
+        icao24 = None
+        for k, s in _flight_states.items():
+            if s.phase != FlightPhase.PARKED:
+                icao24 = k
+                break
+        if icao24 is None:
+            pytest.skip("All generated flights are parked")
+
         trajectory = generate_synthetic_trajectory(icao24, minutes=30, limit=30)
 
         assert len(trajectory) > 0
@@ -237,13 +246,22 @@ class TestTrajectoryGenerator:
             generate_synthetic_flights,
             generate_synthetic_trajectory,
             _flight_states,
+            FlightPhase,
         )
         from datetime import datetime
 
         # Generate flights
-        generate_synthetic_flights(count=5, bbox=sfo_bbox)
+        generate_synthetic_flights(count=10, bbox=sfo_bbox)
 
-        icao24 = list(_flight_states.keys())[0]
+        # Pick a non-parked flight (parked returns empty trajectory by design)
+        icao24 = None
+        for k, s in _flight_states.items():
+            if s.phase != FlightPhase.PARKED:
+                icao24 = k
+                break
+        if icao24 is None:
+            pytest.skip("All generated flights are parked")
+
         trajectory = generate_synthetic_trajectory(icao24, minutes=30, limit=30)
 
         assert len(trajectory) > 1
