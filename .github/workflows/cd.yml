@@ -118,6 +118,9 @@ jobs:
     needs: deploy
     timeout-minutes: 10
     if: success()
+    permissions:
+      contents: read
+      issues: write
 
     steps:
       - uses: actions/checkout@v4
@@ -138,7 +141,7 @@ jobs:
           APP_URL="${{ needs.deploy.outputs.app-url }}"
           echo "Waiting for app to be ready at $APP_URL..."
           for i in $(seq 1 20); do
-            if curl -s "$APP_URL/api/ready" | jq -e '.ready == true' > /dev/null 2>&1; then
+            if curl -s -H "Authorization: Bearer $DATABRICKS_TOKEN" "$APP_URL/api/ready" | jq -e '.ready == true' > /dev/null 2>&1; then
               echo "App is ready after ${i}0s"
               break
             fi

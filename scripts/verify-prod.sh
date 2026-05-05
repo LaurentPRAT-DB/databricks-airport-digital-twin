@@ -2,6 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────
 # Post-deploy production verification script
 # Usage: ./scripts/verify-prod.sh <APP_URL>
+# Env:   DATABRICKS_TOKEN — passed as Bearer token for OAuth-protected apps
 #
 # Runs the same checks as the E2E smoke test but from your local machine.
 # Requires: curl, jq
@@ -11,6 +12,11 @@ set -euo pipefail
 APP_URL="${1:?Usage: $0 <APP_URL>}"
 APP_URL="${APP_URL%/}"
 
+AUTH_HEADER=""
+if [[ -n "${DATABRICKS_TOKEN:-}" ]]; then
+  AUTH_HEADER="Authorization: Bearer $DATABRICKS_TOKEN"
+fi
+
 PASS=0
 FAIL=0
 
@@ -18,7 +24,11 @@ check() {
   local name="$1" url="$2" jq_test="${3:-}"
   local response http_code body
 
-  response=$(curl -s -w "\n%{http_code}" "$url" 2>/dev/null)
+  if [[ -n "$AUTH_HEADER" ]]; then
+    response=$(curl -s -w "\n%{http_code}" -H "$AUTH_HEADER" "$url" 2>/dev/null)
+  else
+    response=$(curl -s -w "\n%{http_code}" "$url" 2>/dev/null)
+  fi
   http_code=$(echo "$response" | tail -1)
   body=$(echo "$response" | sed '$d')
 
