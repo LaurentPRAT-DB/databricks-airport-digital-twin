@@ -252,7 +252,9 @@ if $SEED; then
     echo "  Applying Lakebase schema (branch: $LAKEBASE_BRANCH)..."
     LB_HOST="${LAKEBASE_HOST:-}"
     LB_EP="$LAKEBASE_ENDPOINT"
-    # Use uv run for SDK access (heredoc via temp file to avoid stdin issues)
+    # Use project venv python for SDK access (.venv created by uv sync)
+    VENV_PY=".venv/bin/python"
+    [[ -x "$VENV_PY" ]] || VENV_PY="uv run python3"
     _LB_SCRIPT=$(mktemp /tmp/lb_schema_XXXXXX.py)
     trap "rm -f $_LB_SCRIPT" EXIT
     cat > "$_LB_SCRIPT" <<'PYEOF'
@@ -288,7 +290,7 @@ try:
 except Exception as e:
     print(f"  [INFO] Lakebase schema skipped: {e}")
 PYEOF
-    uv run python3 "$_LB_SCRIPT" "$LB_HOST" "$LB_EP"
+    $VENV_PY "$_LB_SCRIPT" "$LB_HOST" "$LB_EP"
     rm -f "$_LB_SCRIPT"
   else
     info "Lakebase not configured — skipping schema setup"

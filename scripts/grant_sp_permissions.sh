@@ -186,9 +186,9 @@ fi
 
 # ── 6. Lakebase: role creation + table grants ────────────────────────
 echo "6. Lakebase permissions..."
-# Use uv run for SDK access (both local and CI — uv sync runs in workflow)
-PY_CMD="uv run python3"
-command -v uv > /dev/null 2>&1 || PY_CMD="python3"
+# Use project venv python for SDK access (.venv created by uv sync)
+PY_CMD=".venv/bin/python"
+[[ -x "$PY_CMD" ]] || PY_CMD="uv run python3"
 $PY_CMD - "$APP_SP" "$LAKEBASE_ENDPOINT" "$LAKEBASE_HOST" "$PROFILE" <<'PYEOF'
 import sys, os
 
