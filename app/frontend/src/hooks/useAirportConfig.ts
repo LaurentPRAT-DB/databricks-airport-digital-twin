@@ -172,6 +172,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
   // Listen for airport_switch_progress and airport_switch_complete via WS
   // with automatic reconnection on disconnect.
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsBase = API_BASE
       ? API_BASE.replace(/^http/, 'ws')

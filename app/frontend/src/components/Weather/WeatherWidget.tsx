@@ -152,27 +152,33 @@ export default function WeatherWidget({ station }: WeatherWidgetProps) {
   const { dataMode } = useFlightContext();
 
   useEffect(() => {
+    const controller = new AbortController();
+
     async function fetchWeather() {
       try {
         const params = new URLSearchParams();
         if (station) params.set('station', station);
         if (dataMode === 'live') params.set('live', 'true');
         const url = `/api/weather/current${params.toString() ? '?' + params.toString() : ''}`;
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) throw new Error('Failed to fetch weather');
         const data = await response.json();
         setWeather(data);
         setError(null);
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
 
     fetchWeather();
     const interval = setInterval(fetchWeather, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, [station, dataMode]);
 
   if (loading) {
