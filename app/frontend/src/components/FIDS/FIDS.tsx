@@ -129,9 +129,10 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
     AMX: 'Aeromexico', ACA: 'Air Canada', WJA: 'WestJet',
   }), []);
 
-  // Derive FIDS schedule entries from tracked flights during simulation replay
-  // or recorded playback. In live mode, the REST API provides schedule data.
-  const isSimReplay = dataSource === 'simulation' || dataSource === 'opensky_recorded';
+  // Derive FIDS from tracked flights whenever the map shows live data
+  // (simulation, live OpenSky, or recorded playback) — no generated filler.
+  const isSimReplay = dataSource === 'simulation' || dataSource === 'opensky_recorded'
+    || dataSource === 'opensky';
 
   // Deterministic hash for stable per-flight values (times, origins) across frames
   const hashStr = (s: string): number => {
