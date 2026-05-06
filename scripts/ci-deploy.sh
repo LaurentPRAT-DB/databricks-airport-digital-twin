@@ -305,66 +305,46 @@ else
   info "Skipping data seed (use --seed for first-time deploy)"
 fi
 
-# ── Step 4: Deploy source + start app ─────────────────────────────────
-echo "Step 4: Deploy app"
+# ── Step 4: Stop → Deploy → Start app ────────────────────────────────
+echo "Step 4: Deploy app (stop → deploy → start)"
 
 if [[ -z "$BUNDLE_DIR" ]]; then
   fail "BUNDLE_DIR not set — cannot deploy source"
   exit 1
 fi
 
-# Check app state — fresh apps need to be started before deploy
+# Check current app state
 APP_STATE=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
   | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null || true)
 info "Current app state: ${APP_STATE:-unknown}"
 
-if [[ "$APP_STATE" != "RUNNING" ]]; then
-  info "App not running — starting compute (required before first deploy)..."
-  databricks apps start "$APP_NAME" 2>&1 | tail -3 || true
-  # Wait for compute to become ACTIVE (app won't be RUNNING until after deploy)
-  START_WAIT=0
-  while [[ $START_WAIT -lt 180 ]]; do
-    COMPUTE_STATE=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
-      | python3 -c "import sys,json; print(json.load(sys.stdin).get('compute_status',{}).get('state',''))" 2>/dev/null || true)
-    if [[ "$COMPUTE_STATE" == "ACTIVE" ]]; then
+# Stop the app first — hot deploy is unreliable and causes CLI timeouts
+if [[ "$APP_STATE" == "RUNNING" || "$APP_STATE" == "STARTING" ]]; then
+  info "Stopping app before deploy..."
+  databricks apps stop "$APP_NAME" 2>&1 | tail -3 || true
+  # Wait for app to stop (max 120s)
+  STOP_WAIT=0
+  while [[ $STOP_WAIT -lt 120 ]]; do
+    STOP_STATE=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null || true)
+    if [[ "$STOP_STATE" == "STOPPED" || "$STOP_STATE" == "IDLE" ]]; then
       break
     fi
-    sleep 15
-    START_WAIT=$((START_WAIT + 15))
-    info "Waiting for compute... (${START_WAIT}s, state: ${COMPUTE_STATE:-unknown})"
+    sleep 10
+    STOP_WAIT=$((STOP_WAIT + 10))
+    info "Waiting for stop... (${STOP_WAIT}s, state: ${STOP_STATE:-unknown})"
   done
-  if [[ "$COMPUTE_STATE" == "ACTIVE" ]]; then
-    ok "Compute active — ready for deploy"
-  else
-    info "Compute in state '$COMPUTE_STATE' after ${START_WAIT}s — attempting deploy anyway..."
-  fi
+  ok "App stopped"
 fi
 
-# Wait for any existing deployment to finish before deploying new source
-info "Checking for active deployments..."
-DEPLOY_WAIT=0
-while [[ $DEPLOY_WAIT -lt 300 ]]; do
-  DEPLOY_STATE=$(databricks apps list-deployments "$APP_NAME" --output json 2>/dev/null \
-    | python3 -c "
-import sys,json
-data = json.load(sys.stdin)
-deploys = data if isinstance(data, list) else data.get('deployments', [])
-if deploys and deploys[0].get('status',{}).get('state') == 'IN_PROGRESS':
-    print('IN_PROGRESS')
-else:
-    print('READY')
-" 2>/dev/null || echo "READY")
-  if [[ "$DEPLOY_STATE" != "IN_PROGRESS" ]]; then
-    break
-  fi
-  info "Active deployment in progress, waiting... (${DEPLOY_WAIT}s)"
-  sleep 30
-  DEPLOY_WAIT=$((DEPLOY_WAIT + 30))
-done
-
-# apps deploy pushes source code and starts the app in one step
-databricks apps deploy "$APP_NAME" --source-code-path "/Workspace$BUNDLE_DIR" 2>&1 | tail -5
+# Deploy source code (no-wait — just push the code)
+info "Deploying source to /Workspace$BUNDLE_DIR..."
+databricks apps deploy "$APP_NAME" --source-code-path "/Workspace$BUNDLE_DIR" --no-wait 2>&1 | tail -5 || true
 ok "Source deploy initiated"
+
+# Start the app
+info "Starting app..."
+databricks apps start "$APP_NAME" 2>&1 | tail -3 || true
 
 # Wait for app to reach RUNNING state
 info "Waiting for app to reach RUNNING..."
