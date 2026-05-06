@@ -313,36 +313,36 @@ if [[ -z "$BUNDLE_DIR" ]]; then
   exit 1
 fi
 
-# Check current app state
+# Check current app state and compute state
 APP_STATE=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
-  | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null || true)
-info "Current app state: ${APP_STATE:-unknown}"
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('app_status',{}).get('state',''), d.get('compute_status',{}).get('state',''))" 2>/dev/null || true)
+info "Current state: ${APP_STATE:-unknown}"
 
-# Stop the app first — hot deploy is unreliable and causes CLI timeouts
-if [[ "$APP_STATE" == "RUNNING" || "$APP_STATE" == "STARTING" ]]; then
-  info "Stopping app before deploy..."
-  databricks apps stop "$APP_NAME" 2>&1 | tail -3 || true
-  # Wait for app to stop (max 120s)
-  STOP_WAIT=0
-  while [[ $STOP_WAIT -lt 120 ]]; do
-    STOP_STATE=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
-      | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null || true)
-    if [[ "$STOP_STATE" == "STOPPED" || "$STOP_STATE" == "IDLE" ]]; then
-      break
-    fi
-    sleep 10
-    STOP_WAIT=$((STOP_WAIT + 10))
-    info "Waiting for stop... (${STOP_WAIT}s, state: ${STOP_STATE:-unknown})"
-  done
-  ok "App stopped"
+# Fresh app (UNAVAILABLE/never deployed): start compute first so deploy is accepted
+if echo "$APP_STATE" | grep -q "UNAVAILABLE\|STOPPED"; then
+  COMPUTE_STATE=$(echo "$APP_STATE" | awk '{print $2}')
+  if [[ "$COMPUTE_STATE" != "ACTIVE" ]]; then
+    info "Starting compute (required before first deploy)..."
+    databricks apps start "$APP_NAME" 2>&1 | tail -3 || true
+    START_WAIT=0
+    while [[ $START_WAIT -lt 180 ]]; do
+      COMPUTE_STATE=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
+        | python3 -c "import sys,json; print(json.load(sys.stdin).get('compute_status',{}).get('state',''))" 2>/dev/null || true)
+      if [[ "$COMPUTE_STATE" == "ACTIVE" ]]; then break; fi
+      sleep 15
+      START_WAIT=$((START_WAIT + 15))
+      info "Waiting for compute... (${START_WAIT}s, state: ${COMPUTE_STATE:-unknown})"
+    done
+    ok "Compute active"
+  fi
 fi
 
-# Deploy source code (no-wait — just push the code)
+# Deploy source code (no-wait to avoid CLI timeout on slow networks)
 info "Deploying source to /Workspace$BUNDLE_DIR..."
 databricks apps deploy "$APP_NAME" --source-code-path "/Workspace$BUNDLE_DIR" --no-wait 2>&1 | tail -5 || true
 ok "Source deploy initiated"
 
-# Start the app
+# Start the app (idempotent if already starting from deploy)
 info "Starting app..."
 databricks apps start "$APP_NAME" 2>&1 | tail -3 || true
 
