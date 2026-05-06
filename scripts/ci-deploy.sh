@@ -81,16 +81,22 @@ info() { echo "  [INFO] $1"; }
 
 run_sql() {
   local stmt="$1"
-  local json
+  local json result
   if [[ -n "$WAREHOUSE_ID" ]]; then
     json=$(jq -n --arg s "$stmt" --arg w "$WAREHOUSE_ID" \
       '{warehouse_id: $w, statement: $s, wait_timeout: "30s"}')
   else
     json=$(jq -n --arg s "$stmt" '{statement: $s, wait_timeout: "30s"}')
   fi
-  databricks api post /api/2.0/sql/statements \
-    --json "$json" \
-    2>/dev/null | grep -q '"SUCCEEDED"'
+  result=$(databricks api post /api/2.0/sql/statements --json "$json" 2>&1)
+  if echo "$result" | grep -q '"SUCCEEDED"'; then
+    return 0
+  else
+    local err_msg
+    err_msg=$(echo "$result" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('status',{}).get('error',{}).get('message','')[:200])" 2>/dev/null || echo "$result" | tail -1)
+    [[ -n "$err_msg" ]] && echo "    SQL error: $err_msg" >&2
+    return 1
+  fi
 }
 
 echo "═══ Airport Digital Twin — CI Deploy (target: $TARGET) ═══"
@@ -138,9 +144,16 @@ if [[ -n "$UC_CATALOG" ]]; then
     || info "Could not create catalog (may already exist or insufficient perms)"
 fi
 if [[ -n "$UC_CATALOG" && -n "$UC_SCHEMA" ]]; then
-  run_sql "CREATE SCHEMA IF NOT EXISTS \`$UC_CATALOG\`.\`$UC_SCHEMA\`" \
-    && ok "Schema $UC_CATALOG.$UC_SCHEMA exists" \
-    || info "Could not create schema (may already exist or insufficient perms)"
+  if run_sql "CREATE SCHEMA IF NOT EXISTS \`$UC_CATALOG\`.\`$UC_SCHEMA\`"; then
+    ok "Schema $UC_CATALOG.$UC_SCHEMA exists"
+  else
+    if run_sql "DESCRIBE SCHEMA \`$UC_CATALOG\`.\`$UC_SCHEMA\`"; then
+      ok "Schema $UC_CATALOG.$UC_SCHEMA already exists"
+    else
+      fail "Schema $UC_CATALOG.$UC_SCHEMA does not exist and could not be created"
+      exit 1
+    fi
+  fi
 fi
 
 # ── Step 1b: DABs bundle deploy ──────────────────────────────────────
