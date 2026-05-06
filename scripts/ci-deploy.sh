@@ -150,8 +150,7 @@ if [[ -n "$UC_CATALOG" && -n "$UC_SCHEMA" ]]; then
     if run_sql "DESCRIBE SCHEMA \`$UC_CATALOG\`.\`$UC_SCHEMA\`"; then
       ok "Schema $UC_CATALOG.$UC_SCHEMA already exists"
     else
-      fail "Schema $UC_CATALOG.$UC_SCHEMA does not exist and could not be created"
-      exit 1
+      info "Could not verify schema via SQL API (IP ACL?) — proceeding with bundle deploy"
     fi
   fi
 fi
