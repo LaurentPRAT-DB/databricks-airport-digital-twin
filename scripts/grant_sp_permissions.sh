@@ -255,6 +255,7 @@ try:
     cur.execute(f'GRANT USAGE ON SCHEMA public TO "{app_sp}"')
     cur.execute(f'GRANT CREATE ON SCHEMA public TO "{app_sp}"')
     cur.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{app_sp}"')
+    cur.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "{app_sp}"')
 
     # Grant on all existing tables
     cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
@@ -262,8 +263,14 @@ try:
     for t in tables:
         cur.execute(f'GRANT ALL PRIVILEGES ON TABLE "{t}" TO "{app_sp}"')
 
+    # Grant on all existing sequences (required for INSERT with serial/identity columns)
+    cur.execute("SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public'")
+    sequences = [row[0] for row in cur.fetchall()]
+    for s in sequences:
+        cur.execute(f'GRANT ALL PRIVILEGES ON SEQUENCE "{s}" TO "{app_sp}"')
+
     conn.close()
-    print(f"  [OK] Lakebase SQL grants on {len(tables)} table(s)")
+    print(f"  [OK] Lakebase SQL grants on {len(tables)} table(s), {len(sequences)} sequence(s)")
 
 except ImportError as e:
     print(f"  [SKIP] Lakebase role (missing dependency: {e})")

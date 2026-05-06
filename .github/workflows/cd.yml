@@ -83,12 +83,8 @@ jobs:
       - name: Build frontend
         working-directory: app/frontend
         run: |
-          if [[ -f dist/index.html ]]; then
-            echo "dist/ already exists — skipping build"
-          else
-            npm ci
-            npm run build
-          fi
+          npm ci
+          npm run build
 
       - name: Deploy via DABs
         id: deploy
@@ -138,11 +134,16 @@ jobs:
           totp-secret: ${{ secrets.VPN_TOTP_SECRET }}
 
       - name: Wait for app readiness
+        env:
+          DATABRICKS_CONFIG_PROFILE: ""
         run: |
           APP_URL="${{ needs.deploy.outputs.app-url }}"
           TOKEN=$(databricks auth token 2>/dev/null | jq -r '.access_token // empty' || true)
           echo "Waiting for app to be ready at $APP_URL..."
+          echo "Token length: ${#TOKEN}"
           for i in $(seq 1 20); do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$APP_URL/api/ready" || true)
+            echo "  Attempt $i: HTTP $HTTP_CODE"
             if curl -s -H "Authorization: Bearer $TOKEN" "$APP_URL/api/ready" | jq -e '.ready == true' > /dev/null 2>&1; then
               echo "App is ready after ${i}0s"
               break
@@ -153,6 +154,8 @@ jobs:
       - name: Run post-deploy verification
         id: verify
         continue-on-error: true
+        env:
+          DATABRICKS_CONFIG_PROFILE: ""
         run: |
           chmod +x scripts/verify-prod.sh
           scripts/verify-prod.sh "${{ needs.deploy.outputs.app-url }}"
