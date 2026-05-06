@@ -68,7 +68,7 @@ jobs:
           RUNNER_TOOL_CACHE: /tmp/runner-tool-cache
 
       - name: Install Python dependencies
-        run: uv sync --all-extras
+        run: uv sync --extra deploy
 
       - name: Install Databricks CLI
         if: runner.environment == 'github-hosted'

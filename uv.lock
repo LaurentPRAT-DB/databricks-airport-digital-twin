@@ -16,7 +16,6 @@ source = { editable = "." }
 dependencies = [
     { name = "catboost" },
     { name = "circuitbreaker" },
-    { name = "databricks-sdk" },
     { name = "databricks-sql-connector" },
     { name = "defusedxml" },
     { name = "faker" },
@@ -40,6 +39,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+deploy = [
+    { name = "databricks-sdk" },
+]
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -58,7 +60,7 @@ video = [
 requires-dist = [
     { name = "catboost", specifier = ">=1.2" },
     { name = "circuitbreaker", specifier = ">=1.4" },
-    { name = "databricks-sdk", specifier = ">=0.20.0" },
+    { name = "databricks-sdk", marker = "extra == 'deploy'", specifier = ">=0.20.0" },
     { name = "databricks-sql-connector", specifier = ">=3.0.0" },
     { name = "defusedxml", specifier = ">=0.7.0" },
     { name = "faker", specifier = ">=22.0" },
@@ -85,7 +87,7 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.27.0" },
     { name = "websockets", specifier = ">=12.0" },
 ]
-provides-extras = ["dev", "formats", "video"]
+provides-extras = ["dev", "deploy", "formats", "video"]
 
 [[package]]
 name = "annotated-doc"
