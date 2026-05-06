@@ -139,8 +139,8 @@ class TestTrajectoryGenerator:
         # Generate flights to populate _flight_states
         generate_synthetic_flights(count=10, bbox=sfo_bbox)
 
-        # Pick a ground or approaching flight (near airport) to avoid false
-        # positives from enroute departures that are far from the airport.
+        # Pick a non-parked flight (trajectory generator returns [] for parked).
+        # Prefer ground/approaching phases for tighter position tolerance.
         assert len(_flight_states) > 0, "No flights were generated"
         near_phases = {FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_GATE,
                        FlightPhase.TAXI_TO_RUNWAY, FlightPhase.APPROACHING, FlightPhase.LANDING}
@@ -150,7 +150,12 @@ class TestTrajectoryGenerator:
                 icao24 = k
                 break
         if icao24 is None:
-            icao24 = list(_flight_states.keys())[0]
+            for k, s in _flight_states.items():
+                if s.phase != FlightPhase.PARKED:
+                    icao24 = k
+                    break
+        if icao24 is None:
+            pytest.skip("All generated flights are parked — no trajectory to test")
         flight_state = _flight_states[icao24]
 
         # Generate trajectory for this flight
