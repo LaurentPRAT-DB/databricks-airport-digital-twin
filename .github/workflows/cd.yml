@@ -69,6 +69,8 @@ jobs:
 
       - name: Install Python dependencies
         run: uv sync --extra deploy
+        env:
+          UV_INDEX_URL: https://pypi.org/simple/
 
       - name: Install Databricks CLI
         if: runner.environment == 'github-hosted'
