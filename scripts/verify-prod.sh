@@ -15,6 +15,9 @@ APP_URL="${APP_URL%/}"
 AUTH_HEADER=""
 if [[ -n "${DATABRICKS_TOKEN:-}" ]]; then
   AUTH_HEADER="Authorization: Bearer $DATABRICKS_TOKEN"
+elif command -v databricks > /dev/null 2>&1; then
+  _TOKEN=$(databricks auth token 2>/dev/null | jq -r '.access_token // empty' 2>/dev/null || true)
+  [[ -n "$_TOKEN" ]] && AUTH_HEADER="Authorization: Bearer $_TOKEN"
 fi
 
 PASS=0
