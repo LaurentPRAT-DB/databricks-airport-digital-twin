@@ -76,7 +76,7 @@ check "Weather"         "$APP_URL/api/weather/current"       'has("temperature")
 check "GSE"             "$APP_URL/api/gse/status"            '. != null'
 check "Baggage"         "$APP_URL/api/baggage/stats"         '. != null'
 check "Frontend"        "$APP_URL/"                          ''
-check "Version"         "$APP_URL/api/version"               'has("version") or has("commit")'
+check "Version"         "$APP_URL/api/version"               'has("build_number") or has("git_commit")'
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed, $SKIP skipped ($(( PASS + FAIL + SKIP )) total)"
