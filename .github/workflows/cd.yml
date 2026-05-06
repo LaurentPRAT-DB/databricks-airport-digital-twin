@@ -83,7 +83,9 @@ jobs:
       - name: Build frontend
         working-directory: app/frontend
         run: |
-          npm ci
+          rm -rf node_modules
+          npm cache clean --force 2>/dev/null || true
+          npm ci --prefer-offline=false
           npm run build
 
       - name: Deploy via DABs
