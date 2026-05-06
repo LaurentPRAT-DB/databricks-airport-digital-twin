@@ -155,6 +155,9 @@ if [[ -n "$UC_CATALOG" && -n "$UC_SCHEMA" ]]; then
   fi
 fi
 
+# Write current git SHA so /api/version shows the deployed commit
+git rev-parse --short HEAD > GIT_COMMIT 2>/dev/null || true
+
 # ── Step 1b: DABs bundle deploy ──────────────────────────────────────
 databricks bundle deploy --target "$TARGET" --force-lock 2>&1 | grep -v "^Warning:" \
   && ok "Bundle deployed" \
@@ -354,7 +357,20 @@ info "Deploying source to /Workspace$BUNDLE_DIR..."
 databricks apps deploy "$APP_NAME" --source-code-path "/Workspace$BUNDLE_DIR" --no-wait 2>&1 | tail -5 || true
 ok "Source deploy initiated"
 
-# Start the app (idempotent if already starting from deploy)
+# Stop → Start the app (hot deploy is broken — must full restart to pick up new code)
+info "Stopping app..."
+databricks apps stop "$APP_NAME" 2>&1 | tail -3 || true
+# Wait for app to actually stop before starting
+STOP_WAIT=0
+while [[ $STOP_WAIT -lt 60 ]]; do
+  STOP_STATE=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null || true)
+  if [[ "$STOP_STATE" == "UNAVAILABLE" || "$STOP_STATE" == "STOPPED" ]]; then break; fi
+  sleep 5
+  STOP_WAIT=$((STOP_WAIT + 5))
+done
+ok "App stopped (state: ${STOP_STATE:-unknown})"
+
 info "Starting app..."
 databricks apps start "$APP_NAME" 2>&1 | tail -3 || true
 
