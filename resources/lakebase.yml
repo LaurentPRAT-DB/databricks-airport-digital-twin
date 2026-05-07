@@ -61,3 +61,37 @@
 #   - Autoscaling: 0.5-112 CU based on load
 #   - Branching: Create isolated dev/test environments
 #   - OAuth tokens: 1-hour expiry, auto-refresh in SDK
+#
+# Read Replica (Readable Secondaries):
+#   NOT supported on Autoscaling endpoints with scale-to-zero enabled.
+#   The API returns: "compute groups are not allowed for scale to zero endpoints;
+#   set suspend_timeout_seconds to -1 to disable scale to zero"
+#
+#   To enable a read replica, you must use the Provisioned tier instead:
+#
+#   1. Create a Provisioned instance with read replica:
+#      databricks database create-database-instance airport-dt-lakebase \
+#        --capacity=CU_2 \
+#        --node-count=2 \
+#        --enable-readable-secondaries \
+#        --enable-pg-native-login \
+#        --profile FEVM_SERVERLESS_STABLE
+#
+#   2. The instance exposes two DNS endpoints:
+#      - read_write_dns: Primary (reads + writes)
+#      - read_only_dns: Replica (reads only, eventual consistency)
+#
+#   3. Update app.yaml to use read_only_dns for read-heavy queries.
+#
+#   Trade-offs vs Autoscaling:
+#     - No scale-to-zero (always-on compute cost)
+#     - No branching (use PITR for environment isolation)
+#     - Fixed capacity (manual scaling via update-database-instance)
+#     + Read replica for query offloading
+#     + Predictable latency (no cold starts)
+#
+#   Connection pooler alternative (current):
+#     The Autoscaling endpoint already provides a pooled host:
+#       ep-polished-forest-d2hjnab6-pooler.database.us-east-1.cloud.databricks.com
+#     This multiplexes connections and handles read-heavy workloads without
+#     requiring a separate replica.
