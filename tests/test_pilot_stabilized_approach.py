@@ -110,22 +110,33 @@ class TestStabilizedApproach:
             )
 
     def test_no_level_off_below_500ft(self, approach_sim):
-        """Below 500ft, altitude should never increase (no level-offs or climbs)."""
+        """Below 500ft, altitude should never increase (no level-offs or climbs).
+
+        Go-arounds produce multiple sub-sequences below 500ft separated by a
+        climb back to pattern altitude. Only check monotonicity within each
+        continuous descent segment (consecutive snapshots both below 500ft).
+        """
         _, _, traces = approach_sim
         checked = 0
         violations = 0
 
         for icao24, trace in traces.items():
             approach = phase_positions(trace, "approaching")
-            low_snaps = [s for s in approach if s["altitude"] < 500 and s["altitude"] > 0]
-            if len(low_snaps) < 2:
-                continue
-            checked += 1
-            for i in range(1, len(low_snaps)):
-                # Altitude should not increase by more than 20ft (noise tolerance)
-                if low_snaps[i]["altitude"] > low_snaps[i-1]["altitude"] + 30:
+            # Check consecutive pairs that are both below 500ft
+            pairs_checked = 0
+            has_violation = False
+            for i in range(1, len(approach)):
+                prev_alt = approach[i - 1]["altitude"]
+                cur_alt = approach[i]["altitude"]
+                if prev_alt < 500 and prev_alt > 0 and cur_alt < 500 and cur_alt > 0:
+                    pairs_checked += 1
+                    if cur_alt > prev_alt + 30:
+                        has_violation = True
+                        break
+            if pairs_checked > 0:
+                checked += 1
+                if has_violation:
                     violations += 1
-                    break
 
         if checked > 0:
             assert violations / checked < 0.15, (
