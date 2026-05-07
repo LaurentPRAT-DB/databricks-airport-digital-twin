@@ -56,7 +56,13 @@ _N_FALLBACK = 50
 def _hardcoded_descent() -> "FlightProfile":
     progress = np.linspace(0.0, 1.0, _N_FALLBACK)
     alt_ft = 35000 * (1 - progress) ** 1.3
-    speed_kts = 250 + (1 - progress) * 230  # 480 → 250 kts
+    # Realistic A320 speed profile: 460kt (cruise) → 250kt (below FL100) → 140kt (Vref)
+    # Use a piecewise curve: fast decel above FL100, gentle decel on final
+    speed_kts = np.where(
+        alt_ft > 10000,
+        250 + (alt_ft - 10000) / 25000 * 210,  # 460kt at FL350 → 250kt at FL100
+        140 + (alt_ft / 10000) * 110,           # 250kt at FL100 → 140kt at touchdown
+    )
     vrate_fpm = np.full(_N_FALLBACK, -1800.0)
     return FlightProfile(progress=progress, altitude_ft=alt_ft, speed_kts=speed_kts, vertical_rate_fpm=vrate_fpm)
 

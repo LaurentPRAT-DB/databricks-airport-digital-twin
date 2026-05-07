@@ -210,7 +210,7 @@ class TestLakebaseScheduleOperations:
             result = service.get_schedule(flight_type="arrival")
             assert result is None
 
-    @patch("app.backend.services.lakebase_service.execute_values")
+    @patch("app.backend.services.lakebase_service.execute_values", create=True)
     @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_upsert_schedule_success(self, mock_psycopg2, mock_execute_values):
         """Test successful schedule upsert."""
@@ -348,7 +348,7 @@ class TestLakebaseGSEFleetOperations:
             result = service.get_gse_fleet()
             assert result is None
 
-    @patch("app.backend.services.lakebase_service.execute_values")
+    @patch("app.backend.services.lakebase_service.execute_values", create=True)
     @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_upsert_gse_fleet_success(self, mock_psycopg2, mock_execute_values):
         """Test successful GSE fleet upsert."""
@@ -976,7 +976,7 @@ class TestLakebaseReadReplica:
 
         # Mock credentials and pool creation
         with patch.object(service, "_get_credentials", return_value=("token", "user@db.com")):
-            with patch("app.backend.services.lakebase_service.ThreadedConnectionPool") as MockPool:
+            with patch("app.backend.services.lakebase_service.ThreadedConnectionPool", create=True) as MockPool:
                 mock_pool = MagicMock()
                 mock_pool.closed = False
                 MockPool.return_value = mock_pool
@@ -1060,50 +1060,32 @@ class TestLakebaseReadReplica:
         """Test that get_flights routes through _get_read_connection."""
         service = self._make_service()
 
-        with patch.object(service, "_get_read_connection") as mock_read:
-            mock_conn = MagicMock()
-            mock_cursor = MagicMock()
-            mock_cursor.fetchall.return_value = []
-            mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
-            mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
-            mock_read.return_value.__enter__ = Mock(return_value=mock_conn)
-            mock_read.return_value.__exit__ = Mock(return_value=False)
+        with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+            with patch.object(service, "_get_read_connection") as mock_read:
+                mock_conn = MagicMock()
+                mock_cursor = MagicMock()
+                mock_cursor.fetchall.return_value = []
+                mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
+                mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+                mock_read.return_value.__enter__ = Mock(return_value=mock_conn)
+                mock_read.return_value.__exit__ = Mock(return_value=False)
 
-            service.get_flights(limit=10)
-            mock_read.assert_called_once()
+                service.get_flights(limit=10)
+                mock_read.assert_called_once()
 
     @patch("app.backend.services.lakebase_service.psycopg2", create=True)
     def test_upsert_weather_uses_primary_connection(self, mock_psycopg2):
         """Test that write methods still use primary _get_connection."""
         service = self._make_service()
 
-        with patch.object(service, "_get_connection") as mock_primary:
-            mock_conn = MagicMock()
-            mock_cursor = MagicMock()
-            mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
-            mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
-            mock_primary.return_value.__enter__ = Mock(return_value=mock_conn)
-            mock_primary.return_value.__exit__ = Mock(return_value=False)
-
-            service.upsert_weather({
-                "station": "KSFO", "observation_time": "2026-01-01T00:00:00Z",
-                "wind_direction": 0, "wind_speed_kts": 0, "wind_gust_kts": None,
-                "visibility_sm": 10, "clouds": "[]", "temperature_c": 15,
-                "dewpoint_c": 10, "altimeter_inhg": 30.0, "weather": "[]",
-                "flight_category": "VFR", "raw_metar": "", "taf_text": None,
-                "taf_valid_from": None, "taf_valid_to": None,
-            })
-            mock_primary.assert_called()
-
-        # Verify _get_read_connection was NOT called for write
-        with patch.object(service, "_get_read_connection") as mock_read:
-            with patch.object(service, "_get_connection") as mock_primary2:
-                mock_conn2 = MagicMock()
-                mock_cursor2 = MagicMock()
-                mock_conn2.cursor.return_value.__enter__ = Mock(return_value=mock_cursor2)
-                mock_conn2.cursor.return_value.__exit__ = Mock(return_value=False)
-                mock_primary2.return_value.__enter__ = Mock(return_value=mock_conn2)
-                mock_primary2.return_value.__exit__ = Mock(return_value=False)
+        with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+            with patch.object(service, "_get_connection") as mock_primary:
+                mock_conn = MagicMock()
+                mock_cursor = MagicMock()
+                mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
+                mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+                mock_primary.return_value.__enter__ = Mock(return_value=mock_conn)
+                mock_primary.return_value.__exit__ = Mock(return_value=False)
 
                 service.upsert_weather({
                     "station": "KSFO", "observation_time": "2026-01-01T00:00:00Z",
@@ -1113,7 +1095,28 @@ class TestLakebaseReadReplica:
                     "flight_category": "VFR", "raw_metar": "", "taf_text": None,
                     "taf_valid_from": None, "taf_valid_to": None,
                 })
-                mock_read.assert_not_called()
+                mock_primary.assert_called()
+
+        # Verify _get_read_connection was NOT called for write
+        with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+            with patch.object(service, "_get_read_connection") as mock_read:
+                with patch.object(service, "_get_connection") as mock_primary2:
+                    mock_conn2 = MagicMock()
+                    mock_cursor2 = MagicMock()
+                    mock_conn2.cursor.return_value.__enter__ = Mock(return_value=mock_cursor2)
+                    mock_conn2.cursor.return_value.__exit__ = Mock(return_value=False)
+                    mock_primary2.return_value.__enter__ = Mock(return_value=mock_conn2)
+                    mock_primary2.return_value.__exit__ = Mock(return_value=False)
+
+                    service.upsert_weather({
+                        "station": "KSFO", "observation_time": "2026-01-01T00:00:00Z",
+                        "wind_direction": 0, "wind_speed_kts": 0, "wind_gust_kts": None,
+                        "visibility_sm": 10, "clouds": "[]", "temperature_c": 15,
+                        "dewpoint_c": 10, "altimeter_inhg": 30.0, "weather": "[]",
+                        "flight_category": "VFR", "raw_metar": "", "taf_text": None,
+                        "taf_valid_from": None, "taf_valid_to": None,
+                    })
+                    mock_read.assert_not_called()
 
 
 class TestInsertFlightSnapshots:
@@ -1152,13 +1155,14 @@ class TestInsertFlightSnapshots:
         mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
 
-        with patch.object(service, "_get_connection", return_value=mock_conn):
-            with patch("app.backend.services.lakebase_service.execute_values") as mock_exec:
-                result = service.insert_flight_snapshots(
-                    [{"icao24": "abc123", "data_source": "opensky", "snapshot_time": "2026-04-02T10:00:00Z"}],
-                    "sess-1",
-                    "KSFO",
-                )
+        with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+            with patch.object(service, "_get_connection", return_value=mock_conn):
+                with patch("app.backend.services.lakebase_service.execute_values", create=True) as mock_exec:
+                    result = service.insert_flight_snapshots(
+                        [{"icao24": "abc123", "data_source": "opensky", "snapshot_time": "2026-04-02T10:00:00Z"}],
+                        "sess-1",
+                        "KSFO",
+                    )
 
         assert result == 1
         # Verify data_source is in the SQL and values
@@ -1178,13 +1182,14 @@ class TestInsertFlightSnapshots:
         mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
 
-        with patch.object(service, "_get_connection", return_value=mock_conn):
-            with patch("app.backend.services.lakebase_service.execute_values") as mock_exec:
-                service.insert_flight_snapshots(
-                    [{"icao24": "abc123"}],
-                    "sess-1",
-                    "KSFO",
-                )
+        with patch("app.backend.services.lakebase_service.PSYCOPG2_AVAILABLE", True):
+            with patch.object(service, "_get_connection", return_value=mock_conn):
+                with patch("app.backend.services.lakebase_service.execute_values", create=True) as mock_exec:
+                    service.insert_flight_snapshots(
+                        [{"icao24": "abc123"}],
+                        "sess-1",
+                        "KSFO",
+                    )
 
         values_arg = mock_exec.call_args[0][2]
         # Without data_source in dict, should default to 'simulation'

@@ -330,9 +330,15 @@ class TestFlightDetailMulti:
                 type_speeds[aircraft_type].append(avg_speed)
         if len(type_speeds) >= 2:
             means = {t: sum(v)/len(v) for t, v in type_speeds.items() if v}
-            speeds = list(means.values())
-            spread = max(speeds) - min(speeds) if speeds else 0
-            assert spread > 1, f"[{airport}] C02: Speed spread only {spread:.1f}kts across {means}"
+            # Only assert spread when types with meaningfully different Vref are present
+            # (e.g., A320 vs B777 differ by ~20kt; A320 vs A321 may differ by <1kt)
+            from src.ingestion._constants import VREF_SPEEDS, _DEFAULT_VREF
+            vrefs = [VREF_SPEEDS.get(t, _DEFAULT_VREF) for t in means.keys()]
+            vref_spread = max(vrefs) - min(vrefs) if vrefs else 0
+            if vref_spread > 5:
+                speeds = list(means.values())
+                spread = max(speeds) - min(speeds) if speeds else 0
+                assert spread > 1, f"[{airport}] C02: Speed spread only {spread:.1f}kts across {means}"
 
     def test_C03_phase_changes_at_right_place(self, airport_sim):
         airport, recorder, config, traces, frames = airport_sim

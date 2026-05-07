@@ -878,15 +878,19 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 raw_speed = min(prof_spd * speed_slow, speed_ceiling)
                 if state.altitude < 1000:
                     # Below 1000ft: hard ceiling at Vref + 30 (stabilized approach)
-                    # This also handles post-go-around re-entry at low altitude
                     target_speed = min(vref + 30, max(vref, raw_speed))
-                elif state.altitude < 2000 or progress > 0.85:
-                    target_speed = max(vref, raw_speed)
+                    # Hard-clamp: aircraft must be stabilized below 1000ft
+                    state.velocity = min(state.velocity, vref + 30)
+                elif state.altitude < 3000:
+                    # 1000-3000ft: cap at Vref + 50 (configuring for landing)
+                    target_speed = min(vref + 50, max(vref, raw_speed))
                 else:
                     target_speed = max(vref * 0.9, raw_speed)
-                max_speed_change = 5.0 * dt  # 5 kts/s
+                # Below 3000ft: faster deceleration to enforce stabilized approach
+                decel_rate = 10.0 if state.altitude < 3000 else 5.0
+                max_speed_change = decel_rate * dt
                 if target_speed > state.velocity:
-                    state.velocity = min(target_speed, state.velocity + max_speed_change)
+                    state.velocity = min(target_speed, state.velocity + 5.0 * dt)
                 elif target_speed < state.velocity:
                     state.velocity = max(target_speed, state.velocity - max_speed_change)
 
