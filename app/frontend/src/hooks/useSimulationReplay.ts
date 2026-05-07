@@ -65,18 +65,6 @@ export interface PositionSnapshot {
 /** Altitude ceiling for trajectory segment filtering (go-around enroute interludes). */
 const GO_AROUND_ALT_CEILING = 6000;
 
-/** Should an enroute snapshot be visible on the map?
- *  Show flights whose origin or destination is the local airport — they remain
- *  visible until the backend removes them from simulation frames at EXIT_RADIUS (~30 NM).
- *  Flights with no airport data (legacy) are also shown since they're still in range. */
-function isLocalEnroute(s: PositionSnapshot, localAirport: string | undefined): boolean {
-  if (!localAirport) return true;
-  if (s.destination_airport === localAirport) return true;
-  if (s.origin_airport === localAirport) return true;
-  if (!s.destination_airport && !s.origin_airport) return true;
-  return false;
-}
-
 export interface ScenarioEvent {
   time: string;
   event_type: string;   // "weather" | "runway" | "ground" | "traffic" | "capacity"
@@ -512,10 +500,6 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     const snapshots = simData.frames[timestamp] || [];
     const src = dataSourceRef.current;
     // Filter out departing enroute flights (at cruise altitude, heading away).
-    // Keep arriving enroute flights (go-arounds, holding patterns near the airport).
-    // Arrivals have destination_airport = local airport; departures have destination = remote.
-    const localAirport = (simData.config as Record<string, unknown>)?.airport as string | undefined;
-
     // Airport center for coordinate bounds checking.
     // New sim files include airport_center in config; older files fall back to
     // median of parked flights in the current frame.
@@ -535,7 +519,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     const MAX_GROUND_DIST = 0.05; // ~3 NM — no airport taxi exceeds this
 
     const relevant = snapshots.filter((s) => {
-      if (s.phase === 'enroute') return isLocalEnroute(s, localAirport);
+      if (s.phase === 'enroute') return true;
       // Reject ground-phase flights with coordinates far from the airport
       if (centerLat != null && centerLon != null) {
         const groundPhases = ['taxi_in', 'taxi_out', 'parked', 'pushback'];
@@ -669,7 +653,6 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       const diff = Math.abs(new Date(simData.frame_timestamps[i]).getTime() - targetMs);
       if (diff < bestDiff) { bestDiff = diff; centerIdx = i; }
     }
-    const localAirport = (simData.config as Record<string, unknown>)?.airport as string | undefined;
     const maxSearch = 30;
     for (let offset = 0; offset <= maxSearch; offset++) {
       for (const idx of offset === 0 ? [centerIdx] : [centerIdx - offset, centerIdx + offset]) {
@@ -677,7 +660,6 @@ export function useSimulationReplay(): UseSimulationReplayResult {
         const ts = simData.frame_timestamps[idx];
         const snapshots = simData.frames[ts] || [];
         const match = snapshots.find(s =>
-          (s.phase !== 'enroute' || isLocalEnroute(s, localAirport)) &&
           (s.icao24 === icao24 || (callsign && s.callsign?.replace(/\s+/g, '') === callsign))
         );
         if (match) {
@@ -746,9 +728,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     // - Ground departure (pushback/taxi_to_runway) → show taxi-out path
     // - Airborne departure (takeoff/departing/enroute) → show departure trajectory
     let allowedPhases: Set<string>;
-    const localAirportCfg = (simData.config as Record<string, unknown>)?.airport as string | undefined;
     if (ARRIVAL_AIRBORNE.has(currentPhase) ||
-        (currentPhase === 'enroute' && currentSnap && isLocalEnroute(currentSnap, localAirportCfg))) {
+        (currentPhase === 'enroute' && currentSnap)) {
       // Include enroute so trajectory bridges across go-around interludes
       allowedPhases = new Set([...ARRIVAL_AIRBORNE, 'enroute']);
     } else if (ARRIVAL_GROUND.has(currentPhase)) {

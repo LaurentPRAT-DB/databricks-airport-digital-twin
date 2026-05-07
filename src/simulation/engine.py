@@ -1226,7 +1226,6 @@ class SimulationEngine:
         state.phase = FlightPhase.ENROUTE
         self._phase_count_transition(old_phase_value, "enroute")
         state.destination_airport = alt_name
-        state.origin_airport = None
         state.altitude = max(state.altitude, 3000)
         state.velocity = 250
         state.vertical_rate = 1500
