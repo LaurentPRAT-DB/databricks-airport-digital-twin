@@ -638,6 +638,13 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const { flights, filteredFlights, selectedFlight, setSelectedFlight, dataMode, setDataMode } = useFlightContext();
   const { currentAirport, loadAirport, initializeDefaultAirport, demoReady: wsDemoReady } = useAirportConfigContext();
 
+  // Auto-switch to Info tab when a flight is selected on mobile
+  useEffect(() => {
+    if (isMobile && selectedFlight) {
+      setMobileTab('info');
+    }
+  }, [isMobile, selectedFlight]);
+
   // Reset stale tile count when inpainting is toggled or airport changes
   useEffect(() => {
     setStaleTileCount(0);

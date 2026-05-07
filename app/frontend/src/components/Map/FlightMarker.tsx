@@ -83,7 +83,6 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
 
   // Selected aircraft are rendered 1.6x larger for easy tracking at wide zoom
   const displaySize = isSelected ? Math.round(size * 1.6) : size;
-  const half = displaySize / 2;
 
   // Use realistic white fuselage color for satellite view, with a thin dark outline for visibility.
   // Selected aircraft use green. Phase color is shown via the drop-shadow glow instead of fill.
@@ -107,12 +106,21 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
     ${gateLabel}
   `;
 
+  // Minimum 44px hit area for touch targets — icon renders centered within larger area
+  const MIN_TOUCH = 44;
+  const hitSize = Math.max(displaySize, MIN_TOUCH);
+  const hitHalf = hitSize / 2;
+  const needsPad = hitSize > displaySize;
+  const wrappedHtml = needsPad
+    ? `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%">${svgIcon}</div>`
+    : svgIcon;
+
   return L.divIcon({
-    html: svgIcon,
+    html: wrappedHtml,
     className: `flight-marker${isSelected ? ' flight-marker-selected' : ''}`,
-    iconSize: [displaySize, displaySize],
-    iconAnchor: [half, half],
-    popupAnchor: [0, -half],
+    iconSize: [hitSize, hitSize],
+    iconAnchor: [hitHalf, hitHalf],
+    popupAnchor: [0, -hitHalf],
   });
 }
 

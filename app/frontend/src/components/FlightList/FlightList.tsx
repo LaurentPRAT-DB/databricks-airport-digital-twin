@@ -1,12 +1,15 @@
 import { useState, useMemo } from 'react';
 import { useFlightContext } from '../../context/FlightContext';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
+import { PHASE_BG_CLASSES, PHASE_SHORT_LABELS } from '../../utils/phaseUtils';
 import FlightRow from './FlightRow';
+
+const FILTER_PHASES = ['enroute', 'approaching', 'landing', 'taxi_in', 'parked', 'pushback', 'taxi_out', 'takeoff', 'departing'] as const;
 
 type SortOption = 'callsign' | 'altitude';
 
 export default function FlightList() {
-  const { filteredFlights: flights, selectedFlight, setSelectedFlight, isLoading } = useFlightContext();
+  const { filteredFlights: flights, selectedFlight, setSelectedFlight, isLoading, hiddenPhases, togglePhase } = useFlightContext();
   const { switchProgress } = useAirportConfigContext();
   const isAirportSwitching = switchProgress !== null && !switchProgress.done;
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,10 +89,31 @@ export default function FlightList() {
             <option value="altitude">Altitude (High-Low)</option>
           </select>
         </div>
+
+        {/* Phase filter chips */}
+        <div className="mt-2 flex flex-wrap gap-1">
+          {FILTER_PHASES.map((phase) => {
+            const hidden = hiddenPhases.has(phase);
+            return (
+              <button
+                key={phase}
+                onClick={() => togglePhase(phase)}
+                className={`
+                  px-1.5 py-0.5 rounded text-[10px] font-medium transition-opacity
+                  ${PHASE_BG_CLASSES[phase] ?? 'bg-gray-500'} text-white
+                  ${hidden ? 'opacity-30' : 'opacity-100'}
+                `}
+                title={hidden ? `Show ${phase}` : `Hide ${phase}`}
+              >
+                {PHASE_SHORT_LABELS[phase] ?? phase}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Flight list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" data-testid="flight-list-scroll">
         {isAirportSwitching ? (
           <div className="p-4 text-center text-slate-500 dark:text-slate-400">
             <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />

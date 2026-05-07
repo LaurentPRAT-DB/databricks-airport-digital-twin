@@ -17,6 +17,11 @@ html, body, #root {
   width: 100%;
 }
 
+/* Safe area insets for notched iOS devices */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* Custom flight marker styles */
 .flight-marker {
   transition: transform 0.3s ease-out;

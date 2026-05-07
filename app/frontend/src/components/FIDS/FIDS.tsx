@@ -382,8 +382,8 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
   }, [allFlights, search]);
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[1003] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-slate-900 rounded-lg shadow-2xl w-full max-w-4xl max-h-[100vh] md:max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 z-[1003] flex items-center justify-center p-0 md:p-4" onClick={onClose}>
+      <div className="bg-slate-900 rounded-none md:rounded-lg shadow-2xl w-full max-w-4xl h-full md:h-auto md:max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div className="flex items-center gap-4">

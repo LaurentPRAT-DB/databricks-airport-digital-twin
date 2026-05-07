@@ -174,7 +174,8 @@ describe('FlightList', () => {
       await user.selectOptions(sortSelect, 'altitude')
 
       // DAL456 has highest altitude (35000) and should be first
-      const flightRows = screen.getAllByRole('button')
+      const scrollArea = screen.getByTestId('flight-list-scroll')
+      const flightRows = scrollArea.querySelectorAll('button')
       // First clickable flight should be DAL456
       expect(flightRows[0]).toHaveTextContent(/DAL456/i)
     })
