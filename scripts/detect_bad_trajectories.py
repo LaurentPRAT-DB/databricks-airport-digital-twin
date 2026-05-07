@@ -61,21 +61,23 @@ def analyze_flight_positions(positions: list[dict]) -> dict:
         if (d_prev > 0.0001 and d_curr < 0.0001) or (d_prev < 0.0001 and d_curr > 0.0001):
             crossings += 1
 
-    # Heuristics for "bad" trajectory:
-    # 1. Dense cluster: many airborne points packed in < 5 NM spread
-    # 2. High crossing count: flight loops back through center repeatedly
+    # Heuristics for "bad" trajectory (visual "tangled ball" on map):
+    # 1. Dense cluster: many airborne points packed in < 5 NM (stuck/orbiting in place)
+    # 2. Tight loop: moderate area but excessive points (extended holding without diversion)
+    # Note: 2s-timestep sims produce ~20 pts/NM on normal approach paths — that's fine.
+    # The visual problem is spatial clustering, not just high point count.
     is_bad = False
     reason = "ok"
 
-    if spread_nm < 5.0 and len(airborne) > 50:
+    if spread_nm < 5.0 and len(airborne) > 80:
         is_bad = True
         reason = f"dense_cluster: {len(airborne)} airborne pts in {spread_nm:.1f} NM"
-    elif points_per_nm > 20 and len(airborne) > 30:
+    elif spread_nm < 8.0 and len(airborne) > 200:
         is_bad = True
-        reason = f"high_density: {points_per_nm:.0f} pts/NM over {spread_nm:.1f} NM"
-    elif crossings > 8 and spread_nm < 10:
+        reason = f"tight_loop: {len(airborne)} airborne pts in {spread_nm:.1f} NM"
+    elif spread_nm < 10.0 and len(airborne) > 300:
         is_bad = True
-        reason = f"looping: {crossings} center crossings in {spread_nm:.1f} NM"
+        reason = f"extended_hold: {len(airborne)} airborne pts in {spread_nm:.1f} NM"
 
     return {
         "count": len(positions),

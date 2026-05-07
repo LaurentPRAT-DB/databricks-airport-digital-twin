@@ -1820,10 +1820,24 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.vertical_rate = _pv if _pv else -800
             elif not can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
                 # Approach full — FAA standard racetrack holding pattern
-                # 1-minute inbound/outbound legs, standard rate turns (3°/s)
-                HOLDING_LEG_SECONDS = 60.0  # 1-minute legs per FAA 7110.65
+                # 90-second inbound/outbound legs (~4.5 NM at 180 kts), standard rate turns (3°/s)
+                HOLDING_LEG_SECONDS = 90.0   # 1.5-minute legs for wider racetrack
                 HOLDING_TURN_SECONDS = 60.0  # 180° at 3°/s standard rate
-                STANDARD_RATE_DEG_S = 3.0   # Standard rate turn
+                STANDARD_RATE_DEG_S = 3.0    # Standard rate turn
+
+                # Altitude stacking: 1000ft separation per go-around count
+                holding_alt = 3000.0 + state.go_around_count * 1000.0
+                if abs(state.altitude - holding_alt) > 100:
+                    if state.altitude < holding_alt:
+                        state.altitude = min(holding_alt, state.altitude + 15.0 * dt)
+                        state.vertical_rate = 900
+                    else:
+                        state.altitude = max(holding_alt, state.altitude - 15.0 * dt)
+                        state.vertical_rate = -900
+                else:
+                    state.altitude = holding_alt
+                    state.vertical_rate = 0
+
                 state.holding_phase_time += dt
                 if state.holding_inbound:
                     # Inbound leg: smooth turn toward the fix (airport center)

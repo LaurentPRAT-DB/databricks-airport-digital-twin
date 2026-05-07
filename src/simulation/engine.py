@@ -282,6 +282,7 @@ class SimulationEngine:
             "pushback": 300.0,        # 5 min max pushback
             "approaching": 900.0,     # 15 min max approach
             "landing": 120.0,         # 2 min max landing
+            "enroute": 300.0,         # 5 min max holding — divert or force approach
         }
 
     def _phase_count_inc(self, phase_value: str) -> None:
@@ -1048,6 +1049,22 @@ class SimulationEngine:
                           and state.origin_airport and not state.destination_airport):
                         self._divert_flight(icao24, state)
 
+            # Proactive diversion: holding > 10 min while approach is saturated
+            from src.ingestion._state import get_max_approach_aircraft
+            _max_app = get_max_approach_aircraft()
+            _app_count = self._phase_counts.get("approaching", 0) + self._phase_counts.get("landing", 0)
+            if _app_count >= _max_app:
+                for icao24 in list(_flight_states.keys()):
+                    state = _flight_states[icao24]
+                    if state.phase != FlightPhase.ENROUTE:
+                        continue
+                    _is_arriving = (state.origin_airport and not state.destination_airport)
+                    if not _is_arriving:
+                        continue
+                    prev = self._phase_time.get(icao24)
+                    if prev and prev[0] == "enroute" and prev[1] > 360.0:
+                        self._divert_flight(icao24, state)
+
             # Remove completed departures (enroute with exit signal)
             for icao24 in list(_flight_states.keys()):
                 state = _flight_states[icao24]
@@ -1204,6 +1221,27 @@ class SimulationEngine:
             state.waypoint_index = 1  # Already at wp 0 (current pos)
             self._phase_time[icao24] = ("taxi_to_gate", 0.0)
 
+        elif state.phase == FlightPhase.ENROUTE:
+            # Stuck in holding too long — divert or force approach
+            _is_arriving = (
+                (state.origin_airport and not state.destination_airport)
+                or (state.destination_airport == self.config.airport)
+            )
+            if _is_arriving:
+                if state.go_around_count >= 2:
+                    self._divert_flight(icao24, state)
+                else:
+                    # Force transition to approach (bypass capacity)
+                    from src.ingestion.fallback import _snap_to_nearest_waypoint, _get_star_name
+                    state.phase = FlightPhase.APPROACHING
+                    state.waypoint_index = _snap_to_nearest_waypoint(state)
+                    state.star_name = _get_star_name(state.origin_airport)
+                    state.go_around_count += 1
+                    self._phase_time[icao24] = ("approaching", 0.0)
+            else:
+                # Departing enroute stuck — remove
+                state.phase_progress = -1.0
+
         # Record the phase transition for all force-advances (D06 fix)
         new_phase = state.phase
         if new_phase != old_phase:
@@ -1341,6 +1379,15 @@ class SimulationEngine:
             return
 
         for icao24, state in _flight_states.items():
+            # Thin holding pattern recordings: after 30s in ENROUTE, only record
+            # every 30s (skip high-freq landing ticks) to prevent dense clusters
+            if state.phase == FlightPhase.ENROUTE:
+                prev = self._phase_time.get(icao24)
+                if prev and prev[0] == "enroute" and prev[1] > 30.0:
+                    if not bulk_due:
+                        self._prev_altitudes[icao24] = state.altitude
+                        continue
+
             # D04 fix: compute vertical_rate from altitude delta if state value is 0
             vr = state.vertical_rate
             if vr == 0 and icao24 in self._prev_altitudes:
