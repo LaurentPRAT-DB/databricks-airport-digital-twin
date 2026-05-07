@@ -116,15 +116,19 @@ class DemoSimulationService:
             hour=6, minute=0, second=0, microsecond=0
         )
 
-        with open(raw_path) as f:
-            data = json.load(f)
-
-        if "config" in data and "start_time" in data["config"]:
-            data["config"]["start_time"] = today_start.isoformat()
+        # Fast path: patch start_time via string replace to avoid full JSON parse/serialize
+        # of 10+ MB files (saves ~2s on startup)
+        import re
+        raw_content = raw_path.read_text()
+        patched = re.sub(
+            r'"start_time":\s*"[^"]*"',
+            f'"start_time": "{today_start.isoformat()}"',
+            raw_content,
+            count=1,
+        )
 
         output_path = Path(tempfile.gettempdir()) / f"demo_{airport_icao}.json"
-        with open(output_path, "w") as f:
-            json.dump(data, f, default=str)
+        output_path.write_text(patched)
 
         size_mb = output_path.stat().st_size / (1024 * 1024)
         logger.info("Static demo for %s loaded from %s: %.1f MB", airport_icao, source, size_mb)

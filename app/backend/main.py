@@ -304,13 +304,15 @@ async def _background_init(app: FastAPI):
             logger.info(f"INIT |   Gate recommender initialized with {gate_count} OSM gates")
 
             # Refresh the AirportModelRegistry so PredictionService uses OSM gates too
-            logger.info("INIT |   Retraining ML models with airport data...")
-            app.state.startup_status = "Retraining ML models with airport data..."
-            registry = get_model_registry()
-            t_ml = time.monotonic()
-            registry.retrain(airport_icao)
-            ml_ms = (time.monotonic() - t_ml) * 1000
-            logger.info(f"INIT |   ML models retrained in {ml_ms:.0f}ms")
+            # Deferred to background — not needed for initial flight display
+            async def _retrain_ml_background():
+                registry = get_model_registry()
+                t_ml = time.monotonic()
+                await asyncio.to_thread(registry.retrain, airport_icao)
+                ml_ms = (time.monotonic() - t_ml) * 1000
+                logger.info(f"INIT | ML models retrained in {ml_ms:.0f}ms (background)")
+                app.state.init_timings["ml_retrain"] = round(ml_ms / 1000, 2)
+            asyncio.create_task(_retrain_ml_background())
 
             phase1_detail = f"{source_label}: {n_gates} gates, {n_runways} runways, {n_taxiways} taxiways, {n_aprons} aprons"
         else:
