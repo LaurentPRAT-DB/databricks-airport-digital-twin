@@ -1042,12 +1042,28 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         if state.velocity > max_landing_speed:
             state.velocity = max_landing_speed
 
-        # Aircraft moves along the runway heading during landing.
+        # Aircraft movement during landing phase
         speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
-        rwy_hdg_rad = math.radians(rwy_hdg)
-        state.latitude += speed_deg * math.cos(rwy_hdg_rad)
-        state.longitude += speed_deg * math.sin(rwy_hdg_rad) / math.cos(math.radians(state.latitude))
         state.heading = rwy_hdg
+
+        if state.altitude > 0:
+            # Airborne flare: converge toward runway threshold
+            dist_to_thr = _distance_between((state.latitude, state.longitude), runway_touchdown)
+            if dist_to_thr > 1e-6:
+                dlat = runway_touchdown[0] - state.latitude
+                dlon = runway_touchdown[1] - state.longitude
+                ratio = min(speed_deg / dist_to_thr, 1.0)
+                state.latitude += dlat * ratio
+                state.longitude += dlon * ratio
+            else:
+                rwy_hdg_rad = math.radians(rwy_hdg)
+                state.latitude += speed_deg * math.cos(rwy_hdg_rad)
+                state.longitude += speed_deg * math.sin(rwy_hdg_rad) / math.cos(math.radians(state.latitude))
+        else:
+            # On-ground: roll along runway heading
+            rwy_hdg_rad = math.radians(rwy_hdg)
+            state.latitude += speed_deg * math.cos(rwy_hdg_rad)
+            state.longitude += speed_deg * math.sin(rwy_hdg_rad) / math.cos(math.radians(state.latitude))
 
         if state.altitude > 0:
             # Airborne: descend to touchdown + decelerate during flare
