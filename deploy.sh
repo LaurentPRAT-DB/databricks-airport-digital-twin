@@ -75,6 +75,18 @@ databricks bundle deploy --target "$TARGET" 2>&1 | grep -v "^Warning:" \
   && ok "Bundle deployed (app + volumes + jobs + endpoints)" \
   || { fail "Bundle deploy failed"; exit 1; }
 
+# ── Step 2b: Upload airport configs to UC Volume ───────────────────
+# Seed script reads from static_assets/airport_cache/ — upload there.
+echo "Step 2b: Upload airport configs to UC Volume"
+VOLUME_PATH="/Volumes/$UC_CATALOG/$UC_SCHEMA/static_assets/airport_cache"
+UPLOAD_COUNT=0
+for f in data/cache/airport_*.json; do
+  FNAME=$(basename "$f")
+  databricks fs cp "$f" "dbfs:$VOLUME_PATH/$FNAME" --overwrite --profile "$PROFILE" 2>/dev/null \
+    && UPLOAD_COUNT=$((UPLOAD_COUNT + 1))
+done
+ok "Uploaded $UPLOAD_COUNT airport configs to $VOLUME_PATH"
+
 # ── Step 3: Detect app SP and bundle path ────────────────────────────
 echo "Step 3: Detect app configuration"
 APP_JSON=$(databricks apps get "$APP_NAME" --output json 2>/dev/null || echo "{}")

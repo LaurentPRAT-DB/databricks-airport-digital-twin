@@ -67,6 +67,9 @@ env/
 
 # Data directories (for local development)
 data/*
+# Exception: keep OSM airport configs for versioned, offline-capable startup
+!data/cache/
+data/cache/last_airport.txt
 # Exception: keep fallback sample data for offline mode
 !data/fallback/
 # Exception: keep pre-generated demo simulation files

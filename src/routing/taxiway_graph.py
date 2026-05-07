@@ -21,7 +21,8 @@ _BUILDING_PENALTY = 1000.0
 
 # Penalty multiplier for edges that cross a runway centerline.
 # Real airports avoid runway crossings when parallel taxiways exist.
-_RUNWAY_CROSSING_PENALTY = 500.0
+# Must be very high to outweigh the long perimeter taxiway alternatives.
+_RUNWAY_CROSSING_PENALTY = 5000.0
 
 # Buffer in degrees around the runway centerline for crossing detection (~30m).
 _RUNWAY_BUFFER_DEG = 0.0003
