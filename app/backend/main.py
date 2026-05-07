@@ -111,19 +111,22 @@ _SOURCE_LABELS = {
 async def _prewarm_airports_background():
     """Pre-warm Lakebase cache for all well-known airports after startup.
 
-    Runs sequentially to respect Overpass API rate limits. Skips airports
-    already in Lakebase cache (instant Tier 1 check). This makes subsequent
-    airport switches near-instant (<1s) instead of 15-18s.
+    Loading chain (fast → slow):
+    1. UC Volume static_assets/airport_cache/ — bulk seed from pre-computed JSON
+    2. OSM Overpass API — fallback for airports not in the Volume
+
+    Skips airports already in Lakebase cache.
     """
     import time
+    import json
     from app.backend.api.routes_airport import WELL_KNOWN_AIRPORT_INFO
+    from app.backend.services.lakebase_service import get_lakebase_service
 
-    # Brief delay to let the app finish any post-startup work
     await asyncio.sleep(5)
 
     service = get_airport_config_service()
+    lakebase = get_lakebase_service()
 
-    # Check which airports are already cached
     persisted = service.list_persisted_airports()
     persisted_codes = {a.get("icao_code", a.get("icaoCode", "")).upper() for a in persisted}
 
@@ -134,11 +137,42 @@ async def _prewarm_airports_background():
 
     logger.info("PREWARM | Starting background pre-warm for %d/%d airports", len(to_prewarm), len(WELL_KNOWN_AIRPORT_INFO))
 
+    # Phase 1: Bulk-load from UC Volume (fast, no rate limits)
+    volume_loaded = 0
+    try:
+        from databricks.sdk import WorkspaceClient
+        w = WorkspaceClient()
+        catalog = os.getenv("DATABRICKS_CATALOG", "serverless_stable_3n0ihb_catalog")
+        schema = os.getenv("DATABRICKS_SCHEMA", "airport_digital_twin")
+        volume_base = f"/Volumes/{catalog}/{schema}/static_assets/airport_cache"
+
+        for icao in list(to_prewarm):
+            volume_path = f"{volume_base}/airport_{icao}.json"
+            try:
+                resp = w.files.download(volume_path)
+                config = json.loads(resp.contents.read())
+                if lakebase.upsert_airport_config(icao, config):
+                    volume_loaded += 1
+                    to_prewarm.remove(icao)
+                    logger.info("PREWARM | %s seeded from UC Volume", icao)
+            except Exception:
+                pass  # File not in Volume — will try OSM below
+
+        if volume_loaded:
+            logger.info("PREWARM | Phase 1 complete: %d airports seeded from UC Volume", volume_loaded)
+    except Exception as e:
+        logger.info("PREWARM | UC Volume unavailable (%s), falling back to OSM", e)
+
+    # Phase 2: OSM fallback for remaining airports
+    if not to_prewarm:
+        logger.info("PREWARM | Complete: %d airports seeded (all from Volume)", volume_loaded)
+        return
+
+    logger.info("PREWARM | Phase 2: %d airports remaining, trying OSM", len(to_prewarm))
     warmed = 0
     for i, icao in enumerate(to_prewarm, 1):
         try:
             t0 = time.monotonic()
-            # Use a fresh service instance so we don't clobber the active airport config
             prewarm_svc = AirportConfigService()
             loaded = await asyncio.to_thread(
                 prewarm_svc.initialize_from_lakehouse,
@@ -153,11 +187,9 @@ async def _prewarm_airports_background():
                 logger.warning("PREWARM | [%d/%d] %s failed", i, len(to_prewarm), icao)
         except Exception as e:
             logger.warning("PREWARM | [%d/%d] %s error: %s", i, len(to_prewarm), icao, e)
-
-        # Small delay between OSM requests to be polite to Overpass API
         await asyncio.sleep(2)
 
-    logger.info("PREWARM | Complete: %d/%d airports newly cached", warmed, len(to_prewarm))
+    logger.info("PREWARM | Complete: %d from Volume + %d from OSM", volume_loaded, warmed)
 
 
 async def _background_init(app: FastAPI):
