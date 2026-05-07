@@ -61,6 +61,9 @@ variables:
   lakebase_branch:
     description: "Lakebase branch name for environment isolation"
     default: "dev"
+  lakebase_host:
+    description: "Lakebase endpoint host for the target branch"
+    default: "ep-polished-forest-d2hjnab6.database.us-east-1.cloud.databricks.com"
 
 targets:
   dev:
@@ -72,6 +75,7 @@ targets:
       catalog: "serverless_stable_3n0ihb_catalog"
       schema: "airport_digital_twin"
       lakebase_branch: "dev"
+      lakebase_host: "ep-polished-forest-d2hjnab6.database.us-east-1.cloud.databricks.com"
 
   prod:
     workspace:
@@ -80,3 +84,4 @@ targets:
       catalog: "serverless_stable_3n0ihb_catalog"
       schema: "airport_digital_twin_prod"
       lakebase_branch: "production"
+      lakebase_host: "ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com"

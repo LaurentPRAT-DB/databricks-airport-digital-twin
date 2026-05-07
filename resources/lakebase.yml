@@ -10,7 +10,9 @@
 #
 # Branches (environment isolation):
 #   - production: Production data (used by airport-digital-twin-prod app)
+#     Host: ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com
 #   - dev: Development data (used by airport-digital-twin-dev app)
+#     Host: ep-polished-forest-d2hjnab6.database.us-east-1.cloud.databricks.com
 #
 # Each branch has its own endpoint:
 #   projects/airport-digital-twin/branches/<branch>/endpoints/primary

@@ -4,6 +4,12 @@ resources:
       name: airport-digital-twin-${bundle.target}
       description: "Airport Digital Twin - Real-time flight visualization"
       source_code_path: ..
+      config:
+        env:
+          - name: LAKEBASE_HOST
+            value: "${var.lakebase_host}"
+          - name: LAKEBASE_ENDPOINT_NAME
+            value: "projects/airport-digital-twin/branches/${var.lakebase_branch}/endpoints/primary"
       resources:
         - name: sql-warehouse
           sql_warehouse:

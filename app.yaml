@@ -40,8 +40,9 @@ env:
     value: "true"
 
   # Lakebase Autoscaling PostgreSQL
+  # LAKEBASE_HOST and LAKEBASE_ENDPOINT_NAME are overridden per-target via resources/app.yml config.env
   - name: LAKEBASE_HOST
-    value: "ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com"
+    value: "ep-polished-forest-d2hjnab6.database.us-east-1.cloud.databricks.com"
   - name: LAKEBASE_PORT
     value: "5432"
   - name: LAKEBASE_DATABASE
@@ -49,7 +50,7 @@ env:
   - name: LAKEBASE_SCHEMA
     value: "public"
   - name: LAKEBASE_ENDPOINT_NAME
-    value: "projects/airport-digital-twin/branches/production/endpoints/primary"
+    value: "projects/airport-digital-twin/branches/dev/endpoints/primary"
   - name: LAKEBASE_USE_OAUTH
     value: "true"
 
