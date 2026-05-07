@@ -158,7 +158,14 @@ fi
 # Write current git SHA so /api/version shows the deployed commit
 git rev-parse --short HEAD > GIT_COMMIT 2>/dev/null || true
 
-# ── Step 1b: DABs bundle deploy ──────────────────────────────────────
+# ── Step 1b: Clean stale frontend assets + DABs bundle deploy ────────
+# DABs doesn't delete old hashed asset files when new ones replace them,
+# causing index.html to reference files that don't exist on the workspace.
+BUNDLE_ASSETS="/Workspace/Users/laurent.prat@databricks.com/.bundle/airport-digital-twin/$TARGET/files/app/frontend/dist/assets"
+databricks workspace delete "$BUNDLE_ASSETS" --recursive 2>/dev/null \
+  && info "Cleaned stale frontend assets" \
+  || info "No existing assets to clean (first deploy)"
+
 databricks bundle deploy --target "$TARGET" --force-lock 2>&1 | grep -v "^Warning:" \
   && ok "Bundle deployed" \
   || { fail "Bundle deploy failed"; exit 1; }
