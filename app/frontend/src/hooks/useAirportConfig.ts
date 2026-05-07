@@ -410,9 +410,11 @@ export function useAirportConfig(): UseAirportConfigReturn {
    */
   const loadAirport = useCallback(async (icaoCode: string) => {
     console.log(`[AirportConfig] loadAirport called: ${icaoCode} (current: ${currentAirport})`);
-    // Reset demo state — new airport needs its own demo
-    demoReadyRef.current = false;
-    setDemoReady(false);
+    // Only reset demo state when actually switching to a different airport
+    if (icaoCode !== currentAirport) {
+      demoReadyRef.current = false;
+      setDemoReady(false);
+    }
 
     // Apply cached frontend config optimistically (shows airport geometry instantly)
     // but always go through the backend activation flow for proper WS progress/errors.

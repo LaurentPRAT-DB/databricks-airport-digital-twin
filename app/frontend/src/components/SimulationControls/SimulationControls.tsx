@@ -865,11 +865,16 @@ export function SimulationControls({
 
   // Switch airport when simulation loads one for a different airport.
   // sim.airport is IATA (e.g. "MIA") while currentAirport is ICAO (e.g. "KMIA").
-  // We always send the request — the backend normalizes IATA→ICAO and returns
-  // 200 immediately if the airport is already active (no-op dedup).
+  // Only trigger when the sim airport differs from currentAirport to avoid a loop
+  // (loadAirport resets demoReady which re-triggers the demo auto-start).
   useEffect(() => {
-    if (sim.airport && onAirportChange) {
-      console.log(`[SimControls] Sim loaded airport=${sim.airport}, triggering onAirportChange`);
+    if (sim.airport && onAirportChange && currentAirport) {
+      const iataUpper = sim.airport.toUpperCase();
+      const icaoUpper = currentAirport.toUpperCase();
+      // Match: IATA "SFO" matches ICAO "KSFO", "MIA" matches "KMIA", "NRT" matches "RJAA" won't match
+      const alreadyActive = icaoUpper.endsWith(iataUpper) || icaoUpper === iataUpper;
+      if (alreadyActive) return;
+      console.log(`[SimControls] Sim airport=${sim.airport} differs from current=${currentAirport}, switching`);
       onAirportChange(sim.airport).catch((err) => {
         console.warn('Failed to switch airport for simulation:', err);
       });
