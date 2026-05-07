@@ -210,7 +210,7 @@ function clusterEvents(
 }
 
 /** Playback control bar shown at the bottom of the screen during simulation replay. */
-function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResult; isRecorded?: boolean }) {
+function PlaybackBar({ sim, isRecorded = false, savedReport, setSavedReport }: { sim: UseSimulationReplayResult; isRecorded?: boolean; savedReport: string | null; setSavedReport: (r: string | null) => void }) {
   const barRef = useRef<HTMLDivElement>(null);
 
   // Publish bar height as CSS variable so other panels can add matching bottom padding
@@ -229,7 +229,6 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
 
   const [showReport, setShowReport] = useState(false);
   const [focusEvents, setFocusEvents] = useState<ScenarioEvent[] | null>(null);
-  const [savedReport, setSavedReport] = useState<string | null>(null);
   const progressPct = sim.totalFrames > 0
     ? (sim.currentFrameIndex / (sim.totalFrames - 1)) * 100
     : 0;
@@ -811,6 +810,7 @@ export function SimulationControls({
   const [demoAutoStarted, setDemoAutoStarted] = useState(false);
   const [showRecordingPicker, setShowRecordingPicker] = useState(false);
   const [showBatchReport, setShowBatchReport] = useState(false);
+  const [savedReport, setSavedReport] = useState<string | null>(null);
   // Track airport-switching so we push [] (empty) instead of null (WS fallback) to the parent
   const airportSwitchingRef = useRef(false);
   // Track previous airport to detect actual changes (not initial mount)
@@ -1121,7 +1121,7 @@ export function SimulationControls({
       {showBatchReport && <SimulationReport sim={sim} onClose={() => setShowBatchReport(false)} onReportGenerated={setSavedReport} savedReport={savedReport} />}
 
       {/* Playback bar — active replay in simulation or recorded mode */}
-      {dataMode !== 'live' && sim.isActive && !sim.switchPaused && <PlaybackBar sim={sim} isRecorded={dataMode === 'recorded'} />}
+      {dataMode !== 'live' && sim.isActive && !sim.switchPaused && <PlaybackBar sim={sim} isRecorded={dataMode === 'recorded'} savedReport={savedReport} setSavedReport={setSavedReport} />}
 
       {/* Simulation paused bar */}
       {dataMode !== 'live' && sim.switchPaused && (
