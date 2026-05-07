@@ -229,6 +229,7 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
 
   const [showReport, setShowReport] = useState(false);
   const [focusEvents, setFocusEvents] = useState<ScenarioEvent[] | null>(null);
+  const [savedReport, setSavedReport] = useState<string | null>(null);
   const progressPct = sim.totalFrames > 0
     ? (sim.currentFrameIndex / (sim.totalFrames - 1)) * 100
     : 0;
@@ -465,7 +466,7 @@ function PlaybackBar({ sim, isRecorded = false }: { sim: UseSimulationReplayResu
       </div>
 
       {/* Report modal */}
-      {showReport && <SimulationReport sim={sim} onClose={() => { setShowReport(false); setFocusEvents(null); }} focusEvents={focusEvents} />}
+      {showReport && <SimulationReport sim={sim} onClose={() => { setShowReport(false); setFocusEvents(null); }} focusEvents={focusEvents} onReportGenerated={setSavedReport} savedReport={savedReport} />}
     </div>
   );
 }
@@ -1117,7 +1118,7 @@ export function SimulationControls({
       )}
 
       {/* Batch mode report — auto-shown when loading a file with no position data */}
-      {showBatchReport && <SimulationReport sim={sim} onClose={() => setShowBatchReport(false)} />}
+      {showBatchReport && <SimulationReport sim={sim} onClose={() => setShowBatchReport(false)} onReportGenerated={setSavedReport} savedReport={savedReport} />}
 
       {/* Playback bar — active replay in simulation or recorded mode */}
       {dataMode !== 'live' && sim.isActive && !sim.switchPaused && <PlaybackBar sim={sim} isRecorded={dataMode === 'recorded'} />}

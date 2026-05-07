@@ -16,6 +16,7 @@ interface SimulationReportProps {
   onClose: () => void;
   focusEvents?: ScenarioEvent[] | null;
   onReportGenerated?: (content: string) => void;
+  savedReport?: string | null;
 }
 
 const DETAIL_SKIP_KEYS = new Set(['time', 'event_type', 'description']);
@@ -491,11 +492,11 @@ function EventTypeDropdown({ allTypes, selectedTypes, events, fromHour, toHour, 
   );
 }
 
-export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated }: SimulationReportProps) {
+export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated, savedReport }: SimulationReportProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const { filteredFlights, setSelectedFlight } = useFlightContext();
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedReport, setGeneratedReport] = useState<string | null>(null);
+  const [generatedReport, setGeneratedReport] = useState<string | null>(savedReport ?? null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const flightsRef = useRef(filteredFlights);
   flightsRef.current = filteredFlights;
