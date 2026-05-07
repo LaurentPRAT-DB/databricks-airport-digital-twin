@@ -75,15 +75,18 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
 
     if (airportChanged) {
       hasRecenteredRef.current = false;
+      console.log(`[MapRecenter] Airport changed to ${currentAirport}, bounds=${bounds ? 'yes' : 'no'}`);
     }
 
     // On airport switch or first time bounds arrive for this airport, recenter
     if (airportChanged || (!hasRecenteredRef.current && bounds)) {
       if (bounds) {
+        console.log(`[MapRecenter] flyToBounds for ${currentAirport}`);
         map.flyToBounds(bounds, { duration: 1.5, maxZoom: 16 });
         hasRecenteredRef.current = true;
       } else {
         const center = getAirportCenter();
+        console.log(`[MapRecenter] flyTo center for ${currentAirport}: ${center.lat}, ${center.lon}`);
         map.flyTo([center.lat, center.lon], 14, { duration: 1.5 });
       }
       return;

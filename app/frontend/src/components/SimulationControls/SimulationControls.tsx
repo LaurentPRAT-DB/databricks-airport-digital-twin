@@ -863,19 +863,19 @@ export function SimulationControls({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentAirport]);
 
-  // Switch airport when simulation loads a different one (manual file load).
+  // Switch airport when simulation loads one for a different airport.
   // sim.airport is IATA (e.g. "MIA") while currentAirport is ICAO (e.g. "KMIA").
   // We always send the request — the backend normalizes IATA→ICAO and returns
   // 200 immediately if the airport is already active (no-op dedup).
   useEffect(() => {
     if (sim.airport && onAirportChange) {
-      if (sim.loadedFile?.startsWith('demo_') || sim.loadedFile?.startsWith('recording_')) return;
+      console.log(`[SimControls] Sim loaded airport=${sim.airport}, triggering onAirportChange`);
       onAirportChange(sim.airport).catch((err) => {
         console.warn('Failed to switch airport for simulation:', err);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sim.airport]);
+  }, [sim.airport, sim.loadedFile]);
 
   // Push simulation flights to parent
   useEffect(() => {

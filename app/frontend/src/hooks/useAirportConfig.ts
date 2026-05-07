@@ -409,6 +409,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
    * Load airport (lakehouse first, OSM fallback, auto-persists)
    */
   const loadAirport = useCallback(async (icaoCode: string) => {
+    console.log(`[AirportConfig] loadAirport called: ${icaoCode} (current: ${currentAirport})`);
     // Reset demo state — new airport needs its own demo
     demoReadyRef.current = false;
     setDemoReady(false);
