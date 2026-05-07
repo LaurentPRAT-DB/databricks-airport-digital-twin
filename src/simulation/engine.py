@@ -353,6 +353,8 @@ class SimulationEngine:
         _flight_states.clear()
         _gate_states.clear()
         _fb._occupied_gate_count = 0
+        from src.ingestion._state import reset_max_approach_cache
+        reset_max_approach_cache()
 
         # Reset ALL runway states — clear the entire dict and re-init defaults.
         # Previous sims may have created dynamic entries (e.g. reciprocal "10L"

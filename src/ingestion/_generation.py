@@ -1455,6 +1455,7 @@ def reset_synthetic_state() -> dict:
     _flight_states.clear()
     _bearing_cache.clear()
     _st._last_update = 0.0
+    _st.reset_max_approach_cache()
     _runway_states.clear()
     # Re-populate with current airport's runway names (dynamic, not hardcoded SFO)
     arr_rwy = _get_arrival_runway_name()

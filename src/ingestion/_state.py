@@ -69,6 +69,9 @@ class FlightState:
 MAX_APPROACH_AIRCRAFT = 8
 
 
+_cached_max_approach: Optional[int] = None
+
+
 def _compute_max_approach() -> int:
     """Derive approach capacity from the airport's runway count (OSM data)."""
     try:
@@ -89,7 +92,16 @@ def _compute_max_approach() -> int:
 
 def get_max_approach_aircraft() -> int:
     """Return the effective approach capacity for the current airport."""
-    return _compute_max_approach()
+    global _cached_max_approach
+    if _cached_max_approach is None:
+        _cached_max_approach = _compute_max_approach()
+    return _cached_max_approach
+
+
+def reset_max_approach_cache() -> None:
+    """Clear cached approach capacity (call on airport switch)."""
+    global _cached_max_approach
+    _cached_max_approach = None
 
 # Phase index — maintained automatically by _FlightStateDict and _set_phase
 _flights_by_phase: Dict[FlightPhase, Set[str]] = {phase: set() for phase in FlightPhase}

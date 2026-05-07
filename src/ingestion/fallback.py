@@ -396,6 +396,8 @@ def reload_gates() -> Dict[str, tuple]:
     _flight_states.clear()
     from src.ingestion.schedule_generator import invalidate_schedule_cache
     invalidate_schedule_cache()
+    from src.ingestion._state import reset_max_approach_cache
+    reset_max_approach_cache()
     return gates
 
 
