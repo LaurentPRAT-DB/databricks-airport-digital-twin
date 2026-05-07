@@ -83,11 +83,11 @@ export function Trajectory3D({ airportCenter }: Trajectory3DProps) {
 
   return (
     <group>
-      {/* Traveled trajectory — dashed line (─ ─ ─) */}
+      {/* Traveled trajectory — green dashed line (─ ─ ─) */}
       {traveledPts.length >= 2 && (
         <Line
           points={traveledPts}
-          color="#3b82f6"
+          color="#22c55e"
           lineWidth={3}
           dashed={true}
           dashSize={5 * METERS_TO_SCENE_UNITS}
@@ -95,11 +95,11 @@ export function Trajectory3D({ airportCenter }: Trajectory3DProps) {
         />
       )}
 
-      {/* Remaining trajectory — dotted line (· · ·), dark for visibility */}
+      {/* Remaining trajectory — blue dotted line (· · ·) */}
       {remainingPts.length >= 2 && (
         <Line
           points={remainingPts}
-          color="#1e293b"
+          color="#3b82f6"
           lineWidth={3}
           dashed={true}
           dashSize={1.5 * METERS_TO_SCENE_UNITS}
@@ -114,8 +114,8 @@ export function Trajectory3D({ airportCenter }: Trajectory3DProps) {
           <mesh key={`traj-point-${index}`} position={point}>
             <sphereGeometry args={[2 * METERS_TO_SCENE_UNITS, 8, 8]} />
             <meshStandardMaterial
-              color={index === 0 ? '#10b981' : '#3b82f6'}
-              emissive={index === 0 ? '#059669' : '#1e40af'}
+              color={index === 0 ? '#10b981' : '#22c55e'}
+              emissive={index === 0 ? '#059669' : '#166534'}
               emissiveIntensity={0.3}
             />
           </mesh>

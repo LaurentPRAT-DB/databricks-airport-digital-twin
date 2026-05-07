@@ -130,15 +130,48 @@ function formatAltitude(altitude: number | null): string {
   return `${Math.round(altitude)} ft`;
 }
 
+/** Compute bearing (degrees, 0=N clockwise) between two lat/lon points. */
+export function computeBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+  const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180)
+    - Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+}
+
+const MIN_MOVE_DEG_SQ = 0.00001 * 0.00001; // ~1m movement threshold
+
 export default function FlightMarker({ flight, zoom = 14 }: FlightMarkerProps) {
   const { selectedFlight, setSelectedFlight } = useFlightContext();
   const isSelected = selectedFlight?.icao24 === flight.icao24;
   const markerRef = useRef<L.Marker>(null);
   const size = getIconSize(zoom, flight.aircraft_type, flight.latitude);
 
+  // Track previous position to compute movement-based heading
+  const prevPosRef = useRef<{ lat: number; lon: number; bearing: number | null }>({ lat: flight.latitude, lon: flight.longitude, bearing: null });
+
+  const movementBearing = useMemo(() => {
+    const prev = prevPosRef.current;
+    const dlat = flight.latitude - prev.lat;
+    const dlon = flight.longitude - prev.lon;
+    const distSq = dlat * dlat + dlon * dlon;
+
+    if (distSq > MIN_MOVE_DEG_SQ) {
+      const bearing = computeBearing(prev.lat, prev.lon, flight.latitude, flight.longitude);
+      prev.lat = flight.latitude;
+      prev.lon = flight.longitude;
+      prev.bearing = bearing;
+      return bearing;
+    }
+    return prev.bearing;
+  }, [flight.latitude, flight.longitude]);
+
+  // Use movement-derived bearing when available, fall back to reported heading
+  const effectiveHeading = movementBearing ?? flight.heading;
+
   const icon = useMemo(
-    () => createAirplaneIcon(flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type),
-    [flight.heading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type, flight.latitude]
+    () => createAirplaneIcon(effectiveHeading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type),
+    [effectiveHeading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type, flight.latitude]
   );
 
   // Update marker icon when selection changes without full re-render

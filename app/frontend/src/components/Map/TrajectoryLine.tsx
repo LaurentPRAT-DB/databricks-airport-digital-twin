@@ -206,13 +206,13 @@ export default function TrajectoryLine() {
 
   return (
     <>
-      {/* Traveled trajectory — dashed line (─ ─ ─), split at gaps */}
+      {/* Traveled trajectory — green dashed line (─ ─ ─), split at gaps */}
       {traveledSegments.map((seg, i) => (
         <Polyline
           key={`traveled-${i}`}
           positions={seg}
           pathOptions={{
-            color: '#3b82f6',
+            color: '#22c55e',
             weight: 3,
             opacity: 0.8,
             dashArray: '10, 5',
@@ -220,13 +220,13 @@ export default function TrajectoryLine() {
         />
       ))}
 
-      {/* Remaining trajectory — animated marching-ants dotted line, split at gaps */}
+      {/* Remaining trajectory — blue dotted line (· · ·), split at gaps */}
       {remainingSegments.map((seg, i) => (
         <Polyline
           key={`remaining-${i}`}
           positions={seg}
           pathOptions={{
-            color: '#1e293b',
+            color: '#3b82f6',
             weight: 3,
             opacity: 0.7,
             dashArray: '4, 8',
@@ -244,7 +244,7 @@ export default function TrajectoryLine() {
             center={[point.latitude, point.longitude]}
             radius={4}
             pathOptions={{
-              color: '#1e40af',
+              color: '#166534',
               fillColor: getAltitudeColor(point.altitude),
               fillOpacity: 0.8,
               weight: 1,
