@@ -18,8 +18,17 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-TARGET="${1:-dev}"
-[[ "${1:-}" == "--target" ]] && TARGET="${2:-dev}"
+# Parse arguments
+TARGET="dev"
+for arg in "$@"; do
+  case "$arg" in
+    --seed) SEED=true ;;
+    --target) :;; # next arg is the target value
+    *) [[ "${_prev_arg:-}" == "--target" ]] && TARGET="$arg" ;;
+  esac
+  _prev_arg="$arg"
+done
+unset _prev_arg
 
 PROFILE="${DATABRICKS_PROFILE:-FEVM_SERVERLESS_STABLE}"
 UC_CATALOG="${UC_CATALOG:-serverless_stable_3n0ihb_catalog}"
@@ -29,6 +38,7 @@ GENIE_SPACE_ID="${GENIE_SPACE_ID:-01f12612fa6314ae943d0526f5ae3a00}"
 SECRET_SCOPE="${SECRET_SCOPE:-airport-digital-twin}"
 APP_NAME="${APP_NAME:-airport-digital-twin-$TARGET}"
 SKIP_BUILD="${SKIP_BUILD:-}"
+SEED="${SEED:-}"
 
 ok()   { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; }
@@ -140,6 +150,18 @@ if [[ "$STATE" == "RUNNING" ]]; then
 else
   fail "App did not reach RUNNING state within ${TIMEOUT}s (state: ${STATE:-unknown})"
   info "Continuing with grants — some may fail if app hasn't finished initializing"
+fi
+
+# ── Step 5b: Seed Lakebase airport cache (optional) ──────────────────
+if [[ -n "$SEED" ]]; then
+  echo "Step 5b: Seed Lakebase airport cache from UC Volume"
+  LAKEBASE_BRANCH="$TARGET"
+  [[ "$TARGET" == "prod" ]] && LAKEBASE_BRANCH="production"
+  uv run python3 scripts/seed_airport_cache.py \
+    --profile "$PROFILE" --branch "$LAKEBASE_BRANCH" \
+    --catalog "$UC_CATALOG" --schema "$UC_SCHEMA" \
+    && ok "Airport cache seeded ($LAKEBASE_BRANCH)" \
+    || fail "Airport cache seed failed (non-fatal, app will self-heal on startup)"
 fi
 
 # ── Step 6: Grant SP permissions (everything DABs can't manage) ──────

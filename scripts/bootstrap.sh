@@ -253,6 +253,12 @@ except: pass
   if [[ -n "$LAKEBASE_HOST" ]]; then
     echo "  ✓ Lakebase endpoint: $LAKEBASE_HOST"
     echo "  Applying schema (run setup_lakebase.py manually for full setup)"
+    echo "  Seeding airport cache from UC Volume..."
+    uv run python3 "$SCRIPT_DIR/seed_airport_cache.py" \
+      --profile "$PROFILE" --branch production \
+      --catalog "$CATALOG" --schema "$SCHEMA" \
+      && echo "  ✓ Airport cache seeded" \
+      || echo "  WARNING: Airport cache seed failed (app will self-heal on startup)"
   else
     echo "  WARNING: Could not detect Lakebase endpoint. Configure manually in app.yaml."
   fi
