@@ -19,6 +19,13 @@ _EARTH_RADIUS_M = 6_371_000
 # Makes Dijkstra strongly prefer routes that go around buildings.
 _BUILDING_PENALTY = 1000.0
 
+# Penalty multiplier for edges that cross a runway centerline.
+# Real airports avoid runway crossings when parallel taxiways exist.
+_RUNWAY_CROSSING_PENALTY = 500.0
+
+# Buffer in degrees around the runway centerline for crossing detection (~30m).
+_RUNWAY_BUFFER_DEG = 0.0003
+
 
 def _point_in_polygon(lat: float, lon: float, polygon: list[tuple[float, float]]) -> bool:
     """Ray-casting point-in-polygon test. polygon is list of (lat, lon)."""
@@ -172,11 +179,82 @@ class TaxiwayGraph:
             if penalized:
                 logger.info("Penalized %d edges crossing terminal buildings", penalized)
 
+        # 6. Penalize edges that cross runway centerlines
+        runway_segments = self._extract_runway_segments(config)
+        if runway_segments:
+            penalized_rwy = self._penalize_runway_crossings(runway_segments)
+            if penalized_rwy:
+                logger.info("Penalized %d edges crossing runways", penalized_rwy)
+
         logger.info(
             "TaxiwayGraph built: %d nodes, %d edges",
             len(self.nodes),
             sum(len(v) for v in self.edges.values()) // 2,
         )
+
+    # ------------------------------------------------------------------
+    # Runway crossing avoidance
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_runway_segments(config: dict) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+        """Extract runway centerlines as [(start, end), ...] from config."""
+        segments = []
+        for runway in config.get("osmRunways", []):
+            geo_points = runway.get("geoPoints", [])
+            if len(geo_points) < 2:
+                continue
+            start = (geo_points[0]["latitude"], geo_points[0]["longitude"])
+            end = (geo_points[-1]["latitude"], geo_points[-1]["longitude"])
+            segments.append((start, end))
+        return segments
+
+    @staticmethod
+    def _segments_cross(
+        a1: tuple[float, float], a2: tuple[float, float],
+        b1: tuple[float, float], b2: tuple[float, float],
+    ) -> bool:
+        """Test if line segment a1-a2 crosses line segment b1-b2."""
+        def cross2d(o, a, b):
+            return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+        d1 = cross2d(b1, b2, a1)
+        d2 = cross2d(b1, b2, a2)
+        d3 = cross2d(a1, a2, b1)
+        d4 = cross2d(a1, a2, b2)
+
+        if ((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and \
+           ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)):
+            return True
+        return False
+
+    def _penalize_runway_crossings(
+        self, runway_segments: list[tuple[tuple[float, float], tuple[float, float]]]
+    ) -> int:
+        """Penalize edges that cross a runway centerline.
+
+        Returns count of penalized edges.
+        """
+        penalized = 0
+        for node_id, neighbors in self.edges.items():
+            lat_a, lon_a = self.nodes[node_id]
+            new_neighbors = []
+            for neighbor_id, weight in neighbors:
+                lat_b, lon_b = self.nodes[neighbor_id]
+                crosses = False
+                for rwy_start, rwy_end in runway_segments:
+                    if self._segments_cross(
+                        (lat_a, lon_a), (lat_b, lon_b),
+                        rwy_start, rwy_end,
+                    ):
+                        crosses = True
+                        break
+                if crosses:
+                    weight *= _RUNWAY_CROSSING_PENALTY
+                    penalized += 1
+                new_neighbors.append((neighbor_id, weight))
+            self.edges[node_id] = new_neighbors
+        return penalized // 2
 
     # ------------------------------------------------------------------
     # Building avoidance
