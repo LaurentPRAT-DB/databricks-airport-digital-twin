@@ -67,15 +67,21 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
   }, [getGates, getTerminals, currentAirport]);
 
   const prevAirportRef = useRef(currentAirport);
+  const hasRecenteredRef = useRef(false);
 
   useEffect(() => {
     const airportChanged = prevAirportRef.current !== currentAirport;
     prevAirportRef.current = currentAirport;
 
-    // On airport switch, fit to terminal bounding box (or center if no geometry)
     if (airportChanged) {
+      hasRecenteredRef.current = false;
+    }
+
+    // On airport switch or first time bounds arrive for this airport, recenter
+    if (airportChanged || (!hasRecenteredRef.current && bounds)) {
       if (bounds) {
         map.flyToBounds(bounds, { duration: 1.5, maxZoom: 16 });
+        hasRecenteredRef.current = true;
       } else {
         const center = getAirportCenter();
         map.flyTo([center.lat, center.lon], 14, { duration: 1.5 });
@@ -89,11 +95,6 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
         sharedViewport.zoom,
         { animate: false }
       );
-      return;
-    }
-    // Otherwise, fit to terminal area
-    if (bounds) {
-      map.flyToBounds(bounds, { duration: 1.5, maxZoom: 16 });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bounds, map, currentAirport]);

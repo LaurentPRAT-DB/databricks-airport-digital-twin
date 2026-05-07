@@ -180,7 +180,7 @@ describe('AirportMap — airport switch recentering', () => {
     expect(bounds[0][0]).toBeGreaterThan(51.0);
   });
 
-  it('uses sharedViewport when NOT switching airports', () => {
+  it('prioritizes bounds over sharedViewport on initial render', () => {
     const sfoViewport = {
       center: { lat: 37.63, lon: -122.39 },
       zoom: 15,
@@ -189,12 +189,10 @@ describe('AirportMap — airport switch recentering', () => {
 
     render(<AirportMap sharedViewport={sfoViewport} />);
 
-    // On initial render (no airport change), sharedViewport should be used
-    expect(mockSetView).toHaveBeenCalledWith(
-      [37.63, -122.39],
-      15,
-      { animate: false }
-    );
+    // When bounds are available, flyToBounds takes priority over sharedViewport
+    // This prevents stale viewport from overriding proper airport recentering
+    expect(mockFlyToBounds).toHaveBeenCalledTimes(1);
+    expect(mockSetView).not.toHaveBeenCalled();
   });
 
   it('supports switching through multiple airports sequentially', () => {
