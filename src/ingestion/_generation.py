@@ -852,23 +852,49 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 t_offset = _ga_app_dur + ci * _ga_climb_interval
 
             elif i < _GA_APP_PTS + _GA_CLIMB_PTS + _GA_RETURN_PTS:
-                # PHASE 3 — Return: curve from climb-out end toward holding/re-approach entry
+                # PHASE 3 — Return: missed approach pattern (crosswind → downwind → base)
+                # Offsets laterally so the path doesn't cross back over the runway.
                 ri = i - _GA_APP_PTS - _GA_CLIMB_PTS
                 return_progress = ri / max(_GA_RETURN_PTS - 1, 1)
 
                 if _ga_is_reapproach:
-                    # Curve toward the first approach waypoint (re-approach entry)
                     _ret_target_lat = _reapp_entry_lat
                     _ret_target_lon = _reapp_entry_lon
-                    _ret_target_alt = 3500.0  # re-approach entry altitude
+                    _ret_target_alt = 3500.0
                 else:
-                    # Curve toward aircraft's current position (holding)
                     _ret_target_lat = end_lat
                     _ret_target_lon = end_lon
                     _ret_target_alt = end_alt
 
-                lat = _climb_end_lat + return_progress * (_ret_target_lat - _climb_end_lat)
-                lon = _climb_end_lon + return_progress * (_ret_target_lon - _climb_end_lon)
+                # Build rectangular missed approach pattern:
+                # crosswind turn (left 90°) → downwind → base turn to re-approach entry
+                _perp_rad = math.radians((_rwy_heading_ga - 90) % 360)
+                _recip_rad = math.radians((_rwy_heading_ga + 180) % 360)
+                _lat_cos = math.cos(math.radians(_climb_end_lat))
+                _lateral_offset = 0.015  # ~1.7 km lateral offset
+                _downwind_dist = 0.025   # ~2.8 km along downwind leg
+
+                # Crosswind point: perpendicular left from climb-out end
+                _cw_lat = _climb_end_lat + _lateral_offset * math.cos(_perp_rad)
+                _cw_lon = _climb_end_lon + _lateral_offset * math.sin(_perp_rad) / max(0.01, _lat_cos)
+                # Downwind point: fly reciprocal heading (back toward approach side)
+                _dw_lat = _cw_lat + _downwind_dist * math.cos(_recip_rad)
+                _dw_lon = _cw_lon + _downwind_dist * math.sin(_recip_rad) / max(0.01, _lat_cos)
+
+                # 3-segment interpolation: crosswind (0-0.3), downwind (0.3-0.7), base (0.7-1.0)
+                if return_progress < 0.3:
+                    seg_frac = return_progress / 0.3
+                    lat = _climb_end_lat + seg_frac * (_cw_lat - _climb_end_lat)
+                    lon = _climb_end_lon + seg_frac * (_cw_lon - _climb_end_lon)
+                elif return_progress < 0.7:
+                    seg_frac = (return_progress - 0.3) / 0.4
+                    lat = _cw_lat + seg_frac * (_dw_lat - _cw_lat)
+                    lon = _cw_lon + seg_frac * (_dw_lon - _cw_lon)
+                else:
+                    seg_frac = (return_progress - 0.7) / 0.3
+                    lat = _dw_lat + seg_frac * (_ret_target_lat - _dw_lat)
+                    lon = _dw_lon + seg_frac * (_ret_target_lon - _dw_lon)
+
                 alt = _climb_end_alt + return_progress * (_ret_target_alt - _climb_end_alt)
 
                 target_hdg = _calculate_heading((lat, lon), (_ret_target_lat, _ret_target_lon))
