@@ -15,9 +15,11 @@ import KPIDashboard from './components/KPIDashboard/KPIDashboard';
 import GenieChat from './components/GenieChat/GenieChat';
 import MobileTabBar, { type MobileTab } from './components/MobileTabBar/MobileTabBar';
 import { useIsMobile } from './hooks/useIsMobile';
+import { useConnectionHealth } from './hooks/useConnectionHealth';
 import { useViewportState, SharedViewport } from './hooks/useViewportState';
 import { debugLogger } from './utils/debugLogger';
 import SimulationControls, { DataModeToggle } from './components/SimulationControls/SimulationControls';
+import { MaintenanceOverlay } from './components/MaintenanceOverlay/MaintenanceOverlay';
 import { Flight } from './types/flight';
 
 // Lazy load 3D map to reduce initial bundle size
@@ -601,6 +603,15 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [mobileTab, setMobileTab] = useState<MobileTab>('map');
   const [showChat, setShowChat] = useState(false);
 
+  // Connection health: detect backend downtime and show maintenance overlay
+  const { isDown, wasDown } = useConnectionHealth({ enabled: backendReady });
+
+  useEffect(() => {
+    if (wasDown) {
+      window.location.reload();
+    }
+  }, [wasDown]);
+
   // Close FIDS when switching between 2D/3D views
   useEffect(() => {
     setShowFIDS(false);
@@ -774,6 +785,11 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   // Show loading screen until backend is ready
   if (!backendReady) {
     return <LoadingScreen airportCode={currentAirport || undefined} statusMessage={statusMessage} initSteps={initSteps} />;
+  }
+
+  // Show maintenance overlay when backend goes down during an active session
+  if (isDown) {
+    return <MaintenanceOverlay />;
   }
 
   const simulationControlsNode = (
