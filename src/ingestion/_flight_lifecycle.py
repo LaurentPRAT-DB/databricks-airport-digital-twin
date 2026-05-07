@@ -25,6 +25,7 @@ from src.ingestion._state import (
     _flight_states,
     _set_phase,
     MAX_APPROACH_AIRCRAFT,
+    get_max_approach_aircraft,
     _gate_states,
 )
 from src.ingestion._constants import (
@@ -435,8 +436,8 @@ def _create_new_flight(
         approaching_count = _count_aircraft_in_phase(FlightPhase.APPROACHING)
         landing_count = _count_aircraft_in_phase(FlightPhase.LANDING)
 
-        # Limit simultaneous approaches (realistic: max 4-5 in sequence)
-        if approaching_count + landing_count >= MAX_APPROACH_AIRCRAFT:
+        # Limit simultaneous approaches (scaled to airport runway count)
+        if approaching_count + landing_count >= get_max_approach_aircraft():
             # Too many on approach - start as enroute instead
             return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
 
@@ -1774,11 +1775,11 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             elif state.altitude < 10000:
                 state.velocity = min(state.velocity, MAX_SPEED_BELOW_FL100_KTS)
 
-            # Enforce approach capacity at runtime (max 4 on approach)
+            # Enforce approach capacity at runtime (scaled to runway count)
             approach_count = (_count_aircraft_in_phase(FlightPhase.APPROACHING)
                               + _count_aircraft_in_phase(FlightPhase.LANDING))
             # Go-around flights get priority re-entry — they've already been sequenced
-            can_start_approach = (approach_count < MAX_APPROACH_AIRCRAFT
+            can_start_approach = (approach_count < get_max_approach_aircraft()
                                   or state.go_around_count > 0)
 
             # Go-around re-entry: wider radius since aircraft is already close

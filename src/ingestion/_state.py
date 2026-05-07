@@ -65,7 +65,31 @@ class FlightState:
 
 
 # Maximum simultaneous aircraft on approach (approach + landing)
+# Base value — overridden at runtime by _compute_max_approach() based on runway count
 MAX_APPROACH_AIRCRAFT = 8
+
+
+def _compute_max_approach() -> int:
+    """Derive approach capacity from the airport's runway count (OSM data)."""
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+        n_runways = len(config.get("osmRunways", []))
+        if n_runways >= 4:
+            return 14
+        elif n_runways >= 3:
+            return 12
+        elif n_runways >= 2:
+            return 10
+        return 6
+    except Exception:
+        return MAX_APPROACH_AIRCRAFT
+
+
+def get_max_approach_aircraft() -> int:
+    """Return the effective approach capacity for the current airport."""
+    return _compute_max_approach()
 
 # Phase index — maintained automatically by _FlightStateDict and _set_phase
 _flights_by_phase: Dict[FlightPhase, Set[str]] = {phase: set() for phase in FlightPhase}

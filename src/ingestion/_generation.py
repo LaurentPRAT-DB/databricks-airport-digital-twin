@@ -30,6 +30,7 @@ from src.ingestion._state import (
     _runway_28R,
     _gate_states,
     MAX_APPROACH_AIRCRAFT,
+    get_max_approach_aircraft,
 )
 from src.ingestion._constants import (
     _AIRLINE_NAMES,
@@ -518,7 +519,7 @@ def generate_synthetic_flights(
                 if _avg_weight > 0:
                     _activity_boost = max(0.3, min(1.5, _cur_weight / _avg_weight))
 
-            approach_weight = (0.10 * _activity_boost) if approach_count < MAX_APPROACH_AIRCRAFT else 0.0
+            approach_weight = (0.10 * _activity_boost) if approach_count < get_max_approach_aircraft() else 0.0
             parked_weight = (0.12 / max(0.5, _activity_boost)) if parked_count < max_parked else 0.0
             taxi_in_weight = (0.05 * _activity_boost) if taxi_count < 6 else 0.0
             taxi_out_weight = (0.08 * _activity_boost) if taxi_count < 6 else 0.0
