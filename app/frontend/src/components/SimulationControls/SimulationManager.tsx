@@ -921,6 +921,7 @@ function LoadTab({ files, isLoading, isFetchingFiles, onLoad, onSelectForWindow 
   onLoad: (filename: string) => void;
   onSelectForWindow: (filename: string) => void;
 }) {
+  const [search, setSearch] = useState('');
   const MAX_LOADABLE_BYTES = 1 * 1024 * 1024 * 1024;
   const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024;
 
@@ -930,6 +931,16 @@ function LoadTab({ files, isLoading, isFetchingFiles, onLoad, onSelectForWindow 
     if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
     return `${(bytes / 1024).toFixed(0)} KB`;
   }
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return files;
+    const q = search.toLowerCase();
+    return files.filter(f =>
+      f.airport?.toLowerCase().includes(q) ||
+      f.scenario_name?.toLowerCase().includes(q) ||
+      f.filename?.toLowerCase().includes(q)
+    );
+  }, [files, search]);
 
   if (isFetchingFiles) {
     return (
@@ -945,8 +956,32 @@ function LoadTab({ files, isLoading, isFetchingFiles, onLoad, onSelectForWindow 
   }
 
   return (
-    <div className="space-y-2 max-h-[380px] overflow-y-auto">
-      {files.map(f => {
+    <div className="space-y-2">
+      <div className="relative">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Filter by airport or scenario..."
+          className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 focus:border-blue-400 focus:outline-none"
+        />
+        {search && (
+          <button
+            onClick={() => setSearch('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+          >
+            &times;
+          </button>
+        )}
+      </div>
+      {filtered.length === 0 ? (
+        <p className="text-slate-400 text-sm text-center py-6">No simulations match "{search}"</p>
+      ) : (
+      <div className="space-y-2 max-h-[330px] overflow-y-auto">
+      {filtered.map(f => {
         const sizeBytes = f.size_bytes ?? f.size_kb * 1024;
         const tooLarge = sizeBytes > MAX_LOADABLE_BYTES;
         const isLarge = sizeBytes > LARGE_FILE_THRESHOLD;
@@ -982,6 +1017,8 @@ function LoadTab({ files, isLoading, isFetchingFiles, onLoad, onSelectForWindow 
           </button>
         );
       })}
+    </div>
+      )}
     </div>
   );
 }
