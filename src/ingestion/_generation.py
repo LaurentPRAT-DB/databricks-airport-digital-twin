@@ -787,17 +787,27 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         _climb_end_lon = rwy_threshold_lon + _climb_dist_deg * math.sin(_rwy_rad_ga) / math.cos(math.radians(rwy_threshold_lat))
         _climb_end_alt = 1500.0  # missed approach altitude
 
-        # Re-approach entry point: pick an approach waypoint close enough that
-        # the base turn doesn't create a huge gap (which splits the trajectory
-        # line on the map).  Target ~0.03° from the climb-out end (~3-4 km).
-        _reapp_entry_lon, _reapp_entry_lat = _traj_app_wps_ga[0]
-        _max_reentry_dist_sq = 0.035 ** 2
-        for _wp_i in range(len(_traj_app_wps_ga) - 1, -1, -1):
+        # Re-approach entry point: find the approach waypoint nearest to
+        # the downwind endpoint so the base-turn → re-approach transition is
+        # seamless (no large gap that would split the polyline on the map).
+        _perp_rad_pre = math.radians((_rwy_heading_ga - 90) % 360)
+        _recip_rad_pre = math.radians((_rwy_heading_ga + 180) % 360)
+        _lat_cos_pre = math.cos(math.radians(_climb_end_lat))
+        _dw_lat_pre = (_climb_end_lat + 0.015 * math.cos(_perp_rad_pre)
+                       + 0.025 * math.cos(_recip_rad_pre))
+        _dw_lon_pre = (_climb_end_lon
+                       + 0.015 * math.sin(_perp_rad_pre) / max(0.01, _lat_cos_pre)
+                       + 0.025 * math.sin(_recip_rad_pre) / max(0.01, _lat_cos_pre))
+        _reapp_entry_wp_idx = len(_traj_app_wps_ga) - 1
+        _best_dist_sq = float('inf')
+        for _wp_i in range(len(_traj_app_wps_ga)):
             _wp_lon, _wp_lat = _traj_app_wps_ga[_wp_i][0], _traj_app_wps_ga[_wp_i][1]
-            _d_sq = (_wp_lat - _climb_end_lat) ** 2 + (_wp_lon - _climb_end_lon) ** 2
-            if _d_sq >= _max_reentry_dist_sq:
-                _reapp_entry_lon, _reapp_entry_lat = _wp_lon, _wp_lat
-                break
+            _d_sq = (_wp_lat - _dw_lat_pre) ** 2 + (_wp_lon - _dw_lon_pre) ** 2
+            if _d_sq < _best_dist_sq:
+                _best_dist_sq = _d_sq
+                _reapp_entry_wp_idx = _wp_i
+        _reapp_entry_lon = _traj_app_wps_ga[_reapp_entry_wp_idx][0]
+        _reapp_entry_lat = _traj_app_wps_ga[_reapp_entry_wp_idx][1]
 
         # How far along the approach waypoints the aircraft currently is
         _ga_wp_idx = current_state.waypoint_index if current_state else 0
@@ -812,18 +822,21 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         _running_hdg = current_heading
         for i in range(_ga_total):
             if i < _GA_APP_PTS:
-                # PHASE 1 — Initial approach: interpolate along waypoints to threshold
+                # PHASE 1 — Initial approach: interpolate along waypoints to threshold.
+                # Start from re-approach entry waypoint (not the distant STAR start)
+                # to keep all points close together and avoid large gaps.
                 app_progress = i / max(_GA_APP_PTS - 1, 1)
-                wp_count = len(_traj_app_wps_ga)
-                wp_progress = app_progress * (wp_count - 1)
+                _app_start_idx = _reapp_entry_wp_idx
+                _app_wp_range = max(1, _ga_wp_count - 1 - _app_start_idx)
+                wp_progress = app_progress * _app_wp_range + _app_start_idx
                 wp_idx = int(wp_progress)
                 wp_frac = wp_progress - wp_idx
-                if wp_idx >= wp_count - 1:
-                    wp_idx = wp_count - 2
+                if wp_idx >= _ga_wp_count - 1:
+                    wp_idx = _ga_wp_count - 2
                     wp_frac = 1.0
 
                 wp1 = _traj_app_wps_ga[wp_idx]
-                wp2 = _traj_app_wps_ga[min(wp_idx + 1, wp_count - 1)]
+                wp2 = _traj_app_wps_ga[min(wp_idx + 1, _ga_wp_count - 1)]
                 lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
                 lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
 
@@ -915,34 +928,13 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
                 t_offset = _ga_app_dur + _ga_climb_dur + ri * _ga_return_interval
 
             else:
-                # PHASE 4 — Re-approach: follow approach waypoints from entry to current position
+                # PHASE 4 — Re-approach: from re-approach entry to aircraft position.
+                # Linear interpolation keeps gaps small and avoids jumping back to
+                # distant STAR waypoints.
                 rai = i - _GA_APP_PTS - _GA_CLIMB_PTS - _GA_RETURN_PTS
                 reapp_progress = rai / max(_GA_REAPP_PTS - 1, 1)
-
-                # Interpolate along approach waypoints from wp[0] to wp[_ga_wp_idx],
-                # then from there to the aircraft's actual current position.
-                # Use 80% of points for waypoint traversal, 20% for final segment.
-                if _ga_wp_idx > 0 and reapp_progress < 0.80:
-                    # Traversing approach waypoints
-                    wp_progress = (reapp_progress / 0.80) * _ga_wp_idx
-                    wp_idx = int(wp_progress)
-                    wp_frac = wp_progress - wp_idx
-                    if wp_idx >= _ga_wp_count - 1:
-                        wp_idx = _ga_wp_count - 2
-                        wp_frac = 1.0
-                    wp1 = _traj_app_wps_ga[wp_idx]
-                    wp2 = _traj_app_wps_ga[min(wp_idx + 1, _ga_wp_count - 1)]
-                    lon = wp1[0] + (wp2[0] - wp1[0]) * wp_frac
-                    lat = wp1[1] + (wp2[1] - wp1[1]) * wp_frac
-                else:
-                    # Final segment: from last waypoint to aircraft position
-                    if _ga_wp_idx > 0:
-                        final_frac = (reapp_progress - 0.80) / 0.20
-                    else:
-                        final_frac = reapp_progress
-                    _last_wp = _traj_app_wps_ga[min(_ga_wp_idx, _ga_wp_count - 1)]
-                    lon = _last_wp[0] + final_frac * (end_lon - _last_wp[0])
-                    lat = _last_wp[1] + final_frac * (end_lat - _last_wp[1])
+                lon = _reapp_entry_lon + reapp_progress * (end_lon - _reapp_entry_lon)
+                lat = _reapp_entry_lat + reapp_progress * (end_lat - _reapp_entry_lat)
 
                 # Descent profile for re-approach
                 _reapp_prof_prog = 0.5 + 0.5 * reapp_progress
