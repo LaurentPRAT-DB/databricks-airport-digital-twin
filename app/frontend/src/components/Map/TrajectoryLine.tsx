@@ -148,15 +148,18 @@ export default function TrajectoryLine() {
     const curLat = selectedFlight.latitude;
     const curLon = selectedFlight.longitude;
 
-    // Find closest trajectory point to aircraft
-    let bestIdx = 0;
+    // Find closest trajectory point to aircraft — search BACKWARD so that
+    // when the aircraft revisits the same airspace (go-around), we find
+    // the most recent pass, not the first one.
+    let bestIdx = validPoints.length - 1;
     let bestDist = Infinity;
-    for (let i = 0; i < validPoints.length; i++) {
+    for (let i = validPoints.length - 1; i >= 0; i--) {
       const d = distSq(validPoints[i].latitude, validPoints[i].longitude, curLat, curLon);
       if (d < bestDist) {
         bestDist = d;
         bestIdx = i;
       }
+      if (d < 1e-10) break;
     }
 
     const currentPos: [number, number] = [curLat, curLon];
