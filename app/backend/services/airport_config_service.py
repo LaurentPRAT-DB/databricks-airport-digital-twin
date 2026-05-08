@@ -640,6 +640,7 @@ class AirportConfigService:
                     self.set_reference_point(center_lat, center_lon)
                 elif "reference_lat" in cached and "reference_lon" in cached:
                     self.set_reference_point(cached["reference_lat"], cached["reference_lon"])
+                self._build_taxiway_graph()
                 logger.info(f"[DIAG] Tier 1.5 local cache HIT in {time.monotonic() - t_local:.3f}s")
                 return "local_cache"
             except Exception as e:

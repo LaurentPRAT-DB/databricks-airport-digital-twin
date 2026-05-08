@@ -870,9 +870,11 @@ export function SimulationControls({
   // (loadAirport resets demoReady which re-triggers the demo auto-start).
   useEffect(() => {
     if (sim.airport && onAirportChange && currentAirport) {
+      // Demo files are named demo_<ICAO> — if the loaded file matches currentAirport,
+      // the sim is already for the correct airport regardless of IATA/ICAO mismatch.
+      if (sim.loadedFile === `demo_${currentAirport}`) return;
       const iataUpper = sim.airport.toUpperCase();
       const icaoUpper = currentAirport.toUpperCase();
-      // Match: IATA "SFO" matches ICAO "KSFO", "MIA" matches "KMIA", "NRT" matches "RJAA" won't match
       const alreadyActive = icaoUpper.endsWith(iataUpper) || icaoUpper === iataUpper;
       if (alreadyActive) return;
       console.log(`[SimControls] Sim airport=${sim.airport} differs from current=${currentAirport}, switching`);

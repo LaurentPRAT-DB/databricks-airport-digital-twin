@@ -265,7 +265,7 @@ function ViewToggle({
 
     const fetchStats = async () => {
       try {
-        const resp = await fetch('/api/inpainting/cache-stats');
+        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/inpainting/cache-stats`);
         if (!resp.ok) return;
         const data = await resp.json();
         if (data.error) return;
@@ -292,9 +292,14 @@ function ViewToggle({
 
   const checkEndpointStatus = async (): Promise<'ready' | 'not_ready' | 'error'> => {
     try {
-      const resp = await fetch('/api/inpainting/status');
+      const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/inpainting/status`);
       if (!resp.ok) return 'error';
       const data = await resp.json();
+      if (data.status === 'error') {
+        const detail = data.error || data.http_status ? `Error ${data.http_status}: ${data.error || 'permission denied'}` : '';
+        setStatusMessage(detail || 'Endpoint returned an error.');
+        return 'error';
+      }
       if (data.ready === 'READY') return 'ready';
       return 'not_ready';
     } catch {
@@ -337,7 +342,8 @@ function ViewToggle({
       setStatusMessage('Inpainting endpoint is not running (scaled to zero).');
     } else {
       setEndpointStatus('error');
-      setStatusMessage('Could not reach the inpainting endpoint.');
+      // checkEndpointStatus may have already set a detailed message (e.g. 403)
+      setStatusMessage((prev) => prev || 'Could not reach the inpainting endpoint.');
     }
   };
 
@@ -345,7 +351,7 @@ function ViewToggle({
     setEndpointStatus('waking');
     setStatusMessage('Starting endpoint... This may take 2-5 minutes.');
     try {
-      const resp = await fetch('/api/inpainting/wake', { method: 'POST' });
+      const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/inpainting/wake`, { method: 'POST' });
       const data = await resp.json();
       if (data.status === 'ready') {
         setEndpointStatus('ready');
@@ -363,7 +369,7 @@ function ViewToggle({
   const handleRefreshTiles = async () => {
     const params = airportIcao ? `?airport_icao=${airportIcao}` : '';
     try {
-      await fetch(`/api/inpainting/cache${params}`, { method: 'DELETE' });
+      await fetch(`${import.meta.env.VITE_API_URL || ''}/api/inpainting/cache${params}`, { method: 'DELETE' });
       setCacheStats(null);
       setPrevTileCount(null);
       setProcessing(true);

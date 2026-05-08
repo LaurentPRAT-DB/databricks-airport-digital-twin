@@ -15,3 +15,7 @@ resources:
           sql_warehouse:
             id: b868e84cedeb4262
             permission: CAN_USE
+        - name: inpainting-endpoint
+          serving_endpoint:
+            name: airport-dt-aircraft-inpainting-dev
+            permission: CAN_QUERY

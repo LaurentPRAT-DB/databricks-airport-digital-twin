@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 interface UseConnectionHealthOptions {
   enabled: boolean;
   interval?: number;
@@ -14,7 +16,7 @@ interface UseConnectionHealthResult {
 export function useConnectionHealth({
   enabled,
   interval = 10_000,
-  failureThreshold = 2,
+  failureThreshold = 3,
 }: UseConnectionHealthOptions): UseConnectionHealthResult {
   const [isDown, setIsDown] = useState(false);
   const [wasDown, setWasDown] = useState(false);
@@ -26,7 +28,7 @@ export function useConnectionHealth({
 
     const check = async () => {
       try {
-        const res = await fetch('/health', { signal: AbortSignal.timeout(5000) });
+        const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) });
         if (res.ok) {
           if (failCountRef.current >= failureThreshold) {
             wasDownRef.current = true;

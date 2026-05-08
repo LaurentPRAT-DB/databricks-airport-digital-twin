@@ -489,16 +489,16 @@ def _get_departure_waypoints(destination_iata: Optional[str] = None) -> list:
 
 
 def _snap_to_nearest_waypoint(state) -> int:
-    """Find the closest approach waypoint that is AHEAD of the aircraft.
+    """Find the best approach waypoint to resume descent from.
 
-    After a go-around, the aircraft re-enters approach from a holding area
-    that may be on the opposite side of the airport from the approach path.
-    Snapping to the closest waypoint by distance alone can pick a waypoint
-    behind the aircraft, causing it to fly backward across the airport.
+    After a go-around, the aircraft re-enters approach from a holding area.
+    The selected waypoint must satisfy:
+    1. Ahead of the aircraft (within ±90° of heading) — prevents flying backward
+    2. Altitude at or above current altitude — prevents arriving over the
+       runway at high altitude (the aircraft must descend along the path,
+       not skip to a low-altitude waypoint it's already above)
 
-    Instead, prefer waypoints that are roughly in the aircraft's forward
-    hemisphere (within ±90° of current heading).  Fall back to pure distance
-    if no forward waypoint is found.
+    Falls back to pure distance if no suitable waypoint is found.
     """
     approach_wps = _get_approach_waypoints(state.origin_airport)
     if not approach_wps:
@@ -511,6 +511,7 @@ def _snap_to_nearest_waypoint(state) -> int:
 
     for wi, wp in enumerate(approach_wps):
         wp_lat, wp_lon = wp[1], wp[0]
+        wp_alt = wp[2] if len(wp) > 2 else 0
         d = _distance_between((state.latitude, state.longitude), (wp_lat, wp_lon))
 
         if d < best_dist:
@@ -521,7 +522,8 @@ def _snap_to_nearest_waypoint(state) -> int:
             (state.latitude, state.longitude), (wp_lat, wp_lon)
         )
         angle_diff = abs((bearing - state.heading + 540) % 360 - 180)
-        if angle_diff <= 90 and d < best_fwd_dist:
+        # Must be ahead AND at or above current altitude (with 500ft tolerance)
+        if angle_diff <= 90 and wp_alt >= state.altitude - 500 and d < best_fwd_dist:
             best_fwd_dist = d
             best_fwd_idx = wi
 
