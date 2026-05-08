@@ -186,6 +186,7 @@ function ViewToggle({
   onInpaintingToggle,
   airportIcao,
   staleTileCount = 0,
+  warmingUp = false,
 }: {
   viewMode: ViewMode;
   onToggle: (mode: ViewMode) => void;
@@ -195,6 +196,7 @@ function ViewToggle({
   onInpaintingToggle: (on: boolean) => void;
   airportIcao?: string;
   staleTileCount?: number;
+  warmingUp?: boolean;
 }) {
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>('unknown');
   const [statusMessage, setStatusMessage] = useState('');
@@ -500,7 +502,17 @@ function ViewToggle({
       {/* Cache status panel — shown when inpainting is active */}
       {inpainting && satellite && (
         <div className="bg-slate-800/90 backdrop-blur text-white rounded-lg shadow-md px-3 py-3 text-xs max-w-[300px]">
-          {processing ? (
+          {warmingUp && !processing && !cacheStats?.total_tiles ? (
+            <div className="flex items-center gap-2">
+              <svg className="animate-spin w-3.5 h-3.5 flex-shrink-0 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-amber-300 font-medium">
+                GPU endpoint warming up... (2-5 min)
+              </span>
+            </div>
+          ) : processing ? (
             <>
               <div className="flex items-center gap-2">
                 <svg className="animate-spin w-3.5 h-3.5 flex-shrink-0 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -591,6 +603,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [satellite, setSatellite] = useState(false);
   const [inpainting, setInpainting] = useState(false);
   const [staleTileCount, setStaleTileCount] = useState(0);
+  const [inpaintingWarmingUp, setInpaintingWarmingUp] = useState(false);
   const [showFIDS, setShowFIDS] = useState(false);
   const [showKPI, setShowKPI] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
@@ -604,7 +617,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [showChat, setShowChat] = useState(false);
 
   // Connection health: detect backend downtime and show maintenance overlay
-  const { isDown, wasDown } = useConnectionHealth({ enabled: backendReady });
+  const { isDown, wasDown } = useConnectionHealth({ enabled: false });
 
   useEffect(() => {
     if (wasDown) {
@@ -652,6 +665,10 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
 
   const handleStaleTileDetected = useCallback(() => {
     setStaleTileCount((prev) => prev + 1);
+  }, []);
+
+  const handleInpaintingWarmingUp = useCallback(() => {
+    setInpaintingWarmingUp(true);
   }, []);
 
   // Turn off clean tiles (inpainting) when switching to recorded data mode
@@ -820,7 +837,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   // Shared map view (used in both desktop and mobile layouts)
   const mapView = (
     <div className="flex-1 overflow-hidden relative">
-      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} staleTileCount={staleTileCount} />
+      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} staleTileCount={staleTileCount} warmingUp={inpaintingWarmingUp} />
       <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
         <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>
           <AirportMap
@@ -830,6 +847,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
             inpainting={inpainting && satellite}
             airportIcao={currentAirport ?? undefined}
             onStaleDetected={handleStaleTileDetected}
+            onWarmingUp={handleInpaintingWarmingUp}
           />
         </Suspense>
       </div>

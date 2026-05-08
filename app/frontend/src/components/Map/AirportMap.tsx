@@ -11,18 +11,13 @@ import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { SharedViewport } from '../../hooks/useViewportState';
 
 interface AirportMapProps {
-  /** Shared viewport from 3D view (if any) */
   sharedViewport?: SharedViewport | null;
-  /** Callback to save viewport on unmount */
   onViewportChange?: (vp: SharedViewport) => void;
-  /** Show satellite imagery instead of street map */
   satellite?: boolean;
-  /** Route satellite tiles through the inpainting proxy to remove aircraft */
   inpainting?: boolean;
-  /** Airport ICAO code for cache tagging when inpainting is enabled */
   airportIcao?: string;
-  /** Called when an inpainted tile is served from stale cache */
   onStaleDetected?: () => void;
+  onWarmingUp?: () => void;
 }
 
 /**
@@ -202,7 +197,7 @@ const InpaintingGridLayer = L.GridLayer.extend({
       .replace('{y}', String(coords.y))
       .replace('{x}', String(coords.x));
 
-    const opts = this.options as { airportIcao?: string; onStaleDetected?: () => void };
+    const opts = this.options as { airportIcao?: string; onStaleDetected?: () => void; onWarmingUp?: () => void };
     const params = new URLSearchParams({ url: esriUrl });
     if (opts.airportIcao) params.set('airport_icao', opts.airportIcao);
 
@@ -225,16 +220,19 @@ const InpaintingGridLayer = L.GridLayer.extend({
     fetch(`/api/inpainting/clean-tile?${cacheParams.toString()}`, { method: 'POST' })
       .then((resp) => {
         if (resp.ok) {
-          // Cache HIT or STALE — use the tile
           if (resp.headers.get('X-Cache') === 'STALE') {
             opts.onStaleDetected?.();
           }
           return resp.blob().then(loadBlob);
         }
         if (resp.status === 204) {
-          // No cache — Phase 2: full inpaint
+          // No cache — Phase 2: full inpaint (may take minutes on cold start)
           return fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST' })
             .then((r) => {
+              if (r.status === 503) {
+                opts.onWarmingUp?.();
+                throw new Error('warming_up');
+              }
               if (!r.ok) throw new Error(`HTTP ${r.status}`);
               return r.blob();
             })
@@ -243,7 +241,6 @@ const InpaintingGridLayer = L.GridLayer.extend({
         throw new Error(`HTTP ${resp.status}`);
       })
       .catch(() => {
-        // Fallback: load original Esri tile so there's no visible gap
         tile.onload = () => done(null, tile);
         tile.onerror = () => done(null, tile);
         tile.src = esriUrl;
@@ -254,18 +251,21 @@ const InpaintingGridLayer = L.GridLayer.extend({
 });
 
 /** React wrapper for the inpainting grid layer. */
-function InpaintingTileLayer({ airportIcao, onStaleDetected }: { airportIcao?: string; onStaleDetected?: () => void }) {
+function InpaintingTileLayer({ airportIcao, onStaleDetected, onWarmingUp }: { airportIcao?: string; onStaleDetected?: () => void; onWarmingUp?: () => void }) {
   const map = useMap();
   const layerRef = useRef<L.GridLayer | null>(null);
-  const callbackRef = useRef(onStaleDetected);
-  callbackRef.current = onStaleDetected;
+  const staleRef = useRef(onStaleDetected);
+  staleRef.current = onStaleDetected;
+  const warmRef = useRef(onWarmingUp);
+  warmRef.current = onWarmingUp;
 
   useEffect(() => {
     const layer = new (InpaintingGridLayer as unknown as new (opts: object) => L.GridLayer)({
       attribution: SAT_ATTR,
       maxNativeZoom: 17,
       airportIcao,
-      onStaleDetected: () => callbackRef.current?.(),
+      onStaleDetected: () => staleRef.current?.(),
+      onWarmingUp: () => warmRef.current?.(),
     });
     layer.addTo(map);
     layerRef.current = layer;
@@ -339,7 +339,7 @@ function FlightFollower() {
   return null;
 }
 
-export default function AirportMap({ sharedViewport, onViewportChange, satellite = false, inpainting = false, airportIcao, onStaleDetected }: AirportMapProps) {
+export default function AirportMap({ sharedViewport, onViewportChange, satellite = false, inpainting = false, airportIcao, onStaleDetected, onWarmingUp }: AirportMapProps) {
   const { filteredFlights: flights, isLoading, error, lastUpdated } = useFlightContext();
   const { getAirportCenter } = useAirportConfigContext();
   const [zoom, setZoom] = useState(sharedViewport?.zoom ?? DEFAULT_ZOOM);
@@ -364,7 +364,7 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
           url={satellite ? SAT_URL : STREET_URL}
         />
         {satellite && inpainting && (
-          <InpaintingTileLayer key="inpaint" airportIcao={airportIcao} onStaleDetected={onStaleDetected} />
+          <InpaintingTileLayer key="inpaint" airportIcao={airportIcao} onStaleDetected={onStaleDetected} onWarmingUp={onWarmingUp} />
         )}
         <MapRecenter sharedViewport={sharedViewport} />
         <MapViewportSaver onViewportChange={onViewportChange} />

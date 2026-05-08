@@ -10,6 +10,7 @@ are stored alongside the cached tile — when the satellite provider updates
 imagery, the cache is automatically invalidated and re-inpainted.
 """
 
+import asyncio
 import base64
 import json
 import logging
@@ -318,21 +319,50 @@ async def clean_tile(
         }
     }
 
+    # GPU cold start can take 3-5 minutes; retry with backoff
     t0 = time.monotonic()
-    try:
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                serving_url,
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
+    max_attempts = 3
+    resp = None
+    last_error: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            async with httpx.AsyncClient(timeout=300) as client:
+                resp = await client.post(
+                    serving_url,
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                    },
+                )
+                resp.raise_for_status()
+                break
+        except httpx.TimeoutException as e:
+            last_error = e
+            logger.warning(
+                "Serving endpoint timeout (attempt %d/%d, %.0fs elapsed)",
+                attempt + 1, max_attempts, time.monotonic() - t0,
             )
-            resp.raise_for_status()
-    except httpx.HTTPError as e:
-        logger.error("Serving endpoint error: %s", e)
-        raise HTTPException(status_code=502, detail=f"Inpainting endpoint error: {e}")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 503 and attempt < max_attempts - 1:
+                last_error = e
+                logger.warning(
+                    "Serving endpoint 503 (scaling up), retry in %ds", 10 * (attempt + 1),
+                )
+                await asyncio.sleep(10 * (attempt + 1))
+            else:
+                logger.error("Serving endpoint error: %s", e)
+                raise HTTPException(status_code=502, detail=f"Inpainting endpoint error: {e}")
+        except httpx.HTTPError as e:
+            logger.error("Serving endpoint error: %s", e)
+            raise HTTPException(status_code=502, detail=f"Inpainting endpoint error: {e}")
+
+    if resp is None:
+        logger.error("Serving endpoint failed after %d attempts: %s", max_attempts, last_error)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Inpainting endpoint not responding (cold start may be in progress). Try again in a minute.",
+        )
 
     processing_ms = int((time.monotonic() - t0) * 1000)
 
