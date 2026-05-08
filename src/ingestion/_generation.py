@@ -787,10 +787,17 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         _climb_end_lon = rwy_threshold_lon + _climb_dist_deg * math.sin(_rwy_rad_ga) / math.cos(math.radians(rwy_threshold_lat))
         _climb_end_alt = 1500.0  # missed approach altitude
 
-        # Re-approach entry point: first approach waypoint (far end of approach)
-        # The return phase curves from climb-out end to this entry, then the
-        # re-approach follows the approach waypoints toward the aircraft position.
+        # Re-approach entry point: pick an approach waypoint close enough that
+        # the base turn doesn't create a huge gap (which splits the trajectory
+        # line on the map).  Target ~0.03° from the climb-out end (~3-4 km).
         _reapp_entry_lon, _reapp_entry_lat = _traj_app_wps_ga[0]
+        _max_reentry_dist_sq = 0.035 ** 2
+        for _wp_i in range(len(_traj_app_wps_ga) - 1, -1, -1):
+            _wp_lon, _wp_lat = _traj_app_wps_ga[_wp_i][0], _traj_app_wps_ga[_wp_i][1]
+            _d_sq = (_wp_lat - _climb_end_lat) ** 2 + (_wp_lon - _climb_end_lon) ** 2
+            if _d_sq >= _max_reentry_dist_sq:
+                _reapp_entry_lon, _reapp_entry_lat = _wp_lon, _wp_lat
+                break
 
         # How far along the approach waypoints the aircraft currently is
         _ga_wp_idx = current_state.waypoint_index if current_state else 0
