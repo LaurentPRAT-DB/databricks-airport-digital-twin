@@ -822,11 +822,14 @@ def generate_synthetic_trajectory(icao24: str, minutes: int = 60, limit: int = 1
         _running_hdg = current_heading
         for i in range(_ga_total):
             if i < _GA_APP_PTS:
-                # PHASE 1 — Initial approach: interpolate along waypoints to threshold.
-                # Start from re-approach entry waypoint (not the distant STAR start)
-                # to keep all points close together and avoid large gaps.
+                # PHASE 1 — Initial approach: interpolate along local waypoints
+                # to the runway threshold.  Use enough waypoints for smooth
+                # movement but not so many that we include distant STAR points
+                # with large gaps between them.
                 app_progress = i / max(_GA_APP_PTS - 1, 1)
-                _app_start_idx = _reapp_entry_wp_idx
+                # Start from halfway between entry and the beginning, ensuring
+                # at least 3 waypoints of range for visible movement.
+                _app_start_idx = max(0, _reapp_entry_wp_idx - 3)
                 _app_wp_range = max(1, _ga_wp_count - 1 - _app_start_idx)
                 wp_progress = app_progress * _app_wp_range + _app_start_idx
                 wp_idx = int(wp_progress)
