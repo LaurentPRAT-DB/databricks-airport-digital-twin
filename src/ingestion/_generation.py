@@ -298,8 +298,13 @@ def get_flights_as_schedule(
                 scheduled_time = (now + timedelta(minutes=_h % 90)).isoformat()
         else:
             if phase == FlightPhase.PARKED:
-                # Departures waiting: spread 10-120 min into the future
-                scheduled_time = (now + timedelta(minutes=10 + _h % 110)).isoformat()
+                if state.parked_since > 0:
+                    from src.ml.gse_model import get_turnaround_timing
+                    timing = get_turnaround_timing(state.aircraft_type or "A320")
+                    dep_time = datetime.fromtimestamp(state.parked_since, tz=timezone.utc) + timedelta(minutes=timing["total_minutes"])
+                    scheduled_time = dep_time.isoformat()
+                else:
+                    scheduled_time = (now + timedelta(minutes=10 + _h % 110)).isoformat()
             elif phase in (FlightPhase.PUSHBACK, FlightPhase.TAXI_TO_RUNWAY):
                 # About to depart: scheduled 0-5 min ago
                 scheduled_time = (now - timedelta(minutes=_h % 5)).isoformat()
@@ -632,6 +637,7 @@ def generate_synthetic_flights(
             state.origin_airport,                      # 20: origin_airport (custom)
             state.destination_airport,                 # 21: destination_airport (custom)
             state.assigned_gate if state.phase in (FlightPhase.PARKED, FlightPhase.TAXI_TO_GATE) else None,  # 22: assigned_gate (only at/approaching gate)
+            datetime.fromtimestamp(state.parked_since, tz=timezone.utc).isoformat() if state.parked_since > 0 and state.phase == FlightPhase.PARKED else None,  # 23: parked_since
         ]
         states.append(state_vector)
 

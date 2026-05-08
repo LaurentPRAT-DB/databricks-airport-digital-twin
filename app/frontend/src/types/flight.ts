@@ -19,6 +19,7 @@ export interface Flight {
   origin_airport?: string; // Origin airport IATA code
   destination_airport?: string; // Destination airport IATA code
   assigned_gate?: string | null; // Gate assignment (e.g., "A1", "B12")
+  parked_since?: string | null; // ISO timestamp when aircraft parked at gate
 }
 
 export interface FlightsResponse {

@@ -49,6 +49,7 @@ class FlightPosition(BaseModel):
     assigned_gate: Optional[str] = Field(None, description="Assigned gate (e.g., A1, B12)")
     origin_airport: Optional[str] = Field(None, description="Origin airport IATA code")
     destination_airport: Optional[str] = Field(None, description="Destination airport IATA code")
+    parked_since: Optional[str] = Field(None, description="ISO timestamp when aircraft parked at gate")
 
 
 class FlightListResponse(BaseModel):

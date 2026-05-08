@@ -247,8 +247,15 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
       } else if (phase === 'takeoff' || phase === 'departing') {
         schedTime = new Date(anchor + (35 + (h % 20)) * 60000);
       } else if (phase === 'parked' && !isArrival) {
-        // Departure waiting at gate
-        schedTime = new Date(anchor + (60 + (h % 59)) * 60000);
+        // Departure waiting at gate — use turnaround-based ETA
+        if (f.parked_since) {
+          const parkedAt = new Date(f.parked_since).getTime();
+          const isWide = /^(A33|A34|A35|A38|B74|B77|B78|B76)/i.test(f.aircraft_type || '');
+          const turnaroundMin = isWide ? 90 : 55;
+          schedTime = new Date(parkedAt + turnaroundMin * 60000);
+        } else {
+          schedTime = new Date(anchor + (60 + (h % 59)) * 60000);
+        }
       } else if (phase === 'enroute' && isArrival) {
         // Enroute: ETA from speed + rough distance
         const alt = Number(f.altitude) || 20000;

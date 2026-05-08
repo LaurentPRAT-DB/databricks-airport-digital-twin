@@ -157,6 +157,7 @@ class FlightService:
             origin_airport = state[20] if len(state) > 20 else None
             destination_airport = state[21] if len(state) > 21 else None
             assigned_gate = state[22] if len(state) > 22 else None
+            parked_since = state[23] if len(state) > 23 else None
 
             flight = FlightPosition(
                 icao24=state[0],
@@ -175,6 +176,7 @@ class FlightService:
                 assigned_gate=assigned_gate,
                 origin_airport=origin_airport,
                 destination_airport=destination_airport,
+                parked_since=parked_since,
             )
             flights.append(flight)
 
