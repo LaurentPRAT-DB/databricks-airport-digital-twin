@@ -29,6 +29,7 @@ const KPI_DEFINITIONS: Record<string, string> = {
   'Diversions': 'Flights redirected to an alternate airport due to weather or runway unavailability.',
   'Peak': 'Maximum number of aircraft simultaneously active during the simulation.',
   'Avg Hold': 'Average additional wait time per flight due to runway or airspace capacity constraints.',
+  'Turnaround': 'Average turnaround time for parked aircraft from arrival to departure readiness.',
   'Flights': 'Total number of flights in the simulation schedule.',
 };
 
@@ -775,6 +776,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated,
       { label: 'Diversions', value: summary?.total_diversions ?? '--' },
       { label: 'Peak Flights', value: summary?.peak_simultaneous_flights ?? '--' },
       { label: 'Avg Hold', value: summary?.avg_capacity_hold_min != null ? `${summary.avg_capacity_hold_min} min` : '--' },
+      { label: 'Avg Turnaround', value: summary?.avg_turnaround_min != null ? `${summary.avg_turnaround_min} min` : '--' },
       { label: 'Total Flights', value: summary?.total_flights ?? '--' },
     ];
 
