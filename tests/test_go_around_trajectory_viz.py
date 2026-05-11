@@ -22,8 +22,14 @@ from src.ingestion._state import FlightState, FlightPhase
 # This module uses real airport configs loaded via initialize_from_lakehouse.
 @pytest.fixture(autouse=True)
 def _provide_osm_runway_data():
-    """Disable conftest's SFO runway patch — use real OSM data from config service."""
+    """Disable conftest's SFO runway patch — use real OSM data from config service.
+
+    Resets the singleton on teardown so subsequent test files don't inherit
+    airport state loaded here (e.g. KJFK bleeding into SFO-expecting tests).
+    """
     yield
+    import app.backend.services.airport_config_service as _acs
+    _acs._service_instance = None
 
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
