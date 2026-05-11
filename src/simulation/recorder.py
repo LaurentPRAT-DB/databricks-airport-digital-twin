@@ -144,8 +144,8 @@ class SimulationRecorder:
         arrivals = sum(1 for f in self.schedule if f.get("flight_type") == "arrival")
         departures = sum(1 for f in self.schedule if f.get("flight_type") == "departure")
 
-        # Schedule-based average delay (backward compat)
-        delays = [f["delay_minutes"] for f in self.schedule if f.get("delay_minutes", 0) > 0]
+        # Schedule-based average delay across all flights (consistent with ML dashboard)
+        delays = [f.get("delay_minutes", 0) for f in self.schedule]
         avg_delay = sum(delays) / len(delays) if delays else 0.0
 
         # Scenario-caused delay: actual spawn time vs effective scheduled time
