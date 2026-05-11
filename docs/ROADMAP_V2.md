@@ -1,522 +1,321 @@
-# Airport Digital Twin V2 - Gap Analysis & Feature Roadmap
+# Airport Digital Twin V2 — Roadmap & Status
 
 ## Executive Summary
 
-This document analyzes gaps between the current Airport Digital Twin implementation and a comprehensive Airport Operations Management System (AOMS), proposes new features, identifies available data sources, and provides synthetic data generation strategies.
+This document tracks the V2 feature roadmap from initial gap analysis through implementation. All originally planned V2 phases (6–12) are **complete**. The roadmap now extends with V3 phases focused on multi-airport portfolio management, cross-airport benchmarking, optimization recommendations, and remaining gaps.
+
+*Last updated: 2026-05-11*
 
 ---
 
-## 1. Current Implementation Assessment
+## 1. V2 Phases — Complete
 
-### What We Have (V1 Complete)
+All V1 limitations have been resolved. All 7 V2 phases are implemented with backend logic, API routes, frontend UI, and test coverage.
 
-| Category | Feature | Status |
-|----------|---------|--------|
-| **Data Ingestion** | OpenSky API integration | Implemented |
-| **Data Ingestion** | Synthetic flight generator | Implemented |
-| **Data Pipeline** | DLT Bronze/Silver/Gold | Implemented |
-| **Serving** | Lakebase (PostgreSQL) | Implemented |
-| **Serving** | Delta table fallback | Implemented |
-| **ML** | Delay prediction (rule-based) | Implemented |
-| **ML** | Gate recommendation | Implemented |
-| **ML** | Congestion prediction | Implemented |
-| **Visualization** | 2D Leaflet map | Implemented |
-| **Visualization** | 3D Three.js scene | Implemented |
-| **Visualization** | Aircraft GLB models | Implemented |
-| **Platform** | Lakeview dashboard | Implemented |
-| **Platform** | Genie integration | Implemented |
-| **Platform** | Unity Catalog | Implemented |
+| Phase | Feature | Status | What Was Built |
+|-------|---------|--------|----------------|
+| **6** | FIDS Display | **Done** | Full arrivals/departures board, schedule vs actual, delay indicators, gate info, status colors, sticky landed-flight retention |
+| **7** | Ground Support Equipment | **Done** | GSE allocation model (per aircraft type), turnaround timeline UI, pushback/refueling/catering/boarding phases, API routes + service layer |
+| **8** | Weather Integration | **Done** | METAR generation + real METAR parser, weather widget UI (VFR/MVFR/IFR/LIFR), wind/visibility/clouds, weather impact on operations, diurnal patterns |
+| **9** | Baggage Handling System | **Done** | Baggage generator (lognormal timing, MCT-based misconnects), DLT pipeline (bronze/silver/gold), per-flight bag tracking UI, carousel assignment, Lakebase writer |
+| **10** | Enhanced ML Models | **Done** | CatBoost turnaround model, OBT model (HistGBR + CatBoost), BTS data ingest, transfer learning from A-CDM data, per-airport model registry, realism scorecard |
+| **11** | Real Airport Layout | **Done** | OSM/Overpass API integration, 1,183 calibration profiles, multi-airport selector with region grouping, OurAirports + OpenFlights ingest, dynamic geometry |
+| **12** | Passenger Flow Simulation | **Done** | Cohort-based passenger flow (departure + arrival pipelines), security checkpoint throughput model, check-in queues, dwell time, connection handling |
 
-### Current Limitations
+### Additional V2-era features (built beyond original plan)
 
-1. **Flight Data Only** - No ground operations, passengers, or baggage
-2. **Generic Airport** - No real airport layouts or configurations
-3. **Rule-Based ML** - Demo models, not trained on real data
-4. **No Historical Analysis** - Limited trajectory history
-5. **No Scheduling** - No arrival/departure schedules
-6. **No Weather** - Weather impact not modeled
-7. **No Ground Equipment** - Tugs, fuel trucks, stairs not visualized
+| Feature | Description |
+|---------|-------------|
+| MCP Server | 13 tools exposed via JSON-RPC 2.0 for AI Playground / Supervisor Agents |
+| LLM Assistant | Unified Genie + MCP routing with sonnet-4-5, report chat + what-if simulation |
+| A-CDM Adapter | Maps real A-CDM milestones to model features for transfer learning |
+| OBT Model | 2-stage prediction pipeline (turnaround duration → absolute pushback time) |
+| Video Renderer | Headless Chromium + ffmpeg for simulation MP4 export |
+| Format Parsers | AIDM, AIXM, IFC, MSFS BGL, OSM — multi-format airport data ingestion |
+| YOLO Inpainting | Aircraft detection + removal from satellite imagery |
+| Simulation Replay | Record/replay with time controls, WebSocket streaming |
+| KPI Dashboard | ML predictions dashboard + data ops monitoring |
 
 ---
 
-## 2. Gap Analysis: Airport Management System Components
+## 2. V1 Limitations — Resolution Status
 
-### 2.1 Flight Operations (Current: 60% Complete)
-
-| Component | Current State | Gap | Priority |
-|-----------|---------------|-----|----------|
-| Real-time flight positions | Implemented | - | - |
-| Flight trajectories | Basic | Need smoother interpolation | Medium |
-| Arrival/Departure boards | Missing | Full FIDS display | High |
-| Flight schedules | Missing | Scheduled vs actual comparison | High |
-| Turnaround tracking | Missing | Gate arrival → departure cycle | High |
-| Stand/Gate assignment | Basic recommendation | Need operational assignment | Medium |
-| Runway operations | Visual only | Sequencing, spacing logic | Low |
-
-### 2.2 Ground Operations (Current: 0% Complete)
-
-| Component | Current State | Gap | Priority |
-|-----------|---------------|-----|----------|
-| Ground Support Equipment (GSE) | Missing | Tugs, fuel trucks, stairs, belt loaders | High |
-| Pushback operations | Missing | Tug allocation, timing | High |
-| Refueling operations | Missing | Fuel truck routing, fill time | Medium |
-| Catering vehicles | Missing | Meal loading operations | Low |
-| De-icing | Missing | Winter operations simulation | Low |
-| Ground crew scheduling | Missing | Staff allocation | Medium |
-
-### 2.3 Passenger Operations (Current: 0% Complete)
-
-| Component | Current State | Gap | Priority |
-|-----------|---------------|-----|----------|
-| Passenger flow simulation | Missing | Terminal movement | Medium |
-| Check-in queues | Missing | Counter utilization | Medium |
-| Security checkpoint | Missing | Queue times, throughput | Medium |
-| Boarding process | Missing | Zone boarding simulation | Low |
-| Connection monitoring | Missing | Tight connections alerts | High |
-
-### 2.4 Baggage Operations (Current: 0% Complete)
-
-| Component | Current State | Gap | Priority |
-|-----------|---------------|-----|----------|
-| Baggage handling system (BHS) | Missing | Conveyor visualization | High |
-| Bag tracking | Missing | Individual bag status | High |
-| Baggage cart operations | Missing | Ramp handling | Medium |
-| Lost baggage tracking | Missing | Misconnect handling | Low |
-| Baggage claims | Missing | Carousel assignment | Low |
-
-### 2.5 Weather & Environment (Current: 0% Complete)
-
-| Component | Current State | Gap | Priority |
-|-----------|---------------|-----|----------|
-| METAR/TAF integration | Missing | Real weather data | High |
-| Wind visualization | Missing | Runway selection impact | Medium |
-| Visibility conditions | Missing | IFR/VFR operations | Medium |
-| Weather delays | Missing | Ground stops, diversions | High |
-| Seasonal patterns | Missing | Winter ops, thunderstorms | Low |
-
-### 2.6 Analytics & KPIs (Current: 30% Complete)
-
-| Component | Current State | Gap | Priority |
-|-----------|---------------|-----|----------|
-| Lakeview dashboard | Basic | Need more KPIs | Medium |
-| On-time performance | Missing | OTP metrics | High |
-| Turnaround efficiency | Missing | TAT metrics | High |
-| Gate utilization | Basic | Detailed analytics | Medium |
-| Delay causes analysis | Missing | IATA delay codes | Medium |
-| Capacity forecasting | Missing | Demand prediction | Low |
+| Original Limitation | Resolution |
+|--------------------|-----------|
+| "Flight Data Only" | Baggage, GSE, passenger flow all implemented |
+| "Generic Airport" | 1,183 real airports via OSM + calibration profiles |
+| "Rule-Based ML" | CatBoost/HistGBR models trained on BTS + simulation data |
+| "No Historical Analysis" | OpenSky recording persistence, trajectory history, replay |
+| "No Scheduling" | Full schedule generator + FIDS display |
+| "No Weather" | METAR generation + weather widget + operational impact |
+| "No Ground Equipment" | GSE model with turnaround phases and timeline UI |
 
 ---
 
-## 3. Available Data Sources
+## 3. Remaining Gaps
 
-### 3.1 Flight Data APIs
+Features that exist but need validation, polish, or deeper implementation:
 
-| Source | Data Available | Access | Cost |
-|--------|----------------|--------|------|
-| **OpenSky Network** | Real-time ADS-B positions, trajectory history | Free (rate limited), Auth available | Free |
-| **AviationStack** | Flights, schedules, airlines, airports | API Key | Free tier: 100 req/month |
-| **FlightAware AeroAPI** | Comprehensive flight data, schedules | API Key | $$$ (enterprise) |
-| **ADS-B Exchange** | Raw ADS-B data, no restrictions | API | Free/donations |
-| **Flightradar24** | Flight tracking, historical | API | $$$ (enterprise) |
-
-### 3.2 Airport Data (Free)
-
-| Source | Data Available | Format |
-|--------|----------------|--------|
-| **OurAirports.com** | 70k+ airports, runways, frequencies, navaids | CSV |
-| **OpenStreetMap** | Airport layouts, terminals, taxiways | GeoJSON/OSM |
-| **FAA NASR** | US airport data, procedures | Various |
-| **Eurocontrol DDR** | European traffic data | Research access |
-
-### 3.3 Weather Data
-
-| Source | Data Available | Access |
-|--------|----------------|--------|
-| **Aviation Weather Center** | METAR, TAF, SIGMET | Free API |
-| **OpenWeatherMap** | General weather | Free tier |
-| **CheckWX** | Aviation-specific METAR/TAF | Free tier |
-
-### 3.4 Airline Data
-
-| Source | Data Available | Format |
-|--------|----------------|--------|
-| **OpenFlights** | Airlines, routes, aircraft | CSV |
-| **Wikipedia** | Airline fleet data | Scraping |
-| **Planespotters.net** | Aircraft registrations, photos | API |
-
-### 3.5 3D Models (Free/CC)
-
-| Source | Models Available | License |
-|--------|------------------|---------|
-| **Sketchfab** | Aircraft, vehicles, terminals | CC-BY, CC0 |
-| **TurboSquid** | Aircraft, ground equipment | Various (check license) |
-| **Free3D** | Basic airport assets | Various |
-| **Blender Market** | Professional airport kits | Paid |
+| Area | Gap | Current State | Priority |
+|------|-----|---------------|----------|
+| Passenger flow | No spatial visualization | Backend model only (queuing theory), no frontend particle sim | Medium |
+| Baggage | No conveyor/cart 3D | Backend tracking + DLT pipeline work, no 3D ramp visualization | Low |
+| GSE | No 3D vehicle models | Turnaround timeline UI exists, no animated GSE in 3D scene | Medium |
+| Weather | No real-time API | Synthetic METAR generation + historical parser, no live CheckWX/AWC feed | Medium |
+| ML | Models not deployed to serving endpoints | Trained locally / in notebooks, not all registered in MLflow Model Registry | High |
+| Simulation | Clock speed issues | Playback timing inconsistent at high speeds | Medium |
+| Simulation | Demo ≠ simulation path | Two separate code paths for demo mode vs simulation | Medium |
+| OpenSky | Collector fragile | Rate limits, no continuous collection, gaps in recorded data | Medium |
+| Report chat | What-if not validated | Code exists but not tested end-to-end on deployed app | Medium |
 
 ---
 
-## 4. Recommended V2 Roadmap
+## 4. V3 Roadmap — Airport Network & Intelligence
 
-### Phase 6: Flight Information Display System (FIDS)
-**Goal**: Arrival/departure boards with schedule vs actual comparison
+### Phase 13: Airport Group Management
+**Goal**: Manage portfolios of airports as a single operational unit
 
 **Features**:
-- Scheduled arrivals/departures board UI
-- Real-time vs scheduled comparison
-- Delay indicators and reasons
-- Gate changes and announcements
+- Airport group CRUD (create, name, add/remove airports)
+- Group presets by region (US hubs, European majors, Middle East mega-hubs)
+- Parallel simulation across group — run same scenario on N airports simultaneously
+- Group-level health dashboard — one screen showing all airports' status
+- Batch operations: import all, calibrate all, run simulation on all
 
-**Data Sources**:
-- AviationStack API (schedules)
-- Synthetic schedule generator
+**Data Model**:
+```
+airport_groups (Lakebase)
+├── group_id, name, description, created_at
+├── airports: [icao_code, ...]
+└── config: {default_scenario, sim_hours, auto_refresh}
+```
 
-**Effort**: 2-3 days
-
----
-
-### Phase 7: Ground Support Equipment (GSE)
-**Goal**: Visualize and simulate ground operations
-
-**Features**:
-- GSE 3D models (tugs, fuel trucks, belt loaders, stairs)
-- Pushback animation with tug
-- Equipment allocation logic
-- Turnaround timeline visualization
-
-**Data Sources**:
-- Synthetic (realistic timing models)
-- Sketchfab GSE models (CC-BY)
-
-**Effort**: 4-5 days
-
----
-
-### Phase 8: Weather Integration
-**Goal**: Real weather affecting operations
-
-**Features**:
-- METAR/TAF display in UI
-- Wind sock/indicator visualization
-- Runway selection based on wind
-- Low visibility indicators
-- Weather delay predictions
-
-**Data Sources**:
-- Aviation Weather Center API (free)
-- CheckWX API (backup)
-
-**Effort**: 2-3 days
-
----
-
-### Phase 9: Baggage Handling System
-**Goal**: Baggage flow visualization and tracking
-
-**Features**:
-- Baggage cart 3D models on ramp
-- Conveyor system visualization (2D diagram)
-- Bag tracking status per flight
-- Misconnect alerts
-- Carousel assignments
-
-**Data Sources**:
-- Synthetic bag generation
-- Timing models based on aircraft type
+**Technical Approach**:
+- Backend: `AirportGroupService` with CRUD endpoints, parallel sim orchestration
+- Frontend: Group manager panel, multi-select airport picker
+- Lakebase: `airport_groups` table for persistence
+- Databricks Jobs: parameterized job for batch simulation across group
 
 **Effort**: 3-4 days
 
 ---
 
-### Phase 10: Enhanced ML Models
-**Goal**: Train real ML models on historical data
+### Phase 14: Global Network View
+**Goal**: World map showing all airports in a group with real-time status indicators
 
 **Features**:
-- XGBoost/LightGBM delay model trained on historical data
-- Weather feature integration
-- Historical OTP analysis
-- A/B model comparison in MLflow
-- Model serving endpoint upgrade
+- Zoomable world map (Leaflet) with airport markers colored by health/load
+- Flight connections drawn between airports (great circle arcs)
+- Traffic flow visualization — animated particles along routes
+- Aggregate KPI overlay (total flights, avg delay, on-time %)
+- Click-to-drill: click any airport → opens single-airport view
+- Hub-spoke visualization for airline networks
+- Timezone-aware "current hour" heatmap (which airports are in peak vs off-peak)
 
-**Data Sources**:
-- BTS On-Time Performance data (free, US flights)
-- Synthetic historical generation
+**Technical Approach**:
+- New `/api/groups/{group_id}/overview` endpoint — lightweight KPIs for all airports
+- WebSocket channel for group-level updates (status changes, alerts)
+- Frontend: new `GlobalView` component with Leaflet + D3 for flow arcs
+- Aggregate from per-airport simulation snapshots or Lakebase queries
 
 **Effort**: 4-5 days
 
 ---
 
-### Phase 11: Real Airport Layout
-**Goal**: Render actual airport (SFO, JFK, or configurable)
+### Phase 15: Airport Benchmarking & Comparison
+**Goal**: Compare airports against each other on standardized KPIs
 
 **Features**:
-- OurAirports runway data integration
-- OSM terminal/taxiway import
-- Multiple airport selection
-- Accurate gate positions
+- Side-by-side comparison (2-4 airports)
+- Standardized KPI scorecard:
+  - On-time performance (OTP)
+  - Average delay (arrival + departure)
+  - Turnaround efficiency (actual vs minimum)
+  - Gate utilization %
+  - Runway throughput (movements/hour vs capacity)
+  - Baggage delivery time (P50, P95)
+  - Security checkpoint wait time
+  - Passenger connection success rate
+- Radar chart visualization (spider plot)
+- Ranking/leaderboard within a group
+- Historical trend comparison (same KPI across airports over time)
+- Peer group benchmarks (compare SFO to "US large hubs" average)
+- Export comparison as PDF/Slides
 
 **Data Sources**:
-- OurAirports.com CSV
-- OpenStreetMap Overpass API
+- Per-airport simulation KPIs (already computed)
+- BTS On-Time Performance (historical ground truth for US)
+- Calibration profiles (capacity baselines)
 
-**Effort**: 3-4 days
-
----
-
-### Phase 12: Passenger Flow Simulation
-**Goal**: Terminal operations visualization
-
-**Features**:
-- Passenger particle simulation
-- Check-in queue visualization
-- Security checkpoint throughput
-- Boarding progress indicator
-- Connection risk alerts
-
-**Data Sources**:
-- Synthetic (passenger counts from aircraft type)
-- Queue theory models
+**Technical Approach**:
+- Backend: `BenchmarkService` — compute normalized scores, percentile ranks
+- Frontend: `AirportComparison` component with radar chart (recharts/d3)
+- Lakebase: `airport_kpi_snapshots` table (periodic snapshots per airport)
+- Scoring: normalize each KPI to 0-100 scale relative to peer group
 
 **Effort**: 4-5 days
 
 ---
 
-## 5. Synthetic Data Generation Strategies
+### Phase 16: Optimization Recommendations Engine
+**Goal**: AI-powered suggestions for operational improvements per airport
 
-### 5.1 Flight Schedules
+**Features**:
+- Automated gap detection — identify which KPIs are below peer average
+- Root cause analysis — trace poor OTP to specific bottlenecks (taxi, turnaround, weather)
+- Actionable recommendations with estimated impact:
+  - "Adding 1 runway reduces avg departure delay by 4.2 min" (via what-if sim)
+  - "Shifting 15% of departures from 0800-0900 to 0600-0700 reduces congestion 22%"
+  - "Adding 2 security lanes increases pax throughput by 360 pph"
+- What-if simulation integration — each recommendation backed by sim results
+- Priority ranking (impact × feasibility)
+- LLM-generated narrative explaining findings (leverage existing report chat)
+- Track recommendation adoption and measured improvement over time
 
-```python
-# Strategy: Generate realistic schedule based on airport characteristics
-def generate_flight_schedule(airport_code: str, date: date) -> List[Flight]:
-    """
-    Generate synthetic flight schedule.
+**Technical Approach**:
+- Backend: `OptimizationEngine` — rule-based heuristics + what-if sim runner
+- LLM layer: use existing assistant to generate natural language recommendations
+- Pattern library: known operational improvements mapped to simulation parameters
+- Frontend: recommendations panel in single-airport view, link to what-if
 
-    Parameters:
-    - Peak hours: 6-9am, 4-7pm (60% of flights)
-    - Airline mix based on hub status
-    - Domestic/international ratio
-    - Seasonal variation
-    """
-    schedule = []
-
-    # Define peaks
-    morning_peak = range(6, 10)  # 6am-10am
-    evening_peak = range(16, 20)  # 4pm-8pm
-
-    # Airlines weighted by hub status
-    airlines = {
-        "UAL": 0.35,  # Hub carrier
-        "DAL": 0.15,
-        "AAL": 0.15,
-        "SWA": 0.10,
-        "International": 0.25
-    }
-
-    # Generate 300-500 movements per day
-    for hour in range(5, 24):
-        flights_this_hour = 20 if hour in morning_peak or hour in evening_peak else 10
-        for _ in range(flights_this_hour):
-            schedule.append(generate_flight(hour, airlines))
-
-    return schedule
-```
-
-### 5.2 Ground Support Equipment
-
-```python
-# Strategy: GSE allocation based on aircraft type and operation
-GSE_REQUIREMENTS = {
-    "A320": {
-        "pushback_tug": 1,
-        "fuel_truck": 1,
-        "belt_loader": 2,
-        "passenger_stairs": 0,  # Jetbridge
-        "catering": 1,
-    },
-    "B777": {
-        "pushback_tug": 1,  # Heavy tug
-        "fuel_truck": 2,    # More fuel
-        "belt_loader": 3,   # More cargo
-        "passenger_stairs": 0,
-        "catering": 2,
-    },
-    "A380": {
-        "pushback_tug": 1,
-        "fuel_truck": 3,
-        "belt_loader": 4,
-        "passenger_stairs": 2,  # Upper deck
-        "catering": 4,
-    }
-}
-
-TURNAROUND_TIMING = {
-    "narrow_body": {
-        "total_minutes": 45,
-        "phases": {
-            "arrival_taxi": 5,
-            "deboarding": 10,
-            "cleaning": 8,
-            "catering": 12,
-            "refueling": 15,
-            "boarding": 20,
-            "pushback": 5,
-        }
-    },
-    "wide_body": {
-        "total_minutes": 90,
-        "phases": {
-            "arrival_taxi": 8,
-            "deboarding": 25,
-            "cleaning": 15,
-            "catering": 30,
-            "refueling": 35,
-            "boarding": 40,
-            "pushback": 8,
-        }
-    }
-}
-```
-
-### 5.3 Baggage System
-
-```python
-# Strategy: Bag generation based on passenger load
-def generate_baggage_for_flight(flight: Flight) -> List[Bag]:
-    """
-    Generate synthetic baggage.
-
-    Assumptions:
-    - 1.2 bags per passenger average
-    - 15% connecting bags
-    - 2% misconnect rate
-    - Processing time: 20-40 minutes from aircraft to carousel
-    """
-    passenger_count = AIRCRAFT_CAPACITY[flight.aircraft_type] * 0.82  # 82% load factor
-    bag_count = int(passenger_count * 1.2)
-
-    bags = []
-    for i in range(bag_count):
-        is_connecting = random.random() < 0.15
-        is_misconnect = is_connecting and random.random() < 0.02
-
-        bags.append(Bag(
-            bag_id=f"{flight.flight_number}-{i:04d}",
-            flight=flight,
-            is_connecting=is_connecting,
-            connecting_flight=generate_connection() if is_connecting else None,
-            status="checked_in",
-            processing_time_minutes=random.randint(20, 40),
-        ))
-
-    return bags
-```
-
-### 5.4 Weather Data
-
-```python
-# Strategy: Generate realistic METAR sequence
-def generate_weather_sequence(duration_hours: int = 24) -> List[METAR]:
-    """
-    Generate synthetic weather progression.
-
-    Patterns:
-    - Morning fog clearing by 10am
-    - Afternoon thermals/convection
-    - Evening calm conditions
-    - Occasional frontal passages
-    """
-    metars = []
-
-    base_conditions = {
-        "visibility_sm": 10,
-        "ceiling_ft": 25000,
-        "wind_direction": 280,
-        "wind_speed_kts": 8,
-        "temperature_c": 15,
-        "dewpoint_c": 8,
-    }
-
-    for hour in range(duration_hours):
-        conditions = base_conditions.copy()
-
-        # Morning fog (6-9am)
-        if 6 <= hour <= 9:
-            conditions["visibility_sm"] = random.uniform(0.5, 3)
-            conditions["ceiling_ft"] = random.randint(200, 1000)
-
-        # Afternoon convection (14-18)
-        if 14 <= hour <= 18 and random.random() < 0.3:
-            conditions["wind_speed_kts"] = random.randint(15, 25)
-            conditions["ceiling_ft"] = random.randint(3000, 8000)
-
-        metars.append(create_metar(conditions))
-
-    return metars
-```
-
-### 5.5 Delay Causes (IATA Codes)
-
-```python
-# Strategy: Realistic delay distribution
-DELAY_DISTRIBUTION = {
-    # Airline delays (40%)
-    "61": ("Cargo/Mail", 0.05),
-    "62": ("Cleaning/Catering", 0.08),
-    "63": ("Baggage handling", 0.07),
-    "64": ("Cargo handling", 0.03),
-    "65": ("Oversales", 0.02),
-    "66": ("Industrial action", 0.01),
-    "67": ("Late crew", 0.08),
-    "68": ("Late aircraft", 0.06),
-
-    # Weather delays (25%)
-    "71": ("Departure weather", 0.10),
-    "72": ("Destination weather", 0.08),
-    "73": ("En route weather", 0.04),
-    "76": ("De-icing", 0.03),
-
-    # ATC delays (20%)
-    "81": ("ATC restriction", 0.12),
-    "82": ("Airport capacity", 0.05),
-    "83": ("Mandatory security", 0.03),
-
-    # Technical (15%)
-    "41": ("Aircraft defect", 0.08),
-    "42": ("Scheduled maintenance", 0.04),
-    "43": ("Unscheduled maintenance", 0.03),
-}
-```
+**Effort**: 5-7 days
 
 ---
 
-## 6. Implementation Priority Matrix
+### Phase 17: Multi-Airport Simulation (Network Effects)
+**Goal**: Simulate flights flowing between airports — delays propagate through the network
+
+**Features**:
+- Connected airport simulation — a delayed departure at ORD becomes a delayed arrival at SFO
+- Delay propagation modeling — aircraft rotation chains (same aircraft flies multiple legs)
+- Hub bottleneck detection — when one hub degrades, downstream spoke airports suffer
+- Cascade analysis — "if EDDF has fog for 2 hours, which airports are affected and by how much?"
+- Network resilience scoring — how well does a group absorb disruptions
+- Diversion routing — flights divert to alternates within the network
+
+**Data Model**:
+- Route graph: airports as nodes, flight frequency as weighted edges
+- Aircraft rotation chains: [flight1 → turnaround → flight2 → ...]
+- Propagation rules: arrival_delay(N+1) = f(departure_delay(N), buffer_time, wind)
+
+**Technical Approach**:
+- Extend simulation engine with multi-airport coordinator
+- New `NetworkSimulation` class orchestrating per-airport engines
+- Shared flight objects that move between airport instances
+- Databricks Jobs: distributed simulation across workers (one airport per task)
+
+**Effort**: 7-10 days
+
+---
+
+### Phase 18: Real-Time Data Integration
+**Goal**: Live operational data replacing synthetic generation
+
+**Features**:
+- Live METAR/TAF from Aviation Weather Center or CheckWX API
+- Real-time ADS-B from OpenSky (continuous collector, not snapshot)
+- Live schedule feed (AviationStack or FlightAware for demo airports)
+- Hybrid mode: real positions + synthetic ground ops (where no ground truth)
+- Data quality indicators — show which data is live vs synthetic
+- Alerting: notify when live data diverges significantly from prediction
+
+**Data Sources**:
+- CheckWX API (free tier: 2000 req/day) for METAR/TAF
+- OpenSky continuous websocket or polling (authenticated: no rate limit)
+- AviationStack (free tier: 100 req/month — limited to 1-2 airports)
+- BTS monthly data drops (historical validation, not real-time)
+
+**Technical Approach**:
+- Background worker: continuous OpenSky poller → Lakebase
+- Weather service: cache + TTL, fall back to synthetic on API failure
+- Frontend badge: "LIVE" vs "SIM" indicator per data layer
+
+**Effort**: 4-5 days
+
+---
+
+## 5. Implementation Priority Matrix (V3)
 
 | Phase | Feature | Demo Impact | Effort | Priority Score |
 |-------|---------|-------------|--------|----------------|
-| 6 | FIDS Display | High | Low | **9/10** |
-| 8 | Weather Integration | High | Low | **9/10** |
-| 7 | GSE Visualization | Very High | Medium | **8/10** |
-| 10 | Enhanced ML Models | Medium | Medium | **7/10** |
-| 9 | Baggage System | High | Medium | **7/10** |
-| 11 | Real Airport Layout | Medium | Medium | **6/10** |
-| 12 | Passenger Flow | Medium | High | **5/10** |
+| 13 | Airport Group Management | High | Low | **9/10** |
+| 14 | Global Network View | Very High | Medium | **9/10** |
+| 15 | Airport Benchmarking | Very High | Medium | **8/10** |
+| 16 | Optimization Recommendations | High | High | **7/10** |
+| 18 | Real-Time Data Integration | High | Medium | **7/10** |
+| 17 | Multi-Airport Network Sim | Medium | Very High | **6/10** |
 
 ---
 
-## 7. Recommended First Steps
+## 6. Recommended Execution Order
 
 ### Immediate (Week 1):
-1. **FIDS Display** - High visual impact, shows schedules
-2. **Weather API Integration** - Easy win, adds realism
+1. **Phase 13: Airport Group Management** — Foundation for everything else. CRUD + parallel sim.
+2. **Phase 14: Global Network View** — Highest visual impact for demos. "Here are 20 airports, all running."
 
 ### Short-term (Week 2-3):
-3. **GSE Models** - Download from Sketchfab, integrate in 3D scene
-4. **Turnaround Timeline** - Show aircraft ground time progression
+3. **Phase 15: Benchmarking** — Once groups exist, compare them. Radar charts + leaderboard.
+4. **Phase 18: Real-Time Data** — Replace synthetic weather with live METAR (quick win for realism).
 
-### Medium-term (Week 4+):
-5. **Baggage System** - Adds operational depth
-6. **Enhanced ML** - Train real models on BTS data
+### Medium-term (Week 4-6):
+5. **Phase 16: Optimization Engine** — The "so what?" layer. Recommendations backed by what-if sims.
+6. **Phase 17: Network Simulation** — Most complex. Delay propagation across connected airports.
+
+---
+
+## 7. Data Architecture for V3
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Unity Catalog                             │
+│                                                              │
+│  airport_groups          → group definitions                 │
+│  airport_kpi_snapshots   → periodic KPI captures per airport │
+│  benchmark_results       → comparison outputs                │
+│  network_simulations     → multi-airport sim results         │
+│  recommendations_log     → generated recommendations + status│
+│                                                              │
+│  Existing tables:                                            │
+│  flight_status_gold, flight_positions_history,               │
+│  baggage_events_*, calibration_profiles (Volume)             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                     Lakebase (PostgreSQL)                     │
+│                                                              │
+│  airport_groups          → fast CRUD for group management    │
+│  kpi_latest              → most recent KPIs per airport      │
+│  flight_status           → existing real-time serving        │
+│  network_state           → cross-airport flight positions    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 8. Still Missing (Beyond V3)
+
+Features not yet planned but would complete a full AOMS:
+
+| Category | Feature | Notes |
+|----------|---------|-------|
+| **ATC** | Full ATC simulation (sequencing, spacing, vectoring) | Very complex, would need dedicated ATC logic engine |
+| **Ground** | 3D GSE vehicle animations in scene | Models on Sketchfab (CC-BY), needs animation system |
+| **Ground** | De-icing operations | Winter-only, weather-triggered, low priority |
+| **Pax** | Spatial passenger visualization (particle sim in terminal) | Backend model exists, needs WebGL terminal floorplan |
+| **Baggage** | 3D conveyor belt visualization | Cool but low operational value |
+| **Financials** | Revenue impact modeling (delay cost, missed connections) | Would tie KPIs to $ impact |
+| **Staffing** | Crew/ground staff scheduling optimization | Separate optimization problem |
+| **Noise** | Noise contour mapping and community impact | Regulatory use case |
+| **Sustainability** | Carbon emissions per flight/airport, fuel efficiency KPIs | ESG reporting angle |
+| **Security** | Threat detection, perimeter monitoring | Separate security system |
+| **Cargo** | Freight handling, warehouse operations | Cargo airports (MEM, LEJ) focus |
+| **Airlines** | Airline-specific ops view (fleet utilization, crew planning) | Different persona than airport ops |
+| **Regulatory** | Slot compliance, noise quota tracking, curfew management | European airports mainly |
+| **Construction** | Airport expansion planning with traffic impact sim | Long-term capital planning |
+| **Emergency** | Emergency response simulation (evacuation, runway closure) | Safety/compliance use case |
 
 ---
 
 *Document created: 2026-03-08*
-*Version: 2.0 Planning*
+*V2 roadmap complete: 2026-05-11*
+*V3 phases added: 2026-05-11*
