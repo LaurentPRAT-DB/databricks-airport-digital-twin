@@ -285,6 +285,8 @@ async def get_predictions_dashboard(
                 KPICard(label="Avg Delay", value="--", color="slate"),
                 KPICard(label="Congestion", value="--", color="slate"),
                 KPICard(label="Bottlenecks", value="--", color="slate"),
+                KPICard(label="Go-Arounds", value="0", color="slate"),
+                KPICard(label="Avg Hold", value="--", color="slate"),
                 KPICard(label="Avg Turnaround", value="--", color="slate"),
                 KPICard(label="Active Flights", value="0", color="slate"),
             ],
@@ -320,13 +322,21 @@ async def get_predictions_dashboard(
         turnaround_minutes.append(timing["total_minutes"])
     avg_turnaround = round(sum(turnaround_minutes) / max(len(turnaround_minutes), 1)) if turnaround_minutes else 55
 
-    # KPI cards
+    # Scenario metrics from live flight states (aligned with simulation report KPIs)
+    from src.ingestion._state import _flight_states
+    total_go_arounds = sum(s.go_around_count for s in _flight_states.values())
+    departing_states = [s for s in _flight_states.values() if s.departure_queue_set]
+    avg_hold = round(sum(s.departure_queue_hold_s for s in departing_states) / max(len(departing_states), 1) / 60, 1)
+
+    # KPI cards (aligned with simulation report)
     level_colors = {"low": "green", "moderate": "yellow", "high": "orange", "critical": "red"}
     kpi_cards = [
         KPICard(label="On-Time", value=f"{on_time_pct}%", color="green" if on_time_pct >= 80 else "orange" if on_time_pct >= 60 else "red"),
         KPICard(label="Avg Delay", value=f"{avg_delay}m", color="green" if avg_delay < 10 else "orange" if avg_delay < 30 else "red"),
         KPICard(label="Congestion", value=worst_level.capitalize(), color=level_colors.get(worst_level, "slate")),
         KPICard(label="Bottlenecks", value=str(bottleneck_count), color="green" if bottleneck_count == 0 else "red"),
+        KPICard(label="Go-Arounds", value=str(total_go_arounds), color="green" if total_go_arounds == 0 else "yellow" if total_go_arounds <= 3 else "red"),
+        KPICard(label="Avg Hold", value=f"{avg_hold}m", color="green" if avg_hold < 5 else "purple"),
         KPICard(label="Avg Turnaround", value=f"{avg_turnaround}m", color="blue"),
         KPICard(label="Active Flights", value=str(total_flights), color="blue"),
     ]

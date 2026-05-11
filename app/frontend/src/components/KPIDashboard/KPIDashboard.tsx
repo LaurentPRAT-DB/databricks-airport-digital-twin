@@ -201,7 +201,7 @@ export default function KPIDashboard({ onClose }: { onClose: () => void }) {
           {dashboard && !isLoading && (
             <>
               {/* KPI Cards — always visible */}
-              <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+              <div className="grid grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
                 {dashboard.kpi_cards.map((card) => (
                   <KPICardComponent key={card.label} card={card} />
                 ))}

@@ -1045,6 +1045,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated,
               { label: 'Diversions', value: `${timeFilteredCounts['diversion'] ?? 0}`, color: 'text-cyan-600' },
               { label: 'Peak', value: `${summary?.peak_simultaneous_flights ?? '--'}`, color: 'text-blue-600' },
               { label: 'Avg Hold', value: summary?.avg_capacity_hold_min != null ? `${summary.avg_capacity_hold_min}m` : '--', color: 'text-purple-600' },
+              { label: 'Turnaround', value: summary?.avg_turnaround_min != null ? `${summary.avg_turnaround_min}m` : '--', color: 'text-blue-600' },
               { label: 'Flights', value: `${summary?.total_flights ?? '--'}`, color: 'text-slate-900' },
             ].map(kpi => (
               <div key={kpi.label} className="flex-1 bg-slate-100 rounded px-1 py-1 text-center">
