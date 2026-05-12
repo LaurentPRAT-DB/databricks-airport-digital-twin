@@ -62,32 +62,37 @@ function MapRecenter({ sharedViewport }: { sharedViewport?: SharedViewport | nul
   }, [getGates, getTerminals, currentAirport]);
 
   const prevAirportRef = useRef(currentAirport);
-  const hasRecenteredRef = useRef(false);
+  const lastFlewToBoundsRef = useRef<string | null>(null);
 
   useEffect(() => {
     const airportChanged = prevAirportRef.current !== currentAirport;
     prevAirportRef.current = currentAirport;
 
     if (airportChanged) {
-      hasRecenteredRef.current = false;
+      lastFlewToBoundsRef.current = null;
       console.log(`[MapRecenter] Airport changed to ${currentAirport}, bounds=${bounds ? 'yes' : 'no'}`);
     }
 
-    // On airport switch or first time bounds arrive for this airport, recenter
-    if (airportChanged || (!hasRecenteredRef.current && bounds)) {
-      if (bounds) {
-        console.log(`[MapRecenter] flyToBounds for ${currentAirport}`);
-        map.flyToBounds(bounds, { duration: 1.5, maxZoom: 16 });
-        hasRecenteredRef.current = true;
-      } else {
-        const center = getAirportCenter();
-        console.log(`[MapRecenter] flyTo center for ${currentAirport}: ${center.lat}, ${center.lon}`);
-        map.flyTo([center.lat, center.lon], 14, { duration: 1.5 });
-      }
+    // Serialize bounds for value comparison — fly again when bounds actually change
+    const boundsKey = bounds ? JSON.stringify(bounds) : null;
+    const alreadyAtTheseBounds = boundsKey !== null && boundsKey === lastFlewToBoundsRef.current;
+
+    if (!alreadyAtTheseBounds && bounds) {
+      console.log(`[MapRecenter] flyToBounds for ${currentAirport}`);
+      map.flyToBounds(bounds, { duration: 1.5, maxZoom: 16 });
+      lastFlewToBoundsRef.current = boundsKey;
       return;
     }
+
+    if (airportChanged && !bounds) {
+      const center = getAirportCenter();
+      console.log(`[MapRecenter] flyTo center for ${currentAirport}: ${center.lat}, ${center.lon}`);
+      map.flyTo([center.lat, center.lon], 14, { duration: 1.5 });
+      return;
+    }
+
     // If we have a shared viewport from 3D (same airport), restore it
-    if (sharedViewport) {
+    if (!airportChanged && sharedViewport && alreadyAtTheseBounds) {
       map.setView(
         [sharedViewport.center.lat, sharedViewport.center.lon],
         sharedViewport.zoom,

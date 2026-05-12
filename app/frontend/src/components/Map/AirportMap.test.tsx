@@ -236,4 +236,34 @@ describe('AirportMap — airport switch recentering', () => {
     // Should not crash; flyToBounds should not be called (no bounds to compute)
     // The map just stays where it is
   });
+
+  it('does not permanently lock recentering after switch with no bounds', () => {
+    // This tests the fix for: airport switch with stale/missing config should
+    // still allow recentering when correct bounds arrive later.
+    const { rerender } = render(<AirportMap />);
+    mockFlyToBounds.mockClear();
+    mockFlyTo.mockClear();
+
+    // Switch to EGLL with no gates — simulates config not yet loaded
+    mockCurrentAirport = 'EGLL';
+    mockGetGates.mockReturnValue([]);
+    mockGetTerminals.mockReturnValue([]);
+    rerender(<AirportMap />);
+
+    // flyTo was used (center fallback), not flyToBounds
+    expect(mockFlyTo).toHaveBeenCalled();
+    expect(mockFlyToBounds).not.toHaveBeenCalled();
+    mockFlyTo.mockClear();
+
+    // Now switch to CDG with terminals — this proves that the previous
+    // no-bounds flyTo didn't permanently lock recentering
+    mockCurrentAirport = 'LFPG';
+    mockGetGates.mockReturnValue([]);
+    mockGetTerminals.mockReturnValue(CDG_TERMINALS);
+    rerender(<AirportMap />);
+
+    expect(mockFlyToBounds).toHaveBeenCalledTimes(1);
+    const [bounds] = mockFlyToBounds.mock.calls[0];
+    expect(bounds[0][0]).toBeGreaterThan(48.0);
+  });
 });
