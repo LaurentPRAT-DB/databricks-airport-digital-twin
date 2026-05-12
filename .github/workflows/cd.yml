@@ -83,8 +83,10 @@ jobs:
       - name: Build frontend
         working-directory: app/frontend
         run: |
-          npm cache clean --force 2>/dev/null || true
-          npm ci --prefer-offline || npm ci
+          # npm ci has "Exit handler never called" bug on self-hosted runner;
+          # fall back to npm install which is more resilient
+          npm install --no-audit --no-fund
+          test -x node_modules/.bin/tsc || { echo "ERROR: node_modules missing after npm install"; exit 1; }
           npm run build
 
       - name: Deploy via DABs
