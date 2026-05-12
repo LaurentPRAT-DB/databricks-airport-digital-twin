@@ -1382,10 +1382,13 @@ class SimulationEngine:
 
         for icao24, state in _flight_states.items():
             # Thin holding pattern recordings: after 30s in ENROUTE, only record
-            # every 30s (skip high-freq landing ticks) to prevent dense clusters
+            # every 30s (skip high-freq landing ticks) to prevent dense clusters.
+            # Exception: go-around flights (low altitude, actively maneuvering)
+            # must remain visible throughout the missed approach procedure.
             if state.phase == FlightPhase.ENROUTE:
                 prev = self._phase_time.get(icao24)
-                if prev and prev[0] == "enroute" and prev[1] > 30.0:
+                is_go_around = state.go_around_count > 0 and state.altitude < 5000
+                if prev and prev[0] == "enroute" and prev[1] > 30.0 and not is_go_around:
                     if not bulk_due:
                         self._prev_altitudes[icao24] = state.altitude
                         continue
