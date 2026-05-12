@@ -8,10 +8,10 @@ export function distSq(lat1: number, lon1: number, lat2: number, lon2: number) {
   return (lat1 - lat2) ** 2 + (lon1 - lon2) ** 2;
 }
 
-/** Max gap (degrees²) before splitting a polyline — ~0.04° ≈ 2.5 NM.
- *  Normal 30s snapshot spacing at 180 kts is ~0.025° (0.000625 sq),
- *  go-around gaps are 0.08°+ (0.0064 sq). */
-const MAX_GAP_SQ = 0.04 * 0.04; // 0.0016
+/** Max gap (degrees²) before splitting a polyline — ~0.08° ≈ 5 NM.
+ *  Normal 30s snapshot spacing at 180 kts is ~0.025° (0.000625 sq).
+ *  Go-around climbs at 250 kts with 30s ticks can reach ~0.06° gaps. */
+const MAX_GAP_SQ = 0.08 * 0.08; // 0.0064
 
 /** Split a polyline into segments wherever consecutive points are far apart. */
 export function splitAtGaps(positions: [number, number][]): [number, number][][] {

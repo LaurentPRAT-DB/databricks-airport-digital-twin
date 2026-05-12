@@ -497,12 +497,17 @@ def _snap_to_nearest_waypoint(state) -> int:
     2. Altitude at or above current altitude — prevents arriving over the
        runway at high altitude (the aircraft must descend along the path,
        not skip to a low-altitude waypoint it's already above)
+    3. After a go-around, prefer early waypoints (first half of the approach)
+       to ensure a full, stable approach instead of cutting to final.
 
     Falls back to pure distance if no suitable waypoint is found.
     """
     approach_wps = _get_approach_waypoints(state.origin_airport)
     if not approach_wps:
         return 0
+
+    is_go_around = getattr(state, 'go_around_count', 0) > 0
+    half_idx = len(approach_wps) // 2
 
     best_idx = 0
     best_dist = float('inf')
@@ -524,6 +529,10 @@ def _snap_to_nearest_waypoint(state) -> int:
         angle_diff = abs((bearing - state.heading + 540) % 360 - 180)
         # Must be ahead AND at or above current altitude (with 500ft tolerance)
         if angle_diff <= 90 and wp_alt >= state.altitude - 500 and d < best_fwd_dist:
+            # After a go-around, skip late waypoints (near runway) to prevent
+            # cutting straight to final approach from an off-course position.
+            if is_go_around and wi > half_idx:
+                continue
             best_fwd_dist = d
             best_fwd_idx = wi
 

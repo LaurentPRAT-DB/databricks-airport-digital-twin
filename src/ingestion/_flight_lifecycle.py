@@ -788,8 +788,27 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             state.holding_phase_time = 0.0
             state.holding_inbound = True
 
-            # Missed approach: climb to 1500ft AGL minimum
-            state.go_around_target_alt = max(1500.0, state.altitude + 300)
+            # After 3+ go-arounds, transition to enroute for engine diversion.
+            # Don't force-land — the aircraft may not be aligned with the runway.
+            if state.go_around_count >= 3:
+                emit_phase_transition(
+                    state.icao24, state.callsign,
+                    FlightPhase.APPROACHING.value, FlightPhase.ENROUTE.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
+                _set_phase(state, FlightPhase.ENROUTE)
+                state.waypoint_index = 0
+                state.go_around_target_alt = max(3000.0, state.altitude + 500)
+                state.vertical_rate = 1500
+                logger.info(
+                    "GO-AROUND #%d %s (%s) — engine will divert",
+                    state.go_around_count, state.callsign, state.aircraft_type,
+                )
+                return
+
+            # Missed approach: climb to 3000ft AGL minimum
+            state.go_around_target_alt = max(3000.0, state.altitude + 500)
             state.vertical_rate = 1500
 
             # Missed approach speed: gradual acceleration to Vref + 20 kts
@@ -830,13 +849,16 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             target = (wp[1], wp[0])  # lat, lon
             target_alt = wp[2]
 
-            # Skip waypoints whose altitude is above current altitude
-            # (happens after go-around re-entry at low altitude)
-            while target_alt > state.altitude + 200 and state.waypoint_index < len(approach_wps) - 1:
-                state.waypoint_index += 1
-                wp = approach_wps[state.waypoint_index]
-                target = (wp[1], wp[0])
-                target_alt = wp[2]
+            # Skip waypoints whose altitude is above current altitude,
+            # but NOT when climbing back after a go-around (the climb-to-profile
+            # logic handles the altitude gap gradually — skipping would jump to
+            # final approach waypoints and cause a wrong-direction approach).
+            if state.go_around_target_alt <= 0:
+                while target_alt > state.altitude + 200 and state.waypoint_index < len(approach_wps) - 1:
+                    state.waypoint_index += 1
+                    wp = approach_wps[state.waypoint_index]
+                    target = (wp[1], wp[0])
+                    target_alt = wp[2]
 
             # CHECK SEPARATION before moving
             has_separation = _check_approach_separation(state)
@@ -1717,8 +1739,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         if _is_arriving_enroute:
             # ARRIVING enroute: heading toward airport, transition to approach when close
 
-            # Go-around missed approach: climb → straight ahead → downwind turn → re-approach.
-            # Realistic pattern: 3+ NM straight ahead, then gradual turn to downwind.
+            # Go-around missed approach: climb → straight ahead → turn to
+            # re-intercept the approach from the correct side.
             if state.go_around_target_alt > 0 and state.altitude < state.go_around_target_alt:
                 climb_fps = 25.0  # ~1500 ft/min
                 state.altitude = min(state.go_around_target_alt, state.altitude + climb_fps * dt)
@@ -1728,8 +1750,8 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.longitude += math.sin(math.radians(state.heading)) * speed_deg / max(0.01, math.cos(math.radians(state.latitude)))
                 if state.altitude >= state.go_around_target_alt:
                     state.go_around_target_alt = 0.0
-                    # Fly straight ahead 60s (~3 NM) before starting the turn
-                    state.holding_phase_time = -60.0
+                    # Fly straight ahead 180s (~12 NM) to clear the airport
+                    state.holding_phase_time = -180.0
                 state.heading = state.heading % 360
                 return state
 
@@ -1742,13 +1764,28 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.vertical_rate = 0
                 return state
 
-            target_heading = _calculate_heading(
-                (state.latitude, state.longitude), center
-            )
+            # After missed approach straight-ahead: turn toward the first
+            # approach waypoint (far from runway) to re-intercept the approach
+            # from the correct side, instead of making a tight U-turn.
+            if state.go_around_count > 0:
+                approach_wps = _get_approach_waypoints(state.origin_airport)
+                if approach_wps:
+                    first_wp = approach_wps[0]
+                    target_heading = _calculate_heading(
+                        (state.latitude, state.longitude),
+                        (first_wp[1], first_wp[0]),
+                    )
+                else:
+                    target_heading = _calculate_heading(
+                        (state.latitude, state.longitude), center
+                    )
+            else:
+                target_heading = _calculate_heading(
+                    (state.latitude, state.longitude), center
+                )
             heading_diff = (target_heading - state.heading + 540) % 360 - 180
             if state.go_around_count > 0:
-                # Go-around: standard rate turn (3°/s) for a tight missed approach pattern
-                turn_rate = 3.0
+                turn_rate = 2.0  # gentler turn for missed approach pattern
             else:
                 # Fresh arrival vectoring: gentle proportional turn
                 turn_rate = max(0.5, min(1.5, dist_from_airport / 0.08))
@@ -1782,10 +1819,22 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             can_start_approach = (approach_count < get_max_approach_aircraft()
                                   or state.go_around_count > 0)
 
-            # Go-around re-entry: wider radius since aircraft is already close
-            reentry_radius = 0.35 if state.go_around_count > 0 else APPROACH_RADIUS_DEG
+            # Go-around re-entry: require proper alignment with approach
+            # course before allowing transition back to APPROACHING.
+            reentry_radius = APPROACH_RADIUS_DEG
+            ga_aligned = True
+            if state.go_around_count > 0:
+                approach_wps = _get_approach_waypoints(state.origin_airport)
+                if approach_wps and len(approach_wps) >= 2:
+                    last_wp = approach_wps[-1]
+                    approach_bearing = _calculate_heading(
+                        (state.latitude, state.longitude),
+                        (last_wp[1], last_wp[0]),
+                    )
+                    hdg_err = abs((state.heading - approach_bearing + 540) % 360 - 180)
+                    ga_aligned = hdg_err < 60
 
-            if can_start_approach and dist_from_airport < reentry_radius:
+            if can_start_approach and dist_from_airport < reentry_radius and ga_aligned:
                 # Close enough — transition to approach
                 emit_phase_transition(
                     state.icao24, state.callsign,
@@ -1796,6 +1845,15 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 _set_phase(state, FlightPhase.APPROACHING)
                 state.waypoint_index = _snap_to_nearest_waypoint(state)
                 state.star_name = _get_star_name(state.origin_airport)
+                # After go-around: set go_around_target_alt to the snapped waypoint
+                # altitude so the approach descent uses a gradual climb-to-profile
+                # instead of skipping waypoints (which causes wrong-direction approach).
+                if state.go_around_count > 0:
+                    approach_wps = _get_approach_waypoints(state.origin_airport)
+                    if approach_wps and state.waypoint_index < len(approach_wps):
+                        wp_alt = approach_wps[state.waypoint_index][2] if len(approach_wps[state.waypoint_index]) > 2 else 3000
+                        if wp_alt > state.altitude:
+                            state.go_around_target_alt = float(wp_alt)
                 # Smooth speed transition: set speed from OpenAP descent profile
                 # to prevent a visible speed jump on the first approach tick
                 _dp = get_descent_profile(state.aircraft_type)

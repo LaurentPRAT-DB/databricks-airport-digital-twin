@@ -63,7 +63,7 @@ export interface PositionSnapshot {
 }
 
 /** Altitude ceiling for trajectory segment filtering (go-around enroute interludes). */
-const GO_AROUND_ALT_CEILING = 6000;
+const GO_AROUND_ALT_CEILING = 15000;
 
 export interface ScenarioEvent {
   time: string;
@@ -756,25 +756,31 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     // The segment spans across go-around enroute interludes (low altitude)
     // but stops at high-altitude enroute (initial cruise entry).
 
-    // Step 1: Scan backward from current frame to find segment start
+    // Step 1: Scan backward from current frame to find segment start.
+    // Skip frames where the flight has no snapshot (thinned holding recordings
+    // only emit every 30s but frames arrive every few seconds). Only break
+    // when a snapshot IS found but fails the phase/altitude filter — the
+    // altitude ceiling provides the natural break at initial cruise entry.
     let segStart = currentFrameIndex;
     for (let i = currentFrameIndex - 1; i >= 0; i--) {
       const ts = timestamps[i];
       const snapshots = simData.frames[ts];
-      if (!snapshots) { segStart = i + 1; break; }
+      if (!snapshots) continue;
       const snap = snapshots.find(s => s.icao24 === icao24);
-      if (!snap || !isValidForSegment(snap)) { segStart = i + 1; break; }
+      if (!snap) continue;
+      if (!isValidForSegment(snap)) break;
       segStart = i;
     }
 
-    // Step 2: Scan forward from current frame to find segment end
+    // Step 2: Scan forward from current frame to find segment end.
     let segEnd = currentFrameIndex;
     for (let i = currentFrameIndex + 1; i < timestamps.length; i++) {
       const ts = timestamps[i];
       const snapshots = simData.frames[ts];
-      if (!snapshots) break;
+      if (!snapshots) continue;
       const snap = snapshots.find(s => s.icao24 === icao24);
-      if (!snap || !isValidForSegment(snap)) break;
+      if (!snap) continue;
+      if (!isValidForSegment(snap)) break;
       segEnd = i;
     }
 

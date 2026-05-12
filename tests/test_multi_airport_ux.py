@@ -521,6 +521,19 @@ class TestDataIntegrityMulti:
         for icao24, trace in traces.items():
             approach = _phase_positions(trace, "approaching")
             for i in range(1, len(approach)):
+                # Skip non-contiguous segments (go-around gap in between):
+                # a time gap > 60s means the aircraft left and re-entered approach.
+                from datetime import datetime
+                t_prev = approach[i-1].get("time") or approach[i-1].get("timestamp")
+                t_curr = approach[i].get("time") or approach[i].get("timestamp")
+                if t_prev and t_curr:
+                    if isinstance(t_prev, str):
+                        t_prev = datetime.fromisoformat(t_prev)
+                    if isinstance(t_curr, str):
+                        t_curr = datetime.fromisoformat(t_curr)
+                    if hasattr(t_prev, 'timestamp') and hasattr(t_curr, 'timestamp'):
+                        if (t_curr.timestamp() - t_prev.timestamp()) > 60:
+                            continue
                 alt_change = approach[i]["altitude"] - approach[i-1]["altitude"]
                 # Go-around climbs produce gradual altitude gains at ≤1500 ft/min.
                 # These are expected at any altitude during missed approach procedure.
