@@ -105,11 +105,13 @@ export function SatelliteGround({
    * Load a tile image — via inpainting proxy or direct Esri URL.
    * Uses two-phase loading: cache_only first, full inpaint on miss.
    * Returns { img, stale } where stale indicates the cached version is outdated.
+   * onRefreshed is called if a stale tile gets re-inpainted in the background.
    */
   const loadTileImage = (
     esriUrl: string,
     useInpainting: boolean,
     icao: string | undefined,
+    onRefreshed?: (img: HTMLImageElement) => void,
   ): Promise<{ img: HTMLImageElement; stale: boolean }> => {
     return new Promise((resolve) => {
       const img = new Image();
@@ -123,22 +125,26 @@ export function SatelliteGround({
         directImg.src = esriUrl;
       };
 
-      const loadFromBlob = (blob: Blob, stale: boolean) => {
-        const objectUrl = URL.createObjectURL(blob);
-        img.onload = () => {
-          URL.revokeObjectURL(objectUrl);
-          resolve({ img, stale });
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(objectUrl);
-          loadDirect();
-        };
-        img.src = objectUrl;
-      };
+      const blobToImage = (blob: Blob): Promise<HTMLImageElement> =>
+        new Promise((res, rej) => {
+          const i = new Image();
+          i.crossOrigin = 'anonymous';
+          const u = URL.createObjectURL(blob);
+          i.onload = () => { URL.revokeObjectURL(u); res(i); };
+          i.onerror = () => { URL.revokeObjectURL(u); rej(new Error('img load failed')); };
+          i.src = u;
+        });
 
       if (useInpainting) {
         const params = new URLSearchParams({ url: esriUrl });
         if (icao) params.set('airport_icao', icao);
+
+        const fullInpaint = () =>
+          fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST' })
+            .then((r) => {
+              if (!r.ok) throw new Error(`HTTP ${r.status}`);
+              return r.blob();
+            });
 
         // Phase 1: cache-only check
         const cacheParams = new URLSearchParams(params);
@@ -148,22 +154,31 @@ export function SatelliteGround({
           .then((resp) => {
             if (resp.ok) {
               const isStale = resp.headers.get('X-Cache') === 'STALE';
-              return resp.blob().then((blob) => loadFromBlob(blob, isStale));
+              resp.blob().then((blob) => blobToImage(blob))
+                .then((loadedImg) => {
+                  resolve({ img: loadedImg, stale: isStale });
+                  // Background re-inpaint when satellite imagery has been updated
+                  if (isStale && onRefreshed) {
+                    fullInpaint()
+                      .then(blobToImage)
+                      .then(onRefreshed)
+                      .catch(() => {});
+                  }
+                })
+                .catch(loadDirect);
+              return;
             }
             if (resp.status === 204) {
               // Phase 2: full inpaint on cache miss
-              return fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST' })
-                .then((r) => {
-                  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                  return r.blob();
-                })
-                .then((blob) => loadFromBlob(blob, false));
+              fullInpaint()
+                .then(blobToImage)
+                .then((loadedImg) => resolve({ img: loadedImg, stale: false }))
+                .catch(loadDirect);
+              return;
             }
             throw new Error(`HTTP ${resp.status}`);
           })
-          .catch(() => {
-            loadDirect();
-          });
+          .catch(loadDirect);
       } else {
         img.onload = () => resolve({ img, stale: false });
         img.onerror = () => resolve({ img, stale: false });
@@ -241,7 +256,18 @@ export function SatelliteGround({
         const px = (tx - minTX) * TILE_SIZE;
         const py = (ty - minTY) * TILE_SIZE;
 
-        loadTileImage(esriUrl, inpainting, airportIcao).then(({ img, stale }) => {
+        const onRefreshed = (freshImg: HTMLImageElement) => {
+          if (cancelled) return;
+          ctx.drawImage(freshImg, px, py, TILE_SIZE, TILE_SIZE);
+          // Re-crop and update the existing texture
+          setTexture((prev) => {
+            if (!prev || cancelled) return prev;
+            finalize();
+            return prev;
+          });
+        };
+
+        loadTileImage(esriUrl, inpainting, airportIcao, onRefreshed).then(({ img, stale }) => {
           if (cancelled) return;
           ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE);
           loadedCount++;

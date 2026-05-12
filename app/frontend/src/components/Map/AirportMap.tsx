@@ -206,17 +206,39 @@ const InpaintingGridLayer = L.GridLayer.extend({
     const params = new URLSearchParams({ url: esriUrl });
     if (opts.airportIcao) params.set('airport_icao', opts.airportIcao);
 
+    let tileResolved = false;
     const loadBlob = (blob: Blob) => {
-      tile.src = URL.createObjectURL(blob);
+      const objectUrl = URL.createObjectURL(blob);
+      const prev = tile.src;
+      tile.src = objectUrl;
       tile.onload = () => {
-        URL.revokeObjectURL(tile.src);
-        done(null, tile);
+        URL.revokeObjectURL(objectUrl);
+        if (!tileResolved) {
+          tileResolved = true;
+          done(null, tile);
+        }
       };
       tile.onerror = () => {
-        URL.revokeObjectURL(tile.src);
-        done(null, tile);
+        URL.revokeObjectURL(objectUrl);
+        if (!tileResolved) {
+          tileResolved = true;
+          done(null, tile);
+        }
       };
+      if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
     };
+
+    const fullInpaint = () =>
+      fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST' })
+        .then((r) => {
+          if (r.status === 503) {
+            opts.onWarmingUp?.();
+            throw new Error('warming_up');
+          }
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.blob();
+        })
+        .then(loadBlob);
 
     // Phase 1: cache-only check (fast path)
     const cacheParams = new URLSearchParams(params);
@@ -225,29 +247,22 @@ const InpaintingGridLayer = L.GridLayer.extend({
     fetch(`/api/inpainting/clean-tile?${cacheParams.toString()}`, { method: 'POST' })
       .then((resp) => {
         if (resp.ok) {
-          if (resp.headers.get('X-Cache') === 'STALE') {
-            opts.onStaleDetected?.();
-          }
-          return resp.blob().then(loadBlob);
+          const isStale = resp.headers.get('X-Cache') === 'STALE';
+          if (isStale) opts.onStaleDetected?.();
+          resp.blob().then(loadBlob);
+          // Background re-inpaint when satellite imagery has been updated
+          if (isStale) fullInpaint().catch(() => {});
+          return;
         }
         if (resp.status === 204) {
           // No cache — Phase 2: full inpaint (may take minutes on cold start)
-          return fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST' })
-            .then((r) => {
-              if (r.status === 503) {
-                opts.onWarmingUp?.();
-                throw new Error('warming_up');
-              }
-              if (!r.ok) throw new Error(`HTTP ${r.status}`);
-              return r.blob();
-            })
-            .then(loadBlob);
+          return fullInpaint();
         }
         throw new Error(`HTTP ${resp.status}`);
       })
       .catch(() => {
-        tile.onload = () => done(null, tile);
-        tile.onerror = () => done(null, tile);
+        tile.onload = () => { if (!tileResolved) { tileResolved = true; done(null, tile); } };
+        tile.onerror = () => { if (!tileResolved) { tileResolved = true; done(null, tile); } };
         tile.src = esriUrl;
       });
 

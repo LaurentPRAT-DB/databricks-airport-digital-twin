@@ -1909,6 +1909,8 @@ class LakebaseService:
         if not self.is_available:
             return None
 
+        self._maybe_evict_old_tiles()
+
         tile_key = f"{zoom}/{tile_x}/{tile_y}"
         try:
             with self._get_read_connection() as conn:
@@ -2050,6 +2052,57 @@ class LakebaseService:
         except Exception as e:
             logger.warning(f"Tile cache stats query failed: {e}")
             return None
+
+    def _maybe_evict_old_tiles(self, max_age_days: int = 30) -> None:
+        """Probabilistic eviction of tiles older than max_age_days.
+
+        Runs ~1% of the time to avoid overhead on every cache read.
+        """
+        import random
+        if random.random() > 0.01:
+            return
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM satellite_tile_cache WHERE updated_at < NOW() - INTERVAL '%s days'",
+                        (max_age_days,),
+                    )
+                    deleted = cur.rowcount
+                    conn.commit()
+            if deleted:
+                logger.info("Evicted %d tiles older than %d days", deleted, max_age_days)
+        except Exception as e:
+            logger.debug("Tile eviction failed: %s", e)
+
+    def get_cached_tile_urls(self, airport_icao: str | None = None) -> list[dict]:
+        """Get tile metadata for tiles that may need re-processing.
+
+        Returns list of dicts with tile_key, zoom, tile_x, tile_y, original_etag.
+        """
+        self._ensure_tile_cache_table()
+        if not self.is_available:
+            return []
+
+        try:
+            with self._get_read_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    if airport_icao:
+                        cur.execute(
+                            """SELECT tile_key, zoom, tile_x, tile_y, original_etag
+                               FROM satellite_tile_cache
+                               WHERE airport_icao = %s""",
+                            (airport_icao.upper(),),
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT tile_key, zoom, tile_x, tile_y, original_etag FROM satellite_tile_cache"
+                        )
+                    return [dict(r) for r in cur.fetchall()]
+        except Exception as e:
+            logger.warning("get_cached_tile_urls failed: %s", e)
+            return []
 
     # ── Client debug logs ─────────────────────────────────────────────
 

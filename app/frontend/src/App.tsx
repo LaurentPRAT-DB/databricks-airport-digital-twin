@@ -368,16 +368,30 @@ function ViewToggle({
 
   const handleRefreshTiles = async () => {
     const params = airportIcao ? `?airport_icao=${airportIcao}` : '';
+    setProcessing(true);
     try {
-      await fetch(`${import.meta.env.VITE_API_URL || ''}/api/inpainting/cache${params}`, { method: 'DELETE' });
-      setCacheStats(null);
-      setPrevTileCount(null);
-      setProcessing(true);
-      // Toggle inpainting off then on to force re-fetch
-      onInpaintingToggle(false);
-      setTimeout(() => onInpaintingToggle(true), 100);
+      const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/inpainting/reprocess${params}`, { method: 'POST' });
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.reprocessed > 0) {
+          // Tiles updated in cache — toggle to re-fetch from cache
+          setCacheStats(null);
+          setPrevTileCount(null);
+          onInpaintingToggle(false);
+          setTimeout(() => onInpaintingToggle(true), 100);
+        }
+      } else {
+        // Fallback: clear cache and re-fetch everything
+        await fetch(`${import.meta.env.VITE_API_URL || ''}/api/inpainting/cache${params}`, { method: 'DELETE' });
+        setCacheStats(null);
+        setPrevTileCount(null);
+        onInpaintingToggle(false);
+        setTimeout(() => onInpaintingToggle(true), 100);
+      }
     } catch {
       // ignore
+    } finally {
+      setProcessing(false);
     }
   };
 

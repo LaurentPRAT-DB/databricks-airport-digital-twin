@@ -204,6 +204,119 @@ async def clear_cache(
     return {"deleted": deleted, "airport_icao": airport_icao}
 
 
+_ESRI_TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+
+
+@inpainting_router.post("/reprocess")
+async def reprocess_stale_tiles(
+    request: Request,
+    airport_icao: Optional[str] = Query(None, description="Airport ICAO to reprocess (all if omitted)"),
+):
+    """Re-inpaint tiles whose satellite source imagery has been updated.
+
+    Checks ETag of each cached tile against the current source. Only tiles
+    with mismatched ETags are re-processed. Tiles with matching ETags are kept.
+    Returns a summary of how many tiles were checked and reprocessed.
+    """
+    lakebase = get_lakebase_service()
+    cached_tiles = lakebase.get_cached_tile_urls(airport_icao)
+    if not cached_tiles:
+        return {"checked": 0, "stale": 0, "reprocessed": 0, "errors": 0}
+
+    token = _get_auth_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="No auth token available")
+
+    stale_count = 0
+    reprocessed = 0
+    errors = 0
+
+    serving_url = _get_serving_url()
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        for tile in cached_tiles:
+            z, tx, ty = tile["zoom"], tile["tile_x"], tile["tile_y"]
+            cached_etag = tile.get("original_etag")
+
+            tile_url = _ESRI_TILE_URL.replace("{z}", str(z)).replace("{y}", str(ty)).replace("{x}", str(tx))
+
+            # Check current source ETag
+            try:
+                head_resp = await client.head(tile_url)
+                current_etag = head_resp.headers.get("ETag")
+            except httpx.HTTPError:
+                continue
+
+            if current_etag and cached_etag and current_etag == cached_etag:
+                continue  # Still fresh
+
+            stale_count += 1
+
+            # Fetch fresh tile and re-inpaint
+            try:
+                tile_resp = await client.get(tile_url)
+                tile_resp.raise_for_status()
+                image_bytes = tile_resp.content
+                source_etag = tile_resp.headers.get("ETag")
+                source_last_modified = tile_resp.headers.get("Last-Modified")
+            except httpx.HTTPError:
+                errors += 1
+                continue
+
+            image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+            payload = {"dataframe_split": {"columns": ["image_b64"], "data": [[image_b64]]}}
+
+            try:
+                resp = await client.post(
+                    serving_url,
+                    json=payload,
+                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                )
+                resp.raise_for_status()
+            except httpx.HTTPError:
+                errors += 1
+                continue
+
+            result = resp.json()
+            try:
+                predictions = result.get("predictions", result.get("dataframe_split", {}))
+                if isinstance(predictions, dict):
+                    data = predictions.get("data", [[]])[0]
+                    clean_b64 = data[0] if data else ""
+                    aircraft_count = data[1] if len(data) > 1 else 0
+                    detections_json = data[2] if len(data) > 2 else "[]"
+                elif isinstance(predictions, list):
+                    pred = predictions[0]
+                    clean_b64 = pred.get("clean_image_b64", "")
+                    aircraft_count = pred.get("aircraft_count", 0)
+                    detections_json = pred.get("detections", "[]")
+                else:
+                    errors += 1
+                    continue
+            except (KeyError, IndexError):
+                errors += 1
+                continue
+
+            clean_bytes = base64.b64decode(clean_b64)
+            lakebase.store_cached_tile(
+                zoom=z, tile_x=tx, tile_y=ty,
+                image_bytes=clean_bytes,
+                aircraft_count=int(aircraft_count),
+                detections_json=detections_json if isinstance(detections_json, str) else json.dumps(detections_json),
+                source_etag=source_etag,
+                source_last_modified=source_last_modified,
+                airport_icao=airport_icao,
+            )
+            reprocessed += 1
+
+    return {
+        "checked": len(cached_tiles),
+        "stale": stale_count,
+        "reprocessed": reprocessed,
+        "errors": errors,
+    }
+
+
 @inpainting_router.post("/clean-tile")
 async def clean_tile(
     request: Request,
