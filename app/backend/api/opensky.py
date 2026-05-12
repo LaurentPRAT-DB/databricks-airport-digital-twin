@@ -17,6 +17,7 @@ from app.backend.services.opensky_service import (
     determine_flight_phase,
     enrich_origins_opensky,
     enrich_origins_heading,
+    assign_nearest_gates,
     M_TO_FT,
     MS_TO_KTS,
     MS_TO_FTMIN,
@@ -66,10 +67,39 @@ async def get_opensky_flights(airport: str | None = None) -> dict:
     """Fetch live flights from OpenSky Network for the current airport.
 
     Returns flights in the same schema as /api/flights for easy frontend consumption.
+    Enriches each flight with estimated origin/destination based on heading.
     """
     lat, lon = _get_airport_center(airport)
     opensky = get_opensky_service()
     flights = await opensky.fetch_flights(lat, lon)
+
+    # Determine airport ICAO for enrichment
+    airport_icao = airport
+    if not airport_icao:
+        service = get_airport_config_service()
+        config = service.get_config()
+        airport_icao = config.get("icao") or config.get("icao_code") or ""
+
+    if airport_icao and flights:
+        aircraft_first_seen = {
+            f["icao24"]: f for f in flights
+            if f.get("icao24") and f.get("latitude") is not None
+        }
+        origins = enrich_origins_heading(aircraft_first_seen, lat, lon, airport_icao)
+        for f in flights:
+            origin_info = origins.get(f.get("icao24"))
+            if origin_info:
+                f["origin_airport"] = origin_info[0]
+                f["destination_airport"] = origin_info[1]
+
+    # Gate assignment for on-ground, slow aircraft via nearest OSM gate
+    try:
+        config = get_airport_config_service().get_config()
+        gates = config.get("gates", [])
+    except Exception:
+        gates = []
+    if gates and flights:
+        assign_nearest_gates(flights, gates)
 
     return {
         "flights": flights,

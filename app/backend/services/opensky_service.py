@@ -57,15 +57,169 @@ def determine_flight_phase(
         return "takeoff"
     if altitude_ft < 3000 and vertical_rate_ftmin < -200:
         return "landing"
+    # Short final: shallow glideslope at low altitude is still landing
+    if altitude_ft < 2000 and vertical_rate_ftmin < -50:
+        return "landing"
     if altitude_ft < 10000 and vertical_rate_ftmin < -500:
         return "approaching"
     if altitude_ft < 10000 and vertical_rate_ftmin > 500:
         return "departing"
+    # Low altitude with mild descent — approaching, not cruising
+    if altitude_ft < 5000 and vertical_rate_ftmin < -50:
+        return "approaching"
     if vertical_rate_ftmin > 200:
         return "departing"
     if vertical_rate_ftmin < -200:
         return "approaching"
     return "enroute"
+
+
+# ── Live gate proximity matching ────────────────────────────────────────
+
+from src.inference.opensky_events import haversine_m, GATE_MATCH_RADIUS_M
+
+_STATIONARY_KTS = 5.0  # Below this speed, aircraft is considered stopped
+
+
+def assign_nearest_gates(
+    flights: list[dict], gates: list[dict], max_dist_m: float = GATE_MATCH_RADIUS_M
+) -> None:
+    """Assign nearest gate to on-ground stationary aircraft (mutates in-place)."""
+    if not gates:
+        return
+
+    gate_positions: list[tuple[str, float, float]] = []
+    for g in gates:
+        gid = g.get("ref") or g.get("id") or ""
+        geo = g.get("geo", {})
+        glat, glon = geo.get("latitude"), geo.get("longitude")
+        if gid and glat is not None and glon is not None:
+            gate_positions.append((str(gid), float(glat), float(glon)))
+
+    if not gate_positions:
+        return
+
+    for f in flights:
+        if f.get("assigned_gate"):
+            continue
+        if not f.get("on_ground"):
+            continue
+        if float(f.get("velocity", 0) or 0) > _STATIONARY_KTS:
+            continue
+
+        lat, lon = f.get("latitude"), f.get("longitude")
+        if lat is None or lon is None:
+            continue
+
+        best_id, best_dist = None, float("inf")
+        for gid, glat, glon in gate_positions:
+            d = haversine_m(lat, lon, glat, glon)
+            if d < best_dist:
+                best_id, best_dist = gid, d
+
+        if best_dist <= max_dist_m:
+            f["assigned_gate"] = best_id
+
+
+class LiveGateTracker:
+    """Tracks gate assignments across live polling cycles.
+
+    Detects gate arrivals (assign/occupy) and departures (release) by
+    comparing consecutive polls. Persists events to Lakebase.
+    """
+
+    def __init__(self) -> None:
+        self._parked: dict[str, tuple[str, str, str]] = {}  # icao24 -> (gate, callsign, parked_since_iso)
+
+    def update(
+        self,
+        flights: list[dict],
+        session_id: str,
+        airport_icao: str,
+    ) -> list[dict]:
+        """Process a poll cycle. Returns gate events emitted this cycle."""
+        from datetime import datetime, timezone
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        events: list[dict] = []
+        seen: set[str] = set()
+
+        for f in flights:
+            icao24 = f.get("icao24", "")
+            if not icao24:
+                continue
+            seen.add(icao24)
+
+            gate = f.get("assigned_gate")
+            callsign = f.get("callsign", icao24)
+            on_ground = f.get("on_ground", False)
+            velocity = float(f.get("velocity", 0) or 0)
+
+            was_parked = icao24 in self._parked
+
+            if gate and on_ground and velocity < _STATIONARY_KTS:
+                if not was_parked or self._parked[icao24][0] != gate:
+                    # New gate assignment
+                    if was_parked:
+                        old_gate = self._parked[icao24][0]
+                        events.append({
+                            "icao24": icao24, "callsign": callsign,
+                            "gate": old_gate, "event_type": "release",
+                            "event_time": now_iso,
+                        })
+                    self._parked[icao24] = (gate, callsign, now_iso)
+                    events.append({
+                        "icao24": icao24, "callsign": callsign,
+                        "gate": gate, "event_type": "assign",
+                        "event_time": now_iso,
+                    })
+                    events.append({
+                        "icao24": icao24, "callsign": callsign,
+                        "gate": gate, "event_type": "occupy",
+                        "event_time": now_iso,
+                    })
+            elif was_parked:
+                # Was parked, now moving or airborne — gate departure
+                old_gate, old_cs, _ = self._parked.pop(icao24)
+                events.append({
+                    "icao24": icao24, "callsign": old_cs,
+                    "gate": old_gate, "event_type": "release",
+                    "event_time": now_iso,
+                })
+                logger.info("Gate departure: %s left gate %s at %s", callsign, old_gate, airport_icao)
+
+        # Aircraft that disappeared from the feed — release their gates
+        for icao24 in list(self._parked):
+            if icao24 not in seen:
+                old_gate, old_cs, _ = self._parked.pop(icao24)
+                events.append({
+                    "icao24": icao24, "callsign": old_cs,
+                    "gate": old_gate, "event_type": "release",
+                    "event_time": now_iso,
+                })
+
+        # Persist to Lakebase
+        if events:
+            try:
+                from app.backend.services.lakebase_service import get_lakebase_service
+                lakebase = get_lakebase_service()
+                if lakebase.is_available:
+                    lakebase.insert_gate_events(events, session_id, airport_icao)
+            except Exception as e:
+                logger.warning("Failed to persist live gate events: %s", e)
+
+        return events
+
+
+# Per-airport tracker singletons
+_gate_trackers: dict[str, LiveGateTracker] = {}
+
+
+def get_gate_tracker(airport_icao: str) -> LiveGateTracker:
+    """Get or create a LiveGateTracker for the given airport."""
+    if airport_icao not in _gate_trackers:
+        _gate_trackers[airport_icao] = LiveGateTracker()
+    return _gate_trackers[airport_icao]
 
 
 class OpenSkyService:
@@ -449,7 +603,7 @@ def enrich_origins_heading(
 
     for icao24, snap in aircraft_first_seen.items():
         heading = snap.get("heading")
-        phase = snap.get("phase", "")
+        phase = snap.get("phase") or snap.get("flight_phase") or ""
         lat = snap.get("latitude")
         lon = snap.get("longitude")
 

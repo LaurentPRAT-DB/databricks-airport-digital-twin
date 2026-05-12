@@ -255,12 +255,20 @@ class OpenSkyEventInferrer:
 
                 if altitude_ft < 3000 and vrate_ftmin < -200:
                     phase = "landing" if near_airport else "approaching"
+                elif altitude_ft < 2000 and vrate_ftmin < -50:
+                    phase = "landing" if near_airport else "approaching"
                 elif altitude_ft < 3000 and vrate_ftmin > 200:
                     phase = "takeoff" if near_airport else "departing"
-                elif altitude_ft < 10000 and vrate_ftmin < -200:
+                elif altitude_ft < 10000 and vrate_ftmin < -500:
                     phase = "approaching"
-                elif altitude_ft < 10000 and vrate_ftmin > 200:
+                elif altitude_ft < 10000 and vrate_ftmin > 500:
                     phase = "departing"
+                elif altitude_ft < 5000 and vrate_ftmin < -50:
+                    phase = "approaching"
+                elif vrate_ftmin > 200:
+                    phase = "departing"
+                elif vrate_ftmin < -200:
+                    phase = "approaching"
                 else:
                     phase = "enroute"
 
