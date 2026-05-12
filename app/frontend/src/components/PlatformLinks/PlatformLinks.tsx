@@ -79,11 +79,11 @@ export default function PlatformLinks() {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
         title="Databricks Platform Links"
       >
-        <span className="text-lg">🔧</span>
-        <span className="text-sm font-medium">Platform</span>
+        <span className="text-sm">🔧</span>
+        <span className="font-medium">Platform</span>
         <svg
           className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
           fill="none"

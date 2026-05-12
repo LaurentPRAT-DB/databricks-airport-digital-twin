@@ -183,7 +183,7 @@ export default function WeatherWidget({ station }: WeatherWidgetProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 bg-slate-700 px-3 py-1 rounded-full text-sm animate-pulse">
+      <div className="flex items-center gap-2 bg-slate-700 px-3 py-1.5 rounded-lg text-sm animate-pulse">
         <span className="text-slate-400">Loading weather...</span>
       </div>
     );
@@ -191,7 +191,7 @@ export default function WeatherWidget({ station }: WeatherWidgetProps) {
 
   if (error || !weather) {
     return (
-      <div className="flex items-center gap-2 bg-red-900 px-3 py-1 rounded-full text-sm">
+      <div className="flex items-center gap-2 bg-red-900 px-3 py-1.5 rounded-lg text-sm">
         <span className="text-red-300">Weather unavailable</span>
       </div>
     );
@@ -210,7 +210,7 @@ export default function WeatherWidget({ station }: WeatherWidgetProps) {
     <div className="relative">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-full text-sm transition-colors"
+        className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm transition-colors"
       >
         {/* Flight category indicator */}
         <span className={`w-2.5 h-2.5 rounded-full ${categoryColor}`} />

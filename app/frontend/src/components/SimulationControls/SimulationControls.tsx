@@ -731,7 +731,7 @@ export function DataModeToggle({ mode, onChange, showLive = true }: { mode: Data
     <div className="flex items-center bg-slate-700 rounded-lg p-0.5">
       <button
         onClick={() => onChange('simulation')}
-        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+        className={`px-2.5 py-1 rounded-md text-sm font-medium transition-colors ${
           mode === 'simulation'
             ? 'bg-indigo-600 text-white shadow-sm'
             : 'text-slate-300 hover:text-white'
@@ -742,7 +742,7 @@ export function DataModeToggle({ mode, onChange, showLive = true }: { mode: Data
       {showLive && (
         <button
           onClick={() => onChange('live')}
-          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+          className={`px-2.5 py-1 rounded-md text-sm font-medium transition-colors ${
             mode === 'live'
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-300 hover:text-white'
@@ -753,7 +753,7 @@ export function DataModeToggle({ mode, onChange, showLive = true }: { mode: Data
       )}
       <button
         onClick={() => onChange('recorded')}
-        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+        className={`px-2.5 py-1 rounded-md text-sm font-medium transition-colors ${
           mode === 'recorded'
             ? 'bg-amber-600 text-white shadow-sm'
             : 'text-slate-300 hover:text-white'
@@ -976,7 +976,7 @@ export function SimulationControls({
     // Simulation paused (airport switched)
     if (sim.switchPaused) {
       return (
-        <div className="flex items-center gap-2 bg-amber-600 px-3 py-1 rounded-full text-sm">
+        <div className="flex items-center gap-2 bg-amber-600 px-3 py-1.5 rounded-lg text-sm">
           <span className="text-amber-100">Simulation Paused</span>
         </div>
       );
@@ -1052,7 +1052,7 @@ export function SimulationControls({
               sim.fetchFiles();
               setShowManager(true);
             }}
-            className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-500 px-3 py-1.5 rounded-lg text-sm transition-colors"
+            className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm transition-colors"
             title="Create, load, or monitor simulations"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
