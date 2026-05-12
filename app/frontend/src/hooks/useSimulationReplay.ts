@@ -237,6 +237,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dataSourceRef = useRef<string>('simulation');
   const wantsAutoPlayRef = useRef(false);
+  // Last-seen snapshot cache: keeps flights visible during thinning gaps
+  const lastSeenRef = useRef<Map<string, { snap: PositionSnapshot; frameIndex: number }>>(new Map());
 
   const isActive = simData !== null;
   const totalFrames = simData?.frame_count ?? 0;
@@ -517,9 +519,22 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       }
     }
     const MAX_GROUND_DIST = 0.05; // ~3 NM — no airport taxi exceeds this
+    // ENROUTE visibility radius: ~20 NM from airport center.
+    // Flights inside this radius are visible (go-arounds, initial climb/descent).
+    // Flights outside disappear (cruise, diversions heading away).
+    const MAX_ENROUTE_DIST = 0.3; // ~0.3° ≈ 20 NM
+    const MAX_ENROUTE_DIST_SQ = MAX_ENROUTE_DIST * MAX_ENROUTE_DIST;
 
     const relevant = snapshots.filter((s) => {
-      if (s.phase === 'enroute') return true;
+      if (s.phase === 'enroute') {
+        // Only show enroute flights within airport vicinity
+        if (centerLat != null && centerLon != null) {
+          const dLat = s.latitude - centerLat;
+          const dLon = s.longitude - centerLon!;
+          return dLat * dLat + dLon * dLon <= MAX_ENROUTE_DIST_SQ;
+        }
+        return true;
+      }
       // Reject ground-phase flights with coordinates far from the airport
       if (centerLat != null && centerLon != null) {
         const groundPhases = ['taxi_in', 'taxi_out', 'parked', 'pushback'];
@@ -533,6 +548,36 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       }
       return true;
     });
+
+    // Persist flights across thinning gaps: if a flight was visible recently
+    // but has no snapshot in this frame, keep showing it at its last position.
+    const seenIds = new Set(relevant.map(s => s.icao24));
+    const MAX_GAP_FRAMES = 30; // keep visible for ~30 frames (~60s at 2s/frame)
+    for (const [id, cached] of lastSeenRef.current) {
+      if (!seenIds.has(id) && currentFrameIndex - cached.frameIndex <= MAX_GAP_FRAMES) {
+        // Only persist if the cached position is within the enroute radius
+        const snap = cached.snap;
+        if (snap.phase === 'enroute' && centerLat != null && centerLon != null) {
+          const dLat = snap.latitude - centerLat;
+          const dLon = snap.longitude - centerLon!;
+          if (dLat * dLat + dLon * dLon > MAX_ENROUTE_DIST_SQ) continue;
+        }
+        relevant.push(snap);
+        seenIds.add(id);
+      }
+    }
+
+    // Update last-seen cache
+    for (const s of relevant) {
+      lastSeenRef.current.set(s.icao24, { snap: s, frameIndex: currentFrameIndex });
+    }
+    // Prune old entries
+    for (const [id, cached] of lastSeenRef.current) {
+      if (currentFrameIndex - cached.frameIndex > MAX_GAP_FRAMES * 2) {
+        lastSeenRef.current.delete(id);
+      }
+    }
+
     setFlights(relevant.map((s) => snapshotToFlight(s, src)));
   }, [simData, currentFrameIndex]);
 
@@ -697,6 +742,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setSwitchPaused(false);
     setMetadata(null);
     setCurrentWindow(null);
+    lastSeenRef.current.clear();
     dataSourceRef.current = 'simulation';
   }, []);
 
