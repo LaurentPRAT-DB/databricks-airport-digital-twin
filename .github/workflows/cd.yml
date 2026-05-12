@@ -93,8 +93,9 @@ jobs:
             cd "$GITHUB_WORKSPACE"
             BUILD_NUM=$(git rev-list --count HEAD)
             BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            sed -i "s/\" · #\",\"[0-9]*\"/\" · #\",\"$BUILD_NUM\"/g" app/frontend/dist/assets/index-*.js
-            sed -i "s/\"buildTime\":\"[^\"]*\"/\"buildTime\":\"$BUILD_TIME\"/g" app/frontend/dist/assets/index-*.js
+            # Use perl for portability (BSD sed on macOS runners needs different -i syntax)
+            perl -pi -e "s/\" · #\",\"[0-9]+\"/\" · #\",\"$BUILD_NUM\"/g" app/frontend/dist/assets/index-*.js
+            perl -pi -e "s/\"buildTime\":\"[^\"]*\"/\"buildTime\":\"$BUILD_TIME\"/g" app/frontend/dist/assets/index-*.js
             # Verify the patch actually worked
             if ! grep -q "\"$BUILD_NUM\"" app/frontend/dist/assets/index-*.js; then
               echo "::error::Build number patch failed — dist/ contains stale build"
