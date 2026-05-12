@@ -1070,9 +1070,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         state.heading = rwy_hdg
 
         if state.altitude > 0:
-            # Airborne flare: converge toward runway threshold
+            # Airborne flare: converge toward threshold unless already past it
             dist_to_thr = _distance_between((state.latitude, state.longitude), runway_touchdown)
-            if dist_to_thr > 1e-6:
+            dist_to_far = _distance_between((state.latitude, state.longitude), runway_far_end)
+            dist_thr_to_far = _distance_between(runway_touchdown, runway_far_end)
+            past_threshold = dist_to_far < dist_thr_to_far
+
+            if not past_threshold and dist_to_thr > 1e-6:
                 dlat = runway_touchdown[0] - state.latitude
                 dlon = runway_touchdown[1] - state.longitude
                 ratio = min(speed_deg / dist_to_thr, 1.0)
