@@ -199,7 +199,9 @@ class FlightBroadcaster:
     async def _fetch_opensky_flights(self) -> tuple[list[dict], str]:
         """Fetch flights from OpenSky for the current airport."""
         from datetime import datetime, timezone
-        from app.backend.services.opensky_service import get_opensky_service
+        from app.backend.services.opensky_service import (
+            get_opensky_service, assign_nearest_gates, get_gate_tracker,
+        )
         from app.backend.services.airport_config_service import get_airport_config_service
 
         opensky = get_opensky_service()
@@ -212,6 +214,16 @@ class FlightBroadcaster:
         lon = float(ref.get("longitude", -122.379))
 
         flights = await opensky.fetch_flights(lat, lon)
+
+        # Assign nearest gate to on-ground stationary aircraft
+        gates = config.get("gates", [])
+        assign_nearest_gates(flights, gates)
+
+        # Track gate arrivals/departures
+        airport_icao = config.get("icaoCode", "UNKN")
+        tracker = get_gate_tracker(airport_icao)
+        tracker.update(flights, f"live-{airport_icao}", airport_icao)
+
         timestamp = datetime.now(timezone.utc).isoformat()
         return flights, timestamp
 

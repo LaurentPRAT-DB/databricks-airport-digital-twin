@@ -208,12 +208,24 @@ class OpenSkyCollector:
                 await asyncio.sleep(_CYCLE_COOLDOWN_S)
 
     def _persist_snapshots(self, airport_icao: str, flights: list[dict]) -> int:
-        """Write flight snapshots to Lakebase."""
+        """Write flight snapshots to Lakebase, with gate proximity matching."""
         from app.backend.services.lakebase_service import get_lakebase_service
+        from app.backend.services.opensky_service import assign_nearest_gates, get_gate_tracker
 
         lakebase = get_lakebase_service()
         if not lakebase.is_available:
             return 0
+
+        # Assign nearest gates before persisting
+        try:
+            from app.backend.services.airport_config_service import get_airport_config_service
+            config = get_airport_config_service().get_config()
+            gates = config.get("gates", [])
+            assign_nearest_gates(flights, gates)
+            tracker = get_gate_tracker(airport_icao)
+            tracker.update(flights, self._session_id, airport_icao)
+        except Exception:
+            pass  # Gate matching is best-effort
 
         now = datetime.now(timezone.utc).isoformat()
         snapshots = []

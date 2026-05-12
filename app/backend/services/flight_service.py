@@ -26,16 +26,25 @@ def _determine_flight_phase(
     """Determine the flight phase based on flight parameters.
 
     Phase names aligned with simulation engine vocabulary.
+    Units: altitude in ft, vertical_rate in ft/min (matching Lakebase storage).
     """
     if on_ground:
         return "parked"
-    if altitude < 3000 and vertical_rate > 2:
+    if altitude < 3000 and vertical_rate > 200:
         return "takeoff"
-    if altitude < 3000 and vertical_rate < -2:
+    if altitude < 3000 and vertical_rate < -200:
         return "landing"
-    if vertical_rate > 2:
+    if altitude < 2000 and vertical_rate < -50:
+        return "landing"
+    if altitude < 10000 and vertical_rate < -500:
+        return "approaching"
+    if altitude < 10000 and vertical_rate > 500:
         return "departing"
-    if vertical_rate < -2:
+    if altitude < 5000 and vertical_rate < -50:
+        return "approaching"
+    if vertical_rate > 200:
+        return "departing"
+    if vertical_rate < -200:
         return "approaching"
     return "enroute"
 
