@@ -41,12 +41,40 @@ def holding_sim():
 
 
 def _find_holding_flights(traces):
-    """Find flights that entered a holding pattern (enroute phase between two approaching phases)."""
+    """Find flights that entered a genuine holding pattern.
+
+    A holding pattern is an approach→enroute→approach sequence where the
+    aircraft circles at approximately stable altitude (<1500ft variation).
+    Excludes:
+    - Go-around missed approaches (entry altitude <800ft, large climb)
+    - Arriving aircraft descending from cruise (large altitude range)
+    """
     holding = {}
     for icao24, trace in traces.items():
         seq = phase_sequence(trace)
         for i in range(1, len(seq) - 1):
             if seq[i] == "enroute" and seq[i-1] == "approaching":
+                enroute_start = None
+                for j, s in enumerate(trace):
+                    if s["phase"] == "enroute" and j > 0 and trace[j-1]["phase"] == "approaching":
+                        enroute_start = j
+                        break
+                if enroute_start is None:
+                    continue
+                enroute_snaps = []
+                for j in range(enroute_start, len(trace)):
+                    if trace[j]["phase"] == "enroute":
+                        enroute_snaps.append(trace[j])
+                    else:
+                        break
+                if len(enroute_snaps) < 10:
+                    continue
+                entry_alt = enroute_snaps[0]["altitude"]
+                if entry_alt < 800:
+                    continue
+                alt_range = max(s["altitude"] for s in enroute_snaps) - min(s["altitude"] for s in enroute_snaps)
+                if alt_range > 1500:
+                    continue
                 holding[icao24] = trace
                 break
     return holding
