@@ -715,10 +715,17 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     const timestamps = simData.frame_timestamps;
     if (timestamps.length === 0) return [];
 
-    // Determine the flight's current phase from the current frame
-    const currentTs = timestamps[currentFrameIndex];
-    const currentSnaps = currentTs ? simData.frames[currentTs] : null;
-    const currentSnap = currentSnaps?.find(s => s.icao24 === icao24);
+    // Determine the flight's current phase from the current frame.
+    // If the flight has no snapshot in this exact frame (thinning gap),
+    // search backward for the most recent snapshot to avoid losing the
+    // trajectory during phase transitions (e.g., go-around ENROUTE).
+    let currentSnap: PositionSnapshot | undefined;
+    for (let i = currentFrameIndex; i >= Math.max(0, currentFrameIndex - 30); i--) {
+      const ts = timestamps[i];
+      const snaps = ts ? simData.frames[ts] : null;
+      const snap = snaps?.find(s => s.icao24 === icao24);
+      if (snap) { currentSnap = snap; break; }
+    }
     const currentPhase = currentSnap?.phase ?? '';
 
     // Pick the right phase set based on current flight phase:
@@ -743,12 +750,26 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       return [];
     }
 
+    // Airport center for distance-based enroute filtering
+    const cfg = simData.config as Record<string, unknown>;
+    const cfgCenter = cfg.airport_center as { latitude: number; longitude: number } | undefined;
+    const apLat = cfgCenter?.latitude;
+    const apLon = cfgCenter?.longitude;
+
     // Check if a snapshot is valid for the trajectory segment.
-    // For enroute frames, only include low-altitude ones (go-around pattern)
-    // to avoid pulling in the initial high-altitude cruise phase.
+    // For enroute frames, only include those near the airport and below the
+    // altitude ceiling (go-around pattern). Distant/high enroute = cruise.
+    const MAX_ENROUTE_DIST_SQ = 0.3 * 0.3; // ~0.3° ≈ 20 NM from airport
     const isValidForSegment = (snap: PositionSnapshot): boolean => {
       if (!allowedPhases.has(snap.phase)) return false;
-      if (snap.phase === 'enroute' && snap.altitude > GO_AROUND_ALT_CEILING) return false;
+      if (snap.phase === 'enroute') {
+        if (snap.altitude > GO_AROUND_ALT_CEILING) return false;
+        if (apLat != null && apLon != null) {
+          const dLat = snap.latitude - apLat;
+          const dLon = snap.longitude - apLon;
+          if (dLat * dLat + dLon * dLon > MAX_ENROUTE_DIST_SQ) return false;
+        }
+      }
       return true;
     };
 
