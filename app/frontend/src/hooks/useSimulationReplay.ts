@@ -239,6 +239,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const wantsAutoPlayRef = useRef(false);
   // Last-seen snapshot cache: keeps flights visible during thinning gaps
   const lastSeenRef = useRef<Map<string, { snap: PositionSnapshot; frameIndex: number }>>(new Map());
+  // Tracked flight: exempt from enroute distance filter (set by seekToFlight)
+  const trackedIcao24Ref = useRef<string | null>(null);
 
   const isActive = simData !== null;
   const totalFrames = simData?.frame_count ?? 0;
@@ -284,6 +286,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const loadFile = useCallback(async (filename: string, startHour = 0, endHour = 24) => {
     setIsLoading(true);
     setIsPlaying(false);
+    trackedIcao24Ref.current = null;
     dataSourceRef.current = 'simulation';
     try {
       const res = await fetch(
@@ -313,6 +316,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const loadWindow = useCallback(async (filename: string, startTime: string, endTime: string) => {
     setIsLoading(true);
     setIsPlaying(false);
+    trackedIcao24Ref.current = null;
     dataSourceRef.current = 'simulation';
     try {
       const params = new URLSearchParams({
@@ -345,6 +349,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const loadDemo = useCallback(async (airportIcao: string) => {
     setIsLoading(true);
     setIsPlaying(false);
+    trackedIcao24Ref.current = null;
     setSwitchPaused(false);
     dataSourceRef.current = 'simulation';
     wantsAutoPlayRef.current = true;
@@ -431,6 +436,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const loadRecording = useCallback(async (airport: string, date: string) => {
     setIsLoading(true);
     setIsPlaying(false);
+    trackedIcao24Ref.current = null;
     setSwitchPaused(false);
     dataSourceRef.current = 'opensky_recorded';
     wantsAutoPlayRef.current = true;
@@ -527,6 +533,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
 
     const relevant = snapshots.filter((s) => {
       if (s.phase === 'enroute') {
+        if (s.icao24 === trackedIcao24Ref.current) return true;
         // Only show enroute flights within airport vicinity
         if (centerLat != null && centerLon != null) {
           const dLat = s.latitude - centerLat;
@@ -708,6 +715,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
           (s.icao24 === icao24 || (callsign && s.callsign?.replace(/\s+/g, '') === callsign))
         );
         if (match) {
+          trackedIcao24Ref.current = match.icao24;
           debugLog('info', 'seekToFlight', 'found flight', {
             icao24, callsign, offset, frameIdx: idx, phase: match.phase,
             totalFrames: simData.frame_timestamps.length,
@@ -734,6 +742,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
 
   const stop = useCallback(() => {
     wantsAutoPlayRef.current = false;
+    trackedIcao24Ref.current = null;
     setIsPlaying(false);
     setSimData(null);
     setLoadedFile(null);
