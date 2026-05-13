@@ -131,6 +131,7 @@ export function Aircraft3D({ flight, selected = false, onClick, airportCenter }:
       ref={groupRef}
       position={[targetPosition.x, targetPosition.y, targetPosition.z]}
       rotation={[0, targetRotation, 0]}
+      renderOrder={10}
       onClick={(e) => {
         e.stopPropagation();
         onClick?.();
@@ -148,17 +149,17 @@ export function Aircraft3D({ flight, selected = false, onClick, airportCenter }:
 
       {/* Selection ring - scaled to match aircraft in scene coordinates */}
       {selected && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]} renderOrder={10}>
           <ringGeometry args={[1.8, 2.2, 32]} />
-          <meshBasicMaterial color={0x00ff00} transparent opacity={0.8} side={THREE.DoubleSide} />
+          <meshBasicMaterial color={0x00ff00} transparent opacity={0.8} side={THREE.DoubleSide} depthTest={false} />
         </mesh>
       )}
 
       {/* Pulsing selection indicator - outer ring */}
       {selected && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} renderOrder={10}>
           <ringGeometry args={[2.5, 2.7, 32]} />
-          <meshBasicMaterial color={0x00ff00} transparent opacity={0.4} side={THREE.DoubleSide} />
+          <meshBasicMaterial color={0x00ff00} transparent opacity={0.4} side={THREE.DoubleSide} depthTest={false} />
         </mesh>
       )}
 

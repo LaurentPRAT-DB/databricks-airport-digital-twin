@@ -188,7 +188,9 @@ function GLTFAircraftInner({ modelConfig, airline, selected = false, flightPhase
           material.emissiveIntensity = 0.4;
         }
 
+        material.depthTest = false;
         child.material = material;
+        child.renderOrder = 10;
         child.castShadow = true;
         child.receiveShadow = true;
       }
@@ -228,9 +230,9 @@ function FallbackAircraft({ airline, selected = false, flightPhase }: Omit<GLTFA
  */
 function LoadingPlaceholder() {
   return (
-    <mesh>
+    <mesh renderOrder={10}>
       <boxGeometry args={[0.9, 0.3, 1.35]} />
-      <meshBasicMaterial color={0x666666} transparent opacity={0.3} />
+      <meshBasicMaterial color={0x666666} transparent opacity={0.3} depthTest={false} />
     </mesh>
   );
 }

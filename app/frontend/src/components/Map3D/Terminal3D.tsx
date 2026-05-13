@@ -15,13 +15,6 @@ const GLASS_FLOOR_HEIGHT_M = 5;
 const GLASS_COLOR = 0x87CEEB;
 const GLASS_OPACITY = 0.15;
 
-// OSM `aeroway=terminal` can return the entire terminal complex area (building +
-// aprons + stands) rather than just the building footprint. Extruding these as tall
-// 3D buildings causes aircraft to render inside walls. For oversized polygons,
-// render only a low flat slab so the footprint is visible without blocking aircraft.
-const MAX_BUILDING_SHORT_SIDE_M = 80;
-const OVERSIZED_SLAB_HEIGHT_M = 2;
-
 interface Terminal3DProps {
   terminal: OSMTerminal;
   airportCenter?: { lat: number; lon: number };
@@ -36,10 +29,6 @@ interface Terminal3DProps {
  */
 export function Terminal3D({ terminal, airportCenter }: Terminal3DProps) {
   const { dimensions } = terminal;
-
-  // Oversized polygons: render as low slab instead of tall building
-  const shortSide = Math.min(dimensions.width, dimensions.depth);
-  const isOversized = shortSide > MAX_BUILDING_SHORT_SIDE_M;
 
   // Build shape and center position from geo or fallback polygon
   const { shape, centerPos, isExtruded } = useMemo(() => {
@@ -85,36 +74,26 @@ export function Terminal3D({ terminal, airportCenter }: Terminal3DProps) {
     return { shape: null, centerPos: [terminal.position.x, 0, terminal.position.z] as [number, number, number], isExtruded: false };
   }, [terminal, dimensions, airportCenter?.lat, airportCenter?.lon]);
 
-  // Oversized polygons: low slab only; normal: glass ground floor + solid upper
-  const effectiveHeight = isOversized ? OVERSIZED_SLAB_HEIGHT_M : dimensions.height;
-  const glassHeight = Math.min(GLASS_FLOOR_HEIGHT_M, effectiveHeight) * METERS_TO_SCENE_UNITS;
-  const solidHeight = isOversized
-    ? 0
-    : Math.max(0, (effectiveHeight - GLASS_FLOOR_HEIGHT_M)) * METERS_TO_SCENE_UNITS;
+  // Split into transparent ground floor + solid upper floors
+  const glassHeight = Math.min(GLASS_FLOOR_HEIGHT_M, dimensions.height) * METERS_TO_SCENE_UNITS;
+  const solidHeight = Math.max(0, (dimensions.height - GLASS_FLOOR_HEIGHT_M)) * METERS_TO_SCENE_UNITS;
 
   const rotation: [number, number, number] = isExtruded ? [-Math.PI / 2, 0, 0] : [0, 0, 0];
 
   if (!shape) {
     // Box fallback for terminals without polygon data
-    const h = effectiveHeight * METERS_TO_SCENE_UNITS;
     return (
       <mesh
-        position={[centerPos[0], h / 2, centerPos[2]]}
+        position={[centerPos[0], dimensions.height * METERS_TO_SCENE_UNITS / 2, centerPos[2]]}
         castShadow
         receiveShadow
       >
         <boxGeometry args={[
           dimensions.width * METERS_TO_SCENE_UNITS,
-          h,
+          dimensions.height * METERS_TO_SCENE_UNITS,
           dimensions.depth * METERS_TO_SCENE_UNITS,
         ]} />
-        <meshStandardMaterial
-          color={TERMINAL_COLOR}
-          side={THREE.DoubleSide}
-          flatShading
-          transparent={isOversized}
-          opacity={isOversized ? 0.3 : 1}
-        />
+        <meshStandardMaterial color={TERMINAL_COLOR} side={THREE.DoubleSide} flatShading />
       </mesh>
     );
   }
@@ -125,14 +104,14 @@ export function Terminal3D({ terminal, airportCenter }: Terminal3DProps) {
       <mesh position={centerPos} rotation={rotation}>
         <extrudeGeometry args={[shape, { steps: 1, depth: glassHeight, bevelEnabled: false }]} />
         <meshStandardMaterial
-          color={isOversized ? TERMINAL_COLOR : GLASS_COLOR}
+          color={GLASS_COLOR}
           transparent
-          opacity={isOversized ? 0.3 : GLASS_OPACITY}
+          opacity={GLASS_OPACITY}
           side={THREE.DoubleSide}
           depthWrite={false}
         />
       </mesh>
-      {/* Upper floors — solid opaque (only for properly-sized buildings) */}
+      {/* Upper floors — solid opaque */}
       {solidHeight > 0 && (
         <mesh
           position={[centerPos[0], glassHeight, centerPos[2]]}
