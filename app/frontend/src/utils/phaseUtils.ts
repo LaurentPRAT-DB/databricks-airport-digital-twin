@@ -33,6 +33,11 @@ export function isDeparturePhase(phase: Flight['flight_phase']): boolean {
     || phase === 'climbing';
 }
 
+/** True if the phase is high-altitude enroute/cruise. */
+export function isEnroutePhase(phase: Flight['flight_phase']): boolean {
+  return phase === 'enroute' || phase === 'cruising';
+}
+
 /** Hex colors for flight phase markers (2D map). */
 export const PHASE_COLORS: Record<string, string> = {
   // Ground (gray family)

@@ -23,8 +23,8 @@ export const mockFlights = [
   {
     icao24: 'b67890',
     callsign: 'DAL456',
-    latitude: 37.5100,
-    longitude: -122.250,
+    latitude: 37.0000,
+    longitude: -121.500,
     altitude: 35000,
     velocity: 450,
     heading: 180,

@@ -47,7 +47,7 @@ export function FlightProvider({
 }) {
   const { flights: liveFlights, isLoading, error, lastUpdated, dataSource: liveDataSource } = useFlights();
 
-  const { currentAirport } = useAirportConfigContext();
+  const { currentAirport, getAirportCenter } = useAirportConfigContext();
 
   // Data mode: 'simulation' (default) or 'live' (OpenSky)
   const [dataMode, setDataModeState] = useState<DataMode>('simulation');
@@ -162,11 +162,29 @@ export function FlightProvider({
   // Phase filter state
   const [hiddenPhases, setHiddenPhasesState] = useState<Set<string>>(new Set());
 
-  // Flights filtered by visible phases
+  // Store selection by icao24 ID so it persists across data refreshes
+  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
+
+  // Flights filtered by visible phases + enroute proximity filter
   const filteredFlights = useMemo(() => {
-    if (hiddenPhases.size === 0) return flights;
-    return flights.filter(f => !hiddenPhases.has(f.flight_phase));
-  }, [flights, hiddenPhases]);
+    let result = flights;
+
+    if (hiddenPhases.size > 0) {
+      result = result.filter(f => !hiddenPhases.has(f.flight_phase));
+    }
+
+    // Hide enroute/cruising flights near the airport (~10nm) unless selected
+    const center = getAirportCenter();
+    result = result.filter(f => {
+      if (f.flight_phase !== 'enroute' && f.flight_phase !== 'cruising') return true;
+      if (f.icao24 === selectedFlightId) return true;
+      const dLat = Math.abs(f.latitude - center.lat);
+      const dLon = Math.abs(f.longitude - center.lon);
+      return dLat > 0.165 || dLon > 0.165; // ~10nm
+    });
+
+    return result;
+  }, [flights, hiddenPhases, selectedFlightId, getAirportCenter]);
 
   const togglePhase = useCallback((phase: string) => {
     setHiddenPhasesState(prev => {
@@ -180,9 +198,6 @@ export function FlightProvider({
   const setHiddenPhases = useCallback((phases: Set<string>) => {
     setHiddenPhasesState(phases);
   }, []);
-
-  // Store selection by icao24 ID so it persists across data refreshes
-  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   // Trajectory display toggle
   const [showTrajectory, setShowTrajectoryState] = useState(false);
 
