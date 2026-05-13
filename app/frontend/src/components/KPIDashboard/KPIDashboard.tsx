@@ -34,9 +34,9 @@ const CATEGORY_LABELS: Record<string, string> = {
 function KPICardComponent({ card }: { card: KPICard }) {
   const colors = COLOR_MAP[card.color] || COLOR_MAP.slate;
   return (
-    <div className={`rounded-lg border p-4 text-center ${colors.bg}`}>
-      <div className={`text-2xl font-bold ${colors.text}`}>{card.value}</div>
-      <div className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">{card.label}</div>
+    <div className={`rounded-lg border px-2 py-3 text-center min-w-0 ${colors.bg}`}>
+      <div className={`text-lg lg:text-2xl font-bold truncate ${colors.text}`}>{card.value}</div>
+      <div className="text-[10px] lg:text-xs text-slate-500 font-medium uppercase tracking-wider mt-1 truncate">{card.label}</div>
     </div>
   );
 }
@@ -201,7 +201,7 @@ export default function KPIDashboard({ onClose }: { onClose: () => void }) {
           {dashboard && !isLoading && (
             <>
               {/* KPI Cards — always visible */}
-              <div className="grid grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
+              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-2 lg:gap-3 mb-6">
                 {dashboard.kpi_cards.map((card) => (
                   <KPICardComponent key={card.label} card={card} />
                 ))}
