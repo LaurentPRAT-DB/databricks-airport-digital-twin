@@ -592,7 +592,8 @@ async def get_logs(
     }
 
 
-BUILD_NUMBER = "2026-03-26-001"
+_build_number_file = Path(__file__).resolve().parent.parent.parent / "BUILD_NUMBER"
+BUILD_NUMBER = _build_number_file.read_text().strip() if _build_number_file.exists() else "dev"
 _git_commit_file = Path(__file__).resolve().parent.parent.parent / "GIT_COMMIT"
 GIT_COMMIT = _git_commit_file.read_text().strip() if _git_commit_file.exists() else "unknown"
 _APP_START_TIME = datetime.now(timezone.utc)

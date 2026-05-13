@@ -155,8 +155,9 @@ if [[ -n "$UC_CATALOG" && -n "$UC_SCHEMA" ]]; then
   fi
 fi
 
-# Write current git SHA so /api/version shows the deployed commit
+# Write current git SHA and build number so /api/version shows the deployed commit
 git rev-parse --short HEAD > GIT_COMMIT 2>/dev/null || true
+git rev-list --count HEAD > BUILD_NUMBER 2>/dev/null || true
 
 # ── Step 1b: Clean stale frontend assets + DABs bundle deploy ────────
 # DABs doesn't delete old hashed asset files when new ones replace them,

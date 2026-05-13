@@ -76,7 +76,13 @@ check "Weather"         "$APP_URL/api/weather/current"       'has("temperature")
 check "GSE"             "$APP_URL/api/gse/status"            '. != null'
 check "Baggage"         "$APP_URL/api/baggage/stats"         '. != null'
 check "Frontend"        "$APP_URL/"                          ''
-check "Version"         "$APP_URL/api/version"               'has("build_number") or has("git_commit")'
+check "Version"         "$APP_URL/api/version"               'has("build_number") and has("git_commit")'
+
+# Verify deployed commit matches what was pushed
+EXPECTED_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || true)
+if [[ -n "$EXPECTED_COMMIT" ]]; then
+  check "Version match"  "$APP_URL/api/version"              ".git_commit == \"$EXPECTED_COMMIT\""
+fi
 
 # ── Deep verification: simulate a real user session ──────────────────
 # Skip deep checks if any basic check was skipped (OAuth issue) or already failing

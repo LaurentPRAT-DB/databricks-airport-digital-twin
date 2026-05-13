@@ -158,6 +158,10 @@ screenshots/
 *credentials*.json
 *secret*
 
+# CI-generated build metadata (written by ci-deploy.sh)
+/GIT_COMMIT
+/BUILD_NUMBER
+
 # Graphify output
 graphify-out/
 
