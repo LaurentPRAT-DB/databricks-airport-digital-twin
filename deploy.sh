@@ -56,6 +56,10 @@ run_sql() {
 echo "═══ Airport Digital Twin — Full Deploy (target: $TARGET) ═══"
 echo ""
 
+# ── Step 0: Write build metadata for /api/version ───────────────────
+git rev-parse --short HEAD > GIT_COMMIT 2>/dev/null || true
+git rev-list --count HEAD > BUILD_NUMBER 2>/dev/null || true
+
 # ── Step 1: Build frontend ───────────────────────────────────────────
 echo "Step 1: Build frontend"
 if [[ -n "$SKIP_BUILD" ]]; then
