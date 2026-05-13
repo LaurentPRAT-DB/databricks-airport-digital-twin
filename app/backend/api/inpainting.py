@@ -80,9 +80,7 @@ def _parse_tile_coords(url: str) -> tuple[int, int, int] | None:
 @inpainting_router.get("/status")
 async def inpainting_status(request: Request):
     """Health check for the inpainting serving endpoint + cache stats."""
-    lakebase = get_lakebase_service()
-    cache_stats = lakebase.get_tile_cache_stats()
-
+    # Check serving endpoint first (fast) — don't block on Lakebase
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             host = _DATABRICKS_HOST.rstrip("/")
@@ -94,25 +92,37 @@ async def inpainting_status(request: Request):
             if resp.status_code == 200:
                 data = resp.json()
                 state = data.get("state", {}).get("ready", "UNKNOWN")
-                return {
+                result = {
                     "status": "ok",
                     "endpoint": _SERVING_ENDPOINT_NAME,
                     "ready": state,
-                    "cache": cache_stats,
                 }
-            return {
-                "status": "error",
-                "endpoint": _SERVING_ENDPOINT_NAME,
-                "http_status": resp.status_code,
-                "cache": cache_stats,
-            }
+            else:
+                result = {
+                    "status": "error",
+                    "endpoint": _SERVING_ENDPOINT_NAME,
+                    "http_status": resp.status_code,
+                }
     except Exception as e:
-        return {
+        result = {
             "status": "error",
             "endpoint": _SERVING_ENDPOINT_NAME,
             "error": str(e),
-            "cache": cache_stats,
         }
+
+    # Fetch cache stats in a thread — Lakebase connection is synchronous
+    # and can hang if credentials are refreshing or endpoint is cold
+    import asyncio
+    try:
+        lakebase = get_lakebase_service()
+        result["cache"] = await asyncio.wait_for(
+            asyncio.get_event_loop().run_in_executor(None, lakebase.get_tile_cache_stats),
+            timeout=5.0,
+        )
+    except Exception:
+        result["cache"] = None
+
+    return result
 
 
 # Minimal 1x1 white PNG for wake-up ping (68 bytes)
