@@ -347,6 +347,7 @@ function InpaintingTileLayer({ airportIcao, onStaleDetected, onWarmingUp, onTile
     const layer = new (InpaintingGridLayer as unknown as new (opts: object) => L.GridLayer)({
       attribution: SAT_ATTR,
       maxNativeZoom: 17,
+      zIndex: 10,
       airportIcao,
       onStaleDetected: () => staleRef.current?.(),
       onWarmingUp: () => warmRef.current?.(),
