@@ -4,8 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   define: {
-    __APP_VERSION__: JSON.stringify('0.0.0-test'),
-    __BUILD_NUMBER__: JSON.stringify('0'),
+    __APP_VERSION__: JSON.stringify('1.0.0-test'),
     __BUILD_TIME__: JSON.stringify('2026-01-01T00:00:00.000Z'),
   },
   plugins: [react()],

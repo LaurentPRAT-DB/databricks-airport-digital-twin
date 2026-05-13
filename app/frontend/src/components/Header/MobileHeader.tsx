@@ -197,7 +197,7 @@ export default function MobileHeader({ onShowFIDS, onOpenChat }: MobileHeaderPro
 
             {/* Version */}
             <div className="text-[10px] text-slate-500 pt-2 border-t border-slate-700">
-              Airport Digital Twin v{__APP_VERSION__} · #{__BUILD_NUMBER__}
+              Airport Digital Twin v{__APP_VERSION__}
             </div>
           </div>
         </>

@@ -20,11 +20,10 @@ describe('Header', () => {
       expect(title).toHaveTextContent(/airport digital twin/i)
     })
 
-    it('displays version and build number', () => {
+    it('displays version', () => {
       render(<Header />)
-      // vitest.config.ts defines __APP_VERSION__ = '0.0.0-test' and __BUILD_NUMBER__ = '0'
-      expect(screen.getByText(/v0\.0\.0-test/)).toBeInTheDocument()
-      expect(screen.getByText(/#0/)).toBeInTheDocument()
+      // vitest.config.ts defines __APP_VERSION__ = '1.0.0-test'
+      expect(screen.getByText(/v1\.0\.0-test/)).toBeInTheDocument()
     })
 
     it('shows build time in title tooltip', () => {

@@ -1,6 +1,6 @@
 [project]
 name = "airport-digital-twin"
-version = "0.1.0"
+version = "1.0.0"
 description = "Airport Digital Twin - Real-time flight data visualization with Databricks"
 readme = "README.md"
 requires-python = ">=3.10"

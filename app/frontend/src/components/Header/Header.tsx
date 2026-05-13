@@ -44,7 +44,7 @@ export default function Header({ onShowFIDS, onShowKPI, simulationControls, data
           className="text-xs text-slate-500"
           title={`Built ${__BUILD_TIME__}`}
         >
-          v{__APP_VERSION__} · #{__BUILD_NUMBER__}
+          v{__APP_VERSION__}
         </span>
         {initTimings && typeof initTimings.total_ready === 'number' && (
           <span

@@ -9,13 +9,14 @@ let buildNumber = '0'
 try {
   buildNumber = execSync('git rev-list --count HEAD', { encoding: 'utf-8' }).trim()
 } catch { /* not in a git repo */ }
+const [major, minor] = pkg.version.split('.')
+const appVersion = `${major}.${minor}.${buildNumber}`
 const buildTime = new Date().toISOString()
 
 // https://vitejs.dev/config/
 export default defineConfig({
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
-    __BUILD_NUMBER__: JSON.stringify(buildNumber),
+    __APP_VERSION__: JSON.stringify(appVersion),
     __BUILD_TIME__: JSON.stringify(buildTime),
   },
   plugins: [react()],

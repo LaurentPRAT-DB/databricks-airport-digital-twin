@@ -476,7 +476,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Airport Digital Twin API",
     description="Real-time flight data API for the Airport Digital Twin visualization",
-    version="0.1.0",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
