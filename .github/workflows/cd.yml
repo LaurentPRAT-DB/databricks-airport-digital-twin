@@ -90,12 +90,16 @@ jobs:
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Build frontend
+      - name: Install frontend dependencies
+        working-directory: app/frontend
         run: |
-          cd app/frontend
-          npm cache clean --force
-          npm ci --no-audit --no-fund
-          npm run build
+          rm -rf node_modules
+          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+          test -f node_modules/.bin/tsc || { echo "::error::npm install failed — tsc not found"; exit 1; }
+
+      - name: Build frontend
+        working-directory: app/frontend
+        run: npx tsc && npx vite build
 
       - name: Deploy via DABs
         id: deploy
