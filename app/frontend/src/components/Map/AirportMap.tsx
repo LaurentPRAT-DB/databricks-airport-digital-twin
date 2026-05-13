@@ -308,19 +308,17 @@ const InpaintingGridLayer = L.GridLayer.extend({
 
     fetch(`/api/inpainting/clean-tile?${cacheParams.toString()}`, { method: 'POST' })
       .then((resp) => {
+        // 204 = cache miss (no content) — must check before resp.ok since 204 is in the 2xx range
+        if (resp.status === 204) {
+          return fullInpaint();
+        }
         if (resp.ok) {
           const isStale = resp.headers.get('X-Cache') === 'STALE';
           if (isStale) opts.onStaleDetected?.();
-          // Cache hit — emit cached event
           emitEvent('cached', resp);
           resp.blob().then(loadBlob);
-          // Background re-inpaint when satellite imagery has been updated
           if (isStale) fullInpaint().catch(() => {});
           return;
-        }
-        if (resp.status === 204) {
-          // No cache — Phase 2: full inpaint (may take minutes on cold start)
-          return fullInpaint();
         }
         throw new Error(`HTTP ${resp.status}`);
       })
