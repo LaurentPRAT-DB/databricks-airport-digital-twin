@@ -151,3 +151,52 @@ body.cursor-pointer {
 .markdown-report hr { border: none; border-top: 1px solid #e2e8f0; margin: 1.5em 0; }
 .markdown-report a { color: #2563eb; text-decoration: underline; }
 .markdown-report img { max-width: 100%; border-radius: 6px; }
+
+/* Inpainting overlay styles */
+@keyframes inpainting-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.inpainting-tile-loading {
+  animation: inpainting-pulse 1.2s ease-in-out infinite;
+}
+
+.inpainting-det-tooltip {
+  background: rgba(239, 68, 68, 0.9) !important;
+  border: 1px solid #dc2626 !important;
+  color: #fff !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  padding: 1px 5px !important;
+  border-radius: 3px !important;
+  white-space: nowrap !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+}
+.inpainting-det-tooltip::before { border-top-color: rgba(239, 68, 68, 0.9) !important; }
+
+.inpainting-badge {
+  pointer-events: none !important;
+}
+
+.inpainting-badge-inner {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+.inpainting-badge-inner.cache-hit {
+  background: rgba(16, 185, 129, 0.9);
+  color: #fff;
+}
+
+.inpainting-badge-inner.cache-miss {
+  background: rgba(30, 41, 59, 0.9);
+  color: #e2e8f0;
+}

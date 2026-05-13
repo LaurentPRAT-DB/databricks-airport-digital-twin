@@ -8,6 +8,7 @@ import MobileHeader from './components/Header/MobileHeader';
 import FlightList from './components/FlightList/FlightList';
 // Lazy load 2D map (Leaflet) to reduce initial bundle size — header + flight list render first
 const AirportMap = lazy(() => import('./components/Map/AirportMap'));
+import type { TileEvent } from './components/Map/InpaintingOverlay';
 import FlightDetail from './components/FlightDetail/FlightDetail';
 import GateStatus from './components/GateStatus/GateStatus';
 import FIDS from './components/FIDS/FIDS';
@@ -187,6 +188,7 @@ function ViewToggle({
   airportIcao,
   staleTileCount = 0,
   warmingUp = false,
+  tileActivityLog = [],
 }: {
   viewMode: ViewMode;
   onToggle: (mode: ViewMode) => void;
@@ -197,6 +199,7 @@ function ViewToggle({
   airportIcao?: string;
   staleTileCount?: number;
   warmingUp?: boolean;
+  tileActivityLog?: TileEvent[];
 }) {
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>('unknown');
   const [statusMessage, setStatusMessage] = useState('');
@@ -601,6 +604,32 @@ function ViewToggle({
               <span>Inpainting active — pan or zoom to process tiles</span>
             </div>
           )}
+
+          {/* Tile activity log */}
+          {tileActivityLog.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-slate-600/50">
+              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Recent tiles</div>
+              <div className="max-h-[120px] overflow-y-auto space-y-0.5 font-mono text-[10px] leading-relaxed">
+                {tileActivityLog.slice(0, 20).map((evt) => (
+                  <div key={`${evt.id}-${evt.timestamp}`} className="flex items-center gap-1.5">
+                    <span className={evt.cacheStatus === 'HIT' ? 'text-emerald-400' : evt.cacheStatus === 'STALE' ? 'text-amber-400' : 'text-blue-400'}>
+                      {evt.cacheStatus === 'HIT' ? '●' : evt.cacheStatus === 'STALE' ? '◐' : '⚡'}
+                    </span>
+                    <span className="text-slate-400">{evt.zoom}/{evt.tileX}/{evt.tileY}</span>
+                    <span className={evt.cacheStatus === 'HIT' ? 'text-emerald-400/80' : 'text-slate-500'}>
+                      {evt.cacheStatus}
+                    </span>
+                    {evt.aircraftCount > 0 && (
+                      <span className="text-orange-400">{evt.aircraftCount} aircraft</span>
+                    )}
+                    {evt.processingMs != null && (
+                      <span className="text-slate-500">{evt.processingMs.toLocaleString()}ms</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -634,6 +663,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [inpainting, setInpainting] = useState(false);
   const [staleTileCount, setStaleTileCount] = useState(0);
   const [inpaintingWarmingUp, setInpaintingWarmingUp] = useState(false);
+  const [tileActivityLog, setTileActivityLog] = useState<TileEvent[]>([]);
   const [showFIDS, setShowFIDS] = useState(false);
   const [showKPI, setShowKPI] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
@@ -699,6 +729,14 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
 
   const handleInpaintingWarmingUp = useCallback(() => {
     setInpaintingWarmingUp(true);
+  }, []);
+
+  const handleTileActivity = useCallback((event: TileEvent) => {
+    if (event.phase === 'loading') return;
+    setTileActivityLog((prev) => {
+      const next = [event, ...prev.filter((e) => e.id !== event.id)];
+      return next.slice(0, 50);
+    });
   }, []);
 
   // Turn off clean tiles (inpainting) when switching to recorded data mode
@@ -867,7 +905,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   // Shared map view (used in both desktop and mobile layouts)
   const mapView = (
     <div className="flex-1 overflow-hidden relative">
-      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} staleTileCount={staleTileCount} warmingUp={inpaintingWarmingUp} />
+      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} staleTileCount={staleTileCount} warmingUp={inpaintingWarmingUp} tileActivityLog={tileActivityLog} />
       <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
         <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>
           <AirportMap
@@ -878,6 +916,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
             airportIcao={currentAirport ?? undefined}
             onStaleDetected={handleStaleTileDetected}
             onWarmingUp={handleInpaintingWarmingUp}
+            onTileActivity={handleTileActivity}
           />
         </Suspense>
       </div>
