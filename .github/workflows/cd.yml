@@ -92,14 +92,16 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: app/frontend
+        env:
+          npm_config_registry: ${{ runner.environment == 'github-hosted' && 'https://registry.npmjs.org/' || 'https://npm-proxy.dev.databricks.com/' }}
         run: |
           rm -rf node_modules
-          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
-          test -f node_modules/.bin/tsc || { echo "::error::npm install failed — tsc not found"; exit 1; }
+          npm ci --no-audit --no-fund
+          test -d node_modules/typescript || { echo "::error::npm install failed — typescript not installed"; exit 1; }
 
       - name: Build frontend
         working-directory: app/frontend
-        run: npx tsc && npx vite build
+        run: ./node_modules/.bin/tsc && ./node_modules/.bin/vite build
 
       - name: Deploy via DABs
         id: deploy
