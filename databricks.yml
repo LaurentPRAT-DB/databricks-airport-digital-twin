@@ -16,6 +16,8 @@ sync:
     - pyproject.toml
     - databricks/**
     - resources/**
+    - BUILD_NUMBER
+    - GIT_COMMIT
   exclude:
     - node_modules/**
     - "*.pyc"
