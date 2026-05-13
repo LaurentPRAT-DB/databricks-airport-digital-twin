@@ -197,11 +197,19 @@ async def wake_endpoint(request: Request):
 @inpainting_router.get("/cache-stats")
 async def cache_stats():
     """Return tile cache statistics from Lakebase."""
-    lakebase = get_lakebase_service()
-    stats = lakebase.get_tile_cache_stats()
-    if stats:
-        return stats
-    return {"error": "Lakebase tile cache not available"}
+    try:
+        lakebase = get_lakebase_service()
+        stats = await asyncio.wait_for(
+            asyncio.get_event_loop().run_in_executor(None, lakebase.get_tile_cache_stats),
+            timeout=5.0,
+        )
+        if stats:
+            return stats
+    except asyncio.TimeoutError:
+        return {"error": "Lakebase tile cache timed out", "total_tiles": 0}
+    except Exception as e:
+        logger.warning("cache-stats failed: %s", e)
+    return {"error": "Lakebase tile cache not available", "total_tiles": 0}
 
 
 @inpainting_router.delete("/cache")
