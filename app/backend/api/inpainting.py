@@ -162,9 +162,16 @@ async def wake_endpoint(request: Request):
                 status_url, headers={"Authorization": f"Bearer {token}"}
             )
             if resp.status_code == 200:
-                state = resp.json().get("state", {}).get("ready", "UNKNOWN")
+                data = resp.json()
+                state = data.get("state", {}).get("ready", "UNKNOWN")
                 if state == "READY":
-                    return {"status": "ready", "message": "Endpoint is already running"}
+                    entities = data.get("config", {}).get("served_entities", [])
+                    is_cold = any(
+                        "scaled to zero" in (e.get("state", {}).get("deployment_state_message", "") or "").lower()
+                        for e in entities
+                    )
+                    if not is_cold:
+                        return {"status": "ready", "message": "Endpoint is already running"}
     except httpx.HTTPError:
         pass  # Proceed to wake attempt anyway
 

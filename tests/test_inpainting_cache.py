@@ -310,6 +310,30 @@ class TestInpaintingStatusEndpoint:
         assert "cache" in data
         assert data["cache"]["total_tiles"] == 10
 
+    def test_status_reports_scaled_to_zero(self, client, mock_lakebase):
+        with patch("app.backend.api.inpainting.get_lakebase_service", return_value=mock_lakebase):
+            with patch("app.backend.api.inpainting._DATABRICKS_HOST", "https://workspace.databricks.com"):
+                with patch("app.backend.api.inpainting.httpx.AsyncClient") as mock_httpx:
+                    mock_resp = MagicMock()
+                    mock_resp.status_code = 200
+                    mock_resp.json.return_value = {
+                        "state": {"ready": "READY"},
+                        "config": {"served_entities": [
+                            {"state": {"deployment_state": "DEPLOYMENT_READY", "deployment_state_message": "Scaled to zero"}}
+                        ]},
+                    }
+                    mock_client_instance = AsyncMock()
+                    mock_client_instance.get.return_value = mock_resp
+                    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+                    mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+                    mock_httpx.return_value = mock_client_instance
+
+                    response = client.get("/api/inpainting/status")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ready"] == "READY"
+        assert data["scaled_to_zero"] is True
+
 
 class TestInpaintingCacheStatsEndpoint:
     """Tests for GET /api/inpainting/cache-stats."""
@@ -628,3 +652,32 @@ class TestWakeEndpoint:
 
         assert response.status_code == 200
         assert response.json()["status"] == "ready"
+
+    def test_wake_scaled_to_zero_sends_ping(self, client):
+        """Wake when endpoint is scaled to zero sends ping and returns waking."""
+        with patch("app.backend.api.inpainting._get_auth_token", return_value="tok"):
+            with patch("app.backend.api.inpainting._DATABRICKS_HOST", "https://workspace.databricks.com"):
+                with patch("app.backend.api.inpainting.httpx.AsyncClient") as mock_httpx:
+                    mock_status_resp = MagicMock()
+                    mock_status_resp.status_code = 200
+                    mock_status_resp.json.return_value = {
+                        "state": {"ready": "READY"},
+                        "config": {"served_entities": [
+                            {"state": {"deployment_state": "DEPLOYMENT_READY", "deployment_state_message": "Scaled to zero"}}
+                        ]},
+                    }
+
+                    mock_wake_resp = MagicMock()
+                    mock_wake_resp.status_code = 200
+
+                    mock_client_instance = AsyncMock()
+                    mock_client_instance.get.return_value = mock_status_resp
+                    mock_client_instance.post.return_value = mock_wake_resp
+                    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+                    mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+                    mock_httpx.return_value = mock_client_instance
+
+                    response = client.post("/api/inpainting/wake")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "waking"
