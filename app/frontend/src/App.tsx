@@ -246,6 +246,10 @@ function ViewToggle({
       if (result === 'ready') {
         setEndpointStatus('ready');
         onInpaintingToggle(true);
+      } else if (result === 'scaled_to_zero') {
+        setEndpointStatus('waking');
+        setStatusMessage('Waking up inpainting endpoint... (2-5 min)');
+        handleWakeEndpoint();
       }
     })();
     return () => { cancelled = true; };
@@ -290,7 +294,7 @@ function ViewToggle({
     };
   }, [inpainting, satellite]);
 
-  const checkEndpointStatus = async (): Promise<'ready' | 'not_ready' | 'error'> => {
+  const checkEndpointStatus = async (): Promise<'ready' | 'scaled_to_zero' | 'not_ready' | 'error'> => {
     try {
       const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/inpainting/status`);
       if (!resp.ok) return 'error';
@@ -300,7 +304,10 @@ function ViewToggle({
         setStatusMessage(detail || 'Endpoint returned an error.');
         return 'error';
       }
-      if (data.ready === 'READY') return 'ready';
+      if (data.ready === 'READY') {
+        if (data.scaled_to_zero) return 'scaled_to_zero';
+        return 'ready';
+      }
       return 'not_ready';
     } catch {
       return 'error';
@@ -337,9 +344,13 @@ function ViewToggle({
       setEndpointStatus('ready');
       setStatusMessage('');
       onInpaintingToggle(true);
+    } else if (result === 'scaled_to_zero') {
+      setEndpointStatus('waking');
+      setStatusMessage('Endpoint is scaled to zero. Waking up...');
+      handleWakeEndpoint();
     } else if (result === 'not_ready') {
       setEndpointStatus('not_ready');
-      setStatusMessage('Inpainting endpoint is not running (scaled to zero).');
+      setStatusMessage('Inpainting endpoint is not running.');
     } else {
       setEndpointStatus('error');
       // checkEndpointStatus may have already set a detailed message (e.g. 403)

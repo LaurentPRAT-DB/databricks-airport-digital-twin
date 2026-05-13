@@ -92,10 +92,16 @@ async def inpainting_status(request: Request):
             if resp.status_code == 200:
                 data = resp.json()
                 state = data.get("state", {}).get("ready", "UNKNOWN")
+                entities = data.get("config", {}).get("served_entities", [])
+                scaled_to_zero = any(
+                    "scaled to zero" in (e.get("state", {}).get("deployment_state_message", "") or "").lower()
+                    for e in entities
+                )
                 result = {
                     "status": "ok",
                     "endpoint": _SERVING_ENDPOINT_NAME,
                     "ready": state,
+                    "scaled_to_zero": scaled_to_zero,
                 }
             else:
                 result = {

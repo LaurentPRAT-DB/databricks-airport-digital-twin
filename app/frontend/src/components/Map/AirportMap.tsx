@@ -228,9 +228,12 @@ const InpaintingGridLayer = L.GridLayer.extend({
       if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
     };
 
-    const fullInpaint = () =>
-      fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST' })
+    const fullInpaint = () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      return fetch(`/api/inpainting/clean-tile?${params.toString()}`, { method: 'POST', signal: controller.signal })
         .then((r) => {
+          clearTimeout(timer);
           if (r.status === 503) {
             opts.onWarmingUp?.();
             throw new Error('warming_up');
@@ -238,7 +241,13 @@ const InpaintingGridLayer = L.GridLayer.extend({
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           return r.blob();
         })
-        .then(loadBlob);
+        .then(loadBlob)
+        .catch((e) => {
+          clearTimeout(timer);
+          if (e.name === 'AbortError') opts.onWarmingUp?.();
+          throw e;
+        });
+    };
 
     // Phase 1: cache-only check (fast path)
     const cacheParams = new URLSearchParams(params);
