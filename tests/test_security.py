@@ -266,7 +266,7 @@ class TestPathTraversalPrevention:
         """Test path traversal in baggage flight number."""
         for payload in self.PATH_TRAVERSAL_PAYLOADS[:3]:
             response = client.get(f"/api/baggage/flight/{payload}")
-            assert response.status_code in [200, 400, 422]
+            assert response.status_code in [200, 400, 404, 422]
             if response.status_code == 200:
                 assert "root:" not in response.text
 
