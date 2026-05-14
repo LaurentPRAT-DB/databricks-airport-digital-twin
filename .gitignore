@@ -70,6 +70,7 @@ data/*
 # Exception: keep OSM airport configs for versioned, offline-capable startup
 !data/cache/
 data/cache/last_airport.txt
+data/cache/simulations/
 # Exception: keep fallback sample data for offline mode
 !data/fallback/
 # Exception: keep pre-generated demo simulation files
@@ -137,6 +138,7 @@ docs/email_*.md
 # Test coverage and results
 app/frontend/coverage/
 app/frontend/test-results/
+app/frontend/data/
 test-results/
 tests/output/
 
