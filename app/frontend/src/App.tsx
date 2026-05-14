@@ -178,6 +178,8 @@ type ViewMode = '2d' | '3d';
  */
 type EndpointStatus = 'unknown' | 'checking' | 'ready' | 'not_ready' | 'waking' | 'error';
 
+const INPAINTING_MIN_ZOOM = 17;
+
 function ViewToggle({
   viewMode,
   onToggle,
@@ -189,6 +191,7 @@ function ViewToggle({
   staleTileCount = 0,
   warmingUp = false,
   tileActivityLog = [],
+  mapZoom = 13,
 }: {
   viewMode: ViewMode;
   onToggle: (mode: ViewMode) => void;
@@ -200,6 +203,7 @@ function ViewToggle({
   staleTileCount?: number;
   warmingUp?: boolean;
   tileActivityLog?: TileEvent[];
+  mapZoom?: number;
 }) {
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>('unknown');
   const [statusMessage, setStatusMessage] = useState('');
@@ -467,7 +471,7 @@ function ViewToggle({
           </svg>
           Satellite
         </button>
-        {satellite && (
+        {satellite && mapZoom >= INPAINTING_MIN_ZOOM && (
           <button
             onClick={handleCleanTilesClick}
             disabled={endpointStatus === 'checking'}
@@ -533,8 +537,8 @@ function ViewToggle({
         </div>
       )}
 
-      {/* Cache status panel — shown when inpainting is active */}
-      {inpainting && satellite && (
+      {/* Cache status panel — shown when inpainting is active and at working zoom */}
+      {inpainting && satellite && mapZoom >= INPAINTING_MIN_ZOOM && (
         <div className="bg-slate-800/90 backdrop-blur text-white rounded-lg shadow-md px-3 py-3 text-xs max-w-[300px]">
           {warmingUp && !processing && !cacheStats?.total_tiles ? (
             <div className="flex items-center gap-2">
@@ -905,7 +909,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   // Shared map view (used in both desktop and mobile layouts)
   const mapView = (
     <div className="flex-1 overflow-hidden relative">
-      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} staleTileCount={staleTileCount} warmingUp={inpaintingWarmingUp} tileActivityLog={tileActivityLog} />
+      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} staleTileCount={staleTileCount} warmingUp={inpaintingWarmingUp} tileActivityLog={tileActivityLog} mapZoom={viewport?.zoom ?? 13} />
       <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
         <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>
           <AirportMap

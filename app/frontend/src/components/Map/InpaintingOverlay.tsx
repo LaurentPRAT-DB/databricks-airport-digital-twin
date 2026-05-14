@@ -67,9 +67,9 @@ const PHASE_COLORS = {
 
 const PHASE_TTL = {
   loading: 60000,  // removed when phase advances, fallback 60s
-  detected: 2500,
-  done: 3500,
-  cached: 2000,
+  detected: 3000,
+  done: 5000,
+  cached: 4000,
 };
 
 export default function InpaintingOverlay({ events }: { events: TileEvent[] }) {
@@ -141,6 +141,26 @@ export default function InpaintingOverlay({ events }: { events: TileEvent[] }) {
         });
         rect.addTo(map);
         layers.push(rect);
+
+        // Show detection boxes on cached/done tiles too
+        if (event.detections.length > 0) {
+          for (const det of event.detections) {
+            const detBounds = detectionToLatLngBounds(det, bounds);
+            const box = L.rectangle(detBounds, {
+              color: '#f97316', // orange-500
+              weight: 2,
+              fillColor: '#f97316',
+              fillOpacity: 0.12,
+              dashArray: '4 3',
+            });
+            box.bindTooltip(
+              `${Math.round(det.confidence * 100)}%`,
+              { permanent: true, direction: 'top', className: 'inpainting-det-tooltip' }
+            );
+            box.addTo(map);
+            layers.push(box);
+          }
+        }
 
         // Info badge at tile center
         const center = bounds.getCenter();
