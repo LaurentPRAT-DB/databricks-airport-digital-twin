@@ -595,7 +595,11 @@ class TestT08NoTeleportation:
 
                 # Max possible distance: use the higher of the two speeds
                 max_speed_kts = max(prev["velocity"], curr["velocity"], 1)
-                max_dist_nm = (max_speed_kts / 3600) * dt * 3.0  # 3x tolerance for sim jitter
+                # Ground phases (taxi) can have speed spikes between recording
+                # intervals that aren't captured — use higher tolerance
+                is_ground = curr["phase"] in ("taxi_to_runway", "taxi_to_gate")
+                tolerance = 5.0 if is_ground else 3.0
+                max_dist_nm = (max_speed_kts / 3600) * dt * tolerance
 
                 if dist_nm > max_dist_nm and dist_nm > 1.0:
                     violations.append(
