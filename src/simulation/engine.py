@@ -1123,13 +1123,31 @@ class SimulationEngine:
                         )
 
         elif state.phase == FlightPhase.TAXI_TO_RUNWAY:
-            # Jump to takeoff — reset velocity for proper roll start
-            state.phase = FlightPhase.TAKEOFF
-            state.takeoff_subphase = "lineup"
-            state.velocity = 0
-            state.phase_progress = 0.0
-            state.takeoff_roll_dist_ft = 0.0
-            self._phase_time[icao24] = ("takeoff", 0.0)
+            from src.ingestion.fallback import TAXI_WAYPOINTS_DEPARTURE
+            from src.ingestion._approach_departure import _get_takeoff_runway_geometry
+            taxi_wps = state.taxi_route or TAXI_WAYPOINTS_DEPARTURE
+            already_at_hold = state.waypoint_index >= len(taxi_wps)
+
+            if already_at_hold:
+                # Already at hold line but runway never cleared — force takeoff
+                state.phase = FlightPhase.TAKEOFF
+                state.takeoff_subphase = "lineup"
+                state.velocity = 0
+                state.phase_progress = 0.0
+                state.takeoff_roll_dist_ft = 0.0
+                self._phase_time[icao24] = ("takeoff", 0.0)
+            else:
+                # Still traversing waypoints — snap to hold line, stay in taxi
+                if taxi_wps:
+                    last_wp = taxi_wps[-1]
+                    state.latitude, state.longitude = last_wp[1], last_wp[0]
+                state.waypoint_index = len(taxi_wps)
+                state.departure_queue_hold_s = 0
+                state.departure_queue_set = True
+                state.velocity = 0
+                _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
+                state.heading = dep_hdg
+                self._phase_time[icao24] = ("taxi_to_runway", 0.0)
 
         elif state.phase == FlightPhase.PUSHBACK:
             # Finish pushback, move to taxi

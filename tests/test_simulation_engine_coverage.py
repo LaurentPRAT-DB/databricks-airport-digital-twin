@@ -177,9 +177,25 @@ class TestForceAdvance:
         assert state.waypoint_index == 0
         _flight_states.pop("sim00097", None)
 
-    def test_taxi_to_runway_advances_to_takeoff(self):
+    def test_taxi_to_runway_snaps_to_hold_line_first(self):
         engine = self._make_engine()
         state = _make_flight_state("sim00096", FlightPhase.TAXI_TO_RUNWAY)
+        _flight_states["sim00096"] = state
+        engine._phase_counts["taxi_to_runway"] = 1
+
+        engine._force_advance("sim00096", state)
+
+        # First force-advance snaps to hold line, stays in taxi
+        assert state.phase == FlightPhase.TAXI_TO_RUNWAY
+        assert state.velocity == 0
+        assert state.departure_queue_hold_s == 0
+        assert state.departure_queue_set is True
+        _flight_states.pop("sim00096", None)
+
+    def test_taxi_to_runway_advances_to_takeoff_when_already_at_hold(self):
+        engine = self._make_engine()
+        state = _make_flight_state("sim00096", FlightPhase.TAXI_TO_RUNWAY)
+        state.waypoint_index = 999  # Already past all waypoints
         _flight_states["sim00096"] = state
         engine._phase_counts["taxi_to_runway"] = 1
 
@@ -274,6 +290,7 @@ class TestForceAdvance:
     def test_force_advance_updates_phase_counters(self):
         engine = self._make_engine()
         state = _make_flight_state("sim00090", FlightPhase.TAXI_TO_RUNWAY)
+        state.waypoint_index = 999  # Already at hold line
         _flight_states["sim00090"] = state
         engine._phase_counts["taxi_to_runway"] = 1
         engine._phase_counts["takeoff"] = 0
