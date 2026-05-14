@@ -858,3 +858,142 @@ async def get_simulation_data(
             "end_hour": end_hour if not end_time else None,
         },
     }
+
+
+@simulation_router.get("/debug-events")
+async def debug_simulation_events(
+    airport: str = Query(description="Airport ICAO code (e.g., KSFO)"),
+) -> dict:
+    """Debug endpoint: check seekability of go-around/diversion events.
+
+    Replicates the frontend seekToFlight logic to identify which events
+    would fail to select their flight on the map.
+    """
+    from app.backend.services.demo_simulation_service import get_demo_simulation_service
+    from collections import defaultdict
+
+    service = get_demo_simulation_service()
+    path = service.get_demo_path(airport.upper())
+    if path is None:
+        raise HTTPException(status_code=404, detail=f"No demo loaded for {airport}")
+
+    with open(path) as f:
+        data = json.load(f)
+
+    config = data.get("config", {})
+    snapshots = data.get("position_snapshots", [])
+    scenario_events = data.get("scenario_events", [])
+
+    frames: dict[str, list] = defaultdict(list)
+    for snap in snapshots:
+        frames[snap.get("time", "")].append(snap)
+    frame_timestamps = sorted(frames.keys())
+
+    airport_center = config.get("airport_center")
+    center_lat = airport_center.get("latitude") if airport_center else None
+    center_lon = airport_center.get("longitude") if airport_center else None
+
+    MAX_AIRBORNE_DIST_SQ = 0.4 * 0.4
+
+    target_events = [
+        e for e in scenario_events
+        if e.get("event_type") in ("go_around", "diversion")
+    ]
+
+    results = []
+    failures = []
+
+    for evt in target_events:
+        icao24 = evt.get("icao24", "")
+        callsign = evt.get("callsign", "")
+        event_time = evt["time"]
+        evt_type = evt["event_type"]
+
+        try:
+            target_dt = datetime.fromisoformat(event_time.replace("Z", "+00:00"))
+        except ValueError:
+            results.append({"event_type": evt_type, "time": event_time, "icao24": icao24,
+                            "callsign": callsign, "seekable": False, "reason": "INVALID_TIME"})
+            failures.append(f"{icao24}: INVALID_TIME")
+            continue
+
+        target_ms = target_dt.timestamp() * 1000
+        padding_ms = 120_000 if evt_type == "go_around" else 60_000
+        seek_target_ms = target_ms - padding_ms
+
+        seek_idx = 0
+        best_diff = float("inf")
+        for fi, ts in enumerate(frame_timestamps):
+            try:
+                ts_ms = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000
+            except ValueError:
+                continue
+            diff = abs(ts_ms - seek_target_ms)
+            if diff < best_diff:
+                best_diff = diff
+                seek_idx = fi
+
+        found_frame = None
+        found_snap = None
+        found_offset = 0
+        for offset in range(31):
+            for idx in ([seek_idx] if offset == 0 else [seek_idx - offset, seek_idx + offset]):
+                if idx < 0 or idx >= len(frame_timestamps):
+                    continue
+                ts = frame_timestamps[idx]
+                snaps = frames.get(ts, [])
+                match = next(
+                    (s for s in snaps if s.get("icao24") == icao24 or
+                     (callsign and s.get("callsign", "").replace(" ", "") == callsign)),
+                    None,
+                )
+                if match:
+                    found_frame = idx
+                    found_snap = match
+                    found_offset = offset
+                    break
+            if found_frame is not None:
+                break
+
+        if found_frame is None:
+            results.append({
+                "event_type": evt_type, "time": event_time, "icao24": icao24,
+                "callsign": callsign, "seekable": False,
+                "reason": "NOT_IN_FRAMES", "seek_frame_idx": seek_idx,
+                "padding_ms": padding_ms,
+            })
+            failures.append(f"{icao24} ({callsign}): NOT_IN_FRAMES")
+            continue
+
+        dist_deg = 0.0
+        would_be_filtered = False
+        if center_lat is not None and center_lon is not None and found_snap:
+            dlat = found_snap["latitude"] - center_lat
+            dlon = found_snap["longitude"] - center_lon
+            dist_sq = dlat * dlat + dlon * dlon
+            dist_deg = dist_sq ** 0.5
+            would_be_filtered = dist_sq > MAX_AIRBORNE_DIST_SQ
+
+        seekable = not would_be_filtered
+        entry = {
+            "event_type": evt_type, "time": event_time, "icao24": icao24,
+            "callsign": callsign, "seekable": seekable,
+            "seek_frame_idx": found_frame, "seek_offset": found_offset,
+            "found_phase": found_snap.get("phase") if found_snap else None,
+            "found_distance_deg": round(dist_deg, 4),
+            "would_be_filtered": would_be_filtered,
+            "padding_ms": padding_ms,
+        }
+        results.append(entry)
+        if not seekable:
+            failures.append(f"{icao24} ({callsign}): DIST_FILTERED dist={dist_deg:.3f}°")
+
+    return {
+        "airport": airport.upper(),
+        "total_frames": len(frame_timestamps),
+        "total_events": len(target_events),
+        "airport_center": airport_center,
+        "events": results,
+        "failures": len(failures),
+        "failure_reasons": failures,
+    }
