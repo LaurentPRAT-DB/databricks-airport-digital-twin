@@ -249,25 +249,30 @@ const InpaintingGridLayer = L.GridLayer.extend({
     // Emit loading event immediately
     emitEvent('loading');
 
+    // Show original satellite tile immediately as placeholder (never blank)
     let tileResolved = false;
+    tile.crossOrigin = 'anonymous';
+    tile.src = esriUrl;
+    tile.onload = () => {
+      if (!tileResolved) {
+        tileResolved = true;
+        done(null, tile);
+      }
+    };
+    tile.onerror = () => {
+      if (!tileResolved) {
+        tileResolved = true;
+        done(null, tile);
+      }
+    };
+
+    // Swap to clean tile when inpainting result arrives
     const loadBlob = (blob: Blob) => {
       const objectUrl = URL.createObjectURL(blob);
       const prev = tile.src;
       tile.src = objectUrl;
-      tile.onload = () => {
-        URL.revokeObjectURL(objectUrl);
-        if (!tileResolved) {
-          tileResolved = true;
-          done(null, tile);
-        }
-      };
-      tile.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        if (!tileResolved) {
-          tileResolved = true;
-          done(null, tile);
-        }
-      };
+      tile.onload = () => { URL.revokeObjectURL(objectUrl); };
+      tile.onerror = () => { URL.revokeObjectURL(objectUrl); };
       if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
     };
 
@@ -323,9 +328,8 @@ const InpaintingGridLayer = L.GridLayer.extend({
         throw new Error(`HTTP ${resp.status}`);
       })
       .catch(() => {
-        tile.onload = () => { if (!tileResolved) { tileResolved = true; done(null, tile); } };
-        tile.onerror = () => { if (!tileResolved) { tileResolved = true; done(null, tile); } };
-        tile.src = esriUrl;
+        // Tile already shows the original Esri satellite image (set above),
+        // so on inpainting failure we just keep the original — no action needed.
       });
 
     return tile;
@@ -454,12 +458,16 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
         zoom={initialZoom}
         className="h-full w-full"
       >
-        <TileLayer
-          key={satellite ? 'sat' : 'street'}
-          attribution={satellite ? SAT_ATTR : STREET_ATTR}
-          url={satellite ? SAT_URL : STREET_URL}
-        />
-        {satellite && inpainting && (
+        {/* When inpainting is active at zoom >= 17, InpaintingGridLayer is the sole tile source
+            (it shows original Esri tiles as placeholder, then swaps to clean versions) */}
+        {!(satellite && inpainting && zoom >= 17) && (
+          <TileLayer
+            key={satellite ? 'sat' : 'street'}
+            attribution={satellite ? SAT_ATTR : STREET_ATTR}
+            url={satellite ? SAT_URL : STREET_URL}
+          />
+        )}
+        {satellite && inpainting && zoom >= 17 && (
           <>
             <InpaintingTileLayer key="inpaint" airportIcao={airportIcao} onStaleDetected={onStaleDetected} onWarmingUp={onWarmingUp} onTileEvent={handleTileEvent} />
             <InpaintingOverlay events={tileEvents} />
