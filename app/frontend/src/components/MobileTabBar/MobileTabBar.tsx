@@ -50,7 +50,7 @@ const tabs: { id: MobileTab; label: string; icon: JSX.Element }[] = [
 
 export default function MobileTabBar({ activeTab, onTabChange }: MobileTabBarProps) {
   return (
-    <nav className="flex bg-slate-800 border-t border-slate-700 safe-area-bottom">
+    <nav className="flex bg-slate-800 border-t border-slate-700">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (

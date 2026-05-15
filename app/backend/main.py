@@ -701,6 +701,34 @@ if FRONTEND_DIST.exists():
         raise HTTPException(status_code=404, detail=f"Model not found: {subpath}")
 
     logger.info(f"Registered /models route (UC Volumes: {UC_VOLUMES_MODEL_PATH}, fallback: {models_dir})")
+    # Serve PWA manifest
+    @app.get("/manifest.json")
+    async def serve_manifest():
+        """Serve PWA web app manifest."""
+        manifest_file = FRONTEND_DIST / "manifest.json"
+        if manifest_file.exists():
+            return FileResponse(
+                manifest_file,
+                media_type="application/manifest+json",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+        raise HTTPException(status_code=404, detail="Manifest not found")
+
+    # Serve PWA icons
+    icons_dir = FRONTEND_DIST / "icons"
+    if icons_dir.exists():
+        app.mount("/icons", StaticFiles(directory=icons_dir), name="icons")
+        logger.info(f"Mounted /icons from {icons_dir}")
+
+    # Serve favicon SVG
+    @app.get("/airport.svg")
+    async def serve_favicon():
+        """Serve SVG favicon."""
+        svg_file = FRONTEND_DIST / "airport.svg"
+        if svg_file.exists():
+            return FileResponse(svg_file, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
+        raise HTTPException(status_code=404, detail="Favicon not found")
+
     # Serve service worker with correct MIME type
     @app.get("/sw.js")
     async def serve_service_worker():
