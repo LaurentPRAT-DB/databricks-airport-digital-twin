@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPT_FILE = Path(__file__).parent.parent.parent / "prompts" / "simulation_report.md"
 MODEL_ENDPOINT = os.getenv("ASSISTANT_MODEL_ENDPOINT", "databricks-claude-sonnet-4-5")
+FALLBACK_ENDPOINTS = [
+    "databricks-meta-llama-3-3-70b-instruct",
+    "databricks-llama-4-maverick",
+]
 MAX_TOKENS = 4096
 TEMPERATURE = 0.3
 
@@ -168,8 +172,12 @@ def _render_prompt(
 
 
 async def _call_llm(host: str, token: str, messages: list[dict]) -> str:
-    """Call the FM endpoint and return the response text."""
-    url = f"{host}/serving-endpoints/{MODEL_ENDPOINT}/invocations"
+    """Call the FM endpoint and return the response text.
+
+    Tries MODEL_ENDPOINT first; on 404 (endpoint not provisioned on this workspace),
+    falls back through FALLBACK_ENDPOINTS.
+    """
+    endpoints_to_try = [MODEL_ENDPOINT] + FALLBACK_ENDPOINTS
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload = {
         "messages": messages,
@@ -178,18 +186,28 @@ async def _call_llm(host: str, token: str, messages: list[dict]) -> str:
     }
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(url, headers=headers, json=payload)
+        for endpoint in endpoints_to_try:
+            url = f"{host}/serving-endpoints/{endpoint}/invocations"
+            resp = await client.post(url, headers=headers, json=payload)
 
-    if resp.status_code >= 400:
-        detail = resp.text[:500]
-        logger.error(f"Report LLM call failed ({resp.status_code}): {detail}")
-        raise RuntimeError(f"LLM endpoint error ({resp.status_code}): {detail}")
+            if resp.status_code == 404:
+                logger.warning(f"Endpoint {endpoint} not found, trying next fallback")
+                continue
 
-    data = resp.json()
-    choices = data.get("choices", [])
-    if not choices:
-        raise RuntimeError("LLM returned no choices")
-    return choices[0].get("message", {}).get("content", "")
+            if resp.status_code >= 400:
+                detail = resp.text[:500]
+                logger.error(f"Report LLM call failed ({resp.status_code}): {detail}")
+                raise RuntimeError(f"LLM endpoint error ({resp.status_code}): {detail}")
+
+            data = resp.json()
+            choices = data.get("choices", [])
+            if not choices:
+                raise RuntimeError("LLM returned no choices")
+            logger.info(f"Report generated using endpoint: {endpoint}")
+            return choices[0].get("message", {}).get("content", "")
+
+    tried = ", ".join(endpoints_to_try)
+    raise RuntimeError(f"No LLM endpoint available. Tried: {tried}")
 
 
 class ReportGenerator:

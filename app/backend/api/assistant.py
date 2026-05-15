@@ -126,7 +126,7 @@ def _build_function_definitions() -> list[dict]:
 
 
 def _get_databricks_auth(request: Request) -> tuple[str, str]:
-    """Extract Databricks host + token (reuses pattern from genie.py)."""
+    """Extract Databricks host + token from request, env vars, or CLI profiles."""
     host = os.getenv("DATABRICKS_HOST", "")
     if host and not host.startswith("http"):
         host = f"https://{host}"
@@ -137,19 +137,34 @@ def _get_databricks_auth(request: Request) -> tuple[str, str]:
         if token:
             return host, token
 
+    from databricks.sdk.core import Config
+
+    # Try default SDK config (env vars, DEFAULT profile)
     try:
-        from databricks.sdk.core import Config
         cfg = Config()
-        host = host or cfg.host
+        h = host or cfg.host
         token = cfg.token
         if token:
-            return host, token
+            return h, token
         headers = cfg.authenticate()
         auth = headers.get("Authorization", "")
         if auth.startswith("Bearer "):
-            return host, auth[len("Bearer "):]
+            return h, auth[len("Bearer "):]
     except Exception as e:
-        logger.debug(f"SDK auth fallback failed: {e}")
+        logger.debug(f"SDK default auth failed: {e}")
+
+    # Fallback: try known CLI profiles from ~/.databrickscfg
+    for profile in (os.getenv("DATABRICKS_CONFIG_PROFILE", ""), "DEFAULT"):
+        if not profile:
+            continue
+        try:
+            cfg = Config(profile=profile)
+            h = host or cfg.host
+            token = cfg.token
+            if token:
+                return h, token
+        except Exception:
+            pass
 
     raise HTTPException(status_code=503, detail="No Databricks authentication available")
 
