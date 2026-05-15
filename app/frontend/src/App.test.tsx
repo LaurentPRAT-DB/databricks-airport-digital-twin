@@ -151,7 +151,7 @@ describe('App', () => {
       await user.click(fidsButton)
 
       await waitFor(() => {
-        expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: /FIDS/ })).toBeInTheDocument()
       })
     })
 
@@ -165,7 +165,7 @@ describe('App', () => {
       await user.click(fidsButton)
 
       await waitFor(() => {
-        expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: /FIDS/ })).toBeInTheDocument()
       })
 
       // Close FIDS
@@ -173,7 +173,7 @@ describe('App', () => {
       await user.click(closeButton)
 
       await waitFor(() => {
-        expect(screen.queryByText(/flight information display/i)).not.toBeInTheDocument()
+        expect(screen.queryByRole('heading', { name: /FIDS/ })).not.toBeInTheDocument()
       })
     })
   })
@@ -242,7 +242,7 @@ describe('App', () => {
       const start = performance.now()
       await user.click(fidsButton)
       await waitFor(() => {
-        expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: /FIDS/ })).toBeInTheDocument()
       })
       const elapsed = performance.now() - start
 

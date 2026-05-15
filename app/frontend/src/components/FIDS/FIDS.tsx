@@ -392,48 +392,50 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
     <div className="fixed inset-0 bg-black/50 z-[1003] flex items-center justify-center p-0 md:p-4" onClick={onClose}>
       <div className="bg-slate-900 rounded-none md:rounded-lg shadow-2xl w-full max-w-4xl h-full md:h-auto md:max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-700">
-          <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold text-white">Flight Information Display</h2>
-            <div className="flex rounded-lg overflow-hidden">
+        <div className="p-3 md:p-4 border-b border-slate-700 space-y-2 md:space-y-0">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base md:text-xl font-bold text-white">FIDS</h2>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setActiveTab('arrivals')}
+                  className={`px-3 py-1.5 text-xs md:text-sm font-medium transition-colors ${
+                    activeTab === 'arrivals'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  Arrivals
+                </button>
+                <button
+                  onClick={() => setActiveTab('departures')}
+                  className={`px-3 py-1.5 text-xs md:text-sm font-medium transition-colors ${
+                    activeTab === 'departures'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  Departures
+                </button>
+              </div>
               <button
-                onClick={() => setActiveTab('arrivals')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  activeTab === 'arrivals'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
+                onClick={onClose}
+                className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
+                aria-label="Close FIDS"
               >
-                Arrivals
-              </button>
-              <button
-                onClick={() => setActiveTab('departures')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  activeTab === 'departures'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >
-                Departures
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <input
-              type="text"
-              placeholder="Search flights..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 w-48"
-            />
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-white text-2xl font-light"
-              aria-label="Close FIDS"
-            >
-              x
-            </button>
-          </div>
+          <input
+            type="text"
+            placeholder="Search flights..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 w-full"
+          />
         </div>
 
         {/* Content */}
@@ -449,13 +451,13 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-slate-800 sticky top-0">
-                <tr className="text-left text-slate-400 uppercase text-xs">
-                  <th className="px-4 py-3">Time</th>
-                  <th className="px-4 py-3">Flight</th>
-                  <th className="px-4 py-3">{activeTab === 'arrivals' ? 'From' : 'To'}</th>
-                  <th className="px-4 py-3">Gate</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Remarks</th>
+                <tr className="text-left text-slate-400 uppercase text-[10px] md:text-xs">
+                  <th className="px-2 md:px-4 py-2 md:py-3">Time</th>
+                  <th className="px-2 md:px-4 py-2 md:py-3">Flight</th>
+                  <th className="px-2 md:px-4 py-2 md:py-3">{activeTab === 'arrivals' ? 'From' : 'To'}</th>
+                  <th className="px-2 md:px-4 py-2 md:py-3">Gate</th>
+                  <th className="px-2 md:px-4 py-2 md:py-3 hidden md:table-cell">Status</th>
+                  <th className="px-2 md:px-4 py-2 md:py-3 text-right hidden md:table-cell">Remarks</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
@@ -471,31 +473,31 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
                     }`}
                     onClick={isTracked ? () => handleFlightClick(flight.flight_number) : undefined}
                   >
-                    <td className="px-4 py-3 font-mono">
+                    <td className="px-2 md:px-4 py-2 md:py-3 font-mono text-xs md:text-sm">
                       <div className={flight.delay_minutes > 0 ? 'line-through text-slate-500' : ''}>
                         {formatTime(flight.scheduled_time)}
                       </div>
                       {flight.estimated_time && flight.delay_minutes > 0 && (
-                        <div className="text-yellow-400 text-xs font-bold">
+                        <div className="text-yellow-400 text-[10px] md:text-xs font-bold">
                           Est: {formatTime(flight.estimated_time)}
                         </div>
                       )}
                       {flight.estimated_time && flight.delay_minutes === 0 && flight.status !== 'arrived' && flight.status !== 'departed' && (
-                        <div className="text-green-400 text-xs">
+                        <div className="text-green-400 text-[10px] md:text-xs">
                           ETA {formatTime(flight.estimated_time)}
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="font-bold flex items-center gap-2">
+                    <td className="px-2 md:px-4 py-2 md:py-3">
+                      <div className="font-bold text-xs md:text-sm flex items-center gap-1 md:gap-2">
                         {flight.flight_number}
                         {isTracked && (
-                          <span className="px-1.5 py-0.5 bg-blue-600 text-[10px] rounded uppercase font-semibold animate-pulse">
+                          <span className="px-1 py-0.5 bg-blue-600 text-[8px] md:text-[10px] rounded uppercase font-semibold animate-pulse">
                             Live
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-slate-400">
+                      <div className="text-[10px] md:text-xs text-slate-400 truncate max-w-[120px] md:max-w-none">
                         {flight.airline}
                         {flightPhase && (
                           <span className="ml-1 text-blue-400">
@@ -504,18 +506,18 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 font-mono">
+                    <td className="px-2 md:px-4 py-2 md:py-3 font-mono text-xs md:text-sm">
                       {activeTab === 'arrivals' ? flight.origin : flight.destination}
                     </td>
-                    <td className="px-4 py-3 font-mono text-blue-400">
+                    <td className="px-2 md:px-4 py-2 md:py-3 font-mono text-blue-400 text-xs md:text-sm">
                       {flight.gate || '-'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-2 md:px-4 py-2 md:py-3 hidden md:table-cell">
                       <span className={STATUS_COLORS[flight.status] || 'text-slate-300'}>
                         {STATUS_LABELS[flight.status] || flight.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-xs text-slate-400">
+                    <td className="px-2 md:px-4 py-2 md:py-3 text-right text-xs text-slate-400 hidden md:table-cell">
                       {flight.delay_minutes > 0 && (
                         <span className="text-yellow-400">
                           +{flight.delay_minutes} min

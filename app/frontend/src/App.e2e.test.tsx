@@ -306,7 +306,7 @@ describe('End-to-end user interaction flows', () => {
       const openTime = await timed(async () => {
         await user.click(fidsButton)
         await waitFor(() => {
-          expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+          expect(screen.getByRole('heading', { name: /FIDS/ })).toBeInTheDocument()
         })
       })
       expect(openTime).toBeLessThan(PERFORMANCE_THRESHOLDS.apiResponse)
@@ -340,7 +340,7 @@ describe('End-to-end user interaction flows', () => {
       const closeTime = await timed(async () => {
         await user.click(closeButton)
         await waitFor(() => {
-          expect(screen.queryByText(/flight information display/i)).not.toBeInTheDocument()
+          expect(screen.queryByRole('heading', { name: /FIDS/ })).not.toBeInTheDocument()
         })
       })
       expect(closeTime).toBeLessThan(PERFORMANCE_THRESHOLDS.interaction)
@@ -357,11 +357,11 @@ describe('End-to-end user interaction flows', () => {
       await user.click(fidsButton)
 
       await waitFor(() => {
-        expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: /FIDS/ })).toBeInTheDocument()
       })
 
       // Wait for arrivals data — scope to FIDS modal to avoid LiveBar's "Live" label
-      const fidsModal = screen.getByText(/flight information display/i).closest('[class*="bg-slate-900"]')!
+      const fidsModal = screen.getByRole('heading', { name: /FIDS/ }).closest('[class*="bg-slate-900"]')!
       await waitFor(
         () => {
           const liveBadges = within(fidsModal as HTMLElement).getAllByText(/live/i)
@@ -377,7 +377,7 @@ describe('End-to-end user interaction flows', () => {
         await user.click(liveRow)
         // FIDS should close and detail panel should populate
         await waitFor(() => {
-          expect(screen.queryByText(/flight information display/i)).not.toBeInTheDocument()
+          expect(screen.queryByRole('heading', { name: /FIDS/ })).not.toBeInTheDocument()
         })
       })
       expect(selectTime).toBeLessThan(PERFORMANCE_THRESHOLDS.apiResponse)
@@ -876,14 +876,14 @@ describe('End-to-end user interaction flows', () => {
       const fidsButton = screen.getByRole('button', { name: /fids/i })
       await user.click(fidsButton)
       await waitFor(() => {
-        expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: /FIDS/ })).toBeInTheDocument()
       })
 
       // Step 5: Close FIDS
       const closeButton = screen.getByRole('button', { name: /close fids/i })
       await user.click(closeButton)
       await waitFor(() => {
-        expect(screen.queryByText(/flight information display/i)).not.toBeInTheDocument()
+        expect(screen.queryByRole('heading', { name: /FIDS/ })).not.toBeInTheDocument()
       })
 
       // Step 6: Verify flight is still selected after FIDS round-trip
@@ -1141,7 +1141,7 @@ describe('End-to-end user interaction flows', () => {
       await user.click(fidsButton)
 
       await waitFor(() => {
-        expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: /FIDS/ })).toBeInTheDocument()
       })
 
       // Close FIDS
@@ -1149,7 +1149,7 @@ describe('End-to-end user interaction flows', () => {
       await user.click(closeButton)
 
       await waitFor(() => {
-        expect(screen.queryByText(/flight information display/i)).not.toBeInTheDocument()
+        expect(screen.queryByRole('heading', { name: /FIDS/ })).not.toBeInTheDocument()
       })
     })
   })
@@ -1355,20 +1355,20 @@ describe('End-to-end user interaction flows', () => {
       // Open
       await user.click(fidsButton)
       await waitFor(() => {
-        expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: /FIDS/ })).toBeInTheDocument()
       })
 
       // Close
       const closeButton = screen.getByRole('button', { name: /close fids/i })
       await user.click(closeButton)
       await waitFor(() => {
-        expect(screen.queryByText(/flight information display/i)).not.toBeInTheDocument()
+        expect(screen.queryByRole('heading', { name: /FIDS/ })).not.toBeInTheDocument()
       })
 
       // Open again immediately
       await user.click(fidsButton)
       await waitFor(() => {
-        expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: /FIDS/ })).toBeInTheDocument()
       })
     })
 

@@ -715,12 +715,14 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const { flights, filteredFlights, selectedFlight, setSelectedFlight, dataMode, setDataMode } = useFlightContext();
   const { currentAirport, loadAirport, initializeDefaultAirport, demoReady: wsDemoReady } = useAirportConfigContext();
 
-  // Auto-switch to Info tab when a flight is selected on mobile
+  // Auto-switch to Info tab when a flight is newly selected on mobile
+  const prevSelectedForTab = useRef(selectedFlight);
   useEffect(() => {
-    if (isMobile && selectedFlight) {
+    if (isMobile && selectedFlight && !prevSelectedForTab.current) {
       setMobileTab('info');
     }
-  }, [isMobile, selectedFlight]);
+    prevSelectedForTab.current = selectedFlight;
+  }, [isMobile, selectedFlight]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset stale tile count when inpainting is toggled or airport changes
   useEffect(() => {
@@ -961,40 +963,113 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
         <main className="flex-1 flex flex-col overflow-hidden">
           {mobileTab === 'map' && mapView}
           {mobileTab === 'flights' && (
-            <div className="flex-1 overflow-hidden">
-              <FlightList />
-            </div>
+            selectedFlight ? (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="h-[40%] min-h-[200px] relative [&>div]:!h-full [&>div]:!flex-none">
+                  {mapView}
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <FlightList />
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-hidden">
+                <FlightList />
+              </div>
+            )
+          )}
+          {mobileTab === 'gates' && (
+            selectedFlight ? (
+              /* Split view: map on top, gate status on bottom */
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="h-[40%] min-h-[200px] relative [&>div]:!h-full [&>div]:!flex-none">
+                  {mapView}
+                </div>
+                <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4">
+                  <div className="flex items-center justify-end mb-2">
+                    <button
+                      onClick={() => setSelectedFlight(null)}
+                      className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
+                      aria-label="Close map"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <GateStatus highlightGateRef={selectedFlight?.assigned_gate} />
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4">
+                <GateStatus />
+              </div>
+            )
           )}
           {mobileTab === 'info' && (
-            <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => setMobileTab('map')}
-                  className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  Back to map
-                </button>
-                <button
-                  onClick={() => setMobileTab('map')}
-                  className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
-                  aria-label="Close"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+            selectedFlight ? (
+              /* Split view: map on top, flight details on bottom */
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="h-[40%] min-h-[200px] relative [&>div]:!h-full [&>div]:!flex-none">
+                  {mapView}
+                </div>
+                <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => { setSelectedFlight(null); setMobileTab('map'); }}
+                      className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                      Back to map
+                    </button>
+                    <button
+                      onClick={() => { setSelectedFlight(null); setMobileTab('map'); }}
+                      className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
+                      aria-label="Close"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <FlightDetail />
+                </div>
               </div>
-              <FlightDetail />
-              <GateStatus />
-            </div>
+            ) : (
+              /* No flight selected: show flight detail placeholder */
+              <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setMobileTab('map')}
+                    className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Back to map
+                  </button>
+                  <button
+                    onClick={() => setMobileTab('map')}
+                    className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
+                    aria-label="Close"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <FlightDetail />
+              </div>
+            )
           )}
         </main>
 
-        {/* Simulation controls — header buttons hidden, fixed PlaybackBar still renders */}
-        <div className="h-0 overflow-hidden">{simulationControlsNode}</div>
+        {/* Simulation controls — show PlaybackBar when map is visible */}
+        <div className={(mobileTab === 'map' || selectedFlight) ? '' : 'h-0 overflow-hidden'}>
+          {simulationControlsNode}
+        </div>
 
         <MobileTabBar activeTab={mobileTab} onTabChange={setMobileTab} />
       </div>

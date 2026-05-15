@@ -13,7 +13,7 @@ describe('FIDS', () => {
   describe('Rendering', () => {
     it('renders the FIDS modal', async () => {
       render(<FIDS onClose={mockOnClose} />)
-      expect(screen.getByText(/flight information display/i)).toBeInTheDocument()
+      expect(screen.getByText('FIDS')).toBeInTheDocument()
     })
 
     it('shows loading state initially', () => {

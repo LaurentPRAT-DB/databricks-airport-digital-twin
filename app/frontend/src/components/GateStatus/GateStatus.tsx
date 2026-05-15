@@ -359,7 +359,7 @@ function CongestionDetailCard({
   );
 }
 
-export default function GateStatus() {
+export default function GateStatus({ highlightGateRef }: { highlightGateRef?: string | null }) {
   const { getGates } = useAirportConfigContext();
   const osmGates = getGates();
   const { flights, setSelectedFlight } = useFlightContext();
@@ -374,6 +374,17 @@ export default function GateStatus() {
     [terminalGroups]
   );
 
+  // Auto-select gate when highlightGateRef changes
+  useEffect(() => {
+    if (highlightGateRef) {
+      const gate = gates.find((g) => g.ref === highlightGateRef);
+      if (gate) {
+        setSelectedGateId(gate.id);
+        setSelectedTerminal(gate.terminal);
+      }
+    }
+  }, [highlightGateRef]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { congestion, isLoading: isCongestionLoading } = useCongestion();
   const { activeLevel, setActiveLevel, selectedArea, setSelectedArea } = useCongestionFilter();
 
@@ -385,10 +396,6 @@ export default function GateStatus() {
   function handleGateClick(gate: Gate) {
     const toggling = selectedGateId === gate.id;
     setSelectedGateId(toggling ? null : gate.id);
-    // Select/deselect the flight on the map (shows trajectory if enabled)
-    if (gate.flight) {
-      setSelectedFlight(toggling ? null : gate.flight);
-    }
   }
 
   function handleSelectFlight(flight: Flight) {

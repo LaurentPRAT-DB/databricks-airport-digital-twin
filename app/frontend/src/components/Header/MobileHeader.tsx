@@ -18,7 +18,7 @@ interface MobileHeaderProps {
 export default function MobileHeader({ onShowFIDS, onShowKPI, onOpenChat, onGoToMap }: MobileHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
-  const { isLoading, error, setSelectedFlight, selectedFlight, showTrajectory, setShowTrajectory } = useFlightContext();
+  const { isLoading, error, setSelectedFlight } = useFlightContext();
   const { currentAirport, isLoading: isLoadingAirport, error: airportError, loadAirport, switchProgress } = useAirportConfigContext();
   const { isDark, toggle: toggleTheme } = useTheme();
 
@@ -133,26 +133,6 @@ export default function MobileHeader({ onShowFIDS, onShowKPI, onOpenChat, onGoTo
                 )}
                 <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
               </button>
-
-              {/* Trajectory toggle — only when a flight is selected */}
-              {selectedFlight && (
-                <button
-                  onClick={() => setShowTrajectory(!showTrajectory)}
-                  className="mobile-menu-item"
-                >
-                  <svg className={`w-5 h-5 flex-shrink-0 ${showTrajectory ? 'text-blue-400' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                  <span>Trajectory Line</span>
-                  <div className={`ml-auto w-10 h-6 rounded-full p-1 transition-colors ${
-                    showTrajectory ? 'bg-blue-500' : 'bg-slate-600'
-                  }`}>
-                    <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                      showTrajectory ? 'translate-x-4' : 'translate-x-0'
-                    }`} />
-                  </div>
-                </button>
-              )}
 
               {/* PhaseFilter & PlatformLinks: force their internal buttons to match */}
               <div className="mobile-menu-embedded">
