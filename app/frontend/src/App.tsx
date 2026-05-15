@@ -967,15 +967,26 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
           )}
           {mobileTab === 'info' && (
             <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 space-y-4">
-              <button
-                onClick={() => setMobileTab('map')}
-                className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 mb-1"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Back to map
-              </button>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setMobileTab('map')}
+                  className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to map
+                </button>
+                <button
+                  onClick={() => setMobileTab('map')}
+                  className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
               <FlightDetail />
               <GateStatus />
             </div>
