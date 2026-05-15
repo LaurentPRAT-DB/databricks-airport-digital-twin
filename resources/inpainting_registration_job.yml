@@ -23,6 +23,9 @@ resources:
         - task_key: register_inpainting_model
           notebook_task:
             notebook_path: ../databricks/notebooks/register_inpainting_model.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
           environment_key: inpainting_env
 
       tags:

@@ -10,12 +10,14 @@ resources:
             value: "${var.lakebase_host}"
           - name: LAKEBASE_ENDPOINT_NAME
             value: "projects/airport-digital-twin/branches/${var.lakebase_branch}/endpoints/primary"
+          - name: INPAINTING_ENDPOINT_NAME
+            value: "airport-dt-aircraft-inpainting-${bundle.target}"
       resources:
         - name: sql-warehouse
           sql_warehouse:
-            id: b868e84cedeb4262
+            id: ${var.warehouse_id}
             permission: CAN_USE
         - name: inpainting-endpoint
           serving_endpoint:
-            name: airport-dt-aircraft-inpainting-dev
+            name: airport-dt-aircraft-inpainting-${bundle.target}
             permission: CAN_QUERY

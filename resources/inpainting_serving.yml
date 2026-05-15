@@ -1,5 +1,5 @@
 resources:
-  serving_endpoints:
+  model_serving_endpoints:
     aircraft_inpainting:
       name: "airport-dt-aircraft-inpainting-${bundle.target}"
       config:
@@ -10,6 +10,9 @@ resources:
             workload_type: GPU_MEDIUM
             scale_to_zero_enabled: true
       tags:
-        project: airport-digital-twin
-        component: inpainting
-        target: ${bundle.target}
+        - key: project
+          value: airport-digital-twin
+        - key: component
+          value: inpainting
+        - key: target
+          value: ${bundle.target}

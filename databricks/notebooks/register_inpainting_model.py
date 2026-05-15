@@ -29,9 +29,11 @@ from pathlib import Path
 import mlflow
 import torch
 
-# Config
-CATALOG = "serverless_stable_3n0ihb_catalog"
-SCHEMA = "airport_digital_twin"
+# Config — parameterized via job base_parameters (defaults for interactive use)
+dbutils.widgets.text("catalog", "serverless_stable_3n0ihb_catalog")
+dbutils.widgets.text("schema", "airport_digital_twin")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 VOLUME = "model_weights"
 MODEL_NAME = f"{CATALOG}.{SCHEMA}.aircraft_inpainting_model"
 
