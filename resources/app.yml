@@ -11,13 +11,9 @@ resources:
           - name: LAKEBASE_ENDPOINT_NAME
             value: "projects/airport-digital-twin/branches/${var.lakebase_branch}/endpoints/primary"
           - name: INPAINTING_ENDPOINT_NAME
-            value: "airport-dt-aircraft-inpainting-${bundle.target}"
+            value: "${var.inpainting_endpoint_name}"
       resources:
         - name: sql-warehouse
           sql_warehouse:
             id: ${var.warehouse_id}
             permission: CAN_USE
-        - name: inpainting-endpoint
-          serving_endpoint:
-            name: airport-dt-aircraft-inpainting-${bundle.target}
-            permission: CAN_QUERY

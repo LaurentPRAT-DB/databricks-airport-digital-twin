@@ -66,6 +66,9 @@ variables:
   lakebase_host:
     description: "Lakebase endpoint host for the target branch"
     default: "ep-polished-forest-d2hjnab6.database.us-east-1.cloud.databricks.com"
+  inpainting_endpoint_name:
+    description: "Inpainting model serving endpoint name (empty to disable)"
+    default: ""
 
 targets:
   dev:
@@ -73,44 +76,49 @@ targets:
     mode: development
     workspace:
       profile: FEVM_SERVERLESS_STABLE
+    resources:
+      apps:
+        airport_digital_twin:
+          resources:
+            - name: inpainting-endpoint
+              serving_endpoint:
+                name: airport-dt-aircraft-inpainting-dev
+                permission: CAN_QUERY
     variables:
       catalog: "serverless_stable_3n0ihb_catalog"
       schema: "airport_digital_twin"
       warehouse_id: "b868e84cedeb4262"
       lakebase_branch: "dev"
       lakebase_host: "ep-polished-forest-d2hjnab6.database.us-east-1.cloud.databricks.com"
+      inpainting_endpoint_name: "airport-dt-aircraft-inpainting-dev"
 
   prod:
     workspace:
       profile: FEVM_SERVERLESS_STABLE
+    resources:
+      apps:
+        airport_digital_twin:
+          resources:
+            - name: inpainting-endpoint
+              serving_endpoint:
+                name: airport-dt-aircraft-inpainting-prod
+                permission: CAN_QUERY
     variables:
       catalog: "serverless_stable_3n0ihb_catalog"
       schema: "airport_digital_twin_prod"
       warehouse_id: "b868e84cedeb4262"
       lakebase_branch: "production"
       lakebase_host: "ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com"
+      inpainting_endpoint_name: "airport-dt-aircraft-inpainting-prod"
 
   free:
     mode: development
     workspace:
       profile: LPT_FREE_EDITION
-    resources:
-      model_serving_endpoints:
-        aircraft_inpainting: null
-      jobs:
-        inpainting_model_registration: null
-      volumes:
-        model_weights: null
-      apps:
-        airport_digital_twin:
-          resources:
-            - name: sql-warehouse
-              sql_warehouse:
-                id: "58d41113cb262dce"
-                permission: CAN_USE
     variables:
       catalog: "main"
       schema: "airport_digital_twin"
       warehouse_id: "58d41113cb262dce"
       lakebase_branch: ""
       lakebase_host: ""
+      inpainting_endpoint_name: ""
