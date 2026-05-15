@@ -75,12 +75,10 @@ Airport operators manage thousands of flights daily across interconnected system
 
 ### Daily Command Center
 
-![Main Dashboard](docs/screenshots/01-overview.png)
-*Flight list (left), map view (center), flight details and gate status (right)*
-
 **Find any flight** — Type a callsign in the search box. Typing "UAL" filters to all United flights.
 
 ![Flight Search](docs/screenshots/05-flight-search.png)
+*Search filtering with flight details, ML delay predictions, and gate recommendations on the right*
 
 **Select a flight** — Click any flight to see details, ML predictions, and trajectory.
 
@@ -90,9 +88,7 @@ Airport operators manage thousands of flights daily across interconnected system
 
 ![FIDS Board](docs/screenshots/06-fids-modal.png)
 
-**Check weather** — The weather widget shows current METAR conditions: wind, visibility, and flight category.
-
-![Weather Widget](docs/screenshots/07-weather-widget.png)
+**Check weather** — The weather widget in the header shows current METAR conditions: wind, visibility, and flight category.
 
 **Switch airports** — Click the airport button to choose from 12 presets or type any ICAO code.
 
@@ -106,13 +102,9 @@ Airport operators manage thousands of flights daily across interconnected system
 
 **3D view** — Click **3D** for the Three.js visualization with aircraft at actual altitude and extruded terminal buildings.
 
-![3D View](docs/screenshots/08-3d-view.png)
-
 **Live ADS-B mode** — Switch to Live to see real aircraft from OpenSky Network. Click Record to capture a session for later replay.
 
-**Platform links** — Click **Platform** in the header to jump to Databricks tools.
-
-![Platform Links](docs/screenshots/09-platform-links.png)
+**Platform links** — Click **Platform** in the header to jump to Databricks tools (Lakeview, Genie, MLflow, Lineage, Unity Catalog).
 
 | Link | Use Case |
 |---|---|
