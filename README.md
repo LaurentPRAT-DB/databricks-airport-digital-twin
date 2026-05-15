@@ -78,21 +78,27 @@ Airport operators manage thousands of flights daily across interconnected system
 **Find any flight** — Type a callsign in the search box. Typing "UAL" filters to all United flights.
 
 ![Flight Search](docs/screenshots/05-flight-search.png)
-*Search filtering with flight details, ML delay predictions, and gate recommendations on the right*
+*Typing "UAL" filters the flight list to United Airlines flights only*
 
 **Select a flight** — Click any flight to see details, ML predictions, and trajectory.
 
 ![Flight Selected](docs/screenshots/04-flight-selected.png)
+*AMX357 selected — route (LAX→SFO), position, movement data, trajectory toggle, and turnaround progress*
 
 **Check arrivals/departures** — Click **FIDS** for the Flight Information Display with real-time status.
 
 ![FIDS Board](docs/screenshots/06-fids-modal.png)
+*Arrivals board showing airline, origin, gate, status, and remarks — with auto-refresh*
 
-**Check weather** — The weather widget in the header shows current METAR conditions: wind, visibility, and flight category.
+**Check weather** — The header bar shows live METAR conditions: temperature, wind speed/direction, visibility, and flight category (VFR/MVFR/IFR).
+
+![Weather Widget](docs/screenshots/07-weather-widget.png)
+*Header displays 29°C, 251° at 10kt wind, 100M visibility — updated every 5 minutes from NOAA*
 
 **Switch airports** — Click the airport button to choose from 12 presets or type any ICAO code.
 
 ![Airport Selector](docs/screenshots/02-airport-selector.png)
+*12 preset airports with search — type any ICAO code to load airports worldwide*
 
 ![Airport Switching](docs/screenshots/03-airport-switching.png)
 *Progress overlay while loading airport geometry from OpenStreetMap*
@@ -100,7 +106,15 @@ Airport operators manage thousands of flights daily across interconnected system
 ![CDG Airport](docs/screenshots/10-cdg-airport.png)
 *Paris CDG loaded with real terminal, gate, taxiway, and apron data from OpenStreetMap*
 
-**3D view** — Click **3D** for the Three.js visualization with aircraft at actual altitude and extruded terminal buildings.
+**3D view** — Click **3D** (or press `3`) for the Three.js visualization with aircraft at actual altitude and extruded terminal buildings.
+
+![3D View](docs/screenshots/08-3d-view.png)
+*SFO in 3D — extruded terminals, aircraft with callsign labels, altitude-accurate positioning*
+
+**ML Predictions Dashboard** — Click **KPI** for real-time ML predictions across all active flights, with overview, congestion heatmaps, and delay forecasts.
+
+![ML Predictions Dashboard](docs/screenshots/09-platform-links.png)
+*ML Predictions Dashboard with tabs for Overview, Congestion, and Delay Forecast*
 
 **Live ADS-B mode** — Switch to Live to see real aircraft from OpenSky Network. Click Record to capture a session for later replay.
 
