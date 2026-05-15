@@ -163,6 +163,28 @@ When you select a flight, the details panel shows:
 | `Up` / `Down` | Navigate flight list |
 | `Enter` | Select highlighted flight |
 
+### Mobile Experience
+
+The platform is fully responsive — on screens below 768px, it switches to a native mobile-optimized layout with bottom tab navigation.
+
+| Tab | Content |
+|---|---|
+| **Map** | Full-screen interactive map with 2D/3D toggle and satellite view |
+| **Flights** | Searchable flight list with phase filters and callsign search |
+| **Gates** | Terminal gate occupancy with split map view when a flight is selected |
+| **Info** | Flight details, trajectory, ML predictions |
+
+<p align="center">
+  <img src="docs/screenshots/mobile-01-map.png" width="200" alt="Mobile map view" />
+  <img src="docs/screenshots/mobile-02-flights.png" width="200" alt="Mobile flights list" />
+  <img src="docs/screenshots/mobile-04-gates.png" width="200" alt="Mobile gate status" />
+  <img src="docs/screenshots/mobile-03-flight-detail.png" width="200" alt="Mobile flight detail" />
+</p>
+
+*Left to right: Map view with weather & KPI/FIDS buttons, flight list with phase filters, gate status with split map, flight detail with trajectory*
+
+The mobile header provides quick access to **KPI** dashboard and **FIDS** board, plus a hamburger menu for theme toggle, FIDS, legend, and chat assistant.
+
 ---
 
 ## Application Administration
