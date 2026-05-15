@@ -464,6 +464,20 @@ function PlaybackBar({ sim, isRecorded = false, savedReport, setSavedReport }: {
         </button>
       </div>
 
+      {/* Progress bar — mobile only (full-width row below controls) */}
+      <div className="md:hidden mt-2 cursor-pointer" onClick={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const pct = ((e.clientX - rect.left) / rect.width) * 100;
+        sim.seekToPercent(pct);
+      }}>
+        <div className="h-3 bg-slate-600 rounded-full overflow-hidden border border-slate-500">
+          <div
+            className="h-full bg-blue-500 rounded-full transition-[width] duration-100"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      </div>
+
       {/* Report modal */}
       {showReport && <SimulationReport sim={sim} onClose={() => { setShowReport(false); setFocusEvents(null); }} focusEvents={focusEvents} onReportGenerated={setSavedReport} savedReport={savedReport} />}
     </div>

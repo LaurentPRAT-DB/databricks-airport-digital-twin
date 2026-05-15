@@ -10,10 +10,12 @@ import PhaseFilter from './PhaseFilter';
 
 interface MobileHeaderProps {
   onShowFIDS?: () => void;
+  onShowKPI?: () => void;
   onOpenChat?: () => void;
+  onGoToMap?: () => void;
 }
 
-export default function MobileHeader({ onShowFIDS, onOpenChat }: MobileHeaderProps) {
+export default function MobileHeader({ onShowFIDS, onShowKPI, onOpenChat, onGoToMap }: MobileHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const { isLoading, error, setSelectedFlight, selectedFlight, showTrajectory, setShowTrajectory } = useFlightContext();
@@ -38,23 +40,43 @@ export default function MobileHeader({ onShowFIDS, onOpenChat }: MobileHeaderPro
       )}
 
       <header ref={headerRef} className="bg-slate-800 text-white px-3 py-2 flex items-center justify-between shadow-lg z-[1002] relative">
-        {/* Left: Airport selector */}
+        {/* Left: Airport selector + reload (tap reloads and goes to map) */}
         <div className="flex items-center gap-2">
           <AirportSelector
             currentAirport={currentAirport || undefined}
             onAirportChange={handleAirportChange}
             isLoading={isLoadingAirport}
           />
-          {/* Connection status dot */}
-          <span
-            className={`w-2 h-2 rounded-full flex-shrink-0 ${
-              error ? 'bg-red-500' : isLoading ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'
-            }`}
-          />
+          {/* Reload / go-to-map button */}
+          <button
+            onClick={() => { onGoToMap?.(); }}
+            className="p-1 rounded-md hover:bg-slate-700 transition-colors"
+            aria-label="Return to map"
+          >
+            <svg className={`w-4 h-4 ${error ? 'text-red-400' : isLoading ? 'text-yellow-400 animate-spin' : 'text-green-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+          </button>
         </div>
 
-        {/* Right: Weather + Hamburger menu */}
+        {/* Right: KPI + FIDS + Weather + Hamburger menu */}
         <div className="flex items-center gap-2">
+          {onShowKPI && (
+            <button
+              onClick={onShowKPI}
+              className="px-2 py-1 rounded bg-slate-700 text-xs font-medium text-slate-200"
+            >
+              KPI
+            </button>
+          )}
+          {onShowFIDS && (
+            <button
+              onClick={onShowFIDS}
+              className="px-2 py-1 rounded bg-slate-700 text-xs font-medium text-slate-200"
+            >
+              FIDS
+            </button>
+          )}
           <WeatherWidget station={currentAirport || undefined} />
           <button
             onClick={() => setMenuOpen(!menuOpen)}

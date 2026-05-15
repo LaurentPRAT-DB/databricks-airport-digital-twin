@@ -949,9 +949,12 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
       <div className="h-screen w-screen flex flex-col overflow-hidden">
         <MobileHeader
           onShowFIDS={() => setShowFIDS(true)}
+          onShowKPI={() => setShowKPI(true)}
           onOpenChat={() => setShowChat(true)}
+          onGoToMap={() => setMobileTab('map')}
         />
         {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
+        {showKPI && <KPIDashboard onClose={() => setShowKPI(false)} />}
         <GenieChat hideFab externalOpen={showChat} onClose={() => setShowChat(false)} />
 
         {/* Tab content */}
@@ -964,6 +967,15 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
           )}
           {mobileTab === 'info' && (
             <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-800 p-4 space-y-4">
+              <button
+                onClick={() => setMobileTab('map')}
+                className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 mb-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to map
+              </button>
               <FlightDetail />
               <GateStatus />
             </div>
