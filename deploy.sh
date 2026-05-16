@@ -37,6 +37,8 @@ WAREHOUSE_ID="${WAREHOUSE_ID:-b868e84cedeb4262}"
 GENIE_SPACE_ID="${GENIE_SPACE_ID:-01f12612fa6314ae943d0526f5ae3a00}"
 SECRET_SCOPE="${SECRET_SCOPE:-airport-digital-twin}"
 APP_NAME="${APP_NAME:-airport-digital-twin-$TARGET}"
+LAKEBASE_PROJECT="${LAKEBASE_PROJECT:-airport-digital-twin}"
+LAKEBASE_BRANCH="${LAKEBASE_BRANCH:-production}"
 SKIP_BUILD="${SKIP_BUILD:-}"
 SEED="${SEED:-}"
 
@@ -138,6 +140,19 @@ if run_sql "DESCRIBE TABLE \`$UC_CATALOG\`.\`$UC_SCHEMA\`.flight_status_gold"; t
   ok "Table flight_status_gold (exists via DLT)"
 else
   info "Table flight_status_gold not yet created — will appear after first DLT pipeline run"
+fi
+
+# ── Step 4b: Lakebase Autoscaling setup ──────────────────────────────
+echo "Step 4b: Lakebase Autoscaling setup"
+if [[ -n "$LAKEBASE_PROJECT" ]]; then
+  LAKEBASE_HOST=$(uv run python3 scripts/setup_lakebase_autoscaling.py \
+    --profile "$PROFILE" \
+    --project-id "$LAKEBASE_PROJECT" \
+    --branch "$LAKEBASE_BRANCH") \
+    && ok "Lakebase ready (host: $LAKEBASE_HOST)" \
+    || { fail "Lakebase setup failed (non-fatal, app will run without caching)"; LAKEBASE_HOST=""; }
+else
+  info "No LAKEBASE_PROJECT configured — skipping Lakebase"
 fi
 
 # ── Step 5: Stop + start app ─────────────────────────────────────────

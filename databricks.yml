@@ -119,6 +119,6 @@ targets:
       catalog: "main"
       schema: "airport_digital_twin"
       warehouse_id: "58d41113cb262dce"
-      lakebase_branch: ""
-      lakebase_host: ""
+      lakebase_branch: "production"
+      lakebase_host: "ep-patient-fire-d38b447d.database.eu-west-1.cloud.databricks.com"
       inpainting_endpoint_name: ""
