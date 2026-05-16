@@ -66,47 +66,18 @@ def branch_exists(project_id: str, branch: str, profile: str) -> bool:
     return result.returncode == 0
 
 
-def get_workspace_host_and_token(profile: str) -> tuple[str, str]:
-    """Get workspace host and auth token from CLI profile."""
-    result = subprocess.run(
-        ["databricks", "auth", "env", "--profile", profile],
-        capture_output=True, text=True,
-    )
-    env = {}
-    for line in result.stdout.strip().split("\n"):
-        if "=" in line:
-            k, v = line.split("=", 1)
-            env[k] = v
-    host = env.get("DATABRICKS_HOST", "")
-    token = env.get("DATABRICKS_TOKEN", "")
-    if not token:
-        # Fall back to reading token from config
-        import configparser
-        cfg = configparser.ConfigParser()
-        cfg.read(str(Path.home() / ".databrickscfg"))
-        if cfg.has_section(profile):
-            host = cfg.get(profile, "host", fallback=host)
-            token = cfg.get(profile, "token", fallback="")
-    return host.rstrip("/"), token
-
-
-def create_branch(project_id: str, branch: str, profile: str) -> dict:
-    """Create a new branch from production via REST API (CLI can't pass no_expiry)."""
+def create_branch(project_id: str, branch: str, profile: str):
+    """Create a new branch via the Databricks Python SDK."""
     print(f"  Creating branch: {branch}", file=sys.stderr)
-    host, token = get_workspace_host_and_token(profile)
-    import urllib.request
-    url = f"{host}/api/2.0/postgres/projects/{project_id}/branches?branch_id={branch}"
-    data = json.dumps({"branch": {"no_expiry": True}}).encode()
-    req = urllib.request.Request(url, data=data, method="POST", headers={
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            return json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        raise RuntimeError(f"Failed to create branch: {e.code} {body}")
+    from databricks.sdk import WorkspaceClient
+    from databricks.sdk.service.postgres import Branch, BranchSpec
+
+    w = WorkspaceClient(profile=profile)
+    w.postgres.create_branch(
+        parent=f"projects/{project_id}",
+        branch_id=branch,
+        branch=Branch(spec=BranchSpec(no_expiry=True)),
+    )
 
 
 def wait_for_endpoint(project_id: str, branch: str, profile: str, timeout: int = 120) -> str:
