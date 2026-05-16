@@ -1,5 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <circle cx="32" cy="32" r="30" fill="#0f172a"/>
-  <path d="M32 10 L36 28 L52 32 L36 36 L32 54 L28 36 L12 32 L28 28 Z" fill="#3b82f6" stroke="#60a5fa" stroke-width="1"/>
-  <circle cx="32" cy="32" r="4" fill="#60a5fa"/>
+  <rect width="64" height="64" rx="12" fill="#0f172a"/>
+  <!-- Radar rings -->
+  <circle cx="32" cy="32" r="23" stroke="#1e3a5f" stroke-width="0.8" opacity="0.4"/>
+  <circle cx="32" cy="32" r="16" stroke="#1e3a5f" stroke-width="0.8" opacity="0.6"/>
+  <circle cx="32" cy="32" r="10" stroke="#3b82f6" stroke-width="0.6" opacity="0.35"/>
+  <!-- Runway lines -->
+  <line x1="32" y1="12" x2="32" y2="52" stroke="#334155" stroke-width="0.8" opacity="0.5"/>
+  <line x1="14" y1="42" x2="50" y2="22" stroke="#334155" stroke-width="0.8" opacity="0.5"/>
+  <!-- Aircraft silhouette (top-down) -->
+  <!-- Fuselage -->
+  <rect x="30.5" y="17" width="3" height="32" rx="1.5" fill="#60a5fa"/>
+  <!-- Nose -->
+  <polygon points="32,13 30.5,19 33.5,19" fill="#93c5fd"/>
+  <!-- Main wings -->
+  <polygon points="30.5,29 30.5,33.5 18,35.5 18,33" fill="#60a5fa"/>
+  <polygon points="33.5,29 33.5,33.5 46,35.5 46,33" fill="#60a5fa"/>
+  <!-- Tail stabilizers -->
+  <polygon points="30.5,43 30.5,46 24,47.5 24,45.5" fill="#60a5fa"/>
+  <polygon points="33.5,43 33.5,46 40,47.5 40,45.5" fill="#60a5fa"/>
+  <!-- Cockpit dot -->
+  <circle cx="32" cy="20" r="1.2" fill="#93c5fd" opacity="0.8"/>
 </svg>
