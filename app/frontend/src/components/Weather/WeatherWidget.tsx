@@ -183,16 +183,16 @@ export default function WeatherWidget({ station }: WeatherWidgetProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 bg-slate-700 px-3 py-1.5 rounded-lg text-sm animate-pulse">
-        <span className="text-slate-400">Loading weather...</span>
+      <div className="flex items-center gap-2 bg-slate-700 px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm animate-pulse">
+        <span className="text-slate-400">Weather...</span>
       </div>
     );
   }
 
   if (error || !weather) {
     return (
-      <div className="flex items-center gap-2 bg-red-900 px-3 py-1.5 rounded-lg text-sm">
-        <span className="text-red-300">Weather unavailable</span>
+      <div className="flex items-center gap-2 bg-red-900 px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm">
+        <span className="text-red-300">No weather</span>
       </div>
     );
   }
@@ -210,19 +210,19 @@ export default function WeatherWidget({ station }: WeatherWidgetProps) {
     <div className="relative">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm transition-colors"
+        className="flex items-center gap-1.5 sm:gap-2 bg-slate-700 hover:bg-slate-600 px-2 sm:px-3 py-1.5 rounded-lg text-sm transition-colors"
       >
         {/* Flight category indicator */}
-        <span className={`w-2.5 h-2.5 rounded-full ${categoryColor}`} />
+        <span className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${categoryColor}`} />
 
         {/* Temperature */}
-        <span className="font-mono">{metar.temperature_c}°C</span>
+        <span className="font-mono text-xs sm:text-sm">{metar.temperature_c}°C</span>
 
-        {/* Wind */}
-        <span className="text-slate-300">{windStr}</span>
+        {/* Wind — hidden on small screens */}
+        <span className="hidden sm:inline text-slate-300">{windStr}</span>
 
-        {/* Visibility */}
-        <span className="text-slate-400">{metar.visibility_sm}SM</span>
+        {/* Visibility — hidden on small screens */}
+        <span className="hidden sm:inline text-slate-400">{metar.visibility_sm}SM</span>
       </button>
 
       {/* Expanded dropdown */}
