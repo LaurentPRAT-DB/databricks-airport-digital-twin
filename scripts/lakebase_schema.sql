@@ -305,3 +305,159 @@ COMMENT ON TABLE satellite_tile_cache IS 'Cached inpainted satellite tiles with 
 COMMENT ON COLUMN satellite_tile_cache.tile_key IS 'zoom/x/y key for tile lookup';
 COMMENT ON COLUMN satellite_tile_cache.original_etag IS 'ETag from source imagery for cache invalidation';
 COMMENT ON COLUMN satellite_tile_cache.inpainted_image IS 'Inpainted PNG tile bytes';
+
+
+-- ============================================================================
+-- Airport Config Cache — fast-start Tier 1 for OSM configs
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS airport_config_cache (
+    icao_code VARCHAR(10) PRIMARY KEY,
+    config_json JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+COMMENT ON TABLE airport_config_cache IS 'Cached OSM airport configurations for fast startup';
+
+
+-- ============================================================================
+-- Flight Position Snapshots — historical flight tracking
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS flight_position_snapshots (
+    id BIGSERIAL,
+    session_id VARCHAR(36) NOT NULL,
+    airport_icao VARCHAR(4) NOT NULL,
+    icao24 VARCHAR(10) NOT NULL,
+    callsign VARCHAR(10),
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    altitude DOUBLE PRECISION,
+    velocity DOUBLE PRECISION,
+    heading DOUBLE PRECISION,
+    vertical_rate DOUBLE PRECISION,
+    on_ground BOOLEAN,
+    flight_phase VARCHAR(20),
+    aircraft_type VARCHAR(10),
+    assigned_gate VARCHAR(10),
+    origin_airport VARCHAR(10),
+    destination_airport VARCHAR(10),
+    data_source VARCHAR(20) DEFAULT 'simulation',
+    snapshot_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fps_session_airport
+ON flight_position_snapshots (session_id, airport_icao, snapshot_time);
+
+CREATE INDEX IF NOT EXISTS idx_fps_data_source
+ON flight_position_snapshots (data_source, airport_icao, snapshot_time);
+
+COMMENT ON TABLE flight_position_snapshots IS 'Historical flight position snapshots for replay and analysis';
+
+
+-- ============================================================================
+-- Flight Phase Transitions — state machine events
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS flight_phase_transitions (
+    id BIGSERIAL,
+    session_id VARCHAR(36) NOT NULL,
+    airport_icao VARCHAR(4) NOT NULL,
+    icao24 VARCHAR(10) NOT NULL,
+    callsign VARCHAR(10),
+    from_phase VARCHAR(20) NOT NULL,
+    to_phase VARCHAR(20) NOT NULL,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    altitude DOUBLE PRECISION,
+    aircraft_type VARCHAR(10),
+    assigned_gate VARCHAR(10),
+    event_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fpt_session_airport
+ON flight_phase_transitions (session_id, airport_icao, event_time);
+
+COMMENT ON TABLE flight_phase_transitions IS 'Flight state machine transitions (approach → landing → taxi → gate)';
+
+
+-- ============================================================================
+-- Gate Assignment Events — gate occupancy tracking
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS gate_assignment_events (
+    id BIGSERIAL,
+    session_id VARCHAR(36) NOT NULL,
+    airport_icao VARCHAR(4) NOT NULL,
+    icao24 VARCHAR(10) NOT NULL,
+    callsign VARCHAR(10),
+    gate VARCHAR(10) NOT NULL,
+    event_type VARCHAR(10) NOT NULL,
+    aircraft_type VARCHAR(10),
+    event_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gae_session_airport
+ON gate_assignment_events (session_id, airport_icao, event_time);
+
+COMMENT ON TABLE gate_assignment_events IS 'Gate assignment and release events';
+
+
+-- ============================================================================
+-- ML Predictions — model inference results
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS ml_predictions (
+    id BIGSERIAL,
+    session_id VARCHAR(36) NOT NULL,
+    airport_icao VARCHAR(4) NOT NULL,
+    prediction_type VARCHAR(30) NOT NULL,
+    icao24 VARCHAR(10),
+    result_json JSONB,
+    event_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_mlp_session_airport
+ON ml_predictions (session_id, airport_icao, event_time);
+
+COMMENT ON TABLE ml_predictions IS 'ML model predictions (delay, gate, congestion)';
+
+
+-- ============================================================================
+-- Turnaround Events — turnaround phase tracking
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS turnaround_events (
+    id BIGSERIAL,
+    session_id VARCHAR(36) NOT NULL,
+    airport_icao VARCHAR(4) NOT NULL,
+    icao24 VARCHAR(10) NOT NULL,
+    callsign VARCHAR(10),
+    gate VARCHAR(10),
+    turnaround_phase VARCHAR(20) NOT NULL,
+    event_type VARCHAR(15) NOT NULL,
+    aircraft_type VARCHAR(10),
+    event_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_te_session_airport
+ON turnaround_events (session_id, airport_icao, event_time);
+
+COMMENT ON TABLE turnaround_events IS 'Turnaround phase events (deboarding, refueling, boarding, etc.)';
+
+
+-- ============================================================================
+-- Client Debug Logs — frontend diagnostic logging
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS client_debug_logs (
+    id BIGSERIAL PRIMARY KEY,
+    logged_at TIMESTAMPTZ DEFAULT NOW(),
+    level VARCHAR(10) NOT NULL,
+    source VARCHAR(100) NOT NULL,
+    message TEXT NOT NULL,
+    metadata JSONB,
+    session_id VARCHAR(50)
+);
+
+COMMENT ON TABLE client_debug_logs IS 'Client-side debug logs sent from frontend';
