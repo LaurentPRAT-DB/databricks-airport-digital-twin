@@ -103,8 +103,8 @@ export default function MobileHeader({ onShowFIDS, onShowKPI, onOpenChat, onGoTo
           <div
             className="fixed left-0 right-0 bg-slate-800 border-b border-slate-700 shadow-xl z-[1002] p-4 space-y-4 overflow-y-auto"
             style={{
-              top: headerRef.current ? headerRef.current.offsetHeight : 52,
-              maxHeight: `calc(100vh - ${headerRef.current ? headerRef.current.offsetHeight : 52}px)`,
+              top: headerRef.current ? headerRef.current.offsetTop + headerRef.current.offsetHeight : 52,
+              maxHeight: `calc(100vh - ${headerRef.current ? headerRef.current.offsetTop + headerRef.current.offsetHeight : 52}px)`,
             }}
           >
             {/* Actions — uniform vertical menu */}

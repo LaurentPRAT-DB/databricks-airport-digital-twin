@@ -948,7 +948,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
 
   if (isMobile) {
     return (
-      <div className="h-dvh w-screen flex flex-col overflow-hidden safe-area-bottom">
+      <div className="h-dvh w-screen flex flex-col overflow-hidden bg-slate-800 safe-area-top safe-area-bottom">
         <MobileHeader
           onShowFIDS={() => setShowFIDS(true)}
           onShowKPI={() => setShowKPI(true)}

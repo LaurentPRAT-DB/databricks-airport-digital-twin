@@ -17,12 +17,16 @@ html, body, #root {
   width: 100%;
 }
 
-/* Safe area insets for notched iOS devices */
+/* Safe area insets for notched iOS devices (PWA standalone mode) */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Standalone PWA: ensure layout accounts for home indicator */
+/* Standalone PWA: ensure layout accounts for status bar + home indicator */
 @media all and (display-mode: standalone) {
   html, body, #root {
     height: 100dvh;
