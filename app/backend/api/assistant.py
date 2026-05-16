@@ -22,6 +22,10 @@ assistant_router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 # --- Configuration ---
 
 MODEL_ENDPOINT = os.getenv("ASSISTANT_MODEL_ENDPOINT", "databricks-claude-sonnet-4-5")
+FALLBACK_ENDPOINTS = [
+    "databricks-meta-llama-3-3-70b-instruct",
+    "databricks-llama-4-maverick",
+]
 MAX_TOOL_ROUNDS = 3  # Prevent infinite tool-call loops
 
 EXPLAIN_PROMPT = os.getenv("EXPLAIN_PROMPT", (
@@ -135,6 +139,7 @@ def _get_databricks_auth(request: Request) -> tuple[str, str]:
     if auth_header.startswith("Bearer "):
         token = auth_header[len("Bearer "):]
         if token:
+            logger.info("DIAG auth: using request bearer token")
             return host, token
 
     from databricks.sdk.core import Config
@@ -145,13 +150,15 @@ def _get_databricks_auth(request: Request) -> tuple[str, str]:
         h = host or cfg.host
         token = cfg.token
         if token:
+            logger.info(f"DIAG auth: using SDK config token (host={h})")
             return h, token
         headers = cfg.authenticate()
         auth = headers.get("Authorization", "")
         if auth.startswith("Bearer "):
+            logger.info(f"DIAG auth: using SDK authenticate() (host={h})")
             return h, auth[len("Bearer "):]
     except Exception as e:
-        logger.debug(f"SDK default auth failed: {e}")
+        logger.warning(f"DIAG auth: SDK default failed: {e}")
 
     # Fallback: try known CLI profiles from ~/.databrickscfg
     for profile in (os.getenv("DATABRICKS_CONFIG_PROFILE", ""), "DEFAULT"):
@@ -162,10 +169,12 @@ def _get_databricks_auth(request: Request) -> tuple[str, str]:
             h = host or cfg.host
             token = cfg.token
             if token:
+                logger.info(f"DIAG auth: using CLI profile '{profile}' (host={h})")
                 return h, token
         except Exception:
             pass
 
+    logger.error(f"DIAG auth: all methods failed. DATABRICKS_HOST={host}, has_auth_header={bool(auth_header)}")
     raise HTTPException(status_code=503, detail="No Databricks authentication available")
 
 
@@ -178,25 +187,39 @@ async def _call_llm(
     messages: list[dict],
     tools: list[dict],
 ) -> dict:
-    """Call the FM endpoint with OpenAI-compatible chat completions API."""
-    url = f"{host}/serving-endpoints/{MODEL_ENDPOINT}/invocations"
+    """Call the FM endpoint with OpenAI-compatible chat completions API.
+
+    Tries MODEL_ENDPOINT first; on 404 falls back through FALLBACK_ENDPOINTS.
+    """
+    endpoints_to_try = [MODEL_ENDPOINT] + FALLBACK_ENDPOINTS
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    payload = {
+    payload: dict = {
         "messages": messages,
-        "tools": tools,
         "max_tokens": 2048,
         "temperature": 0.1,
     }
+    if tools:
+        payload["tools"] = tools
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(url, headers=headers, json=payload)
+        for endpoint in endpoints_to_try:
+            url = f"{host}/serving-endpoints/{endpoint}/invocations"
+            resp = await client.post(url, headers=headers, json=payload)
 
-    if resp.status_code >= 400:
-        detail = resp.text[:500]
-        logger.error(f"LLM call failed ({resp.status_code}): {detail}")
-        raise HTTPException(status_code=502, detail=f"LLM endpoint error: {resp.status_code}")
+            if resp.status_code == 404:
+                logger.warning(f"Endpoint {endpoint} not found, trying next fallback")
+                continue
 
-    return resp.json()
+            if resp.status_code >= 400:
+                detail = resp.text[:500]
+                logger.error(f"LLM call failed ({resp.status_code}): {detail}")
+                raise HTTPException(status_code=502, detail=f"LLM endpoint error: {resp.status_code}")
+
+            logger.info(f"DIAG assistant: using endpoint {endpoint}")
+            return resp.json()
+
+    tried = ", ".join(endpoints_to_try)
+    raise HTTPException(status_code=502, detail=f"No LLM endpoint available. Tried: {tried}")
 
 
 # --- Tool Execution ---

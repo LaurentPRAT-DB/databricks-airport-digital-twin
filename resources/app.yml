@@ -6,6 +6,14 @@ resources:
       source_code_path: ..
       config:
         env:
+          - name: DATABRICKS_HTTP_PATH
+            value: "/sql/1.0/warehouses/${var.warehouse_id}"
+          - name: DATABRICKS_CATALOG
+            value: "${var.catalog}"
+          - name: DATABRICKS_SCHEMA
+            value: "${var.schema}"
+          - name: DATABRICKS_WAREHOUSE_ID
+            value: "${var.warehouse_id}"
           - name: LAKEBASE_HOST
             value: "${var.lakebase_host}"
           - name: LAKEBASE_ENDPOINT_NAME

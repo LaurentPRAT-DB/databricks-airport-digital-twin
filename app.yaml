@@ -26,8 +26,7 @@ env:
     value: "true"
 
   # Databricks SQL (Delta tables)
-  - name: DATABRICKS_HOST
-    value: "fevm-serverless-stable-3n0ihb.cloud.databricks.com"
+  # DATABRICKS_HOST is auto-injected by the Databricks Apps platform — do not hardcode
   - name: DATABRICKS_HTTP_PATH
     value: "/sql/1.0/warehouses/b868e84cedeb4262"
   - name: DATABRICKS_CATALOG

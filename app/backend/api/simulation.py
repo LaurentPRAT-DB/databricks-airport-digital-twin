@@ -604,11 +604,13 @@ async def generate_report_from_data(
     saved JSON file on disk. The frontend sends summary, events, and config
     directly. If no weather_snapshots are provided, fetches current METAR.
     """
-    from src.simulation.report_generator import ReportGenerator
+    from src.simulation.report_generator import ReportGenerator, MODEL_ENDPOINT, FALLBACK_ENDPOINTS
 
     # Get auth for LLM call
     from app.backend.api.assistant import _get_databricks_auth
+    logger.info(f"DIAG report: starting generation, endpoints=[{MODEL_ENDPOINT}] + {FALLBACK_ENDPOINTS}")
     host, token = _get_databricks_auth(request)
+    logger.info(f"DIAG report: auth obtained, host={host}")
 
     # If no weather snapshots provided, try to fetch current METAR
     weather_snapshots = body.weather_snapshots
