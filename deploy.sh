@@ -39,6 +39,7 @@ SECRET_SCOPE="${SECRET_SCOPE:-airport-digital-twin}"
 APP_NAME="${APP_NAME:-airport-digital-twin-$TARGET}"
 LAKEBASE_PROJECT="${LAKEBASE_PROJECT:-airport-digital-twin}"
 LAKEBASE_BRANCH="${LAKEBASE_BRANCH:-production}"
+LAKEBASE_HOST="${LAKEBASE_HOST:-}"
 SKIP_BUILD="${SKIP_BUILD:-}"
 SEED="${SEED:-}"
 
@@ -80,6 +81,63 @@ echo "Step 2: DABs bundle deploy"
 databricks bundle deploy --target "$TARGET" 2>&1 | grep -v "^Warning:" \
   && ok "Bundle deployed (app + volumes + jobs + endpoints)" \
   || { fail "Bundle deploy failed"; exit 1; }
+
+# ── Step 2a: Patch app.yaml on workspace with target-specific env vars ──
+# DABs terraform provider doesn't apply config.env to app definitions,
+# so we patch the workspace app.yaml directly after bundle deploy.
+echo "Step 2a: Patch app.yaml with target-specific env vars"
+BUNDLE_DIR_PATH=$(databricks bundle summary --target "$TARGET" 2>/dev/null \
+  | grep "Root Path:" | sed 's/.*Root Path: *//' || true)
+if [[ -z "$BUNDLE_DIR_PATH" ]]; then
+  # Fallback: derive from profile user
+  DEPLOY_USER=$(databricks current-user me --profile "$PROFILE" -o json 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('userName',''))" 2>/dev/null || true)
+  BUNDLE_DIR_PATH="/Workspace/Users/$DEPLOY_USER/.bundle/airport-digital-twin/$TARGET/files"
+fi
+
+# Resolve LAKEBASE_HOST from databricks.yml if not set
+if [[ -z "$LAKEBASE_HOST" ]]; then
+  LAKEBASE_HOST=$(uv run python3 -c "
+import yaml
+with open('databricks.yml') as f:
+    cfg = yaml.safe_load(f)
+target = cfg.get('targets', {}).get('$TARGET', {})
+tvars = target.get('variables', {})
+print(tvars.get('lakebase_host', cfg.get('variables', {}).get('lakebase_host', {}).get('default', '')))
+" 2>/dev/null || true)
+fi
+
+if [[ -n "$BUNDLE_DIR_PATH" && -n "$LAKEBASE_HOST" ]]; then
+  # Download, patch, re-upload app.yaml
+  TMP_YAML=$(mktemp /tmp/app_yaml_XXXXX.yaml)
+  databricks workspace export "$BUNDLE_DIR_PATH/app.yaml" --profile "$PROFILE" > "$TMP_YAML" 2>/dev/null
+  LAKEBASE_EP="projects/$LAKEBASE_PROJECT/branches/$LAKEBASE_BRANCH/endpoints/primary"
+  uv run python3 -c "
+import yaml, sys
+with open('$TMP_YAML') as f:
+    cfg = yaml.safe_load(f)
+overrides = {
+    'LAKEBASE_HOST': '$LAKEBASE_HOST',
+    'LAKEBASE_ENDPOINT_NAME': '$LAKEBASE_EP',
+    'DATABRICKS_HTTP_PATH': '/sql/1.0/warehouses/$WAREHOUSE_ID',
+    'DATABRICKS_CATALOG': '$UC_CATALOG',
+    'DATABRICKS_SCHEMA': '$UC_SCHEMA',
+    'DATABRICKS_WAREHOUSE_ID': '$WAREHOUSE_ID',
+}
+for env in cfg.get('env', []):
+    if env.get('name') in overrides:
+        env['value'] = overrides[env['name']]
+with open('$TMP_YAML', 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False, sort_keys=False)
+" 2>/dev/null
+  databricks workspace delete "$BUNDLE_DIR_PATH/app.yaml" --profile "$PROFILE" 2>/dev/null || true
+  databricks workspace import "$BUNDLE_DIR_PATH/app.yaml" --file "$TMP_YAML" --format AUTO --profile "$PROFILE" 2>/dev/null \
+    && ok "Patched app.yaml (LAKEBASE_HOST=$LAKEBASE_HOST)" \
+    || fail "Could not patch app.yaml"
+  rm -f "$TMP_YAML"
+else
+  info "Skipped app.yaml patch (bundle dir or lakebase host not resolved)"
+fi
 
 # ── Step 2b: Upload airport configs to UC Volume ───────────────────
 # Seed script reads from static_assets/airport_cache/ — upload there.
