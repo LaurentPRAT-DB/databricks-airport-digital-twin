@@ -22,14 +22,16 @@ html, body, #root {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
-.safe-area-bottom {
+.safe-area-bottom,
+.safe-area-pad-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Standalone PWA: ensure layout accounts for status bar + home indicator */
+/* Standalone PWA: ensure layout fills viewport correctly */
 @media all and (display-mode: standalone) {
   html, body, #root {
-    height: 100dvh;
+    height: 100%;
+    height: -webkit-fill-available;
   }
 }
 

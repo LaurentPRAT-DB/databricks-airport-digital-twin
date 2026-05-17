@@ -720,6 +720,15 @@ if FRONTEND_DIST.exists():
         app.mount("/icons", StaticFiles(directory=icons_dir), name="icons")
         logger.info(f"Mounted /icons from {icons_dir}")
 
+    # Serve apple-touch-icon at root (iOS checks this path automatically)
+    @app.get("/apple-touch-icon.png")
+    @app.get("/apple-touch-icon-precomposed.png")
+    async def serve_apple_touch_icon():
+        for path in [FRONTEND_DIST / "apple-touch-icon.png", FRONTEND_DIST / "icons" / "apple-touch-icon.png"]:
+            if path.exists():
+                return FileResponse(path, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+        raise HTTPException(status_code=404, detail="Apple touch icon not found")
+
     # Serve favicon SVG
     @app.get("/airport.svg")
     async def serve_favicon():

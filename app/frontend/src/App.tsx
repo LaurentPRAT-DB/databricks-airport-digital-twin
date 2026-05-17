@@ -948,7 +948,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
 
   if (isMobile) {
     return (
-      <div className="h-dvh w-screen flex flex-col overflow-hidden bg-slate-800 safe-area-top safe-area-bottom">
+      <div className="h-screen w-screen flex flex-col overflow-hidden bg-slate-800 safe-area-top">
         <MobileHeader
           onShowFIDS={() => setShowFIDS(true)}
           onShowKPI={() => setShowKPI(true)}
@@ -959,8 +959,8 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
         {showKPI && <KPIDashboard onClose={() => setShowKPI(false)} />}
         <GenieChat hideFab externalOpen={showChat} onClose={() => setShowChat(false)} />
 
-        {/* Tab content */}
-        <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Tab content — pb-20 accounts for fixed MobileTabBar */}
+        <main className="flex-1 flex flex-col overflow-hidden pb-20">
           {mobileTab === 'map' && mapView}
           {mobileTab === 'flights' && (
             selectedFlight ? (
@@ -1064,12 +1064,11 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
               </div>
             )
           )}
+          {/* Simulation controls — show PlaybackBar when map is visible */}
+          <div className={`shrink-0 ${(mobileTab === 'map' || selectedFlight) ? '' : 'h-0 overflow-hidden'}`}>
+            {simulationControlsNode}
+          </div>
         </main>
-
-        {/* Simulation controls — show PlaybackBar when map is visible */}
-        <div className={(mobileTab === 'map' || selectedFlight) ? '' : 'h-0 overflow-hidden'}>
-          {simulationControlsNode}
-        </div>
 
         <MobileTabBar activeTab={mobileTab} onTabChange={setMobileTab} />
       </div>
