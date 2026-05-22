@@ -957,7 +957,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
         />
         {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
         {showKPI && <KPIDashboard onClose={() => setShowKPI(false)} />}
-        <GenieChat hideFab externalOpen={showChat} onClose={() => setShowChat(false)} />
+        <GenieChat hideFab compact externalOpen={showChat} onClose={() => setShowChat(false)} />
 
         {/* Tab content — bottom padding accounts for fixed MobileTabBar + safe-area */}
         <main className="flex-1 flex flex-col overflow-hidden" style={{ paddingBottom: 'var(--tab-bar-h, 80px)' }}>
