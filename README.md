@@ -163,27 +163,53 @@ When you select a flight, the details panel shows:
 | `Up` / `Down` | Navigate flight list |
 | `Enter` | Select highlighted flight |
 
-### Mobile Experience
+### Mobile Experience (PWA — iOS & Android)
 
-The platform is fully responsive — on screens below 768px, it switches to a native mobile-optimized layout with bottom tab navigation.
+The platform is a **Progressive Web App** optimized for mobile — installable to the home screen with native-like behavior. On screens below 768px it switches to a dedicated mobile layout with bottom tab navigation, safe-area support for notched devices, and dynamic viewport handling for iOS Safari.
+
+| Feature | Details |
+|---|---|
+| **Installable PWA** | Add to home screen on iOS/Android — opens full-screen with app icon |
+| **Bottom tab bar** | Map, Flights, Gates, Info — safe-area-aware for iPhone home indicator |
+| **Dynamic viewport** | Uses `100dvh` to handle iOS Safari URL bar collapse without layout shifts |
+| **Offline support** | Service worker caches assets, friendly offline page with retry |
+| **Controlled updates** | In-app toast notification when a new version is available |
+| **Touch-optimized** | 48px minimum touch targets, no 300ms tap delay, no overscroll bounce |
+
+#### Tab Navigation
 
 | Tab | Content |
 |---|---|
-| **Map** | Full-screen interactive map with 2D/3D toggle and satellite view |
+| **Map** | Full-screen interactive map with 2D/3D toggle, satellite view, and simulation timeline |
 | **Flights** | Searchable flight list with phase filters and callsign search |
-| **Gates** | Terminal gate occupancy with split map view when a flight is selected |
-| **Info** | Flight details, trajectory, ML predictions |
+| **Gates** | Terminal gate occupancy with split map — zooms to selected gate area |
+| **Info** | Flight details, origin/destination, trajectory, ML predictions |
+
+#### Map Views
 
 <p align="center">
-  <img src="docs/screenshots/mobile-01-map.png" width="200" alt="Mobile map view" />
-  <img src="docs/screenshots/mobile-02-flights.png" width="200" alt="Mobile flights list" />
-  <img src="docs/screenshots/mobile-04-gates.png" width="200" alt="Mobile gate status" />
-  <img src="docs/screenshots/mobile-03-flight-detail.png" width="200" alt="Mobile flight detail" />
+  <img src="docs/screenshots/mobile-01-map-2d.png" width="180" alt="2D map view" />
+  <img src="docs/screenshots/mobile-02-map-2d-dark.png" width="180" alt="2D map dark mode" />
+  <img src="docs/screenshots/mobile-03-map-3d.png" width="180" alt="3D view" />
+  <img src="docs/screenshots/mobile-04-satellite.png" width="180" alt="Satellite view" />
 </p>
 
-*Left to right: Map view with weather & KPI/FIDS buttons, flight list with phase filters, gate status with split map, flight detail with trajectory*
+*Left to right: 2D map with airport overlay, dark mode, 3D extruded terminals, satellite imagery with Clean Tiles*
 
-The mobile header provides quick access to **KPI** dashboard and **FIDS** board, plus a hamburger menu for theme toggle, FIDS, legend, and chat assistant.
+#### 3D Satellite, Gate Detail & Flight Info
+
+<p align="center">
+  <img src="docs/screenshots/mobile-05-3d-satellite.png" width="180" alt="3D satellite view" />
+  <img src="docs/screenshots/mobile-06-map-gates.png" width="180" alt="Map with gate labels" />
+  <img src="docs/screenshots/mobile-07-gate-detail.png" width="180" alt="Gate detail panel" />
+  <img src="docs/screenshots/mobile-08-flight-detail.png" width="180" alt="Flight detail with trajectory" />
+</p>
+
+*Left to right: 3D satellite with callsign labels, gate labels on map, gate detail (status + congestion), flight detail with approach trajectory*
+
+#### Mobile Header & Menu
+
+The compact header provides quick-access buttons for **KPI** dashboard and **FIDS** board, live weather, and a hamburger menu with phase filter and chat assistant.
 
 ---
 
