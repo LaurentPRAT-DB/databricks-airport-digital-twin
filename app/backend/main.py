@@ -629,6 +629,7 @@ async def get_demo_config():
         "default_airport_icao": DEFAULT_AIRPORT_ICAO,
         "default_airport_iata": DEFAULT_AIRPORT_IATA,
         "default_flight_count": DEFAULT_FLIGHT_COUNT,
+        "inpainting_available": bool(os.getenv("INPAINTING_ENDPOINT_NAME", "")),
         "platform": {
             "workspace_url": workspace_url,
             "catalog": os.getenv("DATABRICKS_CATALOG", ""),

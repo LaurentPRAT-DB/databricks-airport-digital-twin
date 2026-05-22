@@ -192,6 +192,7 @@ function ViewToggle({
   warmingUp = false,
   tileActivityLog = [],
   mapZoom = 13,
+  inpaintingAvailable = true,
 }: {
   viewMode: ViewMode;
   onToggle: (mode: ViewMode) => void;
@@ -204,6 +205,7 @@ function ViewToggle({
   warmingUp?: boolean;
   tileActivityLog?: TileEvent[];
   mapZoom?: number;
+  inpaintingAvailable?: boolean;
 }) {
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>('unknown');
   const [statusMessage, setStatusMessage] = useState('');
@@ -471,7 +473,7 @@ function ViewToggle({
           </svg>
           Satellite
         </button>
-        {satellite && mapZoom >= INPAINTING_MIN_ZOOM && (
+        {satellite && inpaintingAvailable && mapZoom >= INPAINTING_MIN_ZOOM && (
           <button
             onClick={handleCleanTilesClick}
             disabled={endpointStatus === 'checking'}
@@ -679,6 +681,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [openskyAvailable, setOpenskyAvailable] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>('map');
   const [showChat, setShowChat] = useState(false);
+  const [inpaintingAvailable, setInpaintingAvailable] = useState(true);
 
   // Connection health: detect backend downtime and show maintenance overlay
   const { isDown, wasDown } = useConnectionHealth({ enabled: false });
@@ -688,6 +691,15 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
       window.location.reload();
     }
   }, [wasDown]);
+
+  // Fetch inpainting availability from config
+  useEffect(() => {
+    if (!backendReady) return;
+    fetch('/api/config')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setInpaintingAvailable(data.inpainting_available !== false); })
+      .catch(() => {});
+  }, [backendReady]);
 
   // Close FIDS when switching between 2D/3D views
   useEffect(() => {
@@ -911,7 +923,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   // Shared map view (used in both desktop and mobile layouts)
   const mapView = (
     <div className="flex-1 overflow-hidden relative">
-      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} staleTileCount={staleTileCount} warmingUp={inpaintingWarmingUp} tileActivityLog={tileActivityLog} mapZoom={viewport?.zoom ?? 13} />
+      <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} staleTileCount={staleTileCount} warmingUp={inpaintingWarmingUp} tileActivityLog={tileActivityLog} mapZoom={viewport?.zoom ?? 13} inpaintingAvailable={inpaintingAvailable} />
       <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
         <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>
           <AirportMap
