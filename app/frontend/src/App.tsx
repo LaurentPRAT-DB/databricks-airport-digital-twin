@@ -70,7 +70,7 @@ function LoadingScreen({ airportCode, statusMessage, initSteps }: {
   const steps = initSteps && initSteps.length > 0 ? initSteps : null;
 
   return (
-    <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white">
+    <div className="h-[100dvh] w-screen flex flex-col items-center justify-center bg-slate-900 text-white">
       {/* Radar sweep animation */}
       <div className="relative w-32 h-32 mb-6">
         <div className="absolute inset-0 rounded-full border-2 border-slate-600" />
@@ -948,7 +948,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
 
   if (isMobile) {
     return (
-      <div className="h-screen w-screen flex flex-col overflow-hidden bg-slate-800 safe-area-top">
+      <div className="h-[100dvh] w-screen flex flex-col overflow-hidden bg-slate-800 safe-area-top">
         <MobileHeader
           onShowFIDS={() => setShowFIDS(true)}
           onShowKPI={() => setShowKPI(true)}
@@ -959,8 +959,8 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
         {showKPI && <KPIDashboard onClose={() => setShowKPI(false)} />}
         <GenieChat hideFab externalOpen={showChat} onClose={() => setShowChat(false)} />
 
-        {/* Tab content — pb-20 accounts for fixed MobileTabBar */}
-        <main className="flex-1 flex flex-col overflow-hidden pb-20">
+        {/* Tab content — bottom padding accounts for fixed MobileTabBar + safe-area */}
+        <main className="flex-1 flex flex-col overflow-hidden" style={{ paddingBottom: 'var(--tab-bar-h, 80px)' }}>
           {mobileTab === 'map' && mapView}
           {mobileTab === 'flights' && (
             selectedFlight ? (

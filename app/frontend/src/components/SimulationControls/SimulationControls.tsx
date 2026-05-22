@@ -270,7 +270,7 @@ function PlaybackBar({ sim, isRecorded = false, savedReport, setSavedReport }: {
   ];
 
   return (
-    <div ref={barRef} className={`fixed left-0 right-0 z-[1500] backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0 ${isRecorded ? 'bg-slate-900/95 border-t-2 border-amber-500/60' : 'bg-slate-900/95'}`}>
+    <div ref={barRef} className={`fixed left-0 right-0 z-[1500] backdrop-blur text-white px-4 py-2 shadow-lg bottom-[var(--tab-bar-h)] md:bottom-0 ${isRecorded ? 'bg-slate-900/95 border-t-2 border-amber-500/60' : 'bg-slate-900/95'}`}>
       {/* Event legend — hidden on mobile */}
       {visibleEventTypes.length > 0 && (
         <div className="hidden md:flex items-center gap-3 max-w-screen-xl mx-auto mb-1.5 pl-[136px]">
@@ -495,7 +495,7 @@ function PausedBar({
   onRestart: () => void;
 }) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[1500] bg-amber-900/95 backdrop-blur text-white px-4 py-3 shadow-lg max-md:bottom-12">
+    <div className="fixed left-0 right-0 z-[1500] bg-amber-900/95 backdrop-blur text-white px-4 py-3 shadow-lg bottom-[var(--tab-bar-h)] md:bottom-0">
       <div className="flex items-center justify-center gap-4 max-w-screen-xl mx-auto">
         <span className="text-amber-200 font-medium">Simulation Paused</span>
         {pendingAirport && (
@@ -566,7 +566,7 @@ function LiveBar({ flightCount, lastUpdated, airport }: { flightCount: number; l
   };
 
   return (
-    <div className="fixed left-0 right-0 z-[1500] bg-emerald-900/95 backdrop-blur text-white px-4 py-2 shadow-lg bottom-12 md:bottom-0">
+    <div className="fixed left-0 right-0 z-[1500] bg-emerald-900/95 backdrop-blur text-white px-4 py-2 shadow-lg bottom-[var(--tab-bar-h)] md:bottom-0">
       <div className="flex items-center gap-4 max-w-screen-xl mx-auto">
         {/* Live indicator */}
         <div className="flex items-center gap-2">

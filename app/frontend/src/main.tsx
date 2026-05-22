@@ -81,6 +81,32 @@ onLCP(reportWebVitals);
 onFCP(reportWebVitals);
 onTTFB(reportWebVitals);
 
+// Service Worker update listener — show toast when new version is available
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data?.type === 'SW_UPDATED') {
+      showUpdateToast();
+    }
+  });
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload();
+  });
+}
+
+function showUpdateToast() {
+  if (document.getElementById('sw-update-toast')) return;
+  const toast = document.createElement('div');
+  toast.id = 'sw-update-toast';
+  toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:#1e293b;color:#e2e8f0;padding:12px 20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.4);display:flex;align-items:center;gap:12px;font-family:system-ui;font-size:14px;border:1px solid #334155;max-width:90vw';
+  toast.innerHTML = `
+    <span>A new version is available</span>
+    <button style="background:#3b82f6;color:white;border:none;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer" onclick="navigator.serviceWorker.ready.then(r=>{if(r.waiting)r.waiting.postMessage({type:'SKIP_WAITING'})})">Update</button>
+    <button style="background:none;border:none;color:#64748b;cursor:pointer;padding:4px;font-size:18px;line-height:1" onclick="this.parentElement.remove()">×</button>
+  `;
+  document.body.appendChild(toast);
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

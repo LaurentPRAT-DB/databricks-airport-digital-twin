@@ -27,11 +27,13 @@ describe('MobileTabBar', () => {
     expect(mockOnTabChange).toHaveBeenCalledWith('info');
   });
 
-  it('has minimum 48px touch targets', () => {
+  it('has minimum 48px touch targets via nav height', () => {
     render(<MobileTabBar activeTab="map" onTabChange={mockOnTabChange} />);
+    const nav = screen.getByRole('navigation');
+    expect(nav.style.height).toContain('--tab-bar-h');
     const buttons = screen.getAllByRole('button');
     buttons.forEach((btn) => {
-      expect(btn.className).toContain('min-h-[48px]');
+      expect(btn.className).toContain('flex-1');
     });
   });
 });

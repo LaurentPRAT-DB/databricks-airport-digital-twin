@@ -3,14 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/airport.svg" />
+    <link rel="icon" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Airport DT" />
+    <!-- iOS splash screens (generated from 512x512 icon with dark background) -->
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" href="/icons/icon-512.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)" href="/icons/icon-512.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)" href="/icons/icon-512.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" href="/icons/icon-512.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)" href="/icons/icon-512.png" />
     <meta name="description" content="Real-time airport digital twin visualization with 2D/3D flight tracking, ML-powered delay predictions, and gate recommendations. Built on Databricks." />
     <meta name="keywords" content="airport, digital twin, flight tracking, Databricks, real-time visualization" />
     <title>Airport Digital Twin</title>
@@ -36,11 +43,32 @@
       </div>
     </noscript>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- Register Service Worker for caching -->
+    <!-- Register Service Worker for caching + update detection -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
+          navigator.serviceWorker.register('/sw.js').then((reg) => {
+            // Check for updates periodically (every 30 min)
+            setInterval(() => reg.update(), 30 * 60 * 1000);
+            // Detect a waiting worker (new version installed but not active)
+            if (reg.waiting) {
+              navigator.serviceWorker.controller && navigator.serviceWorker.dispatchEvent(
+                new MessageEvent('message', { data: { type: 'SW_UPDATED' } })
+              );
+            }
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              if (!newWorker) return;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New version ready — notify app
+                  navigator.serviceWorker.dispatchEvent(
+                    new MessageEvent('message', { data: { type: 'SW_UPDATED' } })
+                  );
+                }
+              });
+            });
+          }).catch(() => {});
         });
       }
     </script>

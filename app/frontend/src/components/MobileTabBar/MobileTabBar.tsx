@@ -50,14 +50,17 @@ const tabs: { id: MobileTab; label: string; icon: JSX.Element }[] = [
 
 export default function MobileTabBar({ activeTab, onTabChange }: MobileTabBarProps) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 flex bg-slate-800 border-t border-slate-700 safe-area-pad-bottom z-50">
+    <nav
+      className="fixed bottom-0 left-0 right-0 flex bg-slate-800 border-t border-slate-700 z-50"
+      style={{ height: 'var(--tab-bar-h, 80px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
           <button
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
-            className={`flex-1 flex flex-col items-center justify-center min-h-[48px] py-2 transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center py-2 transition-colors ${
               isActive
                 ? 'text-blue-400 bg-slate-700/50'
                 : 'text-slate-400 active:bg-slate-700/30'
