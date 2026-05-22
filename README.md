@@ -185,31 +185,40 @@ The platform is a **Progressive Web App** optimized for mobile — installable t
 | **Gates** | Terminal gate occupancy with split map — zooms to selected gate area |
 | **Info** | Flight details, origin/destination, trajectory, ML predictions |
 
-#### Map Views
+#### Safari Mode (Mobile Browser)
+
+Accessed via the browser URL. The Safari navigation bar is visible at the top — the app adapts its viewport dynamically as the URL bar collapses or expands during scrolling (using CSS `100dvh`).
 
 <p align="center">
-  <img src="docs/screenshots/mobile-01-map-2d.png" width="180" alt="2D map view" />
-  <img src="docs/screenshots/mobile-02-map-2d-dark.png" width="180" alt="2D map dark mode" />
-  <img src="docs/screenshots/mobile-03-map-3d.png" width="180" alt="3D view" />
-  <img src="docs/screenshots/mobile-04-satellite.png" width="180" alt="Satellite view" />
+  <img src="docs/screenshots/mobile-01-map-2d.png" width="180" alt="2D map in Safari" />
+  <img src="docs/screenshots/mobile-03-map-3d.png" width="180" alt="3D view in Safari" />
+  <img src="docs/screenshots/mobile-04-satellite.png" width="180" alt="Satellite view in Safari" />
 </p>
 
-*Left to right: 2D map with airport overlay, dark mode, 3D extruded terminals, satellite imagery with Clean Tiles*
+*Safari browser mode — URL bar visible at top. Left to right: 2D map with airport overlay and simulation timeline, 3D extruded terminals, satellite imagery with Clean Tiles and taxiway overlay*
 
-#### 3D Satellite, Gate Detail & Flight Info
+#### Installed PWA (Add to Home Screen)
+
+When installed via "Add to Home Screen" on iOS (or "Install" on Android), the app runs full-screen without any browser chrome — indistinguishable from a native app. The status bar blends with the app header, and the bottom tab bar accounts for the iPhone home indicator via safe-area insets.
 
 <p align="center">
-  <img src="docs/screenshots/mobile-05-3d-satellite.png" width="180" alt="3D satellite view" />
-  <img src="docs/screenshots/mobile-06-map-gates.png" width="180" alt="Map with gate labels" />
-  <img src="docs/screenshots/mobile-07-gate-detail.png" width="180" alt="Gate detail panel" />
-  <img src="docs/screenshots/mobile-08-flight-detail.png" width="180" alt="Flight detail with trajectory" />
+  <img src="docs/screenshots/mobile-02-map-2d-dark.png" width="180" alt="PWA 2D dark mode" />
+  <img src="docs/screenshots/mobile-05-3d-satellite.png" width="180" alt="PWA 3D satellite" />
+  <img src="docs/screenshots/mobile-06-map-gates.png" width="180" alt="PWA gate labels on map" />
 </p>
 
-*Left to right: 3D satellite with callsign labels, gate labels on map, gate detail (status + congestion), flight detail with approach trajectory*
+*Installed PWA — no browser chrome. Left to right: 2D map (dark theme) with full-screen layout, 3D satellite view with callsign labels, 2D map with gate labels visible at zoom*
+
+<p align="center">
+  <img src="docs/screenshots/mobile-07-gate-detail.png" width="180" alt="PWA gate detail" />
+  <img src="docs/screenshots/mobile-08-flight-detail.png" width="180" alt="PWA flight detail" />
+</p>
+
+*Gate detail panel showing occupancy status and area congestion; Flight info tab with origin/destination, approach trajectory, and ML predictions*
 
 #### Mobile Header & Menu
 
-The compact header provides quick-access buttons for **KPI** dashboard and **FIDS** board, live weather, and a hamburger menu with phase filter and chat assistant.
+The compact header provides quick-access buttons for **KPI** dashboard and **FIDS** board, live weather, and a hamburger menu with phase filter and chat assistant. In both Safari and PWA modes, the bottom tab bar is fixed with 48px touch targets and safe-area padding for notched iPhones.
 
 ---
 
