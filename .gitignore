@@ -125,8 +125,7 @@ app/frontend/dist/
 .planning/fixes/43-ux-review-fixes/
 .planning/fixes/46-ux-review-v3-fixes/
 
-# Generated service worker
-app/frontend/public/sw.js
+# Generated service worker (now hand-maintained, tracked in git)
 
 # Root package files (should only exist in app/frontend/)
 /package.json

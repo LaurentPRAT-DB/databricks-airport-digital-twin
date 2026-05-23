@@ -98,13 +98,60 @@ function showUpdateToast() {
   if (document.getElementById('sw-update-toast')) return;
   const toast = document.createElement('div');
   toast.id = 'sw-update-toast';
-  toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:#1e293b;color:#e2e8f0;padding:12px 20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.4);display:flex;align-items:center;gap:12px;font-family:system-ui;font-size:14px;border:1px solid #334155;max-width:90vw';
+  toast.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);z-index:9999;background:#1e293b;color:#e2e8f0;padding:12px 20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.4);display:flex;align-items:center;gap:12px;font-family:system-ui;font-size:14px;border:1px solid #334155;max-width:90vw;bottom:calc(16px + var(--tab-bar-h, 80px))';
   toast.innerHTML = `
-    <span>A new version is available</span>
+    <span>New version available</span>
     <button style="background:#3b82f6;color:white;border:none;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer" onclick="navigator.serviceWorker.ready.then(r=>{if(r.waiting)r.waiting.postMessage({type:'SKIP_WAITING'})})">Update</button>
     <button style="background:none;border:none;color:#64748b;cursor:pointer;padding:4px;font-size:18px;line-height:1" onclick="this.parentElement.remove()">×</button>
   `;
   document.body.appendChild(toast);
+}
+
+// PWA Install Prompt — capture deferred prompt for in-app install banner
+let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e as BeforeInstallPromptEvent;
+  // Show install banner after engagement (delay 60s from first load)
+  setTimeout(() => {
+    if (deferredInstallPrompt && !localStorage.getItem('pwa-install-dismissed')) {
+      showInstallBanner();
+    }
+  }, 60000);
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  const banner = document.getElementById('pwa-install-banner');
+  if (banner) banner.remove();
+});
+
+function showInstallBanner() {
+  if (document.getElementById('pwa-install-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'pwa-install-banner';
+  banner.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);z-index:9998;background:#1e293b;color:#e2e8f0;padding:12px 20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.4);display:flex;align-items:center;gap:12px;font-family:system-ui;font-size:14px;border:1px solid #334155;max-width:90vw;bottom:calc(16px + var(--tab-bar-h, 80px))';
+  banner.innerHTML = `
+    <span>Install for offline access</span>
+    <button id="pwa-install-btn" style="background:#3b82f6;color:white;border:none;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer">Install</button>
+    <button style="background:none;border:none;color:#64748b;cursor:pointer;padding:4px;font-size:18px;line-height:1" onclick="localStorage.setItem('pwa-install-dismissed',Date.now());this.parentElement.remove()">×</button>
+  `;
+  document.body.appendChild(banner);
+  document.getElementById('pwa-install-btn')?.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    await deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === 'accepted') {
+      banner.remove();
+    }
+    deferredInstallPrompt = null;
+  });
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
