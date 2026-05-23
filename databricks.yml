@@ -95,14 +95,6 @@ targets:
   prod:
     workspace:
       profile: FEVM_SERVERLESS_STABLE
-    resources:
-      apps:
-        airport_digital_twin:
-          resources:
-            - name: inpainting-endpoint
-              serving_endpoint:
-                name: airport-dt-aircraft-inpainting-prod
-                permission: CAN_QUERY
     variables:
       catalog: "serverless_stable_3n0ihb_catalog"
       schema: "airport_digital_twin_prod"
