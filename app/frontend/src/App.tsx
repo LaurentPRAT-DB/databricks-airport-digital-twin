@@ -21,6 +21,7 @@ import { useViewportState, SharedViewport } from './hooks/useViewportState';
 import { debugLogger } from './utils/debugLogger';
 import SimulationControls, { DataModeToggle } from './components/SimulationControls/SimulationControls';
 import { MaintenanceOverlay } from './components/MaintenanceOverlay/MaintenanceOverlay';
+import { ConnectionStatus } from './components/ConnectionStatus';
 import { Flight } from './types/flight';
 
 // Lazy load 3D map to reduce initial bundle size
@@ -1149,6 +1150,7 @@ function App() {
       <AirportConfigProvider>
         <FlightProvider simulationFlights={simulationFlights} simTrajectoryProvider={simTrajectoryProvider} simFlightLogProvider={simFlightLogProvider}>
           <CongestionFilterProvider>
+            <ConnectionStatus />
             <AppContent handleSimFlightsChange={handleSimFlightsChange} handleTrajectoryProviderChange={handleTrajectoryProviderChange} handleFlightLogProviderChange={handleFlightLogProviderChange} />
           </CongestionFilterProvider>
         </FlightProvider>

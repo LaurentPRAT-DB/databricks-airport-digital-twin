@@ -110,11 +110,6 @@ function showUpdateToast() {
 // PWA Install Prompt — capture deferred prompt for in-app install banner
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
-
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstallPrompt = e as BeforeInstallPromptEvent;

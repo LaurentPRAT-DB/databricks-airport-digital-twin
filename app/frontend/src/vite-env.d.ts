@@ -10,3 +10,19 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// PWA Badging API
+interface Navigator {
+  setAppBadge(count?: number): Promise<void>;
+  clearAppBadge(): Promise<void>;
+}
+
+// PWA Install Prompt
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+interface WindowEventMap {
+  beforeinstallprompt: BeforeInstallPromptEvent;
+}

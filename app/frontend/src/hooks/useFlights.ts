@@ -18,6 +18,7 @@ export interface UseFlightsResult {
   error: Error | null;
   lastUpdated: string | null;
   dataSource: 'live' | 'cached' | 'synthetic' | 'opensky' | 'opensky_recorded' | null;
+  wsConnected: boolean;
 }
 
 /** Build the WebSocket URL from the current page origin. */
@@ -195,5 +196,6 @@ export function useFlights(): UseFlightsResult {
     error,
     lastUpdated: data?.timestamp ?? null,
     dataSource: data?.data_source ?? null,
+    wsConnected,
   };
 }
