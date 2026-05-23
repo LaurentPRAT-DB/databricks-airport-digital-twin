@@ -1642,6 +1642,8 @@ def _update_departing(state: FlightState, dt: float) -> None:
 
 def _update_taxi_to_runway(state: FlightState, dt: float) -> FlightState | None:
     """TAXI_TO_RUNWAY phase: waypoint following → queue hold → runway entry."""
+    from src.ingestion.fallback import TAXI_WAYPOINTS_DEPARTURE
+
     taxi_wps = state.taxi_route or TAXI_WAYPOINTS_DEPARTURE
     if state.waypoint_index < len(taxi_wps):
         wp = taxi_wps[state.waypoint_index]
