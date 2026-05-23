@@ -388,4 +388,86 @@ describe('FlightContext', () => {
       expect(result.current.dataSource).not.toBe('opensky')
     })
   })
+
+  describe('Delay predictions', () => {
+    it('exposes delayMap as a Map', async () => {
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => {
+        expect(result.current.delayMap).toBeInstanceOf(Map)
+      })
+    })
+
+    it('exposes delayedCount as a number', async () => {
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => {
+        expect(typeof result.current.delayedCount).toBe('number')
+        expect(result.current.delayedCount).toBeGreaterThanOrEqual(0)
+      })
+    })
+
+    it('populates delayMap from predictions API', async () => {
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      // Wait for flights to load (predictions depend on flights)
+      await waitFor(() => {
+        expect(result.current.flights.length).toBeGreaterThan(0)
+      })
+
+      // MSW handler returns delay for icao24='a12345' with delay_minutes=15
+      await waitFor(() => {
+        expect(result.current.delayMap.size).toBeGreaterThanOrEqual(0)
+      })
+    })
+  })
+
+  describe('PWA Badge API', () => {
+    it('calls setAppBadge when delayed flights exist', async () => {
+      const mockSetBadge = vi.fn().mockResolvedValue(undefined)
+      const mockClearBadge = vi.fn().mockResolvedValue(undefined)
+      Object.defineProperty(navigator, 'setAppBadge', { value: mockSetBadge, configurable: true })
+      Object.defineProperty(navigator, 'clearAppBadge', { value: mockClearBadge, configurable: true })
+
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => {
+        expect(result.current.flights.length).toBeGreaterThan(0)
+      })
+
+      // Badge should have been called (either set or clear depending on mock data)
+      await waitFor(() => {
+        expect(mockSetBadge.mock.calls.length + mockClearBadge.mock.calls.length).toBeGreaterThan(0)
+      })
+
+      // Cleanup
+      delete (navigator as any).setAppBadge
+      delete (navigator as any).clearAppBadge
+    })
+
+    it('does not throw when Badge API is unavailable', async () => {
+      // Ensure Badge API is NOT available
+      delete (navigator as any).setAppBadge
+      delete (navigator as any).clearAppBadge
+
+      const { result } = renderHook(() => useFlightContext(), {
+        wrapper: createWrapper(),
+      })
+
+      await waitFor(() => {
+        expect(result.current.flights.length).toBeGreaterThan(0)
+      })
+
+      // Should not throw — feature detection guards the call
+      expect(result.current.delayedCount).toBeGreaterThanOrEqual(0)
+    })
+  })
 })

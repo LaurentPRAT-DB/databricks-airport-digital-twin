@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useMemo, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { useFlights } from '../hooks/useFlights';
-import { Flight } from '../types/flight';
+import { Flight, DelayPrediction } from '../types/flight';
 import type { SimTrajectoryPoint, PositionSnapshot } from '../hooks/useSimulationReplay';
+import { usePredictions } from '../hooks/usePredictions';
 import { useAirportConfigContext } from './AirportConfigContext';
 
 /** Function that extracts trajectory from simulation frames for a given flight. */
@@ -30,6 +31,8 @@ interface FlightContextType {
   simFlightLogProvider: SimFlightLogProvider | null;
   dataMode: DataMode;
   setDataMode: (mode: DataMode) => void;
+  delayMap: Map<string, DelayPrediction>;
+  delayedCount: number;
 }
 
 const FlightContext = createContext<FlightContextType | null>(null);
@@ -159,6 +162,24 @@ export function FlightProvider({
     : dataMode === 'recorded'
       ? 'opensky_recorded' as const
       : (simulationFlights ? 'simulation' as const : liveDataSource);
+  // Delay predictions — polls /api/predictions/delays every 30s
+  const { delays: delayMap } = usePredictions(flights);
+  const delayedCount = useMemo(() => {
+    let count = 0;
+    delayMap.forEach((pred) => { if (pred.delay_minutes > 15) count++; });
+    return count;
+  }, [delayMap]);
+
+  // PWA Badge — show delayed flight count on app icon
+  useEffect(() => {
+    if (!('setAppBadge' in navigator)) return;
+    if (delayedCount > 0) {
+      navigator.setAppBadge(delayedCount).catch(() => {});
+    } else {
+      navigator.clearAppBadge().catch(() => {});
+    }
+  }, [delayedCount]);
+
   // Phase filter state
   const [hiddenPhases, setHiddenPhasesState] = useState<Set<string>>(new Set());
 
@@ -239,7 +260,9 @@ export function FlightProvider({
     simFlightLogProvider: simFlightLogProvider ?? null,
     dataMode,
     setDataMode,
-  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider, simFlightLogProvider, dataMode, setDataMode, openSkyLoading, openSkyLastUpdated, liveTrajectoryProvider]);
+    delayMap,
+    delayedCount,
+  }), [flights, filteredFlights, hiddenPhases, togglePhase, setHiddenPhases, selectedFlight, setSelectedFlight, showTrajectory, setShowTrajectory, isLoading, error, lastUpdated, dataSource, simTrajectoryProvider, simFlightLogProvider, dataMode, setDataMode, openSkyLoading, openSkyLastUpdated, liveTrajectoryProvider, delayMap, delayedCount]);
 
   return (
     <FlightContext.Provider value={contextValue}>
