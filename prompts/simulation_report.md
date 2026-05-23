@@ -1,4 +1,6 @@
-You are an aviation operations analyst writing a post-simulation debrief report for airport stakeholders.
+You are an aviation operations analyst writing narrative analysis sections for a post-simulation debrief report.
+
+The factual data sections (weather, KPIs, event timeline) have already been generated from raw simulation data and will appear before your narrative. Your job is to write ONLY the interpretive analysis sections below.
 
 ## Simulation Context
 - Airport: {airport}
@@ -21,22 +23,26 @@ You are an aviation operations analyst writing a post-simulation debrief report 
 
 ---
 
-Write a professional markdown analysis report with these sections:
+Write ONLY these narrative sections in markdown (do not repeat weather/KPI/event data tables — those are already in the report):
 
-1. **Executive Summary** — 2-3 sentence overview of the simulation outcome, highlighting the most impactful disruption and overall airport performance.
+1. **Executive Summary** — 2-3 sentences summarizing the simulation outcome. Reference specific numbers from the KPI data above.
 
-2. **Weather Narrative** — chronological description of weather conditions and their evolution throughout the simulation period. Describe transitions between weather states and their operational implications.
+2. **Operational Analysis** — how weather and events affected performance. Explain causal relationships between events listed above and the KPI outcomes. Only reference events that appear in the timeline data.
 
-3. **Operational Impact** — how weather and events affected KPIs, with specific numbers. Compare on-time performance, delays, and cancellation rates to what would be expected in normal conditions.
+3. **Performance Assessment** — was the airport resilient? Where did capacity constraints emerge? Were go-arounds and diversions handled effectively? Reference specific metrics.
 
-4. **Key Events** — the 3-5 most significant disruptions, their root causes, timing, and cascading effects on other operations. Explain the causal chain (e.g., thunderstorm → runway closure → holding patterns → diversions).
+## Grounding Rules (CRITICAL)
 
-5. **Performance Assessment** — was the airport resilient? Where did capacity constraints bite? What bottlenecks emerged? Were go-arounds and diversions handled effectively?
+- ONLY reference facts, numbers, timestamps, and events explicitly present in the data above.
+- Do NOT infer external baselines, industry benchmarks, or "typical" performance for this airport.
+- Do NOT fabricate specific times, flight counts, or metrics not in the data.
+- Do NOT claim knowledge of real-world airport operations beyond what the simulation data shows.
+- If the data is insufficient to make a claim, say so rather than speculating.
+- Every number you cite must appear in the KPI Summary or Event Timeline above.
 
-Guidelines:
-- Use aviation terminology (METAR-style weather descriptions, operational phases).
-- Be specific with times (UTC), flight counts, and delay numbers.
-- Explain causal relationships between events.
+## Format Guidelines
+- Use aviation terminology where appropriate.
+- Be specific with times (UTC) and numbers — but only those from the data.
 - Do not use headers larger than ##.
-- Keep the report between 500-800 words.
+- Keep total narrative between 300-500 words.
 - Format numbers clearly (e.g., "72.3% on-time performance" not "on_time_pct: 72.3").

@@ -171,6 +171,106 @@ def _render_prompt(
     return template
 
 
+def _render_factual_sections(simulation_output: dict[str, Any]) -> str:
+    """Render data-grounded factual sections as markdown (no LLM needed).
+
+    These sections contain only facts derived directly from simulation data.
+    They are prepended to the LLM-generated narrative sections.
+    """
+    config = simulation_output.get("config", {})
+    summary = simulation_output.get("summary", {})
+    weather = simulation_output.get("weather_snapshots", [])
+    events = simulation_output.get("scenario_events", [])
+
+    airport = config.get("airport", "Unknown")
+    scenario = summary.get("scenario_name") or "Standard Operations"
+    start_date = config.get("start_date") or config.get("start_time", "")
+    try:
+        date_fmt = datetime.fromisoformat(start_date).strftime("%d %b %Y").upper()
+    except (ValueError, TypeError):
+        date_fmt = start_date
+
+    # --- Header ---
+    lines = [
+        f"## Post-Simulation Debrief Report\n",
+        f"**{airport} {scenario} | {date_fmt}**\n",
+    ]
+
+    # --- Weather Conditions (factual) ---
+    lines.append("## Weather Conditions\n")
+    if not weather:
+        lines.append("No weather data recorded during simulation.\n")
+    else:
+        lines.append("| Time (UTC) | Category | Visibility | Ceiling | Wind |")
+        lines.append("|---|---|---|---|---|")
+        for w in weather:
+            time_str = w.get("time", "")
+            try:
+                t = datetime.fromisoformat(time_str)
+                time_fmt = t.strftime("%H:%M")
+            except (ValueError, TypeError):
+                time_fmt = time_str
+            cat = w.get("type", "unknown").upper()
+            vis = f"{w['visibility_nm']} nm" if w.get("visibility_nm") is not None else "--"
+            ceil = f"{w['ceiling_ft']} ft" if w.get("ceiling_ft") is not None else "clear"
+            wind_spd = w.get("wind_speed_kt")
+            gusts = w.get("wind_gusts_kt")
+            wind_dir = w.get("wind_direction")
+            if wind_spd is not None:
+                wind_str = f"{wind_dir or '--'}° at {wind_spd} kt"
+                if gusts:
+                    wind_str += f" G{gusts}"
+            else:
+                wind_str = "calm"
+            lines.append(f"| {time_fmt} | {cat} | {vis} | {ceil} | {wind_str} |")
+        lines.append("")
+
+    # --- KPI Summary (factual) ---
+    lines.append("## Performance Metrics\n")
+    lines.append("| Metric | Value |")
+    lines.append("|---|---|")
+    kpi_rows = [
+        ("On-time performance", f"{summary.get('on_time_pct', '--')}%"),
+        ("Average schedule delay", f"{summary.get('schedule_delay_min', '--')} min"),
+        ("Average capacity hold", f"{summary.get('avg_capacity_hold_min', '--')} min"),
+        ("Maximum capacity hold", f"{summary.get('max_capacity_hold_min', '--')} min"),
+        ("Cancellation rate", f"{summary.get('cancellation_rate_pct', '--')}%"),
+        ("Total flights", f"{summary.get('total_flights', '--')} ({summary.get('arrivals', '--')} arr / {summary.get('departures', '--')} dep)"),
+        ("Peak simultaneous", f"{summary.get('peak_simultaneous_flights', '--')} flights"),
+        ("Gates used", f"{summary.get('gate_utilization_gates_used', '--')}"),
+        ("Average turnaround", f"{summary.get('avg_turnaround_min', '--')} min"),
+        ("Go-arounds", f"{summary.get('total_go_arounds', 0)}"),
+        ("Diversions", f"{summary.get('total_diversions', 0)}"),
+        ("Holdings", f"{summary.get('total_holdings', 0)}"),
+    ]
+    for label, value in kpi_rows:
+        lines.append(f"| {label} | {value} |")
+    lines.append("")
+
+    # --- Key Events (factual timeline) ---
+    lines.append("## Event Timeline\n")
+    if not events:
+        lines.append("No scenario events recorded.\n")
+    else:
+        lines.append("| Time (UTC) | Type | Description |")
+        lines.append("|---|---|---|")
+        for e in events[:30]:
+            time_str = e.get("time", "")
+            try:
+                t = datetime.fromisoformat(time_str)
+                time_fmt = t.strftime("%H:%M:%S")
+            except (ValueError, TypeError):
+                time_fmt = time_str
+            etype = e.get("event_type", "")
+            desc = e.get("description", "")
+            lines.append(f"| {time_fmt} | {etype} | {desc} |")
+        if len(events) > 30:
+            lines.append(f"\n*... and {len(events) - 30} additional events.*\n")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 async def _call_llm(host: str, token: str, messages: list[dict]) -> str:
     """Call the FM endpoint and return the response text.
 
@@ -226,15 +326,21 @@ class ReportGenerator:
         host: str,
         token: str,
     ) -> str:
-        """Generate a markdown report from simulation output."""
+        """Generate a grounded markdown report from simulation output.
+
+        Factual sections (weather, KPIs, events) are rendered directly from data.
+        LLM writes only the narrative synthesis (executive summary + analysis).
+        Final report = factual sections + LLM narrative.
+        """
+        factual_md = _render_factual_sections(simulation_output)
         rendered_prompt = _render_prompt(self._template, simulation_output)
         messages = [
             {"role": "user", "content": rendered_prompt},
         ]
         logger.info(f"Generating report for {simulation_output.get('config', {}).get('airport', '?')}...")
-        report = await _call_llm(host, token, messages)
-        logger.info(f"Report generated: {len(report)} chars")
-        return report
+        narrative = await _call_llm(host, token, messages)
+        logger.info(f"Report generated: factual={len(factual_md)} chars, narrative={len(narrative)} chars")
+        return factual_md + "\n" + narrative
 
     def generate_sync(
         self,
