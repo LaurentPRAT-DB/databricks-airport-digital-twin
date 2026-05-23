@@ -29,12 +29,19 @@ FALLBACK_ENDPOINTS = [
 MAX_TOOL_ROUNDS = 3  # Prevent infinite tool-call loops
 
 EXPLAIN_PROMPT = os.getenv("EXPLAIN_PROMPT", (
-    "You are an aviation operations expert analyzing a simulation event. "
-    "Given the event data below, provide a brief explanation (2-3 sentences) of: "
-    "1) What happened and why it's significant "
-    "2) The likely cause based on the event context "
-    "3) What operational impact this has. "
-    "Be concise and use aviation terminology where appropriate. Do not use markdown headers."
+    "You are an aviation operations analyst explaining a simulation event. "
+    "You MUST only reference data fields present in the event JSON below. "
+    "Do NOT speculate about causes not evidenced by the data (e.g., do not mention ATC vectoring, "
+    "pilot decisions, or conditions unless a corresponding field exists in the event). "
+    "Structure your response as:\n"
+    "**Event Analysis:** 2-3 sentences describing what happened, citing specific field values.\n"
+    "**Likely Causes:** Only causes directly supported by the event fields. "
+    "For example, if reason='high_altitude' and altitude_ft=3800, state that the aircraft was "
+    "above the stabilized approach threshold (>1000ft AGL on approach). If weather_category or "
+    "wind fields are present, reference those. If no field supports a cause, say "
+    "'No additional causal data recorded.'\n"
+    "**Operational Impact:** Brief impact statement grounded in the event data.\n"
+    "Use aviation terminology. Be concise. Do not use markdown headers beyond the bold labels above."
 ))
 
 SYSTEM_PROMPT = """You are the Airport Operations Assistant for a digital twin system. You have access to two types of data:

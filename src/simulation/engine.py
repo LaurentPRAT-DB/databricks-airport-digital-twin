@@ -1182,7 +1182,15 @@ class SimulationEngine:
                         self.sim_time, "go_around",
                         f"{state.callsign} go-around #{state.go_around_count} ({self.capacity.current_category})",
                         {"callsign": state.callsign, "icao24": icao24,
-                         "attempt": state.go_around_count, "weather": self.capacity.current_category},
+                         "attempt": state.go_around_count, "reason": "weather",
+                         "altitude_ft": round(state.altitude),
+                         "speed_kts": round(state.velocity),
+                         "vertical_rate_fpm": round(state.vertical_rate),
+                         "aircraft_type": state.aircraft_type,
+                         "weather_category": self.capacity.current_category,
+                         "wind_direction": self.capacity._wind_direction,
+                         "wind_gusts_kt": getattr(self.capacity, '_wind_gusts_kt', None),
+                         "weather_multiplier": round(self.capacity.weather_multiplier, 2)},
                     )
                     if state.go_around_count >= 3:
                         self._divert_flight(icao24, state)
@@ -1202,7 +1210,14 @@ class SimulationEngine:
                             self.sim_time, "go_around",
                             f"{state.callsign} go-around #{state.go_around_count} (altitude {state.altitude:.0f}ft)",
                             {"callsign": state.callsign, "icao24": icao24,
-                             "attempt": state.go_around_count, "reason": "high_altitude"},
+                             "attempt": state.go_around_count, "reason": "high_altitude",
+                             "altitude_ft": round(state.altitude),
+                             "speed_kts": round(state.velocity),
+                             "vertical_rate_fpm": round(state.vertical_rate),
+                             "aircraft_type": state.aircraft_type,
+                             "weather_category": self.capacity.current_category,
+                             "wind_direction": self.capacity._wind_direction,
+                             "wind_gusts_kt": getattr(self.capacity, '_wind_gusts_kt', None)},
                         )
                         self._phase_time[icao24] = ("enroute", 0.0)
                         if state.go_around_count >= 3:
@@ -1295,7 +1310,12 @@ class SimulationEngine:
             self.sim_time, "diversion",
             f"{state.callsign} diverted to {alt_name}",
             {"callsign": state.callsign, "icao24": icao24, "alternate": alt_name,
-             "reason": "runway_closure" if not self.capacity.active_runways else "go_around_limit"},
+             "reason": "runway_closure" if not self.capacity.active_runways else "go_around_limit",
+             "altitude_ft": round(state.altitude),
+             "speed_kts": round(state.velocity),
+             "aircraft_type": state.aircraft_type,
+             "prior_go_arounds": state.go_around_count,
+             "weather_category": self.capacity.current_category},
         )
 
     def _proactive_cancel(self) -> None:
