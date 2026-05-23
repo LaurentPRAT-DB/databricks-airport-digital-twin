@@ -74,6 +74,7 @@ fi
 LAKEBASE_BRANCH="${LAKEBASE_BRANCH:-$TARGET}"
 LAKEBASE_ENDPOINT="projects/airport-digital-twin/branches/$LAKEBASE_BRANCH/endpoints/primary"
 LAKEBASE_HOST="${LAKEBASE_HOST:-ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com}"
+INPAINTING_ENDPOINT="${INPAINTING_ENDPOINT:-airport-dt-aircraft-inpainting-$TARGET}"
 
 ok()   { echo "  [OK] $1"; }
 fail() { echo "  [FAIL] $1"; }
@@ -390,7 +391,7 @@ fi
 
 # ── Step 5: Grant SP permissions ─────────────────────────────────────
 echo "Step 5: Grant SP permissions"
-export APP_SP BUNDLE_DIR APP_NAME UC_CATALOG UC_SCHEMA WAREHOUSE_ID GENIE_SPACE_ID SECRET_SCOPE LAKEBASE_ENDPOINT LAKEBASE_HOST
+export APP_SP BUNDLE_DIR APP_NAME UC_CATALOG UC_SCHEMA WAREHOUSE_ID GENIE_SPACE_ID SECRET_SCOPE LAKEBASE_ENDPOINT LAKEBASE_HOST INPAINTING_ENDPOINT
 # Unset profile — CI uses env var auth
 unset DATABRICKS_PROFILE 2>/dev/null || true
 export DATABRICKS_PROFILE=""

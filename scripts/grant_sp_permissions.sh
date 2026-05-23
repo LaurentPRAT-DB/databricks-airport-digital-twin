@@ -32,6 +32,7 @@ GENIE_SPACE_ID="${GENIE_SPACE_ID:-01f12612fa6314ae943d0526f5ae3a00}"
 SECRET_SCOPE="${SECRET_SCOPE:-airport-digital-twin}"
 LAKEBASE_ENDPOINT="${LAKEBASE_ENDPOINT:-projects/airport-digital-twin/branches/production/endpoints/primary}"
 LAKEBASE_HOST="${LAKEBASE_HOST:-ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com}"
+INPAINTING_ENDPOINT="${INPAINTING_ENDPOINT:-airport-dt-aircraft-inpainting-dev}"
 PROFILE="${DATABRICKS_PROFILE:-FEVM_SERVERLESS_STABLE}"
 
 # ── Auto-detect SP and bundle dir from DABs if not set ──────────────
@@ -279,10 +280,22 @@ except Exception as e:
     sys.exit(1)
 PYEOF
 
-# ── 7. DABs-managed (informational) ─────────────────────────────────
-echo "7. DABs-managed resources (informational)..."
+# ── 7. Serving endpoint CAN_QUERY (conditional) ─────────────────────
+echo "7. Serving endpoint permissions..."
+if [[ -n "$INPAINTING_ENDPOINT" ]]; then
+  EP_EXISTS=$(databricks serving-endpoints get "$INPAINTING_ENDPOINT" "${PROFILE_FLAG[@]}" --output json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('name',''))" 2>/dev/null || true)
+  if [[ -n "$EP_EXISTS" ]]; then
+    databricks api put /api/2.0/permissions/serving-endpoints/"$INPAINTING_ENDPOINT" \
+      "${PROFILE_FLAG[@]}" \
+      --json "{\"access_control_list\":[{\"service_principal_name\":\"$APP_SP\",\"all_permissions\":[{\"permission_level\":\"CAN_QUERY\"}]}]}" \
+      >/dev/null 2>&1 && ok "Inpainting endpoint CAN_QUERY ($INPAINTING_ENDPOINT)" || fail "Could not grant CAN_QUERY on $INPAINTING_ENDPOINT"
+  else
+    skip "Inpainting endpoint $INPAINTING_ENDPOINT not found — will grant when model is deployed"
+  fi
+else
+  skip "No inpainting endpoint configured"
+fi
 ok "SQL Warehouse CAN_USE ($WAREHOUSE_ID) — via resources/app.yml"
-ok "Serving endpoint CAN_QUERY — via resources/app.yml"
 ok "Volumes (calibration_profiles, demo_simulations, opensky_raw, simulation_data, static_assets) — via resources/*.yml"
 
 # ── Summary ──────────────────────────────────────────────────────────
