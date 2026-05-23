@@ -13,7 +13,7 @@ describe('WeatherWidget', () => {
   describe('Loading state', () => {
     it('shows loading indicator initially', () => {
       render(<WeatherWidget />)
-      expect(screen.getByText(/loading weather/i)).toBeInTheDocument()
+      expect(screen.getByText(/Weather\.\.\./)).toBeInTheDocument()
     })
   })
 
@@ -23,7 +23,7 @@ describe('WeatherWidget', () => {
       render(<WeatherWidget />)
 
       await waitFor(() => {
-        expect(screen.queryByText(/loading weather/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Weather\.\.\./)).not.toBeInTheDocument()
       })
 
       // Expand to see station code
@@ -76,7 +76,7 @@ describe('WeatherWidget', () => {
       render(<WeatherWidget />)
 
       await waitFor(() => {
-        expect(screen.queryByText(/loading weather/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Weather\.\.\./)).not.toBeInTheDocument()
       })
 
       const button = screen.getByRole('button')
@@ -92,7 +92,7 @@ describe('WeatherWidget', () => {
       render(<WeatherWidget />)
 
       await waitFor(() => {
-        expect(screen.queryByText(/loading weather/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Weather\.\.\./)).not.toBeInTheDocument()
       })
 
       const button = screen.getByRole('button')
@@ -108,7 +108,7 @@ describe('WeatherWidget', () => {
       render(<WeatherWidget />)
 
       await waitFor(() => {
-        expect(screen.queryByText(/loading weather/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Weather\.\.\./)).not.toBeInTheDocument()
       })
 
       const button = screen.getByRole('button')
@@ -124,7 +124,7 @@ describe('WeatherWidget', () => {
       render(<WeatherWidget />)
 
       await waitFor(() => {
-        expect(screen.queryByText(/loading weather/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Weather\.\.\./)).not.toBeInTheDocument()
       })
 
       const button = screen.getByRole('button')
@@ -140,7 +140,7 @@ describe('WeatherWidget', () => {
       render(<WeatherWidget />)
 
       await waitFor(() => {
-        expect(screen.queryByText(/loading weather/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Weather\.\.\./)).not.toBeInTheDocument()
       })
 
       const button = screen.getByRole('button')
@@ -157,7 +157,7 @@ describe('WeatherWidget', () => {
       render(<WeatherWidget />)
 
       await waitFor(() => {
-        expect(screen.queryByText(/loading weather/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Weather\.\.\./)).not.toBeInTheDocument()
       })
 
       const button = screen.getByRole('button')
@@ -294,7 +294,7 @@ describe('WeatherWidget', () => {
       render(<WeatherWidget />)
 
       await waitFor(() => {
-        expect(screen.getByText(/weather unavailable/i)).toBeInTheDocument()
+        expect(screen.getByText(/No weather/)).toBeInTheDocument()
       })
     })
 
@@ -308,7 +308,7 @@ describe('WeatherWidget', () => {
       render(<WeatherWidget />)
 
       await waitFor(() => {
-        const errorContainer = screen.getByText(/weather unavailable/i).closest('div')
+        const errorContainer = screen.getByText(/No weather/).closest('div')
         expect(errorContainer).toHaveClass('bg-red-900')
       })
     })
@@ -389,7 +389,7 @@ describe('WeatherWidget', () => {
       render(<WeatherWidget />)
 
       await waitFor(() => {
-        expect(screen.queryByText(/loading weather/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Weather\.\.\./)).not.toBeInTheDocument()
       })
 
       const button = screen.getByRole('button')
