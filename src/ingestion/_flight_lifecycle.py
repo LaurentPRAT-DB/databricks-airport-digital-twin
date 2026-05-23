@@ -3,9 +3,10 @@
 import logging
 import math
 import random
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional
+
+from src.ingestion._clock import get_time
 
 logger = logging.getLogger(__name__)
 
@@ -582,8 +583,8 @@ def _create_new_flight(
             time_at_gate=initial_time_at_gate,
             origin_airport=origin,
             destination_airport=destination,
-            landed_at=time.time() - initial_time_at_gate - 5 * 60,  # ~5 min taxi before parking
-            parked_since=time.time() - initial_time_at_gate,
+            landed_at=get_time() - initial_time_at_gate - 5 * 60,  # ~5 min taxi before parking
+            parked_since=get_time() - initial_time_at_gate,
             turnaround_phase=current_phase,
             turnaround_schedule=schedule,
         )
@@ -973,7 +974,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                         _set_phase(state, FlightPhase.LANDING)
                         state.waypoint_index = 0
                         _occupy_runway(state.icao24, arrival_rwy)
-                        _get_runway_state(arrival_rwy).last_arrival_time = time.time()
+                        _get_runway_state(arrival_rwy).last_arrival_time = get_time()
                     else:
                         # P2: Runway busy at decision height → go-around
                         _execute_go_around("runway_busy")
@@ -1034,7 +1035,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                     _set_phase(state, FlightPhase.LANDING)
                     state.waypoint_index = 0
                     _occupy_runway(state.icao24, arrival_rwy)
-                    _get_runway_state(arrival_rwy).last_arrival_time = time.time()
+                    _get_runway_state(arrival_rwy).last_arrival_time = get_time()
                 else:
                     _execute_go_around("runway_busy_at_threshold")
 
@@ -1124,7 +1125,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 state.aircraft_type, state.assigned_gate,
             )
             _set_phase(state, FlightPhase.TAXI_TO_GATE)
-            state.landed_at = time.time()
+            state.landed_at = get_time()
             # Release runway when exiting to taxiway (may already be released by early release above)
             if not getattr(state, '_runway_released', False):
                 arrival_rwy = _get_arrival_runway_name()
@@ -1184,7 +1185,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
 
         # First, ensure we have an assigned gate before proceeding
         if state.assigned_gate is None:
-            now = time.time()
+            now = get_time()
             if now < state.gate_retry_at:
                 # Still waiting for retry — hold position
                 state.velocity = 0
@@ -1286,7 +1287,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
                 _set_phase(state, FlightPhase.PARKED)
                 state.velocity = 0
                 state.time_at_gate = 0
-                state.parked_since = time.time()
+                state.parked_since = get_time()
                 _occupy_gate(state.icao24, state.assigned_gate)
                 # Record inbound delay for reactionary delay prediction
                 # (TAXI_TO_GATE → PARKED is always an arrival)
@@ -1492,7 +1493,7 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
             if runway_clear:
                 # Check departure wake turbulence separation (FAA 7110.65 5-8-1)
                 runway_st = _get_runway_state(dep_rwy)
-                elapsed = time.time() - runway_st.last_departure_time
+                elapsed = get_time() - runway_st.last_departure_time
                 lead_cat = runway_st.last_departure_type
                 follow_cat = _get_wake_category(state.aircraft_type)
                 required = DEPARTURE_SEPARATION_S.get(

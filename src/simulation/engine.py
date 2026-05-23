@@ -6,6 +6,8 @@ import time as wall_time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from src.ingestion._clock import set_clock, reset_clock
+
 from src.simulation.config import SimulationConfig
 from src.simulation.recorder import SimulationRecorder
 from src.simulation.capacity import CapacityManager
@@ -227,15 +229,18 @@ class SimulationEngine:
         self._reset_global_state()
 
         # Pre-generate flight schedule
-        self.flight_schedule: list[dict] = []
-        self._generate_schedule()
+        from src.simulation.schedule_builder import ScheduleBuilder
+        builder = ScheduleBuilder(config, self.airport_profile, scenario=self.scenario)
+        self.flight_schedule = builder.build()
+        self.recorder.schedule = self.flight_schedule
 
-        # Easter egg: inject fighter jet sorties for Ukrainian airports
-        self._inject_fighter_sorties()
-
-        # Inject traffic modifiers from scenario
-        if self.scenario:
-            self._inject_traffic_modifiers()
+        # Phase resolver for stuck-flight recovery
+        from src.simulation.phase_resolver import PhaseResolver
+        self._phase_resolver = PhaseResolver(
+            capacity=self.capacity,
+            airport_code=config.airport,
+            alternate_airports=ALTERNATE_AIRPORTS,
+        )
 
         # Track which scheduled flights have been spawned
         self._spawned_indices: set[int] = set()
@@ -447,283 +452,6 @@ class SimulationEngine:
         avg = sum(travel_times) / len(travel_times)
         logger.debug(f"Estimated taxi-in travel: {avg:.0f}s ({avg/60:.1f} min) from {len(travel_times)} gates")
         return avg
-
-    def _generate_schedule(self) -> None:
-        """Pre-generate the full flight schedule distributed across the duration.
-
-        Uses a three-phase approach for realistic aircraft rotations:
-        1. Generate arrivals distributed across hours (same as before)
-        2. Link departures to arrivals via turnaround time (same aircraft/airline)
-        3. Fill surplus departures as overnight-parked aircraft in the first 2 hours
-        """
-        start = self.config.effective_start_time()
-        end_time = start + timedelta(hours=self.config.effective_duration_hours())
-        duration_h = self.config.effective_duration_hours()
-        profile = self.airport_profile
-
-        # Build hourly weights for the FULL duration (multi-day aware)
-        n_hours = int(duration_h) + (1 if duration_h % 1 > 0 else 0)
-        hour_weights: list[float] = []
-        for h_offset in range(n_hours):
-            clock_hour = (start.hour + h_offset) % 24
-            day_offset = (start.hour + h_offset) // 24
-            dow = (start.weekday() + day_offset) % 7
-            w = _get_flights_per_hour(clock_hour, airport_profile=profile, day_of_week=dow)
-            hour_weights.append(max(w, 1.0))
-
-        if not hour_weights:
-            hour_weights = [1.0]
-
-        total_weight = sum(hour_weights)
-
-        schedule: list[dict] = []
-        local_iata = self.config.airport
-        arrival_count = 0  # running counter — avoids O(n) re-scan per flight
-
-        # --- Phase 1: Generate arrivals distributed across hours ---
-        for h_idx, weight in enumerate(hour_weights):
-            flights_this_hour = max(1, round(self.config.arrivals * weight / total_weight))
-            if h_idx == len(hour_weights) - 1:
-                flights_this_hour = max(0, self.config.arrivals - arrival_count)
-
-            for _ in range(flights_this_hour):
-                if arrival_count >= self.config.arrivals:
-                    break
-
-                airline_code, airline_name = _select_airline(profile=profile)
-                flight_number = _generate_flight_number(airline_code)
-                origin = _select_destination("arrival", airline_code, profile=profile)
-                aircraft = _select_aircraft(origin, airline_code=airline_code, profile=profile)
-                minute = random.randint(0, 59)
-                scheduled_time = start + timedelta(hours=h_idx, minutes=minute)
-                delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
-
-                schedule.append({
-                    "flight_number": flight_number,
-                    "airline": airline_name,
-                    "airline_code": airline_code,
-                    "origin": origin,
-                    "destination": local_iata,
-                    "aircraft_type": aircraft,
-                    "flight_type": "arrival",
-                    "scheduled_time": scheduled_time.isoformat(),
-                    "delay_minutes": delay_minutes,
-                    "delay_code": delay_code,
-                    "delay_reason": delay_reason,
-                })
-                arrival_count += 1
-
-        arrivals = [f for f in schedule if f["flight_type"] == "arrival"]
-
-        # --- Phase 2: Link departures to arrivals via turnaround ---
-        linked_count = 0
-        linkable = min(len(arrivals), self.config.departures)
-        for arr in arrivals[:linkable]:
-            turnaround = _calibrated_turnaround(arr["aircraft_type"], arr["airline_code"], profile)
-            arr_time = datetime.fromisoformat(arr["scheduled_time"])
-            dep_time = arr_time + timedelta(minutes=turnaround)
-
-            if dep_time >= end_time:
-                continue  # aircraft stays parked past sim window
-
-            destination = _select_destination("departure", arr["airline_code"], profile=profile)
-            delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
-
-            schedule.append({
-                "flight_number": _generate_flight_number(arr["airline_code"]),
-                "airline": arr["airline"],
-                "airline_code": arr["airline_code"],
-                "origin": local_iata,
-                "destination": destination,
-                "aircraft_type": arr["aircraft_type"],
-                "flight_type": "departure",
-                "scheduled_time": dep_time.isoformat(),
-                "delay_minutes": delay_minutes,
-                "delay_code": delay_code,
-                "delay_reason": delay_reason,
-                "linked_arrival": arr["flight_number"],
-            })
-            linked_count += 1
-
-        # --- Phase 3: Surplus independent departures (overnight-parked) ---
-        surplus = self.config.departures - linked_count
-        if surplus > 0:
-            # Schedule in the first 2 hours of the sim (early morning departures)
-            early_window_h = min(2.0, duration_h)
-            for _ in range(surplus):
-                airline_code, airline_name = _select_airline(profile=profile)
-                destination = _select_destination("departure", airline_code, profile=profile)
-                aircraft = _select_aircraft(destination, airline_code=airline_code, profile=profile)
-                minute = random.randint(0, int(early_window_h * 60) - 1)
-                scheduled_time = start + timedelta(minutes=minute)
-                delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
-
-                schedule.append({
-                    "flight_number": _generate_flight_number(airline_code),
-                    "airline": airline_name,
-                    "airline_code": airline_code,
-                    "origin": local_iata,
-                    "destination": destination,
-                    "aircraft_type": aircraft,
-                    "flight_type": "departure",
-                    "scheduled_time": scheduled_time.isoformat(),
-                    "delay_minutes": delay_minutes,
-                    "delay_code": delay_code,
-                    "delay_reason": delay_reason,
-                })
-
-        # Sort by scheduled time
-        schedule.sort(key=lambda f: f["scheduled_time"])
-        self.flight_schedule = schedule
-        self.recorder.schedule = schedule
-
-        logger.info(
-            "Generated schedule: %d arrivals, %d departures (%d linked, %d overnight) over %.1fh",
-            sum(1 for f in schedule if f["flight_type"] == "arrival"),
-            sum(1 for f in schedule if f["flight_type"] == "departure"),
-            linked_count,
-            surplus,
-            duration_h,
-        )
-
-    def _inject_fighter_sorties(self) -> None:
-        """Easter egg: inject Ukrainian Air Force fighter jet sorties for UA airports."""
-        from src.ingestion.schedule_generator import FIGHTER_JETS
-
-        # Only inject for Ukrainian airports (country code UA in airport table)
-        from src.ingestion.airport_table import AIRPORTS as _apt
-        entry = _apt.get(self.config.airport)
-        if not entry:
-            # config.airport might be ICAO — reverse-lookup
-            for iata, e in _apt.items():
-                if e[2] == self.config.airport:
-                    entry = e
-                    break
-        if not entry or entry[3] != "UA":
-            return
-
-        start = self.config.effective_start_time()
-        duration_h = self.config.effective_duration_hours()
-        local_iata = self.config.airport
-
-        # Get nearby Ukrainian airports for sortie destinations
-        ua_airports = [code for code, e in _apt.items() if e[3] == "UA" and code != local_iata]
-        if not ua_airports:
-            ua_airports = [local_iata]
-
-        # Inject ~15-20% fighter sorties (proportional to total flights)
-        total = len(self.flight_schedule)
-        n_sorties = max(4, int(total * 0.18))
-
-        for _ in range(n_sorties):
-            aircraft = random.choice(FIGHTER_JETS)
-            flight_num = f"UAF{random.randint(100, 999)}"
-            hour = random.uniform(0, duration_h)
-            sched_time = start + timedelta(hours=hour)
-
-            # Fighter sortie: depart, fly patrol, return
-            dest = random.choice(ua_airports)
-            self.flight_schedule.append({
-                "flight_number": flight_num,
-                "airline": "Ukrainian Air Force",
-                "airline_code": "UAF",
-                "origin": local_iata,
-                "destination": dest,
-                "aircraft_type": aircraft,
-                "flight_type": "departure",
-                "scheduled_time": sched_time.isoformat(),
-                "delay_minutes": 0,
-                "delay_code": None,
-                "delay_reason": None,
-                "scenario_injected": True,
-            })
-
-            # Return sortie 30-90 min later
-            return_time = sched_time + timedelta(minutes=random.randint(30, 90))
-            if return_time < start + timedelta(hours=duration_h):
-                self.flight_schedule.append({
-                    "flight_number": f"UAF{random.randint(100, 999)}",
-                    "airline": "Ukrainian Air Force",
-                    "airline_code": "UAF",
-                    "origin": dest,
-                    "destination": local_iata,
-                    "aircraft_type": aircraft,
-                    "flight_type": "arrival",
-                    "scheduled_time": return_time.isoformat(),
-                    "delay_minutes": 0,
-                    "delay_code": None,
-                    "delay_reason": None,
-                    "scenario_injected": True,
-                })
-
-        self.flight_schedule.sort(key=lambda f: f["scheduled_time"])
-        self.recorder.schedule = self.flight_schedule
-        n_fighters = sum(1 for f in self.flight_schedule if f.get("airline_code") == "UAF")
-        logger.info("Easter egg: injected %d Ukrainian Air Force fighter sorties", n_fighters)
-
-    def _inject_traffic_modifiers(self) -> None:
-        """Inject extra flights from scenario traffic modifiers into the schedule."""
-        if not self.scenario:
-            return
-        start = self.config.effective_start_time()
-        profile = self.airport_profile
-        for mod in self.scenario.traffic_modifiers:
-            if mod.type == "ground_stop":
-                continue  # handled in _process_scenario_events
-            base_time = start
-            if mod.time:
-                h, m = map(int, mod.time.split(":"))
-                base_time = start.replace(hour=h, minute=m, second=0, microsecond=0)
-
-            local_iata = self.config.airport
-            for i in range(mod.extra_arrivals):
-                offset_min = random.randint(0, 20)
-                sched_time = base_time + timedelta(minutes=offset_min + i * 3)
-                airline_code, airline_name = _select_airline(profile=profile)
-                origin = mod.diversion_origin or _select_destination("arrival", airline_code, profile=profile)
-                aircraft = _select_aircraft(origin, airline_code=airline_code, profile=profile)
-                self.flight_schedule.append({
-                    "flight_number": _generate_flight_number(airline_code),
-                    "airline": airline_name,
-                    "airline_code": airline_code,
-                    "origin": origin,
-                    "destination": local_iata,
-                    "aircraft_type": aircraft,
-                    "flight_type": "arrival",
-                    "scheduled_time": sched_time.isoformat(),
-                    "delay_minutes": 0,
-                    "delay_code": None,
-                    "delay_reason": f"Diversion from {mod.diversion_origin}" if mod.diversion_origin else "Traffic surge",
-                    "scenario_injected": True,
-                })
-
-            for i in range(mod.extra_departures):
-                offset_min = random.randint(0, 20)
-                sched_time = base_time + timedelta(minutes=offset_min + i * 3)
-                airline_code, airline_name = _select_airline(profile=profile)
-                dest = _select_destination("departure", airline_code, profile=profile)
-                aircraft = _select_aircraft(dest, airline_code=airline_code, profile=profile)
-                self.flight_schedule.append({
-                    "flight_number": _generate_flight_number(airline_code),
-                    "airline": airline_name,
-                    "airline_code": airline_code,
-                    "origin": local_iata,
-                    "destination": dest,
-                    "aircraft_type": aircraft,
-                    "flight_type": "departure",
-                    "scheduled_time": sched_time.isoformat(),
-                    "delay_minutes": 0,
-                    "delay_code": None,
-                    "delay_reason": "Traffic surge",
-                    "scenario_injected": True,
-                })
-
-        # Re-sort schedule after injections
-        self.flight_schedule.sort(key=lambda f: f["scheduled_time"])
-        self.recorder.schedule = self.flight_schedule
-        injected = sum(1 for f in self.flight_schedule if f.get("scenario_injected"))
-        if injected:
-            logger.info("Injected %d flights from scenario traffic modifiers", injected)
 
     def _process_scenario_events(self) -> None:
         """Process scenario events that should trigger at current sim_time."""
@@ -937,347 +665,145 @@ class SimulationEngine:
 
     def _update_all_flights(self, dt: float) -> None:
         """Update all active flight states and capture events."""
-        # Monkey-patch time.time() for functions that use it internally
-        # (like _find_available_gate, _release_gate which use time.time() for cooldowns)
-        sim_timestamp = self.sim_time.timestamp()
-        original_time = wall_time.time
-        wall_time.time = lambda: sim_timestamp
+        for icao24 in list(_flight_states.keys()):
+            state = _flight_states[icao24]
+            old_phase = state.phase
 
-        try:
-            for icao24 in list(_flight_states.keys()):
-                state = _flight_states[icao24]
-                old_phase = state.phase
+            _flight_states[icao24] = _update_flight_state(state, dt)
 
-                _flight_states[icao24] = _update_flight_state(state, dt)
+            new_state = _flight_states[icao24]
+            new_phase = new_state.phase
 
-                new_state = _flight_states[icao24]
-                new_phase = new_state.phase
+            # Clamp negative altitudes
+            if new_state.altitude < 0:
+                new_state.altitude = 0.0
 
-                # Clamp negative altitudes
-                if new_state.altitude < 0:
-                    new_state.altitude = 0.0
+            # Track phase elapsed time for stuck detection
+            phase_key = new_phase.value
+            prev = self._phase_time.get(icao24)
+            if prev and prev[0] == phase_key:
+                elapsed = prev[1] + dt
+                self._phase_time[icao24] = (phase_key, elapsed)
+            else:
+                self._phase_time[icao24] = (phase_key, 0.0)
+                elapsed = 0.0
 
-                # Track phase elapsed time for stuck detection
-                phase_key = new_phase.value
-                prev = self._phase_time.get(icao24)
-                if prev and prev[0] == phase_key:
-                    elapsed = prev[1] + dt
-                    self._phase_time[icao24] = (phase_key, elapsed)
-                else:
-                    self._phase_time[icao24] = (phase_key, 0.0)
-                    elapsed = 0.0
+            # Resolve stuck flights by forcing phase transitions
+            max_time = self._max_phase_seconds.get(phase_key)
+            if max_time and elapsed > max_time:
+                self._force_advance(icao24, new_state)
 
-                # Resolve stuck flights by forcing phase transitions
-                max_time = self._max_phase_seconds.get(phase_key)
-                if max_time and elapsed > max_time:
-                    self._force_advance(icao24, new_state)
+            # Detect phase transitions
+            if new_phase != old_phase:
+                self._phase_count_transition(old_phase.value, new_phase.value)
+                self.recorder.record_phase_transition(
+                    self.sim_time, icao24, state.callsign,
+                    old_phase.value, new_phase.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
+                # Flag that a landing-related transition happened so
+                # _capture_positions records all flights this tick.
+                if FlightPhase.LANDING in (old_phase, new_phase):
+                    self._landing_transition_this_tick = True
 
-                # Detect phase transitions
-                if new_phase != old_phase:
-                    self._phase_count_transition(old_phase.value, new_phase.value)
+                # Track flights that reach PARKED (for baggage + passenger flow)
+                if new_phase == FlightPhase.PARKED:
+                    sched = self._find_schedule_entry(icao24)
+                    if sched:
+                        self._completed_flights.append({
+                            "icao24": icao24,
+                            "callsign": state.callsign,
+                            "schedule": sched,
+                            "parked_time": self.sim_time,
+                        })
+                        # Process arrival passengers
+                        if sched.get("flight_type") == "arrival":
+                            self._passenger_flow.process_arrival(
+                                flight_number=state.callsign,
+                                aircraft_type=sched.get("aircraft_type", "A320"),
+                                parked_time=self.sim_time,
+                            )
+
+                # Go-around check: APPROACHING → LANDING transition
+                if (old_phase == FlightPhase.APPROACHING
+                        and new_phase == FlightPhase.LANDING
+                        and random.random() < self.capacity.go_around_probability()):
+                    from src.ingestion.fallback import _release_runway, VREF_SPEEDS
+                    from src.ingestion.fallback import _get_arrival_runway_name
+                    _release_runway(icao24, _get_arrival_runway_name())
+                    # Transition to ENROUTE (not APPROACHING wp 0) so the
+                    # aircraft flies FORWARD on current heading, climbs, then
+                    # re-sequences via the holding pattern logic.
+                    # Keep current heading — already correct from approach.
+                    self._phase_count_transition("landing", "enroute")
+                    new_state.phase = FlightPhase.ENROUTE
+                    new_state.waypoint_index = 0
+                    new_state.go_around_target_alt = max(1500.0, new_state.altitude + 300)
+                    vref_ga = VREF_SPEEDS.get(new_state.aircraft_type, 137)
+                    new_state.velocity = min(new_state.velocity + 10, vref_ga + 20)
+                    new_state.vertical_rate = 1500
+                    new_state.go_around_count += 1
+                    new_state.holding_phase_time = 0.0
+                    new_state.holding_inbound = True
                     self.recorder.record_phase_transition(
                         self.sim_time, icao24, state.callsign,
-                        old_phase.value, new_phase.value,
-                        state.latitude, state.longitude, state.altitude,
-                        state.aircraft_type, state.assigned_gate,
+                        "approaching", "enroute",
+                        new_state.latitude, new_state.longitude,
+                        new_state.altitude, new_state.aircraft_type,
+                        new_state.assigned_gate,
                     )
-                    # Flag that a landing-related transition happened so
-                    # _capture_positions records all flights this tick.
-                    if FlightPhase.LANDING in (old_phase, new_phase):
-                        self._landing_transition_this_tick = True
+                    self.recorder.record_scenario_event(
+                        self.sim_time, "go_around",
+                        f"{state.callsign} go-around #{new_state.go_around_count} ({self.capacity.current_category})",
+                        {"callsign": state.callsign, "icao24": icao24,
+                         "attempt": new_state.go_around_count, "weather": self.capacity.current_category},
+                    )
+                    if new_state.go_around_count >= 3:
+                        self._divert_flight(icao24, new_state)
 
-                    # Track flights that reach PARKED (for baggage + passenger flow)
-                    if new_phase == FlightPhase.PARKED:
-                        sched = self._find_schedule_entry(icao24)
-                        if sched:
-                            self._completed_flights.append({
-                                "icao24": icao24,
-                                "callsign": state.callsign,
-                                "schedule": sched,
-                                "parked_time": self.sim_time,
-                            })
-                            # Process arrival passengers
-                            if sched.get("flight_type") == "arrival":
-                                self._passenger_flow.process_arrival(
-                                    flight_number=state.callsign,
-                                    aircraft_type=sched.get("aircraft_type", "A320"),
-                                    parked_time=self.sim_time,
-                                )
-
-                    # Go-around check: APPROACHING → LANDING transition
-                    if (old_phase == FlightPhase.APPROACHING
-                            and new_phase == FlightPhase.LANDING
-                            and random.random() < self.capacity.go_around_probability()):
-                        from src.ingestion.fallback import _release_runway, VREF_SPEEDS
-                        from src.ingestion.fallback import _get_arrival_runway_name
-                        _release_runway(icao24, _get_arrival_runway_name())
-                        # Transition to ENROUTE (not APPROACHING wp 0) so the
-                        # aircraft flies FORWARD on current heading, climbs, then
-                        # re-sequences via the holding pattern logic.
-                        # Keep current heading — already correct from approach.
-                        self._phase_count_transition("landing", "enroute")
-                        new_state.phase = FlightPhase.ENROUTE
-                        new_state.waypoint_index = 0
-                        new_state.go_around_target_alt = max(1500.0, new_state.altitude + 300)
-                        vref_ga = VREF_SPEEDS.get(new_state.aircraft_type, 137)
-                        new_state.velocity = min(new_state.velocity + 10, vref_ga + 20)
-                        new_state.vertical_rate = 1500
-                        new_state.go_around_count += 1
-                        new_state.holding_phase_time = 0.0
-                        new_state.holding_inbound = True
-                        self.recorder.record_phase_transition(
-                            self.sim_time, icao24, state.callsign,
-                            "approaching", "enroute",
-                            new_state.latitude, new_state.longitude,
-                            new_state.altitude, new_state.aircraft_type,
-                            new_state.assigned_gate,
-                        )
-                        self.recorder.record_scenario_event(
-                            self.sim_time, "go_around",
-                            f"{state.callsign} go-around #{new_state.go_around_count} ({self.capacity.current_category})",
-                            {"callsign": state.callsign, "icao24": icao24,
-                             "attempt": new_state.go_around_count, "weather": self.capacity.current_category},
-                        )
-                        if new_state.go_around_count >= 3:
-                            self._divert_flight(icao24, new_state)
-
-            # Divert airborne flights if all runways closed
-            if not self.capacity.active_runways:
-                for icao24 in list(_flight_states.keys()):
-                    state = _flight_states[icao24]
-                    if state.phase == FlightPhase.APPROACHING:
-                        self._divert_flight(icao24, state)
-                    elif (state.phase == FlightPhase.ENROUTE
-                          and state.origin_airport and not state.destination_airport):
-                        self._divert_flight(icao24, state)
-
-            # Proactive diversion: holding > 10 min while approach is saturated
-            from src.ingestion._state import get_max_approach_aircraft
-            _max_app = get_max_approach_aircraft()
-            _app_count = self._phase_counts.get("approaching", 0) + self._phase_counts.get("landing", 0)
-            if _app_count >= _max_app:
-                for icao24 in list(_flight_states.keys()):
-                    state = _flight_states[icao24]
-                    if state.phase != FlightPhase.ENROUTE:
-                        continue
-                    _is_arriving = (state.origin_airport and not state.destination_airport)
-                    if not _is_arriving:
-                        continue
-                    prev = self._phase_time.get(icao24)
-                    if prev and prev[0] == "enroute" and prev[1] > 360.0:
-                        self._divert_flight(icao24, state)
-
-            # Remove completed departures (enroute with exit signal)
+        # Divert airborne flights if all runways closed
+        if not self.capacity.active_runways:
             for icao24 in list(_flight_states.keys()):
                 state = _flight_states[icao24]
-                if state.phase == FlightPhase.ENROUTE and state.phase_progress == -1.0:
-                    if state.assigned_gate:
-                        _release_gate(icao24, state.assigned_gate)
-                    self._phase_count_dec(state.phase.value)
-                    del _flight_states[icao24]
-                    self._phase_time.pop(icao24, None)
-        finally:
-            wall_time.time = original_time
+                if state.phase == FlightPhase.APPROACHING:
+                    self._divert_flight(icao24, state)
+                elif (state.phase == FlightPhase.ENROUTE
+                      and state.origin_airport and not state.destination_airport):
+                    self._divert_flight(icao24, state)
+
+        # Proactive diversion: holding > 10 min while approach is saturated
+        from src.ingestion._state import get_max_approach_aircraft
+        _max_app = get_max_approach_aircraft()
+        _app_count = self._phase_counts.get("approaching", 0) + self._phase_counts.get("landing", 0)
+        if _app_count >= _max_app:
+            for icao24 in list(_flight_states.keys()):
+                state = _flight_states[icao24]
+                if state.phase != FlightPhase.ENROUTE:
+                    continue
+                _is_arriving = (state.origin_airport and not state.destination_airport)
+                if not _is_arriving:
+                    continue
+                prev = self._phase_time.get(icao24)
+                if prev and prev[0] == "enroute" and prev[1] > 360.0:
+                    self._divert_flight(icao24, state)
+
+        # Remove completed departures (enroute with exit signal)
+        for icao24 in list(_flight_states.keys()):
+            state = _flight_states[icao24]
+            if state.phase == FlightPhase.ENROUTE and state.phase_progress == -1.0:
+                if state.assigned_gate:
+                    _release_gate(icao24, state.assigned_gate)
+                self._phase_count_dec(state.phase.value)
+                del _flight_states[icao24]
+                self._phase_time.pop(icao24, None)
 
     def _force_advance(self, icao24: str, state: FlightState) -> None:
         """Force a stuck flight to advance to the next phase."""
-        from src.ingestion.fallback import (
-            _occupy_gate, _find_available_gate, _release_runway,
-            _get_parked_heading, _compute_gate_standoff, _offset_position_by_heading,
-        )
-
         old_phase = state.phase
+        resolution = self._phase_resolver.resolve(icao24, state, 0.0)
+        self._apply_resolution(icao24, state, resolution)
 
-        if state.phase == FlightPhase.TAXI_TO_GATE:
-            # Snap to gate
-            if state.assigned_gate:
-                gate_pos = get_gates().get(state.assigned_gate)
-                if gate_pos:
-                    state.latitude, state.longitude = gate_pos
-                    parked_heading = _get_parked_heading(state.latitude, state.longitude)
-                    state.heading = parked_heading
-                    standoff = _compute_gate_standoff(
-                        state.latitude, state.longitude, parked_heading, state.aircraft_type
-                    )
-                    state.latitude, state.longitude = _offset_position_by_heading(
-                        state.latitude, state.longitude, parked_heading, standoff
-                    )
-                state.phase = FlightPhase.PARKED
-                state.velocity = 0
-                state.time_at_gate = 0
-                self._phase_time[icao24] = ("parked", 0.0)
-                # Track for baggage generation (D03 fix)
-                sched = self._find_schedule_entry(icao24)
-                if sched:
-                    self._completed_flights.append({
-                        "icao24": icao24,
-                        "callsign": state.callsign,
-                        "schedule": sched,
-                        "parked_time": self.sim_time,
-                    })
-                    if sched.get("flight_type") == "arrival":
-                        self._passenger_flow.process_arrival(
-                            flight_number=state.callsign,
-                            aircraft_type=sched.get("aircraft_type", "A320"),
-                            parked_time=self.sim_time,
-                        )
-
-        elif state.phase == FlightPhase.TAXI_TO_RUNWAY:
-            from src.ingestion.fallback import TAXI_WAYPOINTS_DEPARTURE
-            from src.ingestion._approach_departure import _get_takeoff_runway_geometry
-            taxi_wps = state.taxi_route or TAXI_WAYPOINTS_DEPARTURE
-            already_at_hold = state.waypoint_index >= len(taxi_wps)
-
-            if already_at_hold:
-                # Already at hold line but runway never cleared — force takeoff
-                state.phase = FlightPhase.TAKEOFF
-                state.takeoff_subphase = "lineup"
-                state.velocity = 0
-                state.phase_progress = 0.0
-                state.takeoff_roll_dist_ft = 0.0
-                self._phase_time[icao24] = ("takeoff", 0.0)
-            else:
-                # Still traversing waypoints — snap to hold line, stay in taxi
-                if taxi_wps:
-                    last_wp = taxi_wps[-1]
-                    state.latitude, state.longitude = last_wp[1], last_wp[0]
-                state.waypoint_index = len(taxi_wps)
-                state.departure_queue_hold_s = 0
-                state.departure_queue_set = True
-                state.velocity = 0
-                _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
-                state.heading = dep_hdg
-                self._phase_time[icao24] = ("taxi_to_runway", 0.0)
-
-        elif state.phase == FlightPhase.PUSHBACK:
-            # Finish pushback, move to taxi
-            if state.assigned_gate:
-                _release_gate(icao24, state.assigned_gate)
-            state.phase = FlightPhase.TAXI_TO_RUNWAY
-            state.waypoint_index = 0
-            self._phase_time[icao24] = ("taxi_to_runway", 0.0)
-
-        elif state.phase == FlightPhase.APPROACHING:
-            from src.ingestion.fallback import _is_runway_clear, _occupy_runway, _release_runway, VREF_SPEEDS, _get_arrival_runway_name, _is_arrival_separation_met
-            _arr_rwy = _get_arrival_runway_name()
-            # Priority landing after 2+ go-arounds bypasses runway-clear but not separation
-            runway_ok = (
-                (_is_runway_clear(_arr_rwy) or state.go_around_count >= 2)
-                and _is_arrival_separation_met(_arr_rwy)
-            )
-            if runway_ok:
-                # Apply go-around check (same as normal transition)
-                if state.go_around_count < 2 and random.random() < self.capacity.go_around_probability():
-                    # Transition to ENROUTE; keep current heading (correct from approach)
-                    state.phase = FlightPhase.ENROUTE
-                    state.waypoint_index = 0
-                    state.go_around_target_alt = max(1500.0, state.altitude + 300)
-                    vref_ga = VREF_SPEEDS.get(state.aircraft_type, 137)
-                    state.velocity = min(state.velocity + 10, vref_ga + 20)
-                    state.vertical_rate = 1500
-                    state.go_around_count += 1
-                    state.holding_phase_time = 0.0
-                    state.holding_inbound = True
-                    self.recorder.record_scenario_event(
-                        self.sim_time, "go_around",
-                        f"{state.callsign} go-around #{state.go_around_count} ({self.capacity.current_category})",
-                        {"callsign": state.callsign, "icao24": icao24,
-                         "attempt": state.go_around_count, "reason": "weather",
-                         "altitude_ft": round(state.altitude),
-                         "speed_kts": round(state.velocity),
-                         "vertical_rate_fpm": round(state.vertical_rate),
-                         "aircraft_type": state.aircraft_type,
-                         "weather_category": self.capacity.current_category,
-                         "wind_direction": self.capacity._wind_direction,
-                         "wind_gusts_kt": getattr(self.capacity, '_wind_gusts_kt', None),
-                         "weather_multiplier": round(self.capacity.weather_multiplier, 2)},
-                    )
-                    if state.go_around_count >= 3:
-                        self._divert_flight(icao24, state)
-                    self._phase_time[icao24] = ("enroute", 0.0)
-                else:
-                    # Only transition to landing if altitude is reasonable (<800ft)
-                    # Otherwise execute go-around to avoid high-altitude landing (A09 fix)
-                    if state.altitude > 800:
-                        state.phase = FlightPhase.ENROUTE
-                        state.waypoint_index = 0
-                        state.go_around_target_alt = max(1500.0, state.altitude + 300)
-                        state.vertical_rate = 1500
-                        state.go_around_count += 1
-                        state.holding_phase_time = 0.0
-                        state.holding_inbound = True
-                        self.recorder.record_scenario_event(
-                            self.sim_time, "go_around",
-                            f"{state.callsign} go-around #{state.go_around_count} (altitude {state.altitude:.0f}ft)",
-                            {"callsign": state.callsign, "icao24": icao24,
-                             "attempt": state.go_around_count, "reason": "high_altitude",
-                             "altitude_ft": round(state.altitude),
-                             "speed_kts": round(state.velocity),
-                             "vertical_rate_fpm": round(state.vertical_rate),
-                             "aircraft_type": state.aircraft_type,
-                             "weather_category": self.capacity.current_category,
-                             "wind_direction": self.capacity._wind_direction,
-                             "wind_gusts_kt": getattr(self.capacity, '_wind_gusts_kt', None)},
-                        )
-                        self._phase_time[icao24] = ("enroute", 0.0)
-                        if state.go_around_count >= 3:
-                            self._divert_flight(icao24, state)
-                    else:
-                        from src.ingestion.fallback import _get_runway_state
-                        state.phase = FlightPhase.LANDING
-                        state.waypoint_index = 0
-                        _occupy_runway(icao24, _arr_rwy)
-                        _get_runway_state(_arr_rwy).last_arrival_time = wall_time.time()
-                        self._phase_time[icao24] = ("landing", 0.0)
-            else:
-                # Runway still blocked — reset timer to check again in 5 min
-                self._phase_time[icao24] = ("approaching", 600.0)
-
-        elif state.phase == FlightPhase.LANDING:
-            # Force taxi
-            from src.ingestion.fallback import (
-                _release_runway, _get_arrival_runway_name,
-                _get_taxi_waypoints_arrival, TAXI_WAYPOINTS_ARRIVAL,
-            )
-            state.altitude = 0
-            state.on_ground = True
-            state.phase = FlightPhase.TAXI_TO_GATE
-            _release_runway(icao24, _get_arrival_runway_name())
-            if not state.assigned_gate:
-                gate = _find_available_gate()
-                if gate:
-                    state.assigned_gate = gate
-                    _occupy_gate(icao24, gate)
-            # Route from current rollout position (not threshold) to gate
-            current_pos = (state.longitude, state.latitude)
-            taxi_wps = (_get_taxi_waypoints_arrival(state.assigned_gate, start_pos=current_pos)
-                        if state.assigned_gate else None) or TAXI_WAYPOINTS_ARRIVAL
-            state.taxi_route = [current_pos] + list(taxi_wps)
-            state.waypoint_index = 1  # Already at wp 0 (current pos)
-            self._phase_time[icao24] = ("taxi_to_gate", 0.0)
-
-        elif state.phase == FlightPhase.ENROUTE:
-            # Stuck in holding too long — divert or force approach
-            _is_arriving = (
-                (state.origin_airport and not state.destination_airport)
-                or (state.destination_airport == self.config.airport)
-            )
-            if _is_arriving:
-                if state.go_around_count >= 2:
-                    self._divert_flight(icao24, state)
-                else:
-                    # Force transition to approach (bypass capacity)
-                    from src.ingestion.fallback import _snap_to_nearest_waypoint, _get_star_name
-                    state.phase = FlightPhase.APPROACHING
-                    state.waypoint_index = _snap_to_nearest_waypoint(state)
-                    state.star_name = _get_star_name(state.origin_airport)
-                    state.go_around_count += 1
-                    self._phase_time[icao24] = ("approaching", 0.0)
-            else:
-                # Departing enroute stuck — remove
-                state.phase_progress = -1.0
-
-        # Record the phase transition for all force-advances (D06 fix)
         new_phase = state.phase
         if new_phase != old_phase:
             self._phase_count_transition(old_phase.value, new_phase.value)
@@ -1288,35 +814,145 @@ class SimulationEngine:
                 state.aircraft_type, state.assigned_gate,
             )
 
+    def _apply_resolution(self, icao24: str, state: FlightState, resolution) -> None:
+        """Apply a PhaseResolution's mutations and side effects."""
+        from src.ingestion.fallback import (
+            _occupy_gate, _find_available_gate, _release_runway, _occupy_runway,
+            _get_parked_heading, _compute_gate_standoff, _offset_position_by_heading,
+            _get_arrival_runway_name, _get_taxi_waypoints_arrival, TAXI_WAYPOINTS_ARRIVAL,
+            TAXI_WAYPOINTS_DEPARTURE, _snap_to_nearest_waypoint, _get_star_name,
+        )
+        from src.ingestion._approach_departure import _get_takeoff_runway_geometry
+        from src.ingestion._clock import get_time
+
+        # Gate release
+        if resolution.gate_release:
+            _release_gate(icao24, resolution.gate_release)
+
+        # Gate assignment (for landing → taxi)
+        if resolution.gate_assign:
+            _occupy_gate(icao24, resolution.gate_assign)
+
+        # Runway operations
+        if resolution.runway_occupy:
+            from src.ingestion.fallback import _get_runway_state
+            _occupy_runway(icao24, resolution.runway_occupy)
+            _get_runway_state(resolution.runway_occupy).last_arrival_time = get_time()
+
+        if resolution.runway_release:
+            arr_rwy = _get_arrival_runway_name()
+            _release_runway(icao24, arr_rwy)
+
+        # Snap to gate position
+        if resolution.snap_to_gate and state.assigned_gate:
+            gate_pos = get_gates().get(state.assigned_gate)
+            if gate_pos:
+                state.latitude, state.longitude = gate_pos
+                parked_heading = _get_parked_heading(state.latitude, state.longitude)
+                state.heading = parked_heading
+                standoff = _compute_gate_standoff(
+                    state.latitude, state.longitude, parked_heading, state.aircraft_type
+                )
+                state.latitude, state.longitude = _offset_position_by_heading(
+                    state.latitude, state.longitude, parked_heading, standoff
+                )
+
+        # Snap to hold line
+        if resolution.snap_to_hold_line:
+            taxi_wps = state.taxi_route or TAXI_WAYPOINTS_DEPARTURE
+            if taxi_wps:
+                last_wp = taxi_wps[-1]
+                state.latitude, state.longitude = last_wp[1], last_wp[0]
+            state.waypoint_index = len(taxi_wps)
+            _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
+            state.heading = dep_hdg
+
+        # Force approach: snap to nearest waypoint on approach path
+        if resolution.force_approach:
+            state.waypoint_index = _snap_to_nearest_waypoint(state)
+            state.star_name = _get_star_name(state.origin_airport)
+
+        # Landing → taxi: assign gate and build taxi route
+        if resolution.new_phase == FlightPhase.TAXI_TO_GATE and state.phase != FlightPhase.TAXI_TO_GATE:
+            if not state.assigned_gate:
+                gate = _find_available_gate()
+                if gate:
+                    state.assigned_gate = gate
+                    _occupy_gate(icao24, gate)
+            current_pos = (state.longitude, state.latitude)
+            taxi_wps = (_get_taxi_waypoints_arrival(state.assigned_gate, start_pos=current_pos)
+                        if state.assigned_gate else None) or TAXI_WAYPOINTS_ARRIVAL
+            state.taxi_route = [current_pos] + list(taxi_wps)
+            state.waypoint_index = 1
+
+        # Apply state mutations
+        for field, value in resolution.state_mutations.items():
+            setattr(state, field, value)
+
+        # Phase transition
+        if resolution.new_phase:
+            state.phase = resolution.new_phase
+
+        # Mark exit (for departing enroute stuck flights)
+        if resolution.mark_exit:
+            state.phase_progress = -1.0
+
+        # Reset phase time tracker
+        if resolution.reset_phase_time:
+            self._phase_time[icao24] = (resolution.reset_phase_time, resolution.phase_time_value)
+
+        # Record event
+        if resolution.event_type:
+            self.recorder.record_scenario_event(
+                self.sim_time, resolution.event_type,
+                resolution.event_description,
+                resolution.event_data,
+            )
+
+        # Handle diversion (heading toward alternate)
+        if resolution.divert_to:
+            if state.assigned_gate and resolution.gate_release is None:
+                _release_gate(icao24, state.assigned_gate)
+            state.assigned_gate = None
+            if resolution.divert_to in AIRPORT_COORDINATES:
+                from src.ingestion.fallback import _bearing_to_airport
+                state.heading = _bearing_to_airport(resolution.divert_to)
+            # Record diversion event (separate from any go-around event)
+            if resolution.event_type != "diversion":
+                self.recorder.record_scenario_event(
+                    self.sim_time, "diversion",
+                    f"{state.callsign} diverted to {resolution.divert_to}",
+                    {"callsign": state.callsign, "icao24": icao24,
+                     "alternate": resolution.divert_to,
+                     "aircraft_type": state.aircraft_type,
+                     "weather_category": self.capacity.current_category},
+                )
+
+        # Track completed flights for PARKED transitions (baggage generation)
+        if resolution.new_phase == FlightPhase.PARKED:
+            sched = self._find_schedule_entry(icao24)
+            if sched:
+                self._completed_flights.append({
+                    "icao24": icao24,
+                    "callsign": state.callsign,
+                    "schedule": sched,
+                    "parked_time": self.sim_time,
+                })
+                if sched.get("flight_type") == "arrival":
+                    self._passenger_flow.process_arrival(
+                        flight_number=state.callsign,
+                        aircraft_type=sched.get("aircraft_type", "A320"),
+                        parked_time=self.sim_time,
+                    )
+
     def _divert_flight(self, icao24: str, state: FlightState) -> None:
         """Divert flight to an alternate airport."""
-        alternates = ALTERNATE_AIRPORTS.get(self.config.airport, [])
-        alt_name = random.choice(alternates) if alternates else "alternate"
+        from src.simulation.phase_resolver import PhaseResolution
         old_phase_value = state.phase.value
-        if state.assigned_gate:
-            _release_gate(icao24, state.assigned_gate)
-            state.assigned_gate = None
-        state.phase = FlightPhase.ENROUTE
-        self._phase_count_transition(old_phase_value, "enroute")
-        state.destination_airport = alt_name
-        state.altitude = max(state.altitude, 3000)
-        state.velocity = 250
-        state.vertical_rate = 1500
-        state.go_around_count = 0
-        if alt_name in AIRPORT_COORDINATES:
-            from src.ingestion.fallback import _bearing_to_airport
-            state.heading = _bearing_to_airport(alt_name)
-        self.recorder.record_scenario_event(
-            self.sim_time, "diversion",
-            f"{state.callsign} diverted to {alt_name}",
-            {"callsign": state.callsign, "icao24": icao24, "alternate": alt_name,
-             "reason": "runway_closure" if not self.capacity.active_runways else "go_around_limit",
-             "altitude_ft": round(state.altitude),
-             "speed_kts": round(state.velocity),
-             "aircraft_type": state.aircraft_type,
-             "prior_go_arounds": state.go_around_count,
-             "weather_category": self.capacity.current_category},
-        )
+        resolution = self._phase_resolver._diversion_resolution(icao24, state)
+        self._apply_resolution(icao24, state, resolution)
+        if state.phase.value != old_phase_value:
+            self._phase_count_transition(old_phase_value, state.phase.value)
 
     def _proactive_cancel(self) -> None:
         """Pre-cancel departures when severe weather is forecast within 2 hours.
@@ -1562,6 +1198,8 @@ class SimulationEngine:
 
     def run(self) -> SimulationRecorder:
         """Run the simulation from start to end, returning the recorder."""
+        # Inject sim clock so _runway_ops and _flight_lifecycle use sim time
+        set_clock(lambda: self.sim_time.timestamp())
         # Suppress fallback emit_phase_transition — engine records directly (D05 fix)
         set_suppress_phase_transitions(True)
         dt = self.config.time_step_seconds
@@ -1659,6 +1297,8 @@ class SimulationEngine:
 
         # Re-enable fallback phase transition buffering for non-engine callers
         set_suppress_phase_transitions(False)
+        # Restore real wall clock
+        reset_clock()
 
         elapsed_wall = wall_time.time() - start_wall
         print(f"\n  Completed in {elapsed_wall:.1f}s wall time")

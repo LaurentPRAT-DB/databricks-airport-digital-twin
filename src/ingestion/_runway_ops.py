@@ -7,9 +7,10 @@ assignment, and taxi speed factors. Extracted from fallback.py.
 import math
 import random
 import re as _re
-import time
 from datetime import datetime, timezone
 from typing import Optional
+
+from src.ingestion._clock import get_time
 
 from src.ingestion._constants import (
     CROSSING_ZONE_DEG,
@@ -306,7 +307,7 @@ def _is_arrival_separation_met(runway: str = "") -> bool:
     rs = _get_runway_state(runway)
     if rs.last_arrival_time == 0.0:
         return True
-    return (time.time() - rs.last_arrival_time) >= MIN_ARRIVAL_SEPARATION_S
+    return (get_time() - rs.last_arrival_time) >= MIN_ARRIVAL_SEPARATION_S
 
 
 def _occupy_runway(icao24: str, runway: str = ""):
@@ -334,19 +335,19 @@ def _release_runway(icao24: str, runway: str = "", aircraft_type: str = ""):
     rs = _get_runway_state(runway)
     if rs.occupied_by == icao24:
         rs.occupied_by = None
-        rs.last_arrival_time = time.time()
+        rs.last_arrival_time = get_time()
         if aircraft_type:
             rs.last_departure_type = _get_wake_category(aircraft_type)
-            rs.last_departure_time = time.time()
+            rs.last_departure_time = get_time()
     recip = _get_reciprocal_designator(runway)
     if recip and recip in _runway_states:
         rrs = _runway_states[recip]
         if rrs.occupied_by == icao24:
             rrs.occupied_by = None
-            rrs.last_arrival_time = time.time()
+            rrs.last_arrival_time = get_time()
             if aircraft_type:
                 rrs.last_departure_type = _get_wake_category(aircraft_type)
-                rrs.last_departure_time = time.time()
+                rrs.last_departure_time = get_time()
 
 
 # ── Gate assignment ─────────────────────────────────────────────────────────
@@ -361,7 +362,7 @@ def _find_available_gate() -> Optional[str]:
     import src.ingestion._state as _st
 
     _init_gate_states()
-    current_time = time.time()
+    current_time = get_time()
 
     available = [
         gate for gate, state in _gate_states.items()
@@ -429,8 +430,8 @@ def _release_gate(icao24: str, gate: str):
     _init_gate_states()
     if gate in _gate_states and _gate_states[gate].occupied_by == icao24:
         _gate_states[gate].occupied_by = None
-        _gate_states[gate].last_released = time.time()
-        _gate_states[gate].available_at = time.time() + GATE_BUFFER_SECONDS
+        _gate_states[gate].last_released = get_time()
+        _gate_states[gate].available_at = get_time() + GATE_BUFFER_SECONDS
         _st._occupied_gate_count = max(0, _st._occupied_gate_count - 1)
 
 
