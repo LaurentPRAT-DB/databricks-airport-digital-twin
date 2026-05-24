@@ -69,7 +69,7 @@ class DeltaService:
             connection_params["credentials_provider"] = _credential_provider
 
         # Prevent indefinite hang if warehouse is stopped or unreachable
-        connection_params["_socket_timeout"] = 10
+        connection_params["_socket_timeout"] = int(os.getenv("DATABRICKS_SQL_TIMEOUT", "30"))
 
         return sql.connect(**connection_params)
 
