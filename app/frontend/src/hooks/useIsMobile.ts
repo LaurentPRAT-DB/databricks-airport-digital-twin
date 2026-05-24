@@ -1,24 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
-const MOBILE_BREAKPOINT = '(max-width: 767px)';
+function detectMobile(): boolean {
+  if (typeof window === 'undefined') return false;
+  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+  const narrow = window.matchMedia('(max-width: 767px)').matches;
+  return (hasTouch && coarsePointer) || narrow;
+}
 
 export function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    const matches = window.matchMedia(MOBILE_BREAKPOINT).matches;
-    console.log(`[useIsMobile] init: viewport=${window.innerWidth}x${window.innerHeight}, matches=${matches}, userAgent=${navigator.userAgent.slice(0, 80)}`);
-    return matches;
-  });
-
-  useEffect(() => {
-    const mql = window.matchMedia(MOBILE_BREAKPOINT);
-    const handler = (e: MediaQueryListEvent) => {
-      console.log(`[useIsMobile] changed: matches=${e.matches}, viewport=${window.innerWidth}x${window.innerHeight}`);
-      setIsMobile(e.matches);
-    };
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, []);
-
+  const [isMobile] = useState(detectMobile);
   return isMobile;
 }

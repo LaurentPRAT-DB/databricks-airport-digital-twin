@@ -38,7 +38,7 @@ body {
 :root {
   --tab-bar-h: 0px;
 }
-@media (max-width: 767px) {
+@media (max-width: 767px), (pointer: coarse) and (hover: none) {
   :root {
     --tab-bar-h: calc(48px + env(safe-area-inset-bottom, 0px));
   }
