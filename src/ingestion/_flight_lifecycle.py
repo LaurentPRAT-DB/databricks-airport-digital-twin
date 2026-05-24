@@ -130,21 +130,24 @@ def set_calibration_gate_minutes(minutes: float) -> None:
 # taxi_to_runway phase adds a departure-queue hold so total taxi-out duration
 # (waypoint travel + hold) matches the real-world BTS mean.
 _calibration_taxi_out_target_s: float = 0.0
+_calibration_taxi_out_p95_s: float = 0.0
 # Estimated seconds the waypoint path alone takes (set once per airport).
 _calibration_taxi_out_waypoint_s: float = 0.0
 
 
-def set_calibration_taxi_out(mean_minutes: float, waypoint_travel_s: float = 180.0) -> None:
+def set_calibration_taxi_out(mean_minutes: float, waypoint_travel_s: float = 180.0, p95_minutes: float = 0.0) -> None:
     """Set calibrated taxi-out target from BTS OTP data.
 
     Args:
         mean_minutes: BTS mean taxi-out time in minutes (e.g. 20.1 for SFO).
         waypoint_travel_s: estimated seconds the sim's waypoint path takes
             without any hold (default 180s ~ 3 min at 25 kts over 5 waypoints).
+        p95_minutes: BTS P95 taxi-out time. Used to cap queue hold.
     """
-    global _calibration_taxi_out_target_s, _calibration_taxi_out_waypoint_s
+    global _calibration_taxi_out_target_s, _calibration_taxi_out_waypoint_s, _calibration_taxi_out_p95_s
     _calibration_taxi_out_target_s = mean_minutes * 60.0
     _calibration_taxi_out_waypoint_s = waypoint_travel_s
+    _calibration_taxi_out_p95_s = p95_minutes * 60.0 if p95_minutes > 0 else mean_minutes * 60.0 * 1.8
 
 
 # Calibration: BTS taxi-in mean time in seconds.  When set (> 0), the
@@ -152,6 +155,7 @@ def set_calibration_taxi_out(mean_minutes: float, waypoint_travel_s: float = 180
 # (waypoint travel + hold) matches the real-world BTS mean.
 _calibration_taxi_in_target_s: float = 0.0
 _calibration_taxi_in_waypoint_s: float = 0.0
+_calibration_taxi_in_speed_factor: float = 1.0
 
 
 def set_calibration_taxi_in(mean_minutes: float, waypoint_travel_s: float = 120.0) -> None:
@@ -162,8 +166,14 @@ def set_calibration_taxi_in(mean_minutes: float, waypoint_travel_s: float = 120.
         waypoint_travel_s: estimated seconds the sim's waypoint path takes
             without any hold (default 120s ~ 2 min at 30 kts inbound).
     """
-    global _calibration_taxi_in_target_s, _calibration_taxi_in_waypoint_s
+    global _calibration_taxi_in_target_s, _calibration_taxi_in_waypoint_s, _calibration_taxi_in_speed_factor
     _calibration_taxi_in_target_s = mean_minutes * 60.0
+    _calibration_taxi_in_waypoint_s = waypoint_travel_s
+    if mean_minutes > 0:
+        realistic_travel_s = waypoint_travel_s * 3.0
+        _calibration_taxi_in_speed_factor = min(5.0, max(1.0, realistic_travel_s / (mean_minutes * 60.0)))
+    else:
+        _calibration_taxi_in_speed_factor = 1.0
     _calibration_taxi_in_waypoint_s = waypoint_travel_s
 
 
@@ -504,13 +514,17 @@ def _create_new_flight(
         _prof_alt, _prof_spd, _prof_vr = interpolate_profile(_dp, _prof_progress)
         vref = VREF_SPEEDS.get(aircraft_type, _DEFAULT_VREF)
         init_speed = max(vref, min(_prof_spd, MAX_SPEED_BELOW_FL100_KTS))
+        if alt < 1000:
+            init_speed = min(init_speed, vref + 30)
+        elif alt < 2000:
+            init_speed = min(init_speed, vref + 40)
 
         return FlightState(
             icao24=icao24,
             callsign=callsign,
             latitude=lat,
             longitude=lon,
-            altitude=alt + random.uniform(-30, 30),  # realistic ILS approach deviation (±30ft)
+            altitude=alt + random.uniform(-30, 30),
             velocity=init_speed + random.uniform(-5, 5),
             heading=_calculate_heading((lat, lon), center),
             vertical_rate=_prof_vr if _prof_vr else -800,
@@ -771,10 +785,13 @@ def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
     # Taxi along waypoints to assigned gate WITH SEPARATION
 
     # Calibrated arrival hold — pads taxi-in to match BTS mean.
-    # Computed once on first tick, then decremented.
+    # Only applies when speed factor is 1.0 (sim travel < BTS target).
     if not state.arrival_hold_set and _calibration_taxi_in_target_s > 0:
-        hold_base = max(0.0, _calibration_taxi_in_target_s - _calibration_taxi_in_waypoint_s)
-        state.arrival_hold_s = hold_base * random.uniform(0.80, 1.20)
+        if _calibration_taxi_in_speed_factor <= 1.0:
+            hold_base = max(0.0, _calibration_taxi_in_target_s - _calibration_taxi_in_waypoint_s)
+            state.arrival_hold_s = hold_base * random.uniform(0.80, 1.20)
+        else:
+            state.arrival_hold_s = 0.0
         state.arrival_hold_set = True
     if state.arrival_hold_s > 0:
         state.arrival_hold_s -= dt
@@ -785,21 +802,32 @@ def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
     if state.assigned_gate is None:
         now = get_time()
         if now < state.gate_retry_at:
-            # Still waiting for retry — hold position
+            state.phase_progress += dt
             state.velocity = 0
             return state
         available_gate = _find_available_gate()
         if not available_gate:
             available_gate = _find_overflow_gate()
+        if not available_gate and state.phase_progress > 60.0:
+            # Waited too long — force-assign to least-recently-used gate
+            _init_gate_states()
+            if _gate_states:
+                sorted_gates = sorted(
+                    _gate_states.keys(),
+                    key=lambda g: _gate_states[g].available_at,
+                )
+                available_gate = sorted_gates[0]
         if available_gate:
             state.assigned_gate = available_gate
             _occupy_gate(state.icao24, available_gate)
             state.taxi_route = _get_taxi_waypoints_arrival(
                 available_gate, start_pos=(state.longitude, state.latitude))
             state.gate_retry_at = 0.0
+            state.phase_progress = 0.0
         else:
             # No gates available — retry in 5 seconds (sim time)
             state.gate_retry_at = now + 5.0
+            state.phase_progress += dt
             state.velocity = 0
             return state
 
@@ -811,23 +839,26 @@ def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
 
         # Graduated taxi separation — slow down near traffic, stop if too close
         speed_factor = _taxi_speed_factor(state)
+        if speed_factor <= 0 and state.phase_progress > 120.0:
+            speed_factor = 0.3
         if speed_factor > 0:
-            # Arriving aircraft taxi faster on the initial straight
-            # (ATC clears runway exits quickly to maintain arrival rate)
-            base_speed = TAXI_SPEED_STRAIGHT_KTS + 5  # 30 kts for inbound
+            base_speed = (TAXI_SPEED_STRAIGHT_KTS + 5) * _calibration_taxi_in_speed_factor
             taxi_speed = base_speed * speed_factor
             speed_deg = taxi_speed * _KTS_TO_DEG_PER_SEC * dt
             new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
             state.latitude, state.longitude = new_pos
             state.velocity = taxi_speed
+            state.phase_progress = 0.0
         elif speed_factor < 0:
             # Head-on hold: yielding to oncoming traffic — stay put
             state.velocity = 0
             speed_deg = 0
+            state.phase_progress += dt
         else:
             # Factor 0 = traffic ahead within separation threshold — hold position
             state.velocity = 0
             speed_deg = 0
+            state.phase_progress += dt
 
         # Smooth heading toward waypoint (max 5°/s for taxi turns)
         target_hdg = _calculate_heading((state.latitude, state.longitude), target)
@@ -861,15 +892,19 @@ def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
                     return state
 
         speed_factor = _taxi_speed_factor(state)
+        if speed_factor <= 0 and state.phase_progress > 120.0:
+            speed_factor = 0.3
         if speed_factor > 0:
-            ramp_speed = TAXI_SPEED_RAMP_KTS * speed_factor
+            ramp_speed = TAXI_SPEED_RAMP_KTS * _calibration_taxi_in_speed_factor * speed_factor
             speed_deg = ramp_speed * _KTS_TO_DEG_PER_SEC * dt
             new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
             state.latitude, state.longitude = new_pos
             state.velocity = ramp_speed
+            state.phase_progress = 0.0
         else:
             state.velocity = 0
             speed_deg = 0
+            state.phase_progress += dt
 
         target_hdg = _calculate_heading((state.latitude, state.longitude), target)
         state.heading = _smooth_heading(state.heading, target_hdg, 5.0, dt)
@@ -1093,6 +1128,7 @@ def _update_landing(state: FlightState, dt: float) -> None:
         )
         _set_phase(state, FlightPhase.TAXI_TO_GATE)
         state.landed_at = get_time()
+        state.phase_progress = 0.0
         # Release runway when exiting to taxiway (may already be released by early release above)
         if not getattr(state, '_runway_released', False):
             arrival_rwy = _get_arrival_runway_name()
@@ -1231,19 +1267,20 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                                    (ahead.latitude, ahead.longitude))
                 req_sep = _get_required_separation(ahead.aircraft_type, state.aircraft_type) / NM_TO_DEG
                 if dist < req_sep * 1.5:
-                    speed_slow = 0.5
+                    speed_slow = max(0.75, dist / (req_sep * 1.5))
 
             vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
             speed_ceiling = MAX_SPEED_BELOW_FL100_KTS if state.altitude < 10000 else MAX_VELOCITY_KTS
             raw_speed = min(prof_spd * speed_slow, speed_ceiling)
             if state.altitude < 1000:
+                target_speed = min(vref + 20, max(vref, raw_speed))
+            elif state.altitude < 2000:
                 target_speed = min(vref + 30, max(vref, raw_speed))
-                state.velocity = min(state.velocity, vref + 30)
             elif state.altitude < 3000:
                 target_speed = min(vref + 50, max(vref, raw_speed))
             else:
                 target_speed = max(vref * 0.9, raw_speed)
-            decel_rate = 10.0 if state.altitude < 3000 else 5.0
+            decel_rate = 8.0
             max_speed_change = decel_rate * dt
             if target_speed > state.velocity:
                 state.velocity = min(target_speed, state.velocity + 5.0 * dt)
@@ -1271,6 +1308,10 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                 effective_target = min(prof_alt, target_alt)
                 prev_alt = state.altitude
                 state.altitude = max(float(DECISION_HEIGHT_FT), _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
+                max_fpm = 1500.0 if prev_alt > 3000 else 800.0
+                max_descent_per_tick = max_fpm / 60.0 * dt
+                if prev_alt - state.altitude > max_descent_per_tick:
+                    state.altitude = prev_alt - max_descent_per_tick
                 if state.altitude > prev_alt:
                     state.vertical_rate = abs(prof_vr) if prof_vr else 1500
                 else:
@@ -1324,6 +1365,10 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
     else:
         if state.altitude > 1000 and state.go_around_count < 2:
             _execute_go_around(state, "high_altitude_at_threshold")
+        elif state.altitude > DECISION_HEIGHT_FT + 200:
+            state.altitude = max(float(DECISION_HEIGHT_FT), state.altitude - 800.0 / 60.0 * dt)
+            state.vertical_rate = -1500
+            return state
         else:
             arrival_rwy = _get_arrival_runway_name()
             runway_ok = (
@@ -1405,16 +1450,22 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
         heading_diff = (target_heading - state.heading + 540) % 360 - 180
         if state.go_around_count > 0:
             turn_rate = 2.0
+            clockwise_diff = (target_heading - state.heading + 360) % 360
+            if clockwise_diff <= 180:
+                state.heading = (state.heading + min(clockwise_diff, turn_rate * dt)) % 360
+            else:
+                state.heading = (state.heading + turn_rate * dt) % 360
         else:
             turn_rate = max(0.5, min(1.5, dist_from_airport / 0.08))
-        state.heading += max(-turn_rate, min(turn_rate, heading_diff)) * dt
-        state.heading = state.heading % 360
+            state.heading += max(-turn_rate, min(turn_rate, heading_diff)) * dt
+            state.heading = state.heading % 360
 
         if dist_from_airport < EXIT_RADIUS_DEG and state.altitude > 3000:
             frac = max(0.0, (dist_from_airport - 0.17) / (EXIT_RADIUS_DEG - 0.17))
             target_alt = max(3000.0, 3000.0 + frac * (35000.0 - 3000.0))
             if state.altitude > target_alt:
-                descent_rate = min(2000.0, (state.altitude - target_alt) * 2.0)
+                max_fpm = 3500.0 if state.altitude > 10000 else 2000.0
+                descent_rate = min(max_fpm, (state.altitude - target_alt) * 2.0)
                 state.altitude -= descent_rate * dt / 60.0
                 state.altitude = max(target_alt, state.altitude)
                 state.vertical_rate = -descent_rate
@@ -1444,7 +1495,7 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
                 hdg_err = abs((state.heading - approach_bearing + 540) % 360 - 180)
                 ga_aligned = hdg_err < 60
 
-        if can_start_approach and dist_from_airport < reentry_radius and ga_aligned:
+        if can_start_approach and dist_from_airport < reentry_radius and ga_aligned and state.altitude <= 10000:
             emit_phase_transition(
                 state.icao24, state.callsign,
                 FlightPhase.ENROUTE.value, FlightPhase.APPROACHING.value,
@@ -1452,6 +1503,7 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
                 state.aircraft_type, state.assigned_gate,
             )
             _set_phase(state, FlightPhase.APPROACHING)
+            state.velocity = min(state.velocity, MAX_SPEED_BELOW_FL100_KTS)
             state.waypoint_index = _snap_to_nearest_waypoint(state)
             state.star_name = _get_star_name(state.origin_airport)
             if state.go_around_count > 0:
@@ -1462,10 +1514,8 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
                         state.go_around_target_alt = float(wp_alt)
             _dp = get_descent_profile(state.aircraft_type)
             _, _ps, _pv = interpolate_profile(_dp, 0.5)
-            _vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
-            state.velocity = max(_vref, min(_ps, MAX_SPEED_BELOW_FL100_KTS))
             state.vertical_rate = _pv if _pv else -800
-        elif can_start_approach and random.random() < 0.01 * dt and dist_from_airport < 0.35:
+        elif can_start_approach and state.altitude <= 10000 and random.random() < 0.01 * dt and dist_from_airport < 0.35:
             emit_phase_transition(
                 state.icao24, state.callsign,
                 FlightPhase.ENROUTE.value, FlightPhase.APPROACHING.value,
@@ -1473,12 +1523,11 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
                 state.aircraft_type, state.assigned_gate,
             )
             _set_phase(state, FlightPhase.APPROACHING)
+            state.velocity = min(state.velocity, MAX_SPEED_BELOW_FL100_KTS)
             state.waypoint_index = _snap_to_nearest_waypoint(state)
             state.star_name = _get_star_name(state.origin_airport)
             _dp = get_descent_profile(state.aircraft_type)
             _, _ps, _pv = interpolate_profile(_dp, 0.5)
-            _vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
-            state.velocity = max(_vref, min(_ps, MAX_SPEED_BELOW_FL100_KTS))
             state.vertical_rate = _pv if _pv else -800
         elif not can_start_approach and dist_from_airport < APPROACH_RADIUS_DEG:
             HOLDING_LEG_SECONDS = 90.0
@@ -1502,7 +1551,11 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
                 target_heading = _calculate_heading(
                     (state.latitude, state.longitude), center
                 )
-                state.heading = _smooth_heading(state.heading, target_heading, STANDARD_RATE_DEG_S, dt)
+                hdg_diff = (target_heading - state.heading + 360) % 360
+                if hdg_diff > 0 and hdg_diff <= 180:
+                    state.heading = (state.heading + min(hdg_diff, STANDARD_RATE_DEG_S * dt)) % 360
+                elif hdg_diff > 180:
+                    state.heading = (state.heading + STANDARD_RATE_DEG_S * dt) % 360
                 if state.holding_phase_time >= HOLDING_LEG_SECONDS:
                     state.holding_phase_time = 0.0
                     state.holding_inbound = False
@@ -1678,7 +1731,8 @@ def _update_taxi_to_runway(state: FlightState, dt: float) -> FlightState | None:
         state.heading = _smooth_heading(state.heading, dep_hdg, 5.0, dt)
         if not state.departure_queue_set and _calibration_taxi_out_target_s > 0:
             queue_base = max(0.0, _calibration_taxi_out_target_s - _calibration_taxi_out_waypoint_s)
-            state.departure_queue_hold_s = queue_base * random.uniform(0.80, 1.20)
+            p95_budget = max(0.0, _calibration_taxi_out_p95_s - _calibration_taxi_out_waypoint_s) * 0.7
+            state.departure_queue_hold_s = min(queue_base * random.uniform(0.70, 1.10), p95_budget)
             state.departure_queue_set = True
             if state.departure_queue_hold_s > 0:
                 state.velocity = 0
@@ -1686,7 +1740,10 @@ def _update_taxi_to_runway(state: FlightState, dt: float) -> FlightState | None:
 
         dep_rwy = _get_departure_runway_name()
         runway_clear = _is_runway_clear(dep_rwy)
-        if runway_clear:
+        state.phase_progress += dt
+        p95_exceeded = (_calibration_taxi_out_p95_s > 0
+                        and state.phase_progress > 180.0)
+        if runway_clear or p95_exceeded:
             runway_st = _get_runway_state(dep_rwy)
             elapsed = get_time() - runway_st.last_departure_time
             lead_cat = runway_st.last_departure_type
@@ -1694,6 +1751,8 @@ def _update_taxi_to_runway(state: FlightState, dt: float) -> FlightState | None:
             required = DEPARTURE_SEPARATION_S.get(
                 (lead_cat, follow_cat), DEFAULT_DEPARTURE_SEPARATION_S
             )
+            if p95_exceeded:
+                required = min(required, 30.0)
             if elapsed >= required:
                 emit_phase_transition(
                     state.icao24, state.callsign,
@@ -1702,6 +1761,7 @@ def _update_taxi_to_runway(state: FlightState, dt: float) -> FlightState | None:
                     state.aircraft_type, state.assigned_gate,
                 )
                 _set_phase(state, FlightPhase.TAKEOFF)
+                state.velocity = 0
                 _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
                 state.heading = dep_hdg
                 state.takeoff_subphase = "lineup"

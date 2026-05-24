@@ -338,7 +338,10 @@ class SimulationEngine:
         # Set calibrated taxi-out hold from BTS OTP data
         profile = self.airport_profile
         if profile.taxi_out_mean_min > 0:
-            set_calibration_taxi_out(profile.taxi_out_mean_min)
+            set_calibration_taxi_out(
+                profile.taxi_out_mean_min,
+                p95_minutes=getattr(profile, 'taxi_out_p95_min', 0.0),
+            )
         else:
             set_calibration_taxi_out(0.0)
 
@@ -450,6 +453,9 @@ class SimulationEngine:
         if not travel_times:
             return 120.0
         avg = sum(travel_times) / len(travel_times)
+        if avg > 1800.0:
+            logger.warning(f"Estimated taxi-in travel {avg:.0f}s unreasonable, using 120s fallback")
+            return 120.0
         logger.debug(f"Estimated taxi-in travel: {avg:.0f}s ({avg/60:.1f} min) from {len(travel_times)} gates")
         return avg
 
