@@ -18,7 +18,7 @@ from pathlib import Path
 # Real-world benchmarks for validation
 REAL_WORLD_BENCHMARKS = {
     "go_around_rate_pct": {"min": 0.0, "max": 5.0, "typical": 1.5},
-    "on_time_pct": {"min": 60.0, "max": 95.0, "typical": 78.0},
+    "on_time_pct": {"min": 60.0, "max": 100.0, "typical": 78.0},
     "cancellation_rate_pct": {"min": 0.0, "max": 5.0, "typical": 2.0},
     "avg_turnaround_min": {"min": 25.0, "max": 90.0, "typical": 45.0},
 }

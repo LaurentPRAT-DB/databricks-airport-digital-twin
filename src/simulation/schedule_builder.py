@@ -92,6 +92,7 @@ class ScheduleBuilder:
         """Generate arrivals distributed across hours using profile-weighted demand."""
         start = self.config.effective_start_time()
         duration_h = self.config.effective_duration_hours()
+        end_time = start + timedelta(hours=duration_h)
         profile = self.profile
         local_iata = self.config.airport
 
@@ -127,6 +128,9 @@ class ScheduleBuilder:
                 minute = random.randint(0, 59)
                 scheduled_time = start + timedelta(hours=h_idx, minutes=minute)
                 delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
+                # Cap delay so flight spawns within simulation window
+                max_delay = max(0, int((end_time - scheduled_time).total_seconds() / 60) - 5)
+                delay_minutes = min(delay_minutes, max_delay)
 
                 arrivals.append({
                     "flight_number": flight_number,
@@ -166,6 +170,8 @@ class ScheduleBuilder:
 
             destination = _select_destination("departure", arr["airline_code"], profile=profile)
             delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
+            max_delay = max(0, int((end_time - dep_time).total_seconds() / 60) - 5)
+            delay_minutes = min(delay_minutes, max_delay)
 
             departures.append({
                 "flight_number": _generate_flight_number(arr["airline_code"]),
@@ -189,6 +195,7 @@ class ScheduleBuilder:
         """Generate surplus independent departures (overnight-parked aircraft)."""
         start = self.config.effective_start_time()
         duration_h = self.config.effective_duration_hours()
+        end_time = start + timedelta(hours=duration_h)
         profile = self.profile
         local_iata = self.config.airport
 
@@ -206,6 +213,8 @@ class ScheduleBuilder:
             minute = random.randint(0, int(early_window_h * 60) - 1)
             scheduled_time = start + timedelta(minutes=minute)
             delay_minutes, delay_code, delay_reason = _generate_delay(profile=profile)
+            max_delay = max(0, int((end_time - scheduled_time).total_seconds() / 60) - 5)
+            delay_minutes = min(delay_minutes, max_delay)
 
             departures.append({
                 "flight_number": _generate_flight_number(airline_code),

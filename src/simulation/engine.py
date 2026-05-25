@@ -563,10 +563,15 @@ class SimulationEngine:
                 continue
 
             scheduled = datetime.fromisoformat(flight["scheduled_time"])
-            effective_time = scheduled + timedelta(minutes=flight.get("delay_minutes", 0))
 
+            # Schedule is sorted by scheduled_time — if scheduled > sim_time,
+            # no later flights can be due either (regardless of delay).
+            if scheduled > self.sim_time:
+                break
+
+            effective_time = scheduled + timedelta(minutes=flight.get("delay_minutes", 0))
             if effective_time > self.sim_time:
-                break  # schedule is sorted — all remaining are in the future
+                continue  # delayed flight not yet due, but later flights may be
 
             icao24 = f"sim{idx:05d}"
             callsign = flight["flight_number"]

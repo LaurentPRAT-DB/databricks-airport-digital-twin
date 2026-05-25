@@ -239,8 +239,8 @@ class TestForceAdvance:
         assert state.phase == FlightPhase.LANDING
         _flight_states.pop("sim00094", None)
 
-    def test_approaching_high_alt_triggers_go_around(self):
-        """Approaching at >800ft should force a go-around (A09 fix)."""
+    def test_approaching_stuck_force_lands(self):
+        """Stuck approaching aircraft should be force-landed to clear sequence."""
         engine = self._make_engine()
         state = _make_flight_state(
             "sim00093", FlightPhase.APPROACHING,
@@ -249,32 +249,35 @@ class TestForceAdvance:
         _flight_states["sim00093"] = state
         engine._phase_counts["approaching"] = 1
 
-        # No go-around from random, but altitude > 800 should force it
-        with patch("src.simulation.engine.random.random", return_value=0.99):
-            engine._force_advance("sim00093", state)
+        engine._force_advance("sim00093", state)
 
-        assert state.phase == FlightPhase.ENROUTE
-        assert state.go_around_count == 1
+        assert state.phase == FlightPhase.LANDING
+        assert state.altitude == 200.0
         _flight_states.pop("sim00093", None)
 
-    def test_approaching_go_around_random(self):
-        """Random go-around probability check."""
-        engine = self._make_engine()
+    def test_approaching_stuck_waits_when_runway_busy(self):
+        """PhaseResolver resolve_approaching waits if runway busy and go_around_count < 2."""
+        from src.simulation.phase_resolver import PhaseResolver, PhaseResolution
+        from src.simulation.capacity import CapacityManager
+        from unittest.mock import patch
+
+        capacity = CapacityManager(["28R", "28L"])
+        resolver = PhaseResolver(capacity, "SFO")
+
         state = _make_flight_state(
             "sim00092", FlightPhase.APPROACHING,
             altitude=400.0, on_ground=False,
         )
-        _flight_states["sim00092"] = state
-        engine._phase_counts["approaching"] = 1
+        state.go_around_count = 0
 
-        # Force go-around via random
-        with patch.object(engine.capacity, "go_around_probability", return_value=1.0):
-            with patch("src.simulation.engine.random.random", return_value=0.0):
-                engine._force_advance("sim00092", state)
+        # Mock _is_runway_clear at the source module (imported lazily inside method)
+        with patch("src.ingestion.fallback._is_runway_clear", return_value=False):
+            resolution = resolver.resolve_approaching("sim00092", state)
 
-        assert state.phase == FlightPhase.ENROUTE
-        assert state.go_around_count == 1
-        _flight_states.pop("sim00092", None)
+        # Should just reset the timer (no phase change)
+        assert resolution.new_phase is None
+        assert resolution.reset_phase_time == "approaching"
+        assert resolution.phase_time_value == 600.0
 
     def test_force_advance_records_phase_transition(self):
         engine = self._make_engine()
