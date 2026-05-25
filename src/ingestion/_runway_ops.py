@@ -42,6 +42,20 @@ from src.simulation.diagnostics import diag_log
 
 # ── Runway helpers ──────────────────────────────────────────────────────────
 
+_scenario_closed_runways: set[str] = set()
+
+
+def set_runway_closed(runway: str) -> None:
+    _scenario_closed_runways.add(runway)
+
+
+def set_runway_open(runway: str) -> None:
+    _scenario_closed_runways.discard(runway)
+
+
+def clear_runway_closures() -> None:
+    _scenario_closed_runways.clear()
+
 
 def _get_runway_state(runway: str) -> RunwayState:
     """Get or create a RunwayState for the given runway name."""
@@ -286,16 +300,21 @@ def _is_runway_clear(runway: str = "") -> bool:
     """Check if runway is clear for landing or takeoff.
 
     Checks BOTH the given designator AND its reciprocal (e.g. '28L' and '10R')
-    because they are the same physical runway.
+    because they are the same physical runway. Also checks scenario closures.
     """
     if not runway:
         from src.ingestion.fallback import _get_arrival_runway_name
         runway = _get_arrival_runway_name()
+    if runway in _scenario_closed_runways:
+        return False
     if _get_runway_state(runway).occupied_by is not None:
         return False
     recip = _get_reciprocal_designator(runway)
-    if recip and recip in _runway_states and _runway_states[recip].occupied_by is not None:
-        return False
+    if recip:
+        if recip in _scenario_closed_runways:
+            return False
+        if recip in _runway_states and _runway_states[recip].occupied_by is not None:
+            return False
     return True
 
 

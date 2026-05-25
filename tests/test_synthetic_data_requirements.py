@@ -435,14 +435,19 @@ class TestApproachSeparation:
         assert _check_approach_separation(follow) is True
 
     def test_max_simultaneous_approaches_limited(self):
-        """Approach sequence capped at MAX_APPROACH_AIRCRAFT."""
-        # _create_new_flight redirects to ENROUTE when approach is full
-        _flight_states.clear()
+        """Approach sequence capped at get_max_approach_aircraft()."""
+        from src.ingestion._state import get_max_approach_aircraft, reset_max_approach_cache
         from src.ingestion.fallback import _reset_gate_states
-        _reset_gate_states()
 
-        # Fill approach slots
-        for i in range(MAX_APPROACH_AIRCRAFT):
+        _flight_states.clear()
+        _reset_gate_states()
+        reset_max_approach_cache()
+
+        # Use actual dynamic limit (varies by airport runway count)
+        max_app = get_max_approach_aircraft()
+
+        # Fill approach slots to capacity
+        for i in range(max_app):
             state = FlightState(
                 icao24=f"app{i}", callsign=f"TST{i:03d}",
                 latitude=37.58, longitude=-122.10 + i * 0.12,
@@ -453,7 +458,7 @@ class TestApproachSeparation:
             _flight_states[f"app{i}"] = state
 
         # Next aircraft should be redirected (not approach)
-        new = _create_new_flight(f"app{MAX_APPROACH_AIRCRAFT}", "TST999", FlightPhase.APPROACHING)
+        new = _create_new_flight(f"app{max_app}", "TST999", FlightPhase.APPROACHING)
         assert new.phase != FlightPhase.APPROACHING, "Should redirect when approach full"
         _flight_states.clear()
 

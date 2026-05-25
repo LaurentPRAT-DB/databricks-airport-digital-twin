@@ -123,7 +123,8 @@ class TestApproachingResolution:
     @patch("src.ingestion.fallback._is_runway_clear", return_value=True)
     @patch("src.ingestion.fallback._is_arrival_separation_met", return_value=True)
     @patch("src.ingestion.fallback._get_arrival_runway_name", return_value="28R")
-    def test_high_altitude_resolves_to_go_around(self, *_mocks):
+    def test_high_altitude_force_lands_when_stuck(self, *_mocks):
+        """Stuck approach with clear runway → force-land (go-arounds happen in lifecycle)."""
         resolver = _make_resolver()
         state = _make_state(
             phase=FlightPhase.APPROACHING, altitude=1500,
@@ -131,10 +132,10 @@ class TestApproachingResolution:
         )
         result = resolver.resolve("test01", state, 600.0)
 
-        assert result.new_phase == FlightPhase.ENROUTE
-        assert result.event_type == "go_around"
-        assert result.state_mutations["go_around_count"] == 1
-        assert result.reset_phase_time == "enroute"
+        assert result.new_phase == FlightPhase.LANDING
+        assert result.state_mutations["altitude"] == 200.0
+        assert result.runway_occupy == "28R"
+        assert result.reset_phase_time == "landing"
 
     @patch("src.ingestion.fallback._is_runway_clear", return_value=False)
     @patch("src.ingestion.fallback._is_arrival_separation_met", return_value=True)
@@ -154,24 +155,24 @@ class TestApproachingResolution:
     @patch("src.ingestion.fallback._is_runway_clear", return_value=True)
     @patch("src.ingestion.fallback._is_arrival_separation_met", return_value=True)
     @patch("src.ingestion.fallback._get_arrival_runway_name", return_value="28R")
-    def test_weather_go_around_probability(self, *_mocks):
+    def test_stuck_approach_force_lands_regardless_of_weather(self, *_mocks):
+        """PhaseResolver force-lands stuck flights — weather go-arounds happen in lifecycle."""
         resolver = _make_resolver()
-        resolver.capacity.go_around_probability.return_value = 1.0  # always go around
         state = _make_state(
             phase=FlightPhase.APPROACHING, altitude=500,
             on_ground=False, velocity=140, go_around_count=0,
         )
-        with patch("random.random", return_value=0.01):
-            result = resolver.resolve("test01", state, 600.0)
+        result = resolver.resolve("test01", state, 600.0)
 
-        assert result.new_phase == FlightPhase.ENROUTE
-        assert result.event_type == "go_around"
-        assert "weather" in result.event_description
+        assert result.new_phase == FlightPhase.LANDING
+        assert result.state_mutations["altitude"] == 200.0
+        assert result.runway_occupy == "28R"
 
     @patch("src.ingestion.fallback._is_runway_clear", return_value=True)
     @patch("src.ingestion.fallback._is_arrival_separation_met", return_value=True)
     @patch("src.ingestion.fallback._get_arrival_runway_name", return_value="28R")
-    def test_three_go_arounds_triggers_diversion(self, *_mocks):
+    def test_three_go_arounds_force_lands_on_approach(self, *_mocks):
+        """With go_around_count>=2, resolver force-lands immediately (no more waiting)."""
         resolver = _make_resolver()
         state = _make_state(
             phase=FlightPhase.APPROACHING, altitude=1500,
@@ -179,9 +180,9 @@ class TestApproachingResolution:
         )
         result = resolver.resolve("test01", state, 600.0)
 
-        assert result.new_phase == FlightPhase.ENROUTE
-        assert result.divert_to in ["KOAK", "KSJC"]
-        assert result.state_mutations["go_around_count"] == 3
+        assert result.new_phase == FlightPhase.LANDING
+        assert result.state_mutations["altitude"] == 200.0
+        assert result.runway_occupy == "28R"
 
 
 class TestLandingResolution:

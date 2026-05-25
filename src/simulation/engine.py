@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from src.ingestion._clock import set_clock, reset_clock
+from src.ingestion._runway_ops import set_runway_closed, set_runway_open, clear_runway_closures
 
 from src.simulation.config import SimulationConfig
 from src.simulation.recorder import SimulationRecorder
@@ -368,6 +369,9 @@ class SimulationEngine:
         reset_arrival_runway_state()
         set_arrival_runways(sorted(self.capacity.active_runways))
 
+        # Clear scenario runway closures from previous runs
+        clear_runway_closures()
+
         # Reset ALL runway states — clear the entire dict and re-init defaults.
         # Previous sims may have created dynamic entries (e.g. reciprocal "10L"
         # for "28R") that would otherwise persist and block arrivals.
@@ -493,12 +497,14 @@ class SimulationEngine:
                 if re.type == "closure" and re.runway:
                     until = event.time + timedelta(minutes=re.duration_minutes or 60)
                     self.capacity.close_runway(re.runway, until)
+                    set_runway_closed(re.runway)
                     self.recorder.record_scenario_event(
                         self.sim_time, "runway", event.description,
                         {"runway": re.runway, "reason": re.reason},
                     )
                 elif re.type == "reopen" and re.runway:
                     self.capacity.reopen_runway(re.runway)
+                    set_runway_open(re.runway)
                     self.recorder.record_scenario_event(
                         self.sim_time, "runway", event.description,
                         {"runway": re.runway},
@@ -553,7 +559,10 @@ class SimulationEngine:
                 self.capacity.apply_weather(10.0, 10000, None)
 
         # Update capacity manager (expire closures, clean tracking)
+        prev_closed = set(self.capacity.closed_runways.keys())
         self.capacity.update(self.sim_time)
+        for rwy in prev_closed - set(self.capacity.closed_runways.keys()):
+            set_runway_open(rwy)
 
     def _spawn_scheduled_flights(self) -> None:
         """Spawn flights whose scheduled time has arrived, subject to capacity limits."""

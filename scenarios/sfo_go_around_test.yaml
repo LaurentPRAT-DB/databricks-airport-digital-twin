@@ -1,15 +1,15 @@
 name: SFO Go-Around Test — Runway Busy Forces Missed Approach
 description: >
-  Short scenario designed to force go-arounds. Closes runway 28R during the
-  approach window (01:00-01:30) so arriving aircraft encounter a busy runway
-  and must execute missed approach procedures. Strong gusts further increase
-  go-around probability for aircraft arriving after the reopening.
+  Short scenario designed to force go-arounds. Closes ALL arrival runways
+  (28R and 28L) during the approach window (01:00-01:20) so arriving aircraft
+  encounter busy runways with no alternates available, forcing missed approach
+  procedures. Strong gusts further increase go-around probability.
 
 weather_events:
-  - time: "00:45"
+  - time: "00:05"
     type: wind_shift
     severity: moderate
-    duration_hours: 1.5
+    duration_hours: 2.0
     visibility_nm: 3.0
     ceiling_ft: 1200
     wind_speed_kt: 25
@@ -17,12 +17,22 @@ weather_events:
     wind_direction: 250
 
 runway_events:
-  - time: "01:00"
+  - time: "00:30"
     type: closure
     runway: "28R"
-    duration_minutes: 30
+    duration_minutes: 20
     reason: "runway inspection — forces go-around for arriving traffic"
 
-  - time: "01:30"
+  - time: "00:30"
+    type: closure
+    runway: "28L"
+    duration_minutes: 20
+    reason: "runway inspection — forces go-around for arriving traffic"
+
+  - time: "00:50"
     type: reopen
     runway: "28R"
+
+  - time: "00:50"
+    type: reopen
+    runway: "28L"
