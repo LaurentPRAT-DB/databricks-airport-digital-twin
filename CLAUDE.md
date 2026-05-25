@@ -53,7 +53,8 @@ databricks bundle run baggage_pipeline_integration_test --target dev  # DLT pipe
 
 ### Known test issues
 
-- 2 known backend failures: diversion after go-arounds (`test_three_go_arounds_triggers_diversion`, `test_diversion_after_two_go_arounds`).
+- 3 pre-existing approach quality failures: `test_approach_no_large_altitude_jumps`, `test_approach_no_velocity_jitter`, `test_approach_mean_alt_change_smooth` (need altitude/velocity smoothing — tracked in plan).
+- KORD tests deselected (OSM data incomplete for O'Hare).
 
 ## Deployment
 
