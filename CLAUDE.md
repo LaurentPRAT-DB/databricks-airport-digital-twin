@@ -53,8 +53,7 @@ databricks bundle run baggage_pipeline_integration_test --target dev  # DLT pipe
 
 ### Known test issues
 
-- 4 known backend failures: approach speed (DEN), taxi-out median vs BTS, origin/destination generation, diversion after go-arounds.
-- 1 flaky frontend timing test (`switch to 3D and back to 2D`, 750ms threshold).
+- 2 known backend failures: diversion after go-arounds (`test_three_go_arounds_triggers_diversion`, `test_diversion_after_two_go_arounds`).
 
 ## Deployment
 

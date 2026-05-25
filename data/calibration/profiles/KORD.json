@@ -157,5 +157,8 @@
   "data_source": "BTS_DB28+OTP",
   "region": "",
   "profile_date": "2026-03-22",
-  "sample_size": 169552
+  "sample_size": 169552,
+  "latitude": 41.9742,
+  "longitude": -87.9073,
+  "name": "Chicago O'Hare International Airport"
 }
