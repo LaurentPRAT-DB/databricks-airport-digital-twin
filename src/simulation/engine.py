@@ -287,7 +287,7 @@ class SimulationEngine:
             "pushback": 300.0,        # 5 min max pushback
             "approaching": 900.0,     # 15 min max approach
             "landing": 120.0,         # 2 min max landing
-            "enroute": 300.0,         # 5 min max holding — divert or force approach
+            "enroute": 600.0,         # 10 min max holding — divert or force approach
         }
 
     def _phase_count_inc(self, phase_value: str) -> None:
@@ -361,8 +361,12 @@ class SimulationEngine:
         _flight_states.clear()
         _gate_states.clear()
         _fb._occupied_gate_count = 0
-        from src.ingestion._state import reset_max_approach_cache
+        from src.ingestion._state import reset_max_approach_cache, set_max_approach_aircraft
+        from src.ingestion._approach_departure import reset_arrival_runway_state, set_arrival_runways
         reset_max_approach_cache()
+        set_max_approach_aircraft(len(self.capacity.all_runways))
+        reset_arrival_runway_state()
+        set_arrival_runways(sorted(self.capacity.active_runways))
 
         # Reset ALL runway states — clear the entire dict and re-init defaults.
         # Previous sims may have created dynamic entries (e.g. reciprocal "10L"

@@ -245,6 +245,91 @@ def _get_arrival_runway_name() -> str:
     return "28R"
 
 
+# ── Multi-runway arrival distribution ─────────────────────────────────────────
+
+_arrival_runway_assignments: Dict[str, str] = {}
+_arrival_runway_counter: int = 0
+_override_arrival_runways: List[str] = []
+
+
+def set_arrival_runways(runways: List[str]) -> None:
+    """Set available arrival runways (called by engine from capacity manager)."""
+    global _override_arrival_runways
+    _override_arrival_runways = list(runways)
+
+
+def _get_all_arrival_runway_names() -> List[str]:
+    """Get all active arrival runway designators from OSM data.
+
+    For airports with parallel runways (e.g. SFO 28L/28R), returns all runways
+    whose active designator heading is within 30 degrees of the primary.
+    Falls back to single-runway if only one exists.
+    """
+    if _override_arrival_runways:
+        return _override_arrival_runways
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+        runways = config.get("osmRunways", [])
+        if not runways:
+            return [_get_arrival_runway_name()]
+
+        names = []
+        primary_heading = None
+        for rwy in sorted(runways, key=lambda r: len(r.get("geoPoints", [])), reverse=True):
+            if len(rwy.get("geoPoints", [])) < 2:
+                continue
+            _, _, hdg = _osm_runway_endpoints(rwy)
+            ref = rwy.get("ref") or rwy.get("name", "")
+            parts = [p.strip() for p in ref.split("/")]
+            designators = [int(m) for m in _re.findall(r'\d+', ref)]
+            if len(parts) >= 2 and len(designators) >= 2:
+                name = parts[1] if designators[1] > designators[0] else parts[0]
+            elif parts:
+                name = parts[0]
+            else:
+                continue
+
+            if primary_heading is None:
+                primary_heading = hdg
+                names.append(name)
+            else:
+                diff = abs((hdg - primary_heading + 180) % 360 - 180)
+                if diff < 30:
+                    names.append(name)
+
+        return names if names else [_get_arrival_runway_name()]
+    except Exception:
+        return [_get_arrival_runway_name()]
+
+
+def _assign_arrival_runway(icao24: str) -> str:
+    """Assign an arrival runway to an aircraft using round-robin distribution."""
+    global _arrival_runway_counter
+    if icao24 in _arrival_runway_assignments:
+        return _arrival_runway_assignments[icao24]
+
+    runways = _get_all_arrival_runway_names()
+    assigned = runways[_arrival_runway_counter % len(runways)]
+    _arrival_runway_counter += 1
+    _arrival_runway_assignments[icao24] = assigned
+    return assigned
+
+
+def _clear_arrival_runway_assignment(icao24: str) -> None:
+    """Remove runway assignment when aircraft leaves approach (landed or departed)."""
+    _arrival_runway_assignments.pop(icao24, None)
+
+
+def reset_arrival_runway_state() -> None:
+    """Reset multi-runway state (call between simulations)."""
+    global _arrival_runway_counter, _override_arrival_runways
+    _arrival_runway_assignments.clear()
+    _arrival_runway_counter = 0
+    _override_arrival_runways = []
+
+
 def _get_departure_runway() -> Optional[tuple]:
     """Get the departure runway start (lon, lat) from OSM data.
 
@@ -500,7 +585,7 @@ def _snap_to_nearest_waypoint(state) -> int:
     3. After a go-around, prefer early waypoints (first half of the approach)
        to ensure a full, stable approach instead of cutting to final.
 
-    Falls back to pure distance if no suitable waypoint is found.
+    Falls back to first waypoint with sufficient altitude if no forward match.
     """
     approach_wps = _get_approach_waypoints(state.origin_airport)
     if not approach_wps:
@@ -513,6 +598,7 @@ def _snap_to_nearest_waypoint(state) -> int:
     best_dist = float('inf')
     best_fwd_idx = -1
     best_fwd_dist = float('inf')
+    first_above_idx = -1
 
     for wi, wp in enumerate(approach_wps):
         wp_lat, wp_lon = wp[1], wp[0]
@@ -523,17 +609,21 @@ def _snap_to_nearest_waypoint(state) -> int:
             best_dist = d
             best_idx = wi
 
+        if first_above_idx < 0 and wp_alt >= state.altitude:
+            first_above_idx = wi
+
         bearing = _calculate_heading(
             (state.latitude, state.longitude), (wp_lat, wp_lon)
         )
         angle_diff = abs((bearing - state.heading + 540) % 360 - 180)
-        # Must be ahead AND at or above current altitude (with 500ft tolerance)
         if angle_diff <= 90 and wp_alt >= state.altitude - 500 and d < best_fwd_dist:
-            # After a go-around, skip late waypoints (near runway) to prevent
-            # cutting straight to final approach from an off-course position.
             if is_go_around and wi > half_idx:
                 continue
             best_fwd_dist = d
             best_fwd_idx = wi
 
-    return best_fwd_idx if best_fwd_idx >= 0 else best_idx
+    if best_fwd_idx >= 0:
+        return best_fwd_idx
+    if first_above_idx >= 0:
+        return first_above_idx
+    return best_idx

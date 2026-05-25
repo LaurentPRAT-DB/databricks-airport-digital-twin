@@ -97,6 +97,8 @@ from src.ingestion._approach_departure import (
     _osm_runway_endpoints,
     _get_fallback_runway,
     _get_arrival_runway_name,
+    _assign_arrival_runway,
+    _clear_arrival_runway_assignment,
     _get_departure_runway,
     _get_takeoff_runway_geometry,
     _get_star_name,
@@ -478,7 +480,8 @@ def _create_new_flight(
             )
             lat = new_pos[0] + random.uniform(-0.005, 0.005)
             lon = new_pos[1]
-            alt = max(last_aircraft.altitude + 500, 600)
+            min_approach_alt = base_wp[2] * 0.5 if base_wp[2] > 0 else 3000
+            alt = max(last_aircraft.altitude + 500, min_approach_alt)
 
         # Pre-assign a gate so it shows as INBOUND on the gate status panel
         _init_gate_states()
@@ -1114,7 +1117,7 @@ def _update_landing(state: FlightState, dt: float) -> None:
     # Early runway release: vacate when on ground and past initial rollout
     # Real airports: aircraft clears active runway within ~20-30s via high-speed exit
     if state.on_ground and state.velocity <= 80 and not getattr(state, '_runway_released', False):
-        arrival_rwy = _get_arrival_runway_name()
+        arrival_rwy = _assign_arrival_runway(state.icao24)
         _release_runway(state.icao24, arrival_rwy)
         state._runway_released = True
 
@@ -1131,8 +1134,9 @@ def _update_landing(state: FlightState, dt: float) -> None:
         state.phase_progress = 0.0
         # Release runway when exiting to taxiway (may already be released by early release above)
         if not getattr(state, '_runway_released', False):
-            arrival_rwy = _get_arrival_runway_name()
+            arrival_rwy = _assign_arrival_runway(state.icao24)
             _release_runway(state.icao24, arrival_rwy)
+        _clear_arrival_runway_assignment(state.icao24)
         # Reuse pre-assigned gate from approach if still held, else find new one
         _init_gate_states()
         pre_gate = state.assigned_gate
@@ -1179,6 +1183,7 @@ def _execute_go_around(state: FlightState, reason: str = "runway_busy") -> None:
     state.go_around_count += 1
     state.holding_phase_time = 0.0
     state.holding_inbound = True
+    _clear_arrival_runway_assignment(state.icao24)
 
     if state.go_around_count >= 3:
         emit_phase_transition(
@@ -1246,109 +1251,109 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
         has_separation = _check_approach_separation(state)
         queue_pos = _get_approach_queue_position(state.icao24)
 
-        if has_separation:
-            total_wps = len(approach_wps)
-            progress = state.waypoint_index / max(1, total_wps - 1)
-            n_transition = max(0, len(approach_wps) - 7)
-            if n_transition > 0 and state.waypoint_index < n_transition:
-                t = state.waypoint_index / max(1, n_transition)
-                profile_progress = 0.30 + 0.20 * t
-            else:
-                base_idx = state.waypoint_index - max(0, n_transition)
-                base_total = total_wps - max(0, n_transition)
-                profile_progress = 0.50 + 0.50 * (base_idx / max(1, base_total - 1))
-            desc_prof = get_descent_profile(state.aircraft_type)
-            prof_alt, prof_spd, prof_vr = interpolate_profile(desc_prof, profile_progress)
-
-            speed_slow = 1.0
-            ahead = _find_aircraft_ahead_on_approach(state)
-            if ahead:
-                dist = _distance_nm((state.latitude, state.longitude),
-                                   (ahead.latitude, ahead.longitude))
-                req_sep = _get_required_separation(ahead.aircraft_type, state.aircraft_type) / NM_TO_DEG
-                if dist < req_sep * 1.5:
-                    speed_slow = max(0.75, dist / (req_sep * 1.5))
-
-            vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
-            speed_ceiling = MAX_SPEED_BELOW_FL100_KTS if state.altitude < 10000 else MAX_VELOCITY_KTS
-            raw_speed = min(prof_spd * speed_slow, speed_ceiling)
-            if state.altitude < 1000:
-                target_speed = min(vref + 20, max(vref, raw_speed))
-            elif state.altitude < 2000:
-                target_speed = min(vref + 30, max(vref, raw_speed))
-            elif state.altitude < 3000:
-                target_speed = min(vref + 50, max(vref, raw_speed))
-            else:
-                target_speed = max(vref * 0.9, raw_speed)
-            decel_rate = 8.0
-            max_speed_change = decel_rate * dt
-            if target_speed > state.velocity:
-                state.velocity = min(target_speed, state.velocity + 5.0 * dt)
-            elif target_speed < state.velocity:
-                state.velocity = max(target_speed, state.velocity - max_speed_change)
-
-            speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
-            dist_to_wp = _distance_between((state.latitude, state.longitude), target)
-            if dist_to_wp > 1e-8:
-                dlat = target[0] - state.latitude
-                dlon = target[1] - state.longitude
-                ratio = min(speed_deg / dist_to_wp, 1.0)
-                state.latitude += dlat * ratio
-                state.longitude += dlon * ratio
-
-            if state.go_around_target_alt > 0 and state.altitude < state.go_around_target_alt:
-                climb_fps = 25.0
-                state.altitude = min(state.go_around_target_alt, state.altitude + climb_fps * dt)
-                state.vertical_rate = 1500
-                if state.altitude >= state.go_around_target_alt:
-                    state.go_around_target_alt = 0.0
-            else:
-                state.go_around_target_alt = 0.0
-                descent_fps = max(12.0, min(20.0, abs(prof_vr) / 60.0)) if prof_vr else 12.0
-                effective_target = min(prof_alt, target_alt)
-                prev_alt = state.altitude
-                state.altitude = max(float(DECISION_HEIGHT_FT), _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
-                max_fpm = 1500.0 if prev_alt > 3000 else 800.0
-                max_descent_per_tick = max_fpm / 60.0 * dt
-                if prev_alt - state.altitude > max_descent_per_tick:
-                    state.altitude = prev_alt - max_descent_per_tick
-                if state.altitude > prev_alt:
-                    state.vertical_rate = abs(prof_vr) if prof_vr else 1500
-                else:
-                    state.vertical_rate = prof_vr
-
-            if state.altitude <= DECISION_HEIGHT_FT:
-                arrival_rwy = _get_arrival_runway_name()
-                runway_ok = (
-                    (_is_runway_clear(arrival_rwy) or state.go_around_count >= 2)
-                    and _is_arrival_separation_met(arrival_rwy)
-                )
-                if runway_ok:
-                    emit_phase_transition(
-                        state.icao24, state.callsign,
-                        FlightPhase.APPROACHING.value, FlightPhase.LANDING.value,
-                        state.latitude, state.longitude, state.altitude,
-                        state.aircraft_type, state.assigned_gate,
-                    )
-                    _set_phase(state, FlightPhase.LANDING)
-                    state.waypoint_index = 0
-                    _occupy_runway(state.icao24, arrival_rwy)
-                    _get_runway_state(arrival_rwy).last_arrival_time = get_time()
-                else:
-                    _execute_go_around(state, "runway_busy")
-                    return state
+        total_wps = len(approach_wps)
+        progress = state.waypoint_index / max(1, total_wps - 1)
+        n_transition = max(0, len(approach_wps) - 7)
+        if n_transition > 0 and state.waypoint_index < n_transition:
+            t = state.waypoint_index / max(1, n_transition)
+            profile_progress = 0.30 + 0.20 * t
         else:
-            vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
-            state.velocity = max(vref * 0.7, state.velocity - 5.0 * dt)
-            state.vertical_rate = -200
-            creep_deg = state.velocity * 0.3 * _KTS_TO_DEG_PER_SEC * dt
-            dist_to_wp = _distance_between((state.latitude, state.longitude), target)
-            if dist_to_wp > 1e-8:
-                dlat = target[0] - state.latitude
-                dlon = target[1] - state.longitude
-                ratio = min(creep_deg / dist_to_wp, 0.3)
-                state.latitude += dlat * ratio
-                state.longitude += dlon * ratio
+            base_idx = state.waypoint_index - max(0, n_transition)
+            base_total = total_wps - max(0, n_transition)
+            profile_progress = 0.50 + 0.50 * (base_idx / max(1, base_total - 1))
+        desc_prof = get_descent_profile(state.aircraft_type)
+        prof_alt, prof_spd, prof_vr = interpolate_profile(desc_prof, profile_progress)
+
+        speed_slow = 1.0
+        ahead = _find_aircraft_ahead_on_approach(state)
+        if ahead:
+            dist = _distance_nm((state.latitude, state.longitude),
+                               (ahead.latitude, ahead.longitude))
+            req_sep = _get_required_separation(ahead.aircraft_type, state.aircraft_type) / NM_TO_DEG
+            if dist < req_sep * 1.5:
+                speed_slow = max(0.5, dist / (req_sep * 1.5))
+        if not has_separation:
+            speed_slow = min(speed_slow, 0.6)
+
+        vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
+        speed_ceiling = MAX_SPEED_BELOW_FL100_KTS if state.altitude < 10000 else MAX_VELOCITY_KTS
+        raw_speed = min(prof_spd * speed_slow, speed_ceiling)
+        if state.altitude < 1000:
+            target_speed = min(vref + 20, max(vref, raw_speed))
+        elif state.altitude < 2000:
+            target_speed = min(vref + 30, max(vref, raw_speed))
+        elif state.altitude < 3000:
+            target_speed = min(vref + 50, max(vref, raw_speed))
+        else:
+            target_speed = max(vref * 0.9, raw_speed)
+        decel_rate = 8.0
+        max_speed_change = decel_rate * dt
+        if target_speed > state.velocity:
+            state.velocity = min(target_speed, state.velocity + 5.0 * dt)
+        elif target_speed < state.velocity:
+            state.velocity = max(target_speed, state.velocity - max_speed_change)
+
+        speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+        dist_to_wp = _distance_between((state.latitude, state.longitude), target)
+        if dist_to_wp > 1e-8:
+            dlat = target[0] - state.latitude
+            dlon = target[1] - state.longitude
+            ratio = min(speed_deg / dist_to_wp, 1.0)
+            state.latitude += dlat * ratio
+            state.longitude += dlon * ratio
+
+        if state.go_around_target_alt > 0 and state.altitude < state.go_around_target_alt:
+            climb_fps = 25.0
+            state.altitude = min(state.go_around_target_alt, state.altitude + climb_fps * dt)
+            state.vertical_rate = 1500
+            if state.altitude >= state.go_around_target_alt:
+                state.go_around_target_alt = 0.0
+        else:
+            state.go_around_target_alt = 0.0
+            descent_fps = max(12.0, min(20.0, abs(prof_vr) / 60.0)) if prof_vr else 12.0
+            effective_target = min(prof_alt, target_alt)
+            prev_alt = state.altitude
+            state.altitude = max(float(DECISION_HEIGHT_FT), _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
+            above_path = prev_alt > target_alt + 500
+            max_fpm = 1500.0 if (prev_alt > 3000 or above_path) else 800.0
+            max_descent_per_tick = max_fpm / 60.0 * dt
+            if prev_alt - state.altitude > max_descent_per_tick:
+                state.altitude = prev_alt - max_descent_per_tick
+            if state.altitude > prev_alt:
+                state.vertical_rate = abs(prof_vr) if prof_vr else 1500
+            else:
+                state.vertical_rate = prof_vr
+
+        if state.altitude <= DECISION_HEIGHT_FT:
+            arrival_rwy = _assign_arrival_runway(state.icao24)
+            runway_ok = _is_runway_clear(arrival_rwy) or state.go_around_count >= 2
+            if not runway_ok:
+                from src.ingestion._approach_departure import (
+                    _get_all_arrival_runway_names, _clear_arrival_runway_assignment,
+                )
+                all_rwys = _get_all_arrival_runway_names()
+                for alt_rwy in all_rwys:
+                    if alt_rwy == arrival_rwy:
+                        continue
+                    if _is_runway_clear(alt_rwy):
+                        _clear_arrival_runway_assignment(state.icao24)
+                        arrival_rwy = alt_rwy
+                        runway_ok = True
+                        break
+            if runway_ok:
+                emit_phase_transition(
+                    state.icao24, state.callsign,
+                    FlightPhase.APPROACHING.value, FlightPhase.LANDING.value,
+                    state.latitude, state.longitude, state.altitude,
+                    state.aircraft_type, state.assigned_gate,
+                )
+                _set_phase(state, FlightPhase.LANDING)
+                state.waypoint_index = 0
+                _occupy_runway(state.icao24, arrival_rwy)
+                _get_runway_state(arrival_rwy).last_arrival_time = get_time()
+            else:
+                _execute_go_around(state, "runway_busy")
+                return state
 
         target_hdg = _calculate_heading((state.latitude, state.longitude), target)
         state.heading = _smooth_heading(state.heading, target_hdg, 3.0, dt)
@@ -1363,18 +1368,28 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                 )
                 state.heading = _smooth_heading(state.heading, next_hdg, 3.0, dt)
     else:
-        if state.altitude > 1000 and state.go_around_count < 2:
+        if state.altitude > 2500 and state.go_around_count == 0:
             _execute_go_around(state, "high_altitude_at_threshold")
         elif state.altitude > DECISION_HEIGHT_FT + 200:
-            state.altitude = max(float(DECISION_HEIGHT_FT), state.altitude - 800.0 / 60.0 * dt)
+            state.altitude = max(float(DECISION_HEIGHT_FT), state.altitude - 1500.0 / 60.0 * dt)
             state.vertical_rate = -1500
             return state
         else:
-            arrival_rwy = _get_arrival_runway_name()
-            runway_ok = (
-                (_is_runway_clear(arrival_rwy) or state.go_around_count >= 2)
-                and _is_arrival_separation_met(arrival_rwy)
-            )
+            arrival_rwy = _assign_arrival_runway(state.icao24)
+            runway_ok = _is_runway_clear(arrival_rwy) or state.go_around_count >= 2
+            if not runway_ok:
+                from src.ingestion._approach_departure import (
+                    _get_all_arrival_runway_names, _clear_arrival_runway_assignment,
+                )
+                all_rwys = _get_all_arrival_runway_names()
+                for alt_rwy in all_rwys:
+                    if alt_rwy == arrival_rwy:
+                        continue
+                    if _is_runway_clear(alt_rwy):
+                        _clear_arrival_runway_assignment(state.icao24)
+                        arrival_rwy = alt_rwy
+                        runway_ok = True
+                        break
             if runway_ok:
                 emit_phase_transition(
                     state.icao24, state.callsign,

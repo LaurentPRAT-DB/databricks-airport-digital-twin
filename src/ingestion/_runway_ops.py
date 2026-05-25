@@ -412,12 +412,19 @@ def _find_overflow_gate() -> Optional[str]:
 
 
 def _occupy_gate(icao24: str, gate: str):
-    """Mark gate as occupied."""
+    """Mark gate as occupied, evicting previous occupant if needed."""
     import src.ingestion._state as _st
 
     _init_gate_states()
     if gate in _gate_states:
-        was_empty = _gate_states[gate].occupied_by is None
+        prev = _gate_states[gate].occupied_by
+        was_empty = prev is None
+        if prev is not None and prev != icao24:
+            from src.ingestion._event_buffers import emit_gate_event
+            prev_state = _flight_states.get(prev)
+            cs = prev_state.callsign if prev_state else prev
+            atype = prev_state.aircraft_type if prev_state else "A320"
+            emit_gate_event(prev, cs, gate, "release", atype)
         _gate_states[gate].occupied_by = icao24
         if was_empty:
             _st._occupied_gate_count += 1

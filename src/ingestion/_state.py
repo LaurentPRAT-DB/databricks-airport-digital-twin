@@ -103,6 +103,19 @@ def reset_max_approach_cache() -> None:
     global _cached_max_approach
     _cached_max_approach = None
 
+
+def set_max_approach_aircraft(n_runways: int) -> None:
+    """Set approach capacity from known runway count (bypasses config service)."""
+    global _cached_max_approach
+    if n_runways >= 4:
+        _cached_max_approach = 14
+    elif n_runways >= 3:
+        _cached_max_approach = 12
+    elif n_runways >= 2:
+        _cached_max_approach = 10
+    else:
+        _cached_max_approach = 6
+
 # Phase index — maintained automatically by _FlightStateDict and _set_phase
 _flights_by_phase: Dict[FlightPhase, Set[str]] = {phase: set() for phase in FlightPhase}
 

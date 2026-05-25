@@ -130,33 +130,19 @@ class PhaseResolver:
         )
 
     def resolve_approaching(self, icao24: str, state: FlightState) -> PhaseResolution:
-        """Handle stuck approach: land, go-around, or wait."""
+        """Handle stuck approach: force-land to clear the sequence."""
         from src.ingestion.fallback import (
-            _is_runway_clear, _is_arrival_separation_met,
-            _get_arrival_runway_name, VREF_SPEEDS,
+            _is_runway_clear, _get_arrival_runway_name,
         )
 
         arr_rwy = _get_arrival_runway_name()
-        runway_ok = (
-            (_is_runway_clear(arr_rwy) or state.go_around_count >= 2)
-            and _is_arrival_separation_met(arr_rwy)
-        )
 
-        if not runway_ok:
+        if not _is_runway_clear(arr_rwy) and state.go_around_count < 2:
             return PhaseResolution(reset_phase_time="approaching", phase_time_value=600.0)
 
-        # Check go-around probability
-        if state.go_around_count < 2 and random.random() < self.capacity.go_around_probability():
-            return self._go_around_resolution(icao24, state, reason="weather")
-
-        # Check altitude — too high means missed approach
-        if state.altitude > 800:
-            return self._go_around_resolution(icao24, state, reason="high_altitude")
-
-        # Clear to land
         return PhaseResolution(
             new_phase=FlightPhase.LANDING,
-            state_mutations={"waypoint_index": 0},
+            state_mutations={"waypoint_index": 0, "altitude": 200.0},
             runway_occupy=arr_rwy,
             reset_phase_time="landing",
         )
@@ -185,6 +171,12 @@ class PhaseResolver:
 
         if state.go_around_count >= 2:
             return self._diversion_resolution(icao24, state)
+
+        if state.altitude > 5000:
+            return PhaseResolution(
+                state_mutations={"altitude": max(state.altitude - 2000, 5000)},
+                reset_phase_time="enroute",
+            )
 
         # Force transition to approach
         return PhaseResolution(

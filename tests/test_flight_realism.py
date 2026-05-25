@@ -50,6 +50,8 @@ from src.ingestion.fallback import (
     APPROACH_WAYPOINTS,
     DEPARTURE_WAYPOINTS,
     MAX_APPROACH_AIRCRAFT,
+    get_max_approach_aircraft,
+    reset_max_approach_cache,
     NM_TO_DEG,
     MIN_GATES_FOR_OPERATIONS,
     MAX_SPEED_BELOW_FL100_KTS,
@@ -400,13 +402,17 @@ class TestParkedHeading:
 class TestApproachCapacityRuntime:
     """Verify approach capacity is enforced during ENROUTE→APPROACHING transition."""
 
+    def setup_method(self):
+        reset_max_approach_cache()
+
     def test_enroute_holds_when_approach_full(self):
         """An enroute arriving flight should NOT transition to APPROACHING
-        when MAX_APPROACH_AIRCRAFT are already approaching."""
+        when approach capacity is full."""
         center = get_airport_center()
+        max_app = get_max_approach_aircraft()
 
-        # Create MAX_APPROACH_AIRCRAFT aircraft already on approach
-        for i in range(MAX_APPROACH_AIRCRAFT):
+        # Create max_approach aircraft already on approach
+        for i in range(max_app):
             icao24 = f"app_{i}"
             state = FlightState(
                 icao24=icao24,
@@ -445,7 +451,7 @@ class TestApproachCapacityRuntime:
         # Update — should NOT transition to approaching
         result = _update_flight_state(enroute, 1.0)
         assert result.phase == FlightPhase.ENROUTE, (
-            f"Should hold as ENROUTE when approach is full ({MAX_APPROACH_AIRCRAFT} aircraft), "
+            f"Should hold as ENROUTE when approach is full ({max_app} aircraft), "
             f"but transitioned to {result.phase.value}"
         )
 
@@ -841,12 +847,15 @@ class TestPushbackDuration:
 class TestRacetrackHolding:
     """Verify holding aircraft fly racetrack patterns, not lazy orbits."""
 
+    def setup_method(self):
+        reset_max_approach_cache()
+
     def _setup_holding_flight(self):
         """Create an arriving enroute flight that should enter holding."""
         center = get_airport_center()
 
         # Fill approach to capacity
-        for i in range(MAX_APPROACH_AIRCRAFT):
+        for i in range(get_max_approach_aircraft()):
             icao24 = f"hold_app_{i}"
             state = FlightState(
                 icao24=icao24,
