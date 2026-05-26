@@ -39,18 +39,21 @@ _default_for_target() {
             schema)  echo "airport_digital_twin" ;;
             profile) echo "LPT_FREE_EDITION" ;;
             warehouse) echo "58d41113cb262dce" ;;
+            inpainting_endpoint) echo "" ;;
           esac ;;
     prod) case "$key" in
             catalog) echo "serverless_stable_3n0ihb_catalog" ;;
             schema)  echo "airport_digital_twin_prod" ;;
             profile) echo "FEVM_SERVERLESS_STABLE" ;;
             warehouse) echo "b868e84cedeb4262" ;;
+            inpainting_endpoint) echo "airport-dt-aircraft-inpainting-prod" ;;
           esac ;;
     *)    case "$key" in
             catalog) echo "serverless_stable_3n0ihb_catalog" ;;
             schema)  echo "airport_digital_twin" ;;
             profile) echo "FEVM_SERVERLESS_STABLE" ;;
             warehouse) echo "b868e84cedeb4262" ;;
+            inpainting_endpoint) echo "airport-dt-aircraft-inpainting-dev" ;;
           esac ;;
   esac
 }
@@ -280,7 +283,8 @@ fi
 
 # ── Step 6: Grant SP permissions (everything DABs can't manage) ──────
 echo "Step 6: Grant SP permissions"
-export APP_SP BUNDLE_DIR APP_NAME UC_CATALOG UC_SCHEMA WAREHOUSE_ID GENIE_SPACE_ID SECRET_SCOPE DATABRICKS_PROFILE="$PROFILE"
+INPAINTING_ENDPOINT="${INPAINTING_ENDPOINT:-$(_default_for_target inpainting_endpoint)}"
+export APP_SP BUNDLE_DIR APP_NAME UC_CATALOG UC_SCHEMA WAREHOUSE_ID GENIE_SPACE_ID SECRET_SCOPE INPAINTING_ENDPOINT DATABRICKS_PROFILE="$PROFILE"
 ./scripts/grant_sp_permissions.sh
 
 # ── Done ──────────────────────────────────────────────────────────────

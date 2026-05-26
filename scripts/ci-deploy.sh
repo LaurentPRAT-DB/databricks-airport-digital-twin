@@ -85,7 +85,11 @@ fi
 LAKEBASE_BRANCH="${LAKEBASE_BRANCH:-$TARGET}"
 LAKEBASE_ENDPOINT="projects/airport-digital-twin/branches/$LAKEBASE_BRANCH/endpoints/primary"
 LAKEBASE_HOST="${LAKEBASE_HOST:-ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com}"
-INPAINTING_ENDPOINT="${INPAINTING_ENDPOINT:-airport-dt-aircraft-inpainting-$TARGET}"
+if [[ "$TARGET" == "free" ]]; then
+  INPAINTING_ENDPOINT=""
+else
+  INPAINTING_ENDPOINT="${INPAINTING_ENDPOINT:-airport-dt-aircraft-inpainting-$TARGET}"
+fi
 
 ok()   { echo "  [OK] $1"; }
 fail() { echo "  [FAIL] $1"; }
