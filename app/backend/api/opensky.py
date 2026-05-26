@@ -899,18 +899,21 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
 
     thread = threading.Thread(target=_query_enriched, daemon=True)
     thread.start()
-    thread.join(timeout=30)
+    thread.join(timeout=90)
 
-    if errors:
+    if thread.is_alive():
+        logger.warning("Enriched query timed out for %s/%s (90s) — falling back to raw", airport, date)
+    elif errors:
         logger.warning("Enriched table query failed: %s — falling back to raw", errors[0])
     elif snap_result and snap_result[0]:
         return _build_recording_response_from_enriched(
             airport, date, snap_result[0], phase_result[0] if phase_result else [],
             gate_result[0] if gate_result else [],
         )
+    else:
+        logger.info("No enriched data for %s/%s, falling back to raw table", airport, date)
 
     # ── Fallback: raw table (unenriched data) ────────────────────────
-    logger.info("No enriched data for %s/%s, falling back to raw table", airport, date)
     return await _load_recording_from_raw(airport, date)
 
 
@@ -1070,12 +1073,12 @@ async def _load_recording_from_raw(airport: str, date: str) -> dict:
 
     thread = threading.Thread(target=_query, daemon=True)
     thread.start()
-    thread.join(timeout=30)
+    thread.join(timeout=90)
 
     if error:
         raise HTTPException(status_code=503, detail=f"Query failed: {error[0]}")
     if not result:
-        raise HTTPException(status_code=504, detail="Query timed out")
+        raise HTTPException(status_code=504, detail="Query timed out (recording too large or warehouse cold-starting)")
     if not result[0]:
         raise HTTPException(status_code=404, detail=f"No recorded data for {airport} on {date}")
 

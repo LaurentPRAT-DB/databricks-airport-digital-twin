@@ -1055,7 +1055,7 @@ export function SimulationControls({
         console.warn('Failed to switch airport for recording:', err);
       }
     }
-    sim.loadRecording(airport, date);
+    await sim.loadRecording(airport, date);
   };
 
   return (
