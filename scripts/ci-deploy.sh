@@ -51,8 +51,14 @@ fi
 
 # Resolve catalog/schema from DABs bundle variables (unless overridden via env)
 # Known target → catalog/schema mappings (fallback when bundle validate unavailable in CI)
-declare -A _TARGET_CATALOG=( [dev]="serverless_stable_3n0ihb_catalog" [prod]="serverless_stable_3n0ihb_catalog" [free]="main" )
-declare -A _TARGET_SCHEMA=( [dev]="airport_digital_twin" [prod]="airport_digital_twin_prod" [free]="airport_digital_twin" )
+declare -A _TARGET_CATALOG
+_TARGET_CATALOG[dev]="serverless_stable_3n0ihb_catalog"
+_TARGET_CATALOG[prod]="serverless_stable_3n0ihb_catalog"
+_TARGET_CATALOG[free]="main"
+declare -A _TARGET_SCHEMA
+_TARGET_SCHEMA[dev]="airport_digital_twin"
+_TARGET_SCHEMA[prod]="airport_digital_twin_prod"
+_TARGET_SCHEMA[free]="airport_digital_twin"
 
 if [[ -z "${UC_CATALOG:-}" || -z "${UC_SCHEMA:-}" ]]; then
   BUNDLE_VARS=$(databricks bundle validate --target "$TARGET" --output json 2>/dev/null \
