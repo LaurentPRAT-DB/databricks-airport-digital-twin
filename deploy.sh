@@ -30,10 +30,35 @@ for arg in "$@"; do
 done
 unset _prev_arg
 
-PROFILE="${DATABRICKS_PROFILE:-FEVM_SERVERLESS_STABLE}"
-UC_CATALOG="${UC_CATALOG:-serverless_stable_3n0ihb_catalog}"
-UC_SCHEMA="${UC_SCHEMA:-airport_digital_twin}"
-WAREHOUSE_ID="${WAREHOUSE_ID:-b868e84cedeb4262}"
+# Per-target defaults (catalog, schema, profile, warehouse)
+_default_for_target() {
+  local key="$1"
+  case "$TARGET" in
+    free) case "$key" in
+            catalog) echo "main" ;;
+            schema)  echo "airport_digital_twin" ;;
+            profile) echo "LPT_FREE_EDITION" ;;
+            warehouse) echo "58d41113cb262dce" ;;
+          esac ;;
+    prod) case "$key" in
+            catalog) echo "serverless_stable_3n0ihb_catalog" ;;
+            schema)  echo "airport_digital_twin_prod" ;;
+            profile) echo "FEVM_SERVERLESS_STABLE" ;;
+            warehouse) echo "b868e84cedeb4262" ;;
+          esac ;;
+    *)    case "$key" in
+            catalog) echo "serverless_stable_3n0ihb_catalog" ;;
+            schema)  echo "airport_digital_twin" ;;
+            profile) echo "FEVM_SERVERLESS_STABLE" ;;
+            warehouse) echo "b868e84cedeb4262" ;;
+          esac ;;
+  esac
+}
+
+PROFILE="${DATABRICKS_PROFILE:-$(_default_for_target profile)}"
+UC_CATALOG="${UC_CATALOG:-$(_default_for_target catalog)}"
+UC_SCHEMA="${UC_SCHEMA:-$(_default_for_target schema)}"
+WAREHOUSE_ID="${WAREHOUSE_ID:-$(_default_for_target warehouse)}"
 GENIE_SPACE_ID="${GENIE_SPACE_ID:-01f12612fa6314ae943d0526f5ae3a00}"
 SECRET_SCOPE="${SECRET_SCOPE:-airport-digital-twin}"
 APP_NAME="${APP_NAME:-airport-digital-twin-$TARGET}"
@@ -153,7 +178,7 @@ ok "Uploaded $UPLOAD_COUNT airport configs to $VOLUME_PATH"
 
 # ── Step 3: Detect app SP and bundle path ────────────────────────────
 echo "Step 3: Detect app configuration"
-APP_JSON=$(databricks apps get "$APP_NAME" --output json 2>/dev/null || echo "{}")
+APP_JSON=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json 2>/dev/null || echo "{}")
 APP_SP=$(echo "$APP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null || true)
 BUNDLE_DIR=$(echo "$APP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('default_source_code_path',''))" 2>/dev/null || true)
 BUNDLE_DIR="${BUNDLE_DIR#/Workspace}"
@@ -215,16 +240,16 @@ fi
 
 # ── Step 5: Stop + start app ─────────────────────────────────────────
 echo "Step 5: Restart app"
-databricks apps stop "$APP_NAME" > /dev/null 2>&1 || true
+databricks apps stop "$APP_NAME" --profile "$PROFILE" > /dev/null 2>&1 || true
 ok "App stopped"
-databricks apps start "$APP_NAME" > /dev/null 2>&1 &
+databricks apps start "$APP_NAME" --profile "$PROFILE" > /dev/null 2>&1 &
 info "App starting..."
 
 # Wait for RUNNING state (up to 10 minutes)
 TIMEOUT=600
 ELAPSED=0
 while [[ $ELAPSED -lt $TIMEOUT ]]; do
-  STATE=$(databricks apps get "$APP_NAME" --output json 2>/dev/null \
+  STATE=$(databricks apps get "$APP_NAME" --profile "$PROFILE" --output json 2>/dev/null \
     | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null || true)
   if [[ "$STATE" == "RUNNING" ]]; then
     break
