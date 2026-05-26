@@ -969,7 +969,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated,
                     setGenerateError(null);
                     try {
                       let res: Response;
-                      const isLiveOrDemo = !sim.loadedFile || sim.loadedFile.startsWith('demo_');
+                      const isLiveOrDemo = !sim.loadedFile || sim.loadedFile.startsWith('demo_') || sim.loadedFile.startsWith('recording_');
                       if (isLiveOrDemo) {
                         // Live/demo sim: send data directly from memory
                         const weatherEvents = sim.scenarioEvents
