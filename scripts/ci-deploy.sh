@@ -183,6 +183,7 @@ databricks workspace delete "$BUNDLE_ASSETS" --recursive 2>/dev/null \
   && info "Cleaned stale frontend assets" \
   || info "No existing assets to clean (first deploy)"
 
+mkdir -p ".databricks/bundle/$TARGET/bin"
 databricks bundle deploy --target "$TARGET" --force-lock 2>&1 | grep -v "^Warning:" \
   && ok "Bundle deployed" \
   || { fail "Bundle deploy failed"; exit 1; }
