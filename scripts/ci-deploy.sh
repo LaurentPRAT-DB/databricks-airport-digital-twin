@@ -50,16 +50,6 @@ if [[ -z "${DATABRICKS_TOKEN:-}" && ( -z "${DATABRICKS_CLIENT_ID:-}" || -z "${DA
 fi
 
 # Resolve catalog/schema from DABs bundle variables (unless overridden via env)
-# Known target → catalog/schema mappings (fallback when bundle validate unavailable in CI)
-declare -A _TARGET_CATALOG
-_TARGET_CATALOG[dev]="serverless_stable_3n0ihb_catalog"
-_TARGET_CATALOG[prod]="serverless_stable_3n0ihb_catalog"
-_TARGET_CATALOG[free]="main"
-declare -A _TARGET_SCHEMA
-_TARGET_SCHEMA[dev]="airport_digital_twin"
-_TARGET_SCHEMA[prod]="airport_digital_twin_prod"
-_TARGET_SCHEMA[free]="airport_digital_twin"
-
 if [[ -z "${UC_CATALOG:-}" || -z "${UC_SCHEMA:-}" ]]; then
   BUNDLE_VARS=$(databricks bundle validate --target "$TARGET" --output json 2>/dev/null \
     | python3 -c "import sys,json; b=json.load(sys.stdin); v=b.get('variables',{}); print(v.get('catalog',{}).get('value',''), v.get('schema',{}).get('value',''))" 2>/dev/null) || true
@@ -68,8 +58,19 @@ if [[ -z "${UC_CATALOG:-}" || -z "${UC_SCHEMA:-}" ]]; then
     UC_SCHEMA="${UC_SCHEMA:-$(echo "$BUNDLE_VARS" | cut -d' ' -f2)}"
   fi
 fi
-UC_CATALOG="${UC_CATALOG:-${_TARGET_CATALOG[$TARGET]:-serverless_stable_3n0ihb_catalog}}"
-UC_SCHEMA="${UC_SCHEMA:-${_TARGET_SCHEMA[$TARGET]:-airport_digital_twin}}"
+# Fallback: known target → catalog/schema mappings (bash 3.x compatible)
+if [[ -z "${UC_CATALOG:-}" ]]; then
+  case "$TARGET" in
+    free) UC_CATALOG="main" ;;
+    *)    UC_CATALOG="serverless_stable_3n0ihb_catalog" ;;
+  esac
+fi
+if [[ -z "${UC_SCHEMA:-}" ]]; then
+  case "$TARGET" in
+    prod) UC_SCHEMA="airport_digital_twin_prod" ;;
+    *)    UC_SCHEMA="airport_digital_twin" ;;
+  esac
+fi
 WAREHOUSE_ID="${DATABRICKS_WAREHOUSE_ID:-}"
 GENIE_SPACE_ID="${GENIE_SPACE_ID:-}"
 SECRET_SCOPE="${SECRET_SCOPE:-airport-digital-twin}"
