@@ -853,6 +853,7 @@ export function SimulationControls({
     if (fileLoadedRef.current) return;
     if (demoReady && currentAirport && !sim.isActive && !sim.isLoading && !demoAutoStarted) {
       setDemoAutoStarted(true);
+      setSavedReport(null);
       sim.loadDemo(currentAirport);
     }
   }, [demoReady, currentAirport, sim.isActive, sim.isLoading, demoAutoStarted, sim.loadDemo, dataMode]);
@@ -940,6 +941,7 @@ export function SimulationControls({
     setShowPicker(false);
     setDemoAutoStarted(true);
     fileLoadedRef.current = true;
+    setSavedReport(null);
     sim.loadFile(filename, 0, 24);
   };
 
@@ -956,6 +958,7 @@ export function SimulationControls({
     const isBatch = windowPickerMetadata?.total_frames === 0;
     setDemoAutoStarted(true);
     fileLoadedRef.current = true;
+    setSavedReport(null);
     // Keep modal open while loading — sim.isLoading drives the spinner in TimeWindowPicker
     await sim.loadWindow(filename, startTime, endTime);
     setShowWindowPicker(false);
@@ -976,6 +979,7 @@ export function SimulationControls({
   const handleDemoRestart = () => {
     if (pendingAirport) {
       setPendingAirport(null);
+      setSavedReport(null);
       sim.loadDemo(pendingAirport);
     }
   };
@@ -1043,6 +1047,7 @@ export function SimulationControls({
     setShowRecordingPicker(false);
     setDemoAutoStarted(true);
     fileLoadedRef.current = true;
+    setSavedReport(null);
     if (onAirportChange) {
       try {
         await onAirportChange(airport);
