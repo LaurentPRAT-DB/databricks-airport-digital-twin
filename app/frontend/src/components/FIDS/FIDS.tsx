@@ -392,10 +392,19 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
     <div className="fixed inset-0 bg-black/50 z-[1003] flex items-center justify-center p-0 md:p-4" onClick={onClose}>
       <div className="bg-slate-900 rounded-none md:rounded-lg shadow-2xl w-full max-w-4xl h-full md:h-auto md:max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className="p-3 md:p-4 border-b border-slate-700 space-y-2 md:space-y-0">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base md:text-xl font-bold text-white">FIDS</h2>
-            <div className="flex items-center gap-2">
+        <div className="p-3 md:p-4 border-b border-slate-700 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <h2 className="text-base md:text-xl font-bold text-white shrink-0">FIDS</h2>
+              <input
+                type="text"
+                placeholder="Search flights..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 max-w-[220px] w-full"
+              />
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
               <div className="flex rounded-lg overflow-hidden">
                 <button
                   onClick={() => setActiveTab('arrivals')}
@@ -429,13 +438,6 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
               </button>
             </div>
           </div>
-          <input
-            type="text"
-            placeholder="Search flights..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 w-full"
-          />
         </div>
 
         {/* Content */}
