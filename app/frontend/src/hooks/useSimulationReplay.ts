@@ -484,7 +484,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
         ? (await metaRes.json()).requires_windowing === true
         : false;
 
-      const WINDOW_HOURS = 1;
+      const WINDOW_HOURS = 0.5;
       let url = `/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`;
 
       if (needsWindowing) {
