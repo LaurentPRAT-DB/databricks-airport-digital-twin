@@ -70,111 +70,84 @@ class DelayPredictor:
     def predict(self, features: FeatureSet, flight_id: str = "") -> DelayPrediction:
         """Predict delay for a single flight.
 
-        Args:
-            features: FeatureSet extracted from flight data
-            flight_id: Optional flight identifier (callsign/icao24) for
-                per-flight variation. Without this, flights with identical
-                features get identical predictions.
-
-        Returns:
-            DelayPrediction with delay estimate and confidence
+        Uses calibrated delay_rate to determine if a flight is delayed at all,
+        then assigns delay magnitude from calibrated mean_delay_minutes.
         """
-        # Per-flight deterministic RNG for consistent but varied predictions
         flight_rng = random.Random(flight_id) if flight_id else self._random
 
-        # Scale base delay from calibrated mean (default 0 for non-delayed prediction)
-        # The profile's mean_delay adjusts the overall delay magnitude
-        delay_scale = self._mean_delay / 20.0  # 20.0 is the default mean
-        base_delay = 0.0
-        confidence = 0.7  # Default confidence
+        # --- Determine effective delay probability for this flight ---
+        delay_prob = self._base_delay_rate
 
-        # --- Per-flight baseline variation ---
-        # Each flight gets a unique delay disposition: some flights are
-        # inherently more delay-prone (crew scheduling, aircraft rotation,
-        # connecting passengers, etc.)
-        flight_disposition = flight_rng.gauss(0, 6.0)  # +/- ~6 min std dev
-        base_delay += flight_disposition
-
-        # Peak hours (7-9am, 5-7pm) add delay scaled by airport profile
+        # Peak hours increase probability
         if features.hour_of_day in [7, 8, 9]:
-            base_delay += 15.0 * delay_scale
-            confidence -= 0.1
+            delay_prob += 0.10
         elif features.hour_of_day in [17, 18, 19]:
-            base_delay += 12.0 * delay_scale
-            confidence -= 0.1
+            delay_prob += 0.08
 
-        # Weekend flights typically have fewer delays
+        # Weekend reduces probability
         if features.is_weekend:
-            base_delay -= 3.0
-            confidence += 0.05
+            delay_prob -= 0.05
 
-        # Ground aircraft (taxiing, waiting) more likely delayed
-        if features.altitude_category == "ground":
-            base_delay += 8.0
-            confidence += 0.1  # More confident about ground aircraft
-        elif features.altitude_category == "low":
-            base_delay += 3.0
-        # Cruising aircraft less likely to be delayed
-        elif features.altitude_category == "cruise":
-            base_delay -= 2.0
-            confidence -= 0.1  # Less confident about cruising aircraft
+        # Weather increases probability
+        if features.wind_speed_kt > 40:
+            delay_prob += 0.15
+        elif features.wind_speed_kt > 25:
+            delay_prob += 0.08
+        if features.visibility_sm < 1:
+            delay_prob += 0.15
+        elif features.visibility_sm < 3:
+            delay_prob += 0.08
 
-        # Slow-moving aircraft might indicate delays
-        if features.velocity_normalized < 0.1 and features.altitude_category != "cruise":
-            base_delay += 5.0
+        # Congestion increases probability
+        congestion_bump = {"LOW": 0.0, "MODERATE": 0.03, "HIGH": 0.07, "CRITICAL": 0.12}
+        delay_prob += congestion_bump.get(features.congestion_level, 0.0)
 
-        # --- Weather impact ---
-        # Wind: >25kt adds 15-30%, >40kt adds 30-60%
-        weather_factor = 1.0
-        wind = features.wind_speed_kt
-        if wind > 40:
-            weather_factor += 0.3 + flight_rng.uniform(0, 0.3)
-        elif wind > 25:
-            weather_factor += 0.15 + flight_rng.uniform(0, 0.15)
-        # Low visibility: <1SM adds 40-80%, <3SM adds 20-40%
-        vis = features.visibility_sm
-        if vis < 1:
-            weather_factor += 0.4 + flight_rng.uniform(0, 0.4)
-        elif vis < 3:
-            weather_factor += 0.2 + flight_rng.uniform(0, 0.2)
-
-        base_delay *= weather_factor
-
-        # --- Congestion multiplier ---
-        congestion_mult = {"LOW": 1.0, "MODERATE": 1.15, "HIGH": 1.35, "CRITICAL": 1.6}
-        base_delay *= congestion_mult.get(features.congestion_level, 1.0)
-
-        # --- Reactionary delay (inbound delay propagation) ---
-        # 30-60% of inbound delay propagates to outbound flight at same gate
-        if features.inbound_delay_minutes > 0:
-            propagation = features.inbound_delay_minutes * flight_rng.uniform(0.3, 0.6)
-            base_delay += propagation
-
-        # --- Airport load ratio scaling ---
-        # >0.8 load increases delay probability, >1.0 strongly increases
+        # Load ratio
         load = features.airport_load_ratio
         if load > 1.0:
-            base_delay *= 1.0 + (load - 1.0) * 1.5
+            delay_prob += min(0.10, (load - 1.0) * 0.5)
         elif load > 0.8:
-            base_delay *= 1.0 + (load - 0.8) * 0.75
+            delay_prob += (load - 0.8) * 0.25
 
-        # Add noise for realism (+/- 5 minutes)
-        noise = flight_rng.uniform(-5.0, 5.0)
-        delay_minutes = max(0.0, base_delay + noise)
+        delay_prob = max(0.05, min(0.60, delay_prob))
 
-        # Per-flight confidence variation
-        confidence += flight_rng.uniform(-0.1, 0.1)
+        # --- Per-flight: is this flight delayed? ---
+        flight_draw = flight_rng.random()
+        is_delayed = flight_draw < delay_prob
 
-        # Ensure confidence is in valid range
+        if not is_delayed:
+            # On-time flight: 0-4 min minor variance
+            minor_noise = flight_rng.uniform(0, 4.0)
+            confidence = 0.85 + flight_rng.uniform(-0.05, 0.05)
+            return DelayPrediction(
+                delay_minutes=round(minor_noise, 1),
+                confidence=round(confidence, 2),
+                delay_category="on_time",
+            )
+
+        # --- Delayed flight: draw from calibrated distribution ---
+        # Log-normal-ish distribution centered on mean_delay
+        # mean_delay is the average FOR delayed flights (not all flights)
+        base = self._mean_delay * flight_rng.lognormvariate(0, 0.4)
+
+        # Reactionary delay propagation
+        if features.inbound_delay_minutes > 0:
+            base += features.inbound_delay_minutes * flight_rng.uniform(0.2, 0.4)
+
+        # Weather amplification (already increased probability, mild magnitude bump)
+        if features.wind_speed_kt > 25 or features.visibility_sm < 3:
+            base *= 1.0 + flight_rng.uniform(0.0, 0.15)
+
+        # Cap at reasonable maximum (3x mean)
+        delay_minutes = max(5.0, min(base, self._mean_delay * 3.0))
+
+        confidence = 0.65 + flight_rng.uniform(-0.1, 0.1)
         confidence = max(0.3, min(0.95, confidence))
-
-        # Categorize delay
-        delay_category = self._categorize_delay(delay_minutes)
 
         return DelayPrediction(
             delay_minutes=round(delay_minutes, 1),
             confidence=round(confidence, 2),
-            delay_category=delay_category,
+            delay_category=self._categorize_delay(delay_minutes),
         )
 
     def predict_batch(self, flights: List[Dict[str, Any]]) -> List[DelayPrediction]:
