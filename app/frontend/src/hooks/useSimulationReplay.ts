@@ -506,9 +506,12 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       }
 
       if (needsWindowing) {
-        // Use metadata time_window if available, otherwise use hint from recording list
-        const totalStart = meta?.time_window?.start_time ?? hint?.first_seen ?? `${date}T00:00:00`;
-        const totalEnd = meta?.time_window?.end_time ?? hint?.last_seen ?? `${date}T23:59:59`;
+        // Use metadata time_window if available, otherwise use hint from recording list.
+        // Normalize timestamps to UTC: append Z if no timezone indicator present,
+        // so Date arithmetic doesn't interpret them as local time.
+        const asUTC = (ts: string) => /[Zz]|[+-]\d{2}:\d{2}$/.test(ts) ? ts : ts + 'Z';
+        const totalStart = asUTC(meta?.time_window?.start_time ?? hint?.first_seen ?? `${date}T00:00:00`);
+        const totalEnd = asUTC(meta?.time_window?.end_time ?? hint?.last_seen ?? `${date}T23:59:59`);
         const windowEnd = new Date(new Date(totalStart).getTime() + WINDOW_HOURS * 3600000).toISOString();
         url += `?start_time=${encodeURIComponent(totalStart)}&end_time=${encodeURIComponent(windowEnd)}`;
         debugLog('info', 'loadRecording', `windowed load: ${totalStart} → ${windowEnd} (${meta?.snapshot_count ?? '?'} total snaps)`);
