@@ -286,9 +286,11 @@ if [[ -n "$INPAINTING_ENDPOINT" ]]; then
   EP_JSON=$(databricks serving-endpoints get "$INPAINTING_ENDPOINT" "${PROFILE_FLAG[@]}" --output json 2>/dev/null || true)
   EP_STATE=$(echo "$EP_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('state',{}).get('ready',''))" 2>/dev/null || true)
   if [[ "$EP_STATE" == "READY" ]]; then
-    databricks api put /api/2.0/permissions/serving-endpoints/"$INPAINTING_ENDPOINT" \
+    EP_ID=$(echo "$EP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+    if [[ -z "$EP_ID" ]]; then EP_ID="$INPAINTING_ENDPOINT"; fi
+    databricks serving-endpoints update-permissions "$EP_ID" \
       "${PROFILE_FLAG[@]}" \
-      --json "{\"access_control_list\":[{\"service_principal_name\":\"$APP_SP\",\"all_permissions\":[{\"permission_level\":\"CAN_QUERY\"}]}]}" \
+      --json "{\"access_control_list\":[{\"service_principal_name\":\"$APP_SP\",\"permission_level\":\"CAN_QUERY\"}]}" \
       >/dev/null 2>&1 && ok "Inpainting endpoint CAN_QUERY ($INPAINTING_ENDPOINT)" || fail "Could not grant CAN_QUERY on $INPAINTING_ENDPOINT"
   elif [[ -n "$EP_STATE" ]]; then
     skip "Inpainting endpoint $INPAINTING_ENDPOINT exists but not READY (state: $EP_STATE) — grant will apply on next deploy"
