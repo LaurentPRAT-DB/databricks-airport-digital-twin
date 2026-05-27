@@ -531,17 +531,24 @@ export function useSimulationReplay(): UseSimulationReplayResult {
         throw new Error(`${res.status} ${res.statusText}: ${body}`);
       }
       const data: SimulationData = await res.json();
-      debugLog('info', 'loadRecording', `loaded ${data.frame_timestamps.length} frames, ${data.frame_count} frame_count`);
+      debugLog('info', 'loadRecording', `loaded ${data.frame_timestamps.length} frames, ${data.frame_count} frame_count, keys=${Object.keys(data.frames || {}).length}`);
+      if (data.frame_timestamps.length === 0) {
+        console.warn('[loadRecording] received 0 frames — check backend time filtering');
+        debugLog('warn', 'loadRecording', 'received 0 frames from backend');
+      }
 
       // For windowed recordings, override frame_count to reflect total duration
       if (needsWindowing && recordingWindowRef.current) {
-        const meta = recordingWindowRef.current;
-        const totalDurationMs = new Date(meta.totalEndTime).getTime() - new Date(meta.totalStartTime).getTime();
-        const loadedDurationMs = new Date(meta.loadedEndTime).getTime() - new Date(meta.totalStartTime).getTime();
-        const estimatedTotalFrames = Math.round(
-          (data.frame_timestamps.length / loadedDurationMs) * totalDurationMs
-        );
-        data.frame_count = estimatedTotalFrames;
+        const winMeta = recordingWindowRef.current;
+        const totalDurationMs = new Date(winMeta.totalEndTime).getTime() - new Date(winMeta.totalStartTime).getTime();
+        const loadedDurationMs = new Date(winMeta.loadedEndTime).getTime() - new Date(winMeta.totalStartTime).getTime();
+        if (loadedDurationMs > 0 && totalDurationMs > 0) {
+          const estimatedTotalFrames = Math.round(
+            (data.frame_timestamps.length / loadedDurationMs) * totalDurationMs
+          );
+          data.frame_count = estimatedTotalFrames;
+        }
+        debugLog('info', 'loadRecording', `windowing: loaded=${data.frame_timestamps.length} frames, loadedDur=${loadedDurationMs}ms, totalDur=${totalDurationMs}ms, estTotal=${data.frame_count}`);
       }
 
       setSimData(data);
@@ -553,6 +560,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       if (data.frame_timestamps.length > 0) {
         const firstTimestamp = data.frame_timestamps[0];
         const snapshots = data.frames[firstTimestamp] || [];
+        debugLog('info', 'loadRecording', `first frame "${firstTimestamp}": ${snapshots.length} snapshots, sample lat=${snapshots[0]?.latitude}`);
         setFlights(snapshots.map((s) => snapshotToFlight(s, 'opensky_recorded')));
       }
 
@@ -560,6 +568,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       wantsAutoPlayRef.current = false;
     } catch (err) {
       wantsAutoPlayRef.current = false;
+      console.error('[loadRecording] failed:', err);
       debugLog('error', 'loadRecording', `failed: ${err}`);
     } finally {
       setIsLoading(false);
@@ -678,7 +687,11 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       return true;
     });
 
-    setFlights(filtered.map((s) => snapshotToFlight(s, src)));
+    const mapped = filtered.map((s) => snapshotToFlight(s, src));
+    if (currentFrameIndex <= 2 && mapped.length === 0 && snapshots.length > 0) {
+      debugLog('warn', 'flightsUpdate', `frame ${currentFrameIndex}: ${snapshots.length} snaps → ${relevant.length} after dist filter → ${filtered.length} after stale filter → 0 flights!`);
+    }
+    setFlights(mapped);
   }, [simData, currentFrameIndex]);
 
   // Compute sim-seconds between consecutive frames from the loaded data.
