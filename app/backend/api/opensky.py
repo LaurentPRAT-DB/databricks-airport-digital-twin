@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.backend.services.opensky_service import (
     get_opensky_service,
@@ -826,8 +826,77 @@ async def load_local_recording(filename: str):
     }
 
 
+@opensky_router.get("/recordings/{airport_icao}/{date}/metadata")
+async def get_recording_metadata(airport_icao: str, date: str) -> dict:
+    """Lightweight metadata for a recording — no frame data."""
+    import threading
+
+    airport = airport_icao.upper()
+    enriched_table = f"{_UC_CATALOG}.{_UC_SCHEMA}.opensky_enriched_snapshots"
+
+    result: list = []
+    error: list = []
+
+    def _query():
+        try:
+            conn = _get_delta_connection()
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT MIN(time) as start_time, MAX(time) as end_time,
+                           COUNT(*) as snapshot_count,
+                           COUNT(DISTINCT icao24) as aircraft_count
+                    FROM {enriched_table}
+                    WHERE airport_icao = '{airport}'
+                      AND collection_date = '{date}'
+                """)
+                row = cur.fetchone()
+                cols = [d[0] for d in cur.description]
+                result.append(dict(zip(cols, row)) if row else None)
+            conn.close()
+        except Exception as e:
+            error.append(e)
+
+    thread = threading.Thread(target=_query, daemon=True)
+    thread.start()
+    thread.join(timeout=30)
+
+    if thread.is_alive():
+        raise HTTPException(status_code=504, detail="Metadata query timed out")
+    if error:
+        raise HTTPException(status_code=503, detail=f"Query failed: {error[0]}")
+    if not result or not result[0] or not result[0].get("start_time"):
+        raise HTTPException(status_code=404, detail=f"No recording found for {airport}/{date}")
+
+    meta = result[0]
+    start = meta["start_time"]
+    end = meta["end_time"]
+    if isinstance(start, datetime):
+        start = start.isoformat()
+    if isinstance(end, datetime):
+        end = end.isoformat()
+
+    start_dt = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
+    end_dt = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
+    duration_minutes = (end_dt - start_dt).total_seconds() / 60
+
+    return {
+        "airport": airport,
+        "date": date,
+        "snapshot_count": meta["snapshot_count"],
+        "aircraft_count": meta["aircraft_count"],
+        "duration_minutes": round(duration_minutes, 1),
+        "time_window": {"start_time": start, "end_time": end},
+        "requires_windowing": meta["snapshot_count"] > 20000,
+    }
+
+
 @opensky_router.get("/recordings/{airport_icao}/{date}")
-async def get_recording_data(airport_icao: str, date: str) -> dict:
+async def get_recording_data(
+    airport_icao: str,
+    date: str,
+    start_time: str | None = Query(default=None, description="Window start (ISO 8601)"),
+    end_time: str | None = Query(default=None, description="Window end (ISO 8601)"),
+) -> dict:
     """Load a recorded OpenSky session as frame-based replay data.
 
     Reads pre-enriched data from Delta tables (populated by the
@@ -848,6 +917,13 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
     phase_table = f"{_UC_CATALOG}.{_UC_SCHEMA}.opensky_phase_transitions"
     gate_events_table = f"{_UC_CATALOG}.{_UC_SCHEMA}.opensky_gate_events"
 
+    # Build time window SQL filter
+    time_filter = ""
+    if start_time:
+        time_filter += f" AND time >= '{start_time}'"
+    if end_time:
+        time_filter += f" AND time < '{end_time}'"
+
     snap_result: list = []
     phase_result: list = []
     gate_result: list = []
@@ -864,6 +940,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
                     FROM {enriched_table}
                     WHERE airport_icao = '{airport}'
                       AND collection_date = '{date}'
+                      {time_filter}
                     ORDER BY time, icao24
                 """)
                 rows = cur.fetchall()
@@ -876,6 +953,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
                     FROM {phase_table}
                     WHERE airport_icao = '{airport}'
                       AND collection_date = '{date}'
+                      {time_filter}
                     ORDER BY time
                 """)
                 rows = cur.fetchall()
@@ -888,6 +966,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
                     FROM {gate_events_table}
                     WHERE airport_icao = '{airport}'
                       AND collection_date = '{date}'
+                      {time_filter}
                     ORDER BY time
                 """)
                 rows = cur.fetchall()
@@ -914,7 +993,7 @@ async def get_recording_data(airport_icao: str, date: str) -> dict:
         logger.info("No enriched data for %s/%s, falling back to raw table", airport, date)
 
     # ── Fallback: raw table (unenriched data) ────────────────────────
-    return await _load_recording_from_raw(airport, date)
+    return await _load_recording_from_raw(airport, date, start_time, end_time)
 
 
 def _build_recording_response_from_enriched(
@@ -1041,9 +1120,18 @@ def _build_recording_response_from_enriched(
     }
 
 
-async def _load_recording_from_raw(airport: str, date: str) -> dict:
+async def _load_recording_from_raw(
+    airport: str, date: str,
+    start_time: str | None = None, end_time: str | None = None,
+) -> dict:
     """Fallback: load from raw opensky_states_raw and enrich on the fly."""
     import threading
+
+    raw_time_filter = ""
+    if start_time:
+        raw_time_filter += f" AND collection_time >= '{start_time}'"
+    if end_time:
+        raw_time_filter += f" AND collection_time < '{end_time}'"
 
     result: list = []
     error: list = []
@@ -1062,6 +1150,7 @@ async def _load_recording_from_raw(airport: str, date: str) -> dict:
                     FROM {_RECORDINGS_TABLE}
                     WHERE airport_icao = '{airport}'
                       AND collection_date = '{date}'
+                      {raw_time_filter}
                     ORDER BY collection_time, icao24
                 """)
                 rows = cur.fetchall()

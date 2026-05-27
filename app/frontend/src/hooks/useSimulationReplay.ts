@@ -237,6 +237,15 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dataSourceRef = useRef<string>('simulation');
   const wantsAutoPlayRef = useRef(false);
+  const recordingWindowRef = useRef<{
+    airport: string;
+    date: string;
+    totalStartTime: string;
+    totalEndTime: string;
+    loadedEndTime: string;
+    windowHours: number;
+    isLoadingNext: boolean;
+  } | null>(null);
   // Last-seen snapshot cache: keeps flights visible during thinning gaps
   const lastSeenRef = useRef<Map<string, { snap: PositionSnapshot; frameIndex: number }>>(new Map());
   // Tracked flight: exempt from enroute distance filter (set by seekToFlight)
@@ -250,7 +259,8 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     ? simData.frame_timestamps[currentFrameIndex]
     : null;
   const simStartTime = simData?.frame_timestamps?.[0] ?? null;
-  const simEndTime = simData?.frame_timestamps?.[simData.frame_timestamps.length - 1] ?? null;
+  const simEndTime = recordingWindowRef.current?.totalEndTime
+    ?? simData?.frame_timestamps?.[simData.frame_timestamps.length - 1] ?? null;
 
   // Fetch list of available simulation files
   const fetchFiles = useCallback(async () => {
@@ -442,12 +452,61 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     setSwitchPaused(false);
     dataSourceRef.current = 'opensky_recorded';
     wantsAutoPlayRef.current = true;
+    recordingWindowRef.current = null;
     try {
       const isLocal = date.endsWith('.jsonl');
-      const url = isLocal
-        ? `/api/opensky/recordings/local/${encodeURIComponent(date)}`
-        : `/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`;
-      debugLog('info', 'loadRecording', `fetching ${url}...`);
+
+      if (isLocal) {
+        // Local recordings: load fully (small files)
+        const url = `/api/opensky/recordings/local/${encodeURIComponent(date)}`;
+        debugLog('info', 'loadRecording', `fetching local ${url}...`);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        const data: SimulationData = await res.json();
+        setSimData(data);
+        setLoadedFile(`recording_${airport}_${date}`);
+        setCurrentFrameIndex(0);
+        setCurrentWindow(null);
+        if (data.frame_timestamps.length > 0) {
+          const snapshots = data.frames[data.frame_timestamps[0]] || [];
+          setFlights(snapshots.map((s) => snapshotToFlight(s, 'opensky_recorded')));
+        }
+        setIsPlaying(true);
+        wantsAutoPlayRef.current = false;
+        return;
+      }
+
+      // Cloud recordings: check metadata first for large recordings
+      const metaUrl = `/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}/metadata`;
+      debugLog('info', 'loadRecording', `checking metadata...`);
+      const metaRes = await fetch(metaUrl);
+      const needsWindowing = metaRes.ok
+        ? (await metaRes.json()).requires_windowing === true
+        : false;
+
+      const WINDOW_HOURS = 1;
+      let url = `/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`;
+
+      if (needsWindowing) {
+        const meta = await (await fetch(metaUrl)).json();
+        const totalStart = meta.time_window.start_time;
+        const totalEnd = meta.time_window.end_time;
+        const windowEnd = new Date(new Date(totalStart).getTime() + WINDOW_HOURS * 3600000).toISOString();
+        url += `?start_time=${encodeURIComponent(totalStart)}&end_time=${encodeURIComponent(windowEnd)}`;
+        debugLog('info', 'loadRecording', `large recording (${meta.snapshot_count} snaps), loading first ${WINDOW_HOURS}h window`);
+
+        recordingWindowRef.current = {
+          airport, date,
+          totalStartTime: totalStart,
+          totalEndTime: totalEnd,
+          loadedEndTime: windowEnd,
+          windowHours: WINDOW_HOURS,
+          isLoadingNext: false,
+        };
+      } else {
+        debugLog('info', 'loadRecording', `small recording, loading fully`);
+      }
+
       const res = await fetch(url);
       if (!res.ok) {
         const body = await res.text().catch(() => '');
@@ -455,6 +514,18 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       }
       const data: SimulationData = await res.json();
       debugLog('info', 'loadRecording', `loaded ${data.frame_timestamps.length} frames, ${data.frame_count} frame_count`);
+
+      // For windowed recordings, override frame_count to reflect total duration
+      if (needsWindowing && recordingWindowRef.current) {
+        const meta = recordingWindowRef.current;
+        const totalDurationMs = new Date(meta.totalEndTime).getTime() - new Date(meta.totalStartTime).getTime();
+        const loadedDurationMs = new Date(meta.loadedEndTime).getTime() - new Date(meta.totalStartTime).getTime();
+        const estimatedTotalFrames = Math.round(
+          (data.frame_timestamps.length / loadedDurationMs) * totalDurationMs
+        );
+        data.frame_count = estimatedTotalFrames;
+      }
+
       setSimData(data);
       setSwitchPaused(false);
       setLoadedFile(`recording_${airport}_${date}`);
@@ -467,7 +538,6 @@ export function useSimulationReplay(): UseSimulationReplayResult {
         setFlights(snapshots.map((s) => snapshotToFlight(s, 'opensky_recorded')));
       }
 
-      // Auto-play recording
       setIsPlaying(true);
       wantsAutoPlayRef.current = false;
     } catch (err) {
@@ -631,9 +701,15 @@ export function useSimulationReplay(): UseSimulationReplayResult {
     intervalRef.current = setInterval(() => {
       setCurrentFrameIndex((prev) => {
         const next = prev + framesPerTick;
-        if (next >= (simData?.frame_count ?? 0)) {
+        // Stop at end of loaded frames (not estimated total — more may be loading)
+        const loadedCount = simData?.frame_timestamps.length ?? 0;
+        if (next >= loadedCount) {
+          // If we have a windowing ref with more data coming, pause at boundary
+          if (recordingWindowRef.current && new Date(recordingWindowRef.current.loadedEndTime) < new Date(recordingWindowRef.current.totalEndTime)) {
+            return Math.min(prev, loadedCount - 1);
+          }
           setIsPlaying(false);
-          return Math.min(prev, (simData?.frame_count ?? 1) - 1);
+          return Math.min(prev, loadedCount - 1);
         }
         return next;
       });
@@ -653,6 +729,61 @@ export function useSimulationReplay(): UseSimulationReplayResult {
       setIsPlaying(true);
     }
   }, [simData, isPlaying, isLoading]);
+
+  // Auto-load next window for large recordings when approaching end of loaded data
+  useEffect(() => {
+    const win = recordingWindowRef.current;
+    if (!win || !simData || !isPlaying || win.isLoadingNext) return;
+
+    const loadedFrameCount = simData.frame_timestamps.length;
+    const threshold = Math.floor(loadedFrameCount * 0.8);
+    if (currentFrameIndex < threshold) return;
+
+    // Already loaded everything?
+    if (new Date(win.loadedEndTime) >= new Date(win.totalEndTime)) return;
+
+    win.isLoadingNext = true;
+    const nextStart = win.loadedEndTime;
+    const nextEndMs = new Date(nextStart).getTime() + win.windowHours * 3600000;
+    const nextEnd = new Date(Math.min(nextEndMs, new Date(win.totalEndTime).getTime())).toISOString();
+
+    debugLog('info', 'loadRecording', `prefetching next window: ${nextStart} → ${nextEnd}`);
+
+    const url = `/api/opensky/recordings/${encodeURIComponent(win.airport)}/${encodeURIComponent(win.date)}?start_time=${encodeURIComponent(nextStart)}&end_time=${encodeURIComponent(nextEnd)}`;
+
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.statusText)))
+      .then((nextData: SimulationData) => {
+        setSimData((prev) => {
+          if (!prev) return prev;
+          const mergedFrames = { ...prev.frames };
+          const mergedTimestamps = [...prev.frame_timestamps];
+          for (const ts of nextData.frame_timestamps) {
+            if (!mergedFrames[ts]) {
+              mergedFrames[ts] = nextData.frames[ts];
+              mergedTimestamps.push(ts);
+            }
+          }
+          mergedTimestamps.sort();
+          return {
+            ...prev,
+            frames: mergedFrames,
+            frame_timestamps: mergedTimestamps,
+            frame_count: prev.frame_count, // keep estimated total
+            phase_transitions: [...prev.phase_transitions, ...nextData.phase_transitions],
+            gate_events: [...prev.gate_events, ...nextData.gate_events],
+            scenario_events: [...prev.scenario_events, ...nextData.scenario_events],
+          };
+        });
+        win.loadedEndTime = nextEnd;
+        win.isLoadingNext = false;
+        debugLog('info', 'loadRecording', `appended window, loaded up to ${nextEnd}`);
+      })
+      .catch((err) => {
+        debugLog('error', 'loadRecording', `prefetch failed: ${err}`);
+        win.isLoadingNext = false;
+      });
+  }, [currentFrameIndex, simData, isPlaying]);
 
   const play = useCallback(() => {
     if (!simData) return;
