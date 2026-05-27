@@ -665,7 +665,7 @@ function RecordingPicker({
   recordings: RecordingFile[];
   isLoading: boolean;
   isFetching: boolean;
-  onLoad: (airport: string, date: string) => void;
+  onLoad: (airport: string, date: string, hint?: { state_count?: number; first_seen?: string; last_seen?: string }) => void;
   onClose: () => void;
 }) {
   return (
@@ -699,7 +699,7 @@ function RecordingPicker({
               {recordings.map((r) => (
                 <button
                   key={`${r.airport_icao}_${r.date}`}
-                  onClick={() => onLoad(r.airport_icao, r.date)}
+                  onClick={() => onLoad(r.airport_icao, r.date, { state_count: r.state_count, first_seen: r.first_seen, last_seen: r.last_seen })}
                   disabled={isLoading}
                   className="w-full text-left px-4 py-3 rounded-lg border border-amber-200 dark:border-amber-700/50 hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors disabled:opacity-50"
                 >
@@ -1043,7 +1043,7 @@ export function SimulationControls({
     }
   }, [dataMode, sim]);
 
-  const handleLoadRecording = async (airport: string, date: string) => {
+  const handleLoadRecording = async (airport: string, date: string, hint?: { state_count?: number; first_seen?: string; last_seen?: string }) => {
     setShowRecordingPicker(false);
     setDemoAutoStarted(true);
     fileLoadedRef.current = true;
@@ -1055,7 +1055,7 @@ export function SimulationControls({
         console.warn('Failed to switch airport for recording:', err);
       }
     }
-    await sim.loadRecording(airport, date);
+    await sim.loadRecording(airport, date, hint);
   };
 
   return (

@@ -179,7 +179,7 @@ export interface UseSimulationReplayResult {
   loadFile: (filename: string, startHour?: number, endHour?: number) => Promise<void>;
   loadWindow: (filename: string, startTime: string, endTime: string) => Promise<void>;
   loadDemo: (airportIcao: string) => Promise<void>;
-  loadRecording: (airport: string, date: string) => Promise<void>;
+  loadRecording: (airport: string, date: string, hint?: { state_count?: number; first_seen?: string; last_seen?: string }) => Promise<void>;
   fetchMetadata: (filename: string) => Promise<SimulationMetadata | null>;
   fetchRecordings: () => Promise<void>;
   play: () => void;
@@ -445,7 +445,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
   }, []);
 
   // Load a recorded OpenSky session for replay
-  const loadRecording = useCallback(async (airport: string, date: string) => {
+  const loadRecording = useCallback(async (airport: string, date: string, hint?: { state_count?: number; first_seen?: string; last_seen?: string }) => {
     setIsLoading(true);
     setIsPlaying(false);
     trackedIcao24Ref.current = null;
@@ -476,24 +476,42 @@ export function useSimulationReplay(): UseSimulationReplayResult {
         return;
       }
 
-      // Cloud recordings: check metadata first for large recordings
-      const metaUrl = `/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}/metadata`;
-      debugLog('info', 'loadRecording', `checking metadata...`);
-      const metaRes = await fetch(metaUrl);
-      const needsWindowing = metaRes.ok
-        ? (await metaRes.json()).requires_windowing === true
-        : false;
-
+      // Cloud recordings: check metadata to determine if windowing needed
       const WINDOW_HOURS = 0.5;
-      let url = `/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`;
+      const baseUrl = `/api/opensky/recordings/${encodeURIComponent(airport)}/${encodeURIComponent(date)}`;
+      let url = baseUrl;
+      let needsWindowing = false;
+
+      // Try metadata with 8s timeout — if it fails, use recording list info to decide
+      const metaUrl = `${baseUrl}/metadata`;
+      debugLog('info', 'loadRecording', `checking metadata...`);
+      let meta: { snapshot_count: number; time_window: { start_time: string; end_time: string }; requires_windowing: boolean } | null = null;
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const metaRes = await fetch(metaUrl, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (metaRes.ok) {
+          meta = await metaRes.json();
+          needsWindowing = meta?.requires_windowing === true;
+        }
+      } catch {
+        // Metadata endpoint timed out or failed — use hint from recording list if available
+        needsWindowing = (hint?.state_count ?? 0) > 20000;
+        if (!needsWindowing && hint?.state_count) {
+          debugLog('info', 'loadRecording', `metadata timeout but hint says ${hint.state_count} states — loading fully`);
+        } else if (needsWindowing) {
+          debugLog('info', 'loadRecording', `metadata timeout, hint says ${hint?.state_count} states — using windowed load`);
+        }
+      }
 
       if (needsWindowing) {
-        const meta = await (await fetch(metaUrl)).json();
-        const totalStart = meta.time_window.start_time;
-        const totalEnd = meta.time_window.end_time;
+        // Use metadata time_window if available, otherwise use hint from recording list
+        const totalStart = meta?.time_window?.start_time ?? hint?.first_seen ?? `${date}T00:00:00`;
+        const totalEnd = meta?.time_window?.end_time ?? hint?.last_seen ?? `${date}T23:59:59`;
         const windowEnd = new Date(new Date(totalStart).getTime() + WINDOW_HOURS * 3600000).toISOString();
         url += `?start_time=${encodeURIComponent(totalStart)}&end_time=${encodeURIComponent(windowEnd)}`;
-        debugLog('info', 'loadRecording', `large recording (${meta.snapshot_count} snaps), loading first ${WINDOW_HOURS}h window`);
+        debugLog('info', 'loadRecording', `windowed load: ${totalStart} → ${windowEnd} (${meta?.snapshot_count ?? '?'} total snaps)`);
 
         recordingWindowRef.current = {
           airport, date,
@@ -504,7 +522,7 @@ export function useSimulationReplay(): UseSimulationReplayResult {
           isLoadingNext: false,
         };
       } else {
-        debugLog('info', 'loadRecording', `small recording, loading fully`);
+        debugLog('info', 'loadRecording', `small recording (${meta?.snapshot_count} snaps), loading fully`);
       }
 
       const res = await fetch(url);
