@@ -57,7 +57,7 @@ interface ChatMessage {
   content: string;
 }
 
-function EventDetailPanel({ event, onJump }: { event: ScenarioEvent; onJump: () => void }) {
+function EventDetailPanel({ event, onJump, isBatchMode }: { event: ScenarioEvent; onJump: () => void; isBatchMode?: boolean }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState('');
@@ -136,16 +136,18 @@ function EventDetailPanel({ event, onJump }: { event: ScenarioEvent; onJump: () 
           </div>
         )}
         <div className="flex items-center gap-2 pt-2 border-t border-blue-100/50">
-          <button
-            onClick={onJump}
-            className="px-3 py-1.5 rounded text-[11px] font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors flex items-center gap-1.5"
-            title="Seek simulation to this event and select the flight"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            View on Map
-          </button>
+          {!isBatchMode && (
+            <button
+              onClick={onJump}
+              className="px-3 py-1.5 rounded text-[11px] font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors flex items-center gap-1.5"
+              title="Seek simulation to this event and select the flight"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              View on Map
+            </button>
+          )}
           {messages.length === 0 && (
             <button
               onClick={handleExplain}
@@ -499,6 +501,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated,
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<string | null>(savedReport ?? null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const isBatchMode = sim.totalFrames === 0 && sim.scenarioEvents.length > 0;
   const flightsRef = useRef(filteredFlights);
   flightsRef.current = filteredFlights;
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
@@ -506,6 +509,61 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated,
   const tableScrollRef = useRef<HTMLDivElement>(null);
 
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // Reusable report generation logic
+  const triggerGenerate = useCallback(async () => {
+    if (isGenerating) return;
+    setIsGenerating(true);
+    setGenerateError(null);
+    try {
+      let res: Response;
+      const isLiveOrDemo = !sim.loadedFile || sim.loadedFile.startsWith('demo_') || sim.loadedFile.startsWith('recording_');
+      if (isLiveOrDemo) {
+        const weatherEvents = sim.scenarioEvents.filter(e => e.event_type === 'weather');
+        res = await fetch('/api/simulation/report/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            config: { airport: sim.airport, duration_hours: sim.simStartTime && sim.simEndTime
+              ? (new Date(sim.simEndTime).getTime() - new Date(sim.simStartTime).getTime()) / 3600000
+              : 24, start_date: sim.simStartTime },
+            summary: sim.summary || {},
+            schedule: sim.schedule || [],
+            scenario_events: sim.scenarioEvents || [],
+            weather_snapshots: weatherEvents,
+          }),
+        });
+      } else {
+        res = await fetch(`/api/simulation/report/generate/${encodeURIComponent(sim.loadedFile!)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({}),
+        });
+      }
+      if (res.ok) {
+        const data = await res.json();
+        setGeneratedReport(data.content);
+        onReportGenerated?.(data.content);
+      } else {
+        const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+        setGenerateError(err.detail || `Failed (${res.status})`);
+      }
+    } catch {
+      setGenerateError('Failed to connect to server');
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [isGenerating, sim.loadedFile, sim.scenarioEvents, sim.airport, sim.simStartTime, sim.simEndTime, sim.summary, sim.schedule, onReportGenerated]);
+
+  // Auto-generate report for batch mode
+  useEffect(() => {
+    if (isBatchMode && !generatedReport && !isGenerating && sim.loadedFile) {
+      triggerGenerate();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBatchMode, sim.loadedFile]);
 
   // ── Event isolation: disable pointer events on map while report is open ──
   useEffect(() => {
@@ -963,54 +1021,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated,
                   <p className="text-xs text-red-500 mb-3">{generateError}</p>
                 )}
                 <button
-                  onClick={async () => {
-                    if (isGenerating) return;
-                    setIsGenerating(true);
-                    setGenerateError(null);
-                    try {
-                      let res: Response;
-                      const isLiveOrDemo = !sim.loadedFile || sim.loadedFile.startsWith('demo_') || sim.loadedFile.startsWith('recording_');
-                      if (isLiveOrDemo) {
-                        // Live/demo sim: send data directly from memory
-                        const weatherEvents = sim.scenarioEvents
-                          .filter(e => e.event_type === 'weather');
-                        res = await fetch('/api/simulation/report/generate', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          credentials: 'include',
-                          body: JSON.stringify({
-                            config: { airport: sim.airport, duration_hours: sim.simStartTime && sim.simEndTime
-                              ? (new Date(sim.simEndTime).getTime() - new Date(sim.simStartTime).getTime()) / 3600000
-                              : 24, start_date: sim.simStartTime },
-                            summary: sim.summary || {},
-                            schedule: sim.schedule || [],
-                            scenario_events: sim.scenarioEvents || [],
-                            weather_snapshots: weatherEvents,
-                          }),
-                        });
-                      } else {
-                        // Saved file: use file-based endpoint
-                        res = await fetch(`/api/simulation/report/generate/${encodeURIComponent(sim.loadedFile!)}`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          credentials: 'include',
-                          body: JSON.stringify({}),
-                        });
-                      }
-                      if (res.ok) {
-                        const data = await res.json();
-                        setGeneratedReport(data.content);
-                        onReportGenerated?.(data.content);
-                      } else {
-                        const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
-                        setGenerateError(err.detail || `Failed (${res.status})`);
-                      }
-                    } catch (e) {
-                      setGenerateError('Failed to connect to server');
-                    } finally {
-                      setIsGenerating(false);
-                    }
-                  }}
+                  onClick={triggerGenerate}
                   disabled={isGenerating || (!sim.loadedFile && !sim.summary)}
                   className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -1213,7 +1224,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated,
                               </svg>
                             </td>
                           </tr>,
-                          ...(isSelected ? [<EventDetailPanel key={`detail-${group.callsign}-${i}`} event={event} onJump={() => handleEventClick(event)} />] : []),
+                          ...(isSelected ? [<EventDetailPanel key={`detail-${group.callsign}-${i}`} event={event} onJump={() => handleEventClick(event)} isBatchMode={isBatchMode} />] : []),
                         ];
                       }) : []),
                     ];
@@ -1245,7 +1256,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated,
                         </svg>
                       </td>
                     </tr>,
-                    ...(isSelected ? [<EventDetailPanel key={`detail-${event.time}-${i}`} event={event} onJump={() => handleEventClick(event)} />] : []),
+                    ...(isSelected ? [<EventDetailPanel key={`detail-${event.time}-${i}`} event={event} onJump={() => handleEventClick(event)} isBatchMode={isBatchMode} />] : []),
                   ];
                 })}
               </tbody>

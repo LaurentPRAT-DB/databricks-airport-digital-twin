@@ -951,6 +951,24 @@ export function SimulationControls({
     setShowWindowPicker(true);
     // Fetch metadata for the time window picker
     const meta = await sim.fetchMetadata(filename);
+    if (!meta) { setShowWindowPicker(false); return; }
+
+    // Batch mode: skip time picker, load everything directly
+    const isBatch = meta.total_frames === 0 && ((meta.summary as Record<string, unknown>)?.total_flights as number ?? 0) > 0;
+    if (isBatch) {
+      setShowWindowPicker(false);
+      setWindowPickerFile(null);
+      setDemoAutoStarted(true);
+      fileLoadedRef.current = true;
+      setSavedReport(null);
+      const startISO = meta.days[0] + 'T00:00:00Z';
+      const lastDay = meta.days[meta.days.length - 1];
+      const endISO = lastDay + 'T23:59:59Z';
+      await sim.loadWindow(filename, startISO, endISO);
+      setShowBatchReport(true);
+      return;
+    }
+
     setWindowPickerMetadata(meta);
   };
 
