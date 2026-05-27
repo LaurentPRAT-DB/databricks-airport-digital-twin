@@ -245,7 +245,8 @@ describe('useSimulationReplay', () => {
       });
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        '/api/opensky/recordings/EDDF/2024-01-15'
+        '/api/opensky/recordings/EDDF/2024-01-15',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
       );
       expect(result.current.isActive).toBe(true);
       expect(result.current.isPlaying).toBe(true);

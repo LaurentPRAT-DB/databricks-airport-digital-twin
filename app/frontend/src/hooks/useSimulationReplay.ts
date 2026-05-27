@@ -525,7 +525,10 @@ export function useSimulationReplay(): UseSimulationReplayResult {
         debugLog('info', 'loadRecording', `small recording (${meta?.snapshot_count} snaps), loading fully`);
       }
 
-      const res = await fetch(url);
+      const dataController = new AbortController();
+      const dataTimeout = setTimeout(() => dataController.abort(), 90000);
+      const res = await fetch(url, { signal: dataController.signal });
+      clearTimeout(dataTimeout);
       if (!res.ok) {
         const body = await res.text().catch(() => '');
         throw new Error(`${res.status} ${res.statusText}: ${body}`);
