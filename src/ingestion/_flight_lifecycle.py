@@ -76,6 +76,7 @@ from src.ingestion._runway_ops import (
     _find_last_aircraft_on_approach,
     _check_approach_separation,
     _is_runway_clear,
+    _is_runway_scenario_open,
     _is_arrival_separation_met,
     _occupy_runway,
     _release_runway,
@@ -1326,7 +1327,8 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
 
         if state.altitude <= DECISION_HEIGHT_FT:
             arrival_rwy = _assign_arrival_runway(state.icao24)
-            runway_ok = _is_runway_clear(arrival_rwy) or state.go_around_count >= 2
+            runway_ok = (_is_runway_scenario_open(arrival_rwy)
+                         and (_is_runway_clear(arrival_rwy) or state.go_around_count >= 2))
             if not runway_ok:
                 from src.ingestion._approach_departure import (
                     _get_all_arrival_runway_names, _clear_arrival_runway_assignment,
@@ -1335,7 +1337,7 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                 for alt_rwy in all_rwys:
                     if alt_rwy == arrival_rwy:
                         continue
-                    if _is_runway_clear(alt_rwy):
+                    if _is_runway_clear(alt_rwy) and _is_runway_scenario_open(alt_rwy):
                         _clear_arrival_runway_assignment(state.icao24)
                         arrival_rwy = alt_rwy
                         runway_ok = True
@@ -1376,7 +1378,8 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
             return state
         else:
             arrival_rwy = _assign_arrival_runway(state.icao24)
-            runway_ok = _is_runway_clear(arrival_rwy) or state.go_around_count >= 2
+            runway_ok = (_is_runway_scenario_open(arrival_rwy)
+                         and (_is_runway_clear(arrival_rwy) or state.go_around_count >= 2))
             if not runway_ok:
                 from src.ingestion._approach_departure import (
                     _get_all_arrival_runway_names, _clear_arrival_runway_assignment,
@@ -1385,7 +1388,7 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                 for alt_rwy in all_rwys:
                     if alt_rwy == arrival_rwy:
                         continue
-                    if _is_runway_clear(alt_rwy):
+                    if _is_runway_clear(alt_rwy) and _is_runway_scenario_open(alt_rwy):
                         _clear_arrival_runway_assignment(state.icao24)
                         arrival_rwy = alt_rwy
                         runway_ok = True

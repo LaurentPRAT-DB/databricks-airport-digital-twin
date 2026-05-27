@@ -96,6 +96,23 @@ ALTERNATE_AIRPORTS: dict[str, list[str]] = {
 }
 
 
+def _parse_runway_config(config_str: str, all_runways: set[str]) -> set[str]:
+    """Parse runway_config string to extract allowed runway names.
+
+    Examples: "28R_only" → {"28R"}, "28L,28R" → {"28L","28R"},
+              "24L_24R_westerly" → {"24L","24R"}, "27L_only" → {"27L"}
+    """
+    import re as re_mod
+    tokens = re_mod.split(r"[,_\s]+", config_str)
+    allowed = set()
+    for token in tokens:
+        for rwy in all_runways:
+            if token.upper() == rwy.upper():
+                allowed.add(rwy)
+                break
+    return allowed if allowed else all_runways
+
+
 def _critical_path_turnaround(aircraft_type: str) -> float:
     """Compute turnaround duration via critical-path through the phase DAG.
 
@@ -509,11 +526,16 @@ class SimulationEngine:
                         self.sim_time, "runway", event.description,
                         {"runway": re.runway},
                     )
-                elif re.type == "config_change":
-                    # Config change: close all except specified config
+                elif re.type == "config_change" and re.runway_config:
+                    allowed = _parse_runway_config(re.runway_config, self.capacity.all_runways)
+                    until = event.time + timedelta(minutes=re.duration_minutes or 60)
+                    for rwy in self.capacity.all_runways - allowed:
+                        self.capacity.close_runway(rwy, until)
+                        set_runway_closed(rwy)
                     self.recorder.record_scenario_event(
                         self.sim_time, "runway", event.description,
-                        {"runway_config": re.runway_config, "reason": re.reason},
+                        {"runway_config": re.runway_config, "reason": re.reason,
+                         "closed": list(self.capacity.all_runways - allowed)},
                     )
 
             elif event.event_type == "ground":
@@ -750,8 +772,10 @@ class SimulationEngine:
                             )
 
                 # Go-around check: APPROACHING → LANDING transition
+                # Skip probabilistic go-around after 2+ prior attempts (let them land)
                 if (old_phase == FlightPhase.APPROACHING
                         and new_phase == FlightPhase.LANDING
+                        and new_state.go_around_count < 2
                         and random.random() < self.capacity.go_around_probability()):
                     from src.ingestion.fallback import _release_runway, VREF_SPEEDS
                     from src.ingestion.fallback import _get_arrival_runway_name

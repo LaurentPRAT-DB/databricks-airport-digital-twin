@@ -232,7 +232,7 @@ class TestEnrouteResolution:
         state = _make_state(
             phase=FlightPhase.ENROUTE, altitude=3000,
             on_ground=False, velocity=200,
-            destination_airport="KSFO", go_around_count=2,
+            destination_airport="KSFO", go_around_count=3,
         )
         random.seed(42)
         result = resolver.resolve("test01", state, 600.0)

@@ -57,6 +57,16 @@ def clear_runway_closures() -> None:
     _scenario_closed_runways.clear()
 
 
+def _is_runway_scenario_open(runway: str) -> bool:
+    """Check if runway is NOT scenario-closed (ignores occupancy)."""
+    if runway in _scenario_closed_runways:
+        return False
+    recip = _get_reciprocal_designator(runway)
+    if recip and recip in _scenario_closed_runways:
+        return False
+    return True
+
+
 def _get_runway_state(runway: str) -> RunwayState:
     """Get or create a RunwayState for the given runway name."""
     if runway not in _runway_states:

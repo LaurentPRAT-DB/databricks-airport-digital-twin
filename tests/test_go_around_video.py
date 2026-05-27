@@ -109,7 +109,7 @@ def sim():
         airport="SFO",
         arrivals=30,
         departures=5,
-        duration_hours=2.0,
+        duration_hours=2.5,
         time_step_seconds=2.0,
         seed=42,
         diagnostics=True,

@@ -134,8 +134,12 @@ class PhaseResolver:
         from src.ingestion.fallback import (
             _is_runway_clear, _get_arrival_runway_name,
         )
+        from src.ingestion._runway_ops import _is_runway_scenario_open
 
         arr_rwy = _get_arrival_runway_name()
+
+        if not _is_runway_scenario_open(arr_rwy):
+            return self._diversion_resolution(icao24, state)
 
         if not _is_runway_clear(arr_rwy) and state.go_around_count < 2:
             return PhaseResolution(reset_phase_time="approaching", phase_time_value=600.0)
@@ -161,6 +165,9 @@ class PhaseResolver:
 
     def resolve_enroute(self, icao24: str, state: FlightState) -> PhaseResolution:
         """Handle stuck holding: divert or force approach."""
+        from src.ingestion._runway_ops import _is_runway_scenario_open
+        from src.ingestion.fallback import _get_arrival_runway_name
+
         is_arriving = (
             (state.origin_airport and not state.destination_airport)
             or (state.destination_airport == self.airport_code)
@@ -169,7 +176,10 @@ class PhaseResolver:
         if not is_arriving:
             return PhaseResolution(mark_exit=True)
 
-        if state.go_around_count >= 2:
+        arr_rwy = _get_arrival_runway_name()
+        if state.go_around_count >= 3:
+            return self._diversion_resolution(icao24, state)
+        if state.go_around_count >= 2 and not _is_runway_scenario_open(arr_rwy):
             return self._diversion_resolution(icao24, state)
 
         if state.altitude > 5000:
