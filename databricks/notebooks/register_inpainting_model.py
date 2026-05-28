@@ -2,16 +2,15 @@
 # MAGIC %md
 # MAGIC # Register Aircraft Inpainting Model
 # MAGIC
-# MAGIC Downloads YOLO + LaMa weights, caches them in a UC Volume,
+# MAGIC Downloads YOLO OBB weights, caches them in a UC Volume,
 # MAGIC and registers the MLflow pyfunc model to Unity Catalog.
 # MAGIC
-# MAGIC LaMa weights are downloaded directly from the official repository
-# MAGIC (not via IOPaint's ModelManager which may not be available on
-# MAGIC serverless environments).
+# MAGIC Uses cv2 TELEA inpainting (no LaMa/torch-heavy deps) for
+# MAGIC GPU serving compatibility.
 
 # COMMAND ----------
 
-# MAGIC %pip install ultralytics>=8.3 opencv-python-headless>=4.8 torch torchvision pillow mlflow pydantic>=2.5 pyyaml simple-lama-inpainting
+# MAGIC %pip install ultralytics>=8.3 opencv-python-headless>=4.8 torch pillow mlflow pydantic>=2.5 pyyaml
 
 # COMMAND ----------
 
@@ -27,7 +26,7 @@ import urllib.request
 from pathlib import Path
 
 import mlflow
-import torch
+import torch  # noqa: F401 — used inside model class at serving time
 
 # Config — parameterized via job base_parameters (defaults for interactive use)
 dbutils.widgets.text("catalog", "serverless_stable_3n0ihb_catalog")
@@ -39,11 +38,6 @@ MODEL_NAME = f"{CATALOG}.{SCHEMA}.aircraft_inpainting_model"
 
 VOLUME_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}"
 YOLO_WEIGHTS_VOLUME = f"{VOLUME_PATH}/yolov8s-obb.pt"
-LAMA_WEIGHTS_DIR = f"{VOLUME_PATH}/lama"
-LAMA_WEIGHTS_FILE = f"{LAMA_WEIGHTS_DIR}/big-lama.pt"
-
-# Official LaMa checkpoint URL (Sanster/IOPaint's release of big-lama)
-LAMA_CHECKPOINT_URL = "https://github.com/Sanster/models/releases/download/add_big_lama/big-lama.pt"
 
 # COMMAND ----------
 
@@ -81,57 +75,19 @@ print(f"Classes: {model.names}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 3. Cache LaMa weights to UC Volume
+# MAGIC ## 3. Register MLflow pyfunc model
 # MAGIC
-# MAGIC Downloads Big-LaMa checkpoint directly from HuggingFace.
-
-# COMMAND ----------
-
-os.makedirs(LAMA_WEIGHTS_DIR, exist_ok=True)
-
-if not os.path.exists(LAMA_WEIGHTS_FILE):
-    print(f"Downloading LaMa weights from {LAMA_CHECKPOINT_URL}...")
-    print("This may take a few minutes (~200 MB)...")
-
-    # Download with progress
-    urllib.request.urlretrieve(LAMA_CHECKPOINT_URL, LAMA_WEIGHTS_FILE)
-
-    size_mb = os.path.getsize(LAMA_WEIGHTS_FILE) / 1e6
-    print(f"LaMa weights cached at {LAMA_WEIGHTS_FILE} ({size_mb:.1f} MB)")
-else:
-    size_mb = os.path.getsize(LAMA_WEIGHTS_FILE) / 1e6
-    print(f"LaMa weights already cached at {LAMA_WEIGHTS_FILE} ({size_mb:.1f} MB)")
-
-# Verify the weights load correctly
-print("Verifying LaMa weights...")
-state_dict = torch.load(LAMA_WEIGHTS_FILE, map_location="cpu", weights_only=False)
-if isinstance(state_dict, dict):
-    if 'state_dict' in state_dict:
-        n_params = len(state_dict['state_dict'])
-    else:
-        n_params = len(state_dict)
-    print(f"LaMa checkpoint OK: {n_params} parameter keys")
-else:
-    print(f"LaMa checkpoint loaded (type: {type(state_dict).__name__})")
-del state_dict
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 4. Register MLflow pyfunc model
+# MAGIC Uses cv2 TELEA inpainting — minimal deps, GPU-serving compatible.
 
 # COMMAND ----------
 
 mlflow.set_registry_uri("databricks-uc")
 
-# Write config artifact pointing to UC Volume weight paths
 with tempfile.TemporaryDirectory() as tmp:
     config_path = os.path.join(tmp, "config.json")
     config = {
         "device": "auto",
         "yolo_weights": YOLO_WEIGHTS_VOLUME,
-        "lama_weights_dir": LAMA_WEIGHTS_DIR,
-        "lama_weights_file": LAMA_WEIGHTS_FILE,
         "confidence_threshold": 0.25,
         "mask_dilation_px": 10,
         "max_detection_ratio": 0.03,
@@ -140,39 +96,20 @@ with tempfile.TemporaryDirectory() as tmp:
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
-    artifacts = {
-        "config": config_path,
-    }
+    artifacts = {"config": config_path}
 
-    conda_env = {
-        "channels": ["defaults", "conda-forge"],
-        "dependencies": [
-            "python=3.10",
-            "pip",
-            {
-                "pip": [
-                    "simple-lama-inpainting",
-                    "ultralytics>=8.3",
-                    "opencv-python-headless>=4.8",
-                    "torch>=2.0",
-                    "torchvision",
-                    "pillow",
-                    "numpy",
-                    "pandas",
-                    "mlflow",
-                    "pydantic>=2.5",
-                    "pyyaml",
-                ]
-            },
-        ],
-    }
-
-    # We use a lightweight code-only pyfunc — the actual model class
-    # is inlined here so the notebook doesn't depend on the src/ package
-    # being importable at registration time.
+    pip_requirements = [
+        "ultralytics>=8.3",
+        "opencv-python-headless>=4.8",
+        "pillow",
+        "numpy",
+        "pandas",
+        "pydantic>=2.5",
+        "pyyaml",
+    ]
 
     class AircraftInpaintingModel(mlflow.pyfunc.PythonModel):
-        """MLflow pyfunc for YOLO + LaMa inpainting pipeline."""
+        """MLflow pyfunc: YOLO OBB detection + cv2 TELEA inpainting."""
 
         def load_context(self, context):
             import json as _json
@@ -186,69 +123,26 @@ with tempfile.TemporaryDirectory() as tmp:
             except Exception:
                 pass
 
-            # Auto-detect device: use GPU if available, else CPU
             if torch.cuda.is_available():
                 self._device = "cuda"
             else:
                 self._device = "cpu"
 
             self._yolo_weights = config.get("yolo_weights", "yolov8n.pt")
-            self._lama_weights = config.get("lama_weights_file")
             self._confidence = config.get("confidence_threshold", 0.25)
             self._dilation = config.get("mask_dilation_px", 10)
             self._max_det_ratio = config.get("max_detection_ratio", 0.03)
             self._imgsz = config.get("imgsz", 640)
 
-            # Load YOLO
             from ultralytics import YOLO
             self._yolo = YOLO(self._yolo_weights)
-
-            # Load LaMa inpainting model — try simple-lama-inpainting first,
-            # then IOPaint, then OpenCV TELEA as last resort
-            self._inpaint_backend = None
-
-            # Option 1: simple-lama-inpainting (lightweight, just torch)
-            try:
-                from simple_lama_inpainting import SimpleLama
-                self._simple_lama = SimpleLama(device=torch.device(self._device))
-                self._inpaint_backend = "simple_lama"
-                print(f"simple-lama-inpainting loaded (device={self._device})")
-            except Exception as e:
-                print(f"simple-lama-inpainting unavailable: {e}")
-
-            # Option 2: IOPaint ModelManager
-            if self._inpaint_backend is None:
-                try:
-                    from iopaint.model_manager import ModelManager
-                    self._iopaint = ModelManager(name="lama", device=torch.device(self._device))
-                    self._inpaint_backend = "iopaint"
-                    print(f"IOPaint LaMa loaded (device={self._device})")
-                except Exception as e:
-                    print(f"IOPaint unavailable: {e}")
-
-            # Option 3: OpenCV TELEA fallback
-            if self._inpaint_backend is None:
-                self._inpaint_backend = "cv2"
-                print("Using OpenCV TELEA inpainting as fallback")
-
-        def _inpaint(self, image, mask):
-            import numpy as np
-            if self._inpaint_backend == "simple_lama":
-                from PIL import Image as PILImage
-                img_pil = PILImage.fromarray(image)
-                mask_pil = PILImage.fromarray(mask)
-                result_pil = self._simple_lama(img_pil, mask_pil)
-                return np.array(result_pil)
-            elif self._inpaint_backend == "iopaint":
-                return self._iopaint(image, mask)
-            else:
-                import cv2
-                return cv2.inpaint(image, mask, 10, cv2.INPAINT_TELEA)
+            print(f"YOLO OBB loaded (device={self._device}, imgsz={self._imgsz}, conf={self._confidence})")
 
         def predict(self, context, model_input):
             import base64
             import io
             import json as _json
+            import cv2
             import numpy as np
             import pandas as pd
             from PIL import Image
@@ -260,15 +154,12 @@ with tempfile.TemporaryDirectory() as tmp:
                 pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
                 image_np = np.array(pil_image)
 
-                # Detect aircraft — imgsz=640 upscales 256px tiles for better detection
                 yolo_results = self._yolo.predict(
                     image_np, conf=self._confidence, device=self._device,
                     imgsz=self._imgsz, verbose=False
                 )
 
-                # Collect detections from YOLO results
                 detections = []
-                import cv2
                 for r in yolo_results:
                     obb = getattr(r, 'obb', None)
                     if obb is not None and len(obb) > 0:
@@ -313,7 +204,6 @@ with tempfile.TemporaryDirectory() as tmp:
                                 "class_name": cls_name or "plane",
                             })
 
-                # Filter out oversized detections (likely buildings)
                 tile_area = image_np.shape[0] * image_np.shape[1]
                 max_area = self._max_det_ratio * tile_area
                 detections = [
@@ -321,7 +211,6 @@ with tempfile.TemporaryDirectory() as tmp:
                     if (d["x2"] - d["x1"]) * (d["y2"] - d["y1"]) < max_area
                 ]
 
-                # Build mask from filtered detections
                 mask = np.zeros(image_np.shape[:2], dtype=np.uint8)
                 for det in detections:
                     corners = det.pop("_corners", None)
@@ -339,18 +228,16 @@ with tempfile.TemporaryDirectory() as tmp:
                         my2 = min(image_np.shape[0], y2 + d)
                         mask[my1:my2, mx1:mx2] = 255
 
-                # Safety cap: if >15% of tile is masked, likely false positives
                 total_pixels = mask.shape[0] * mask.shape[1]
                 mask_ratio = np.count_nonzero(mask) / total_pixels
                 if mask_ratio > 0.15:
                     clean = image_np
                     detections = []
                 elif mask.max() > 0:
-                    clean = self._inpaint(image_np, mask)
+                    clean = cv2.inpaint(image_np, mask, 10, cv2.INPAINT_TELEA)
                 else:
                     clean = image_np
 
-                # Encode output
                 out_pil = Image.fromarray(clean)
                 buf = io.BytesIO()
                 out_pil.save(buf, format="PNG")
@@ -380,7 +267,7 @@ with tempfile.TemporaryDirectory() as tmp:
             artifact_path="model",
             python_model=AircraftInpaintingModel(),
             artifacts=artifacts,
-            conda_env=conda_env,
+            pip_requirements=pip_requirements,
             signature=signature,
             registered_model_name=MODEL_NAME,
         )
@@ -390,7 +277,7 @@ with tempfile.TemporaryDirectory() as tmp:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 5. Verify registration
+# MAGIC ## 4. Verify registration
 
 # COMMAND ----------
 
