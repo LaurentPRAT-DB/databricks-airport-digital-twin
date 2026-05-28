@@ -79,6 +79,7 @@ class AircraftDetector:
         results = self._model.predict(
             image,
             conf=self.confidence_threshold,
+            iou=0.3,
             device=self.device,
             verbose=False,
         )

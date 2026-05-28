@@ -33,8 +33,8 @@ class InpaintingPipeline:
     def __init__(
         self,
         yolo_weights: Optional[str] = None,
-        confidence_threshold: float = 0.5,
-        mask_dilation_px: int = 10,
+        confidence_threshold: float = 0.3,
+        mask_dilation_px: int = 18,
         device: str = "cpu",
         lama_weights_dir: Optional[str] = None,
     ):
