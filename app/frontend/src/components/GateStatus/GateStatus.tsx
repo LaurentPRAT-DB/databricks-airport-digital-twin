@@ -473,7 +473,6 @@ export default function GateStatus({ highlightGateRef }: { highlightGateRef?: st
                   onClick={() => { setSelectedTerminal(gate.terminal); setSelectedGateId(gate.id); }}
                 >
                   {gate.ref}
-                  {gate.flight && <span className="ml-0.5 opacity-75">{gate.flight.callsign || gate.flight.icao24}</span>}
                 </button>
               );
             })}

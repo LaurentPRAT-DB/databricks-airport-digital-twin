@@ -522,10 +522,27 @@ function PausedBar({
 function LiveBar({ flightCount, lastUpdated, airport }: { flightCount: number; lastUpdated: string | null; airport: string }) {
   const [recording, setRecording] = useState(false);
   const [recStatus, setRecStatus] = useState<{ frames?: number; elapsed_seconds?: number; filename?: string } | null>(null);
+  const [recError, setRecError] = useState<string | null>(null);
 
   const timeStr = lastUpdated
     ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit' })
     : '--:--';
+
+  // Sync recording state from backend on mount (handles page reload mid-recording)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/opensky/record/status');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.recording) {
+            setRecording(true);
+            setRecStatus(data);
+          }
+        }
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!recording) return;
@@ -543,19 +560,31 @@ function LiveBar({ flightCount, lastUpdated, airport }: { flightCount: number; l
   }, [recording]);
 
   const toggleRecording = async () => {
-    if (recording) {
-      const res = await fetch('/api/opensky/record/stop', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        setRecStatus(data);
+    setRecError(null);
+    try {
+      if (recording) {
+        const res = await fetch('/api/opensky/record/stop', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          setRecStatus(data);
+        }
+        setRecording(false);
+      } else {
+        const res = await fetch(`/api/opensky/record/start?airport_icao=${encodeURIComponent(airport)}`, { method: 'POST' });
+        if (res.ok) {
+          setRecording(true);
+          setRecStatus(null);
+        } else {
+          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+          setRecError(err.detail || `Failed (${res.status})`);
+          // If "already recording", sync state
+          if (res.status === 400 && err.detail?.includes('Already recording')) {
+            setRecording(true);
+          }
+        }
       }
-      setRecording(false);
-    } else {
-      const res = await fetch(`/api/opensky/record/start?airport_icao=${encodeURIComponent(airport)}`, { method: 'POST' });
-      if (res.ok) {
-        setRecording(true);
-        setRecStatus(null);
-      }
+    } catch (e) {
+      setRecError(e instanceof Error ? e.message : 'Network error');
     }
   };
 
@@ -602,6 +631,13 @@ function LiveBar({ flightCount, lastUpdated, airport }: { flightCount: number; l
             <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
             Record
           </button>
+        )}
+
+        {/* Recording error */}
+        {recError && (
+          <div className="text-xs text-red-300 bg-red-900/40 px-2 py-1 rounded">
+            {recError}
+          </div>
         )}
 
         {/* Stopped confirmation */}

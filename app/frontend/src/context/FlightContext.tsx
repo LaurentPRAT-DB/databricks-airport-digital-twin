@@ -52,8 +52,14 @@ export function FlightProvider({
 
   const { currentAirport, getAirportCenter } = useAirportConfigContext();
 
-  // Data mode: 'simulation' (default) or 'live' (OpenSky)
-  const [dataMode, setDataModeState] = useState<DataMode>('simulation');
+  // Data mode: persisted to localStorage so live mode survives page reload
+  const [dataMode, setDataModeState] = useState<DataMode>(() => {
+    try {
+      const stored = localStorage.getItem('airport-dt-data-mode');
+      if (stored === 'live' || stored === 'recorded' || stored === 'simulation') return stored;
+    } catch { /* SSR / test env */ }
+    return 'simulation';
+  });
   const [openSkyFlights, setOpenSkyFlights] = useState<Flight[]>([]);
   const [openSkyLoading, setOpenSkyLoading] = useState(false);
   const [openSkyLastUpdated, setOpenSkyLastUpdated] = useState<string | null>(null);
@@ -148,6 +154,7 @@ export function FlightProvider({
 
   const setDataMode = useCallback((mode: DataMode) => {
     setDataModeState(mode);
+    try { localStorage.setItem('airport-dt-data-mode', mode); } catch { /* test env */ }
   }, []);
 
   // Use simulation flights when provided, otherwise live/opensky based on mode
