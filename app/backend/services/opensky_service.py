@@ -231,10 +231,14 @@ class OpenSkyService:
         self,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
         timeout: float = 15.0,
     ):
         self._client_id = client_id
         self._client_secret = client_secret
+        self._username = username
+        self._password = password
         self._token: Optional[str] = None
         self._timeout = timeout
         self._last_fetch_time: Optional[float] = None
@@ -290,11 +294,14 @@ class OpenSkyService:
 
         try:
             headers = {}
+            auth = None
             token = await self._get_token()
             if token:
                 headers["Authorization"] = f"Bearer {token}"
+            elif self._username and self._password:
+                auth = (self._username, self._password)
 
-            response = await self._client.get(OPENSKY_API_URL, params=params, headers=headers)
+            response = await self._client.get(OPENSKY_API_URL, params=params, headers=headers, auth=auth)
 
             if response.status_code == 429:
                 logger.warning("OpenSky rate limited (429), backing off")
@@ -442,13 +449,17 @@ class OpenSkyService:
 _opensky_service: Optional[OpenSkyService] = None
 
 
-def _resolve_opensky_credentials() -> tuple[Optional[str], Optional[str]]:
-    """Resolve OpenSky OAuth2 credentials: Databricks secrets first, then env vars.
+def _resolve_opensky_credentials() -> dict:
+    """Resolve OpenSky credentials: Databricks secrets → env vars → anonymous.
 
-    Returns:
-        (client_id, client_secret) tuple, or (None, None) for anonymous access.
+    Returns dict with keys: client_id, client_secret, username, password (all Optional[str]).
+    OAuth2 (client_id/secret) takes priority; basic auth (username/password) is fallback.
     """
     import os
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    result: dict = {"client_id": None, "client_secret": None, "username": None, "password": None}
 
     # Try Databricks secrets (secure, no plaintext in app.yaml)
     try:
@@ -458,30 +469,46 @@ def _resolve_opensky_credentials() -> tuple[Optional[str], Optional[str]]:
         client_secret = w.dbutils.secrets.get(scope="airport-digital-twin", key="opensky-client-secret")
         if client_id and client_secret:
             logger.info("OpenSky OAuth2 credentials loaded from Databricks secrets")
-            return client_id, client_secret
-        else:
-            logger.warning("Databricks secrets returned empty values for OpenSky credentials")
+            result["client_id"] = client_id
+            result["client_secret"] = client_secret
+            return result
     except Exception as e:
         logger.warning("Failed to load OpenSky credentials from Databricks secrets: %s: %s",
                        type(e).__name__, e)
 
-    # Fall back to env vars (local dev)
+    # OAuth2 via env vars
     client_id = os.getenv("OPENSKY_CLIENT_ID")
     client_secret = os.getenv("OPENSKY_CLIENT_SECRET")
     if client_id and client_secret:
         logger.info("OpenSky OAuth2 credentials loaded from environment variables")
-        return client_id, client_secret
+        result["client_id"] = client_id
+        result["client_secret"] = client_secret
+        return result
+
+    # Basic auth via env vars (free tier account)
+    username = os.getenv("OPENSKY_USERNAME")
+    password = os.getenv("OPENSKY_PASSWORD")
+    if username and password:
+        logger.info("OpenSky basic auth credentials loaded from environment variables")
+        result["username"] = username
+        result["password"] = password
+        return result
 
     logger.warning("No OpenSky credentials found — using anonymous access (lower rate limits)")
-    return None, None
+    return result
 
 
 def get_opensky_service() -> OpenSkyService:
     """Get or create the OpenSky service singleton."""
     global _opensky_service
     if _opensky_service is None:
-        client_id, client_secret = _resolve_opensky_credentials()
-        _opensky_service = OpenSkyService(client_id=client_id, client_secret=client_secret)
+        creds = _resolve_opensky_credentials()
+        _opensky_service = OpenSkyService(
+            client_id=creds["client_id"],
+            client_secret=creds["client_secret"],
+            username=creds["username"],
+            password=creds["password"],
+        )
     return _opensky_service
 
 

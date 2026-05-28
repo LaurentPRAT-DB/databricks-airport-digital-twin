@@ -135,7 +135,7 @@ export function FlightProvider({
     if (dataMode === 'live') {
       liveTrailsRef.current.clear();
       fetchOpenSkyFlights();
-      openSkyIntervalRef.current = setInterval(fetchOpenSkyFlights, 10000);
+      openSkyIntervalRef.current = setInterval(fetchOpenSkyFlights, 15000);
       return () => {
         if (openSkyIntervalRef.current) clearInterval(openSkyIntervalRef.current);
       };
