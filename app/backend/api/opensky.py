@@ -1389,6 +1389,16 @@ class _LiveRecorder:
         self._task = None
         return stats
 
+    async def switch_airport(self, airport_icao: str, lat: float, lon: float) -> None:
+        """Restart recording for new airport if currently recording."""
+        if not self.is_recording:
+            return
+        if self._airport == airport_icao:
+            return
+        logger.info("Airport switched to %s — restarting recording", airport_icao)
+        await self.stop()
+        await self.start(airport_icao, lat, lon)
+
     async def _record_loop(self) -> None:
         svc = get_opensky_service()
         while True:

@@ -667,6 +667,10 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
         from app.backend.demo_config import save_last_airport
         save_last_airport(icao_code)
 
+        # Restart OpenSky recording for new airport if active
+        from app.backend.api.opensky import _recorder
+        await _recorder.switch_airport(icao_code, lat, lon)
+
         async def _retrain_ml_background():
             try:
                 _t0 = _time.monotonic()
