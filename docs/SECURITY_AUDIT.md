@@ -11,8 +11,8 @@
 | Severity | Count | Status |
 |----------|-------|--------|
 | CRITICAL | 0 | **FIXED** |
-| HIGH | 3 | Needs Fix |
-| MEDIUM | 4 | Review |
+| HIGH | 3 | 1 Resolved, 2 Open |
+| MEDIUM | 4 | 1 Partially Resolved, 3 Review |
 | LOW | 3 | Advisory |
 | INFO | 4 | Informational |
 
@@ -54,14 +54,13 @@ cursor.execute(query, {"icao24": icao24})
 
 ## HIGH Vulnerabilities
 
-### HIGH-01: Overly Permissive CORS Policy
+### HIGH-01: Overly Permissive CORS Policy — **RESOLVED**
 
 **File:** `app/backend/main.py`
-**Lines:** 29-35
 
-**Description:**
-CORS is configured to allow ALL origins with credentials:
+**Status:** **RESOLVED** — Fixed: CORS now restricted to specific origins list with `CORS_ALLOWED_ORIGINS` env var override.
 
+**Previous Vulnerable Code:**
 ```python
 app.add_middleware(
     CORSMiddleware,
@@ -74,11 +73,8 @@ app.add_middleware(
 
 **Impact:** Any website can make authenticated requests to the API, enabling CSRF attacks.
 
-**Recommendation:**
-Restrict origins to specific allowed domains:
-```python
-allow_origins=["https://airport-digital-twin-dev-xxx.aws.databricksapps.com"]
-```
+**Fix Applied:**
+The code now uses a `_CORS_ORIGINS` list restricted to specific origins, with an optional `CORS_ALLOWED_ORIGINS` environment variable override for deployment flexibility.
 
 ---
 
@@ -136,10 +132,11 @@ async def get_flights(token: str = Depends(security)):
 
 ## MEDIUM Vulnerabilities
 
-### MED-01: Debug Endpoint Exposes File Paths
+### MED-01: Debug Endpoint Exposes File Paths — **PARTIALLY RESOLVED**
 
 **File:** `app/backend/main.py`
-**Lines:** 49-65
+
+**Status:** **PARTIALLY RESOLVED** — Debug endpoints now gated behind `DEBUG_MODE=true` env var. Recommend setting to false for production.
 
 **Description:**
 The `/api/debug/paths` endpoint exposes internal file system paths:
@@ -155,13 +152,8 @@ async def debug_paths():
 
 **Impact:** Information disclosure aids attackers in path traversal attacks.
 
-**Recommendation:**
-Remove in production or protect with authentication:
-```python
-if os.getenv("DEBUG", "false").lower() == "true":
-    @app.get("/api/debug/paths")
-    ...
-```
+**Mitigation Applied:**
+Debug endpoints are now conditionally registered only when `DEBUG_MODE=true`. Ensure this is set to `false` in production deployments.
 
 ---
 
@@ -306,6 +298,17 @@ All REST endpoints can be called without limits.
 
 ### INFO-04: Logging Without Sanitization
 User input may be logged without sanitization, risking log injection.
+
+### INFO-05: New Attack Surfaces — MCP Router & Simulation Jobs
+
+**Files:** `app/backend/api/mcp.py`, `app/backend/api/simulation_jobs.py`
+
+**Description:**
+Two newer routers introduce additional attack surface that has not been reviewed:
+- **MCP Router** (`mcp.py`): Exposes Model Context Protocol endpoints that proxy tool invocations to external services. Input validation and authorization scope need audit.
+- **Simulation Jobs Router** (`simulation_jobs.py`): Manages simulation job lifecycle (create, list, cancel). Potential for resource exhaustion or unauthorized job manipulation.
+
+**Recommendation:** Conduct targeted security review of both routers for input validation, authorization, and resource exhaustion risks.
 
 ---
 

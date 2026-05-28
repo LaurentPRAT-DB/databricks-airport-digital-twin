@@ -17,7 +17,7 @@ Aircraft are categorized by weight and generate different levels of wake turbule
 | **SUPER** | A380 | > 560,000 lbs |
 | **HEAVY** | B747, B777, B787, A330, A340, A350 | > 300,000 lbs |
 | **LARGE** | A320, A321, B737, B738 | 41,000 - 300,000 lbs |
-| **SMALL** | CRJ9, E175, E190 | < 41,000 lbs |
+| **LARGE** | CRJ9, E175, E190 | 41,000 - 300,000 lbs |
 
 ### Minimum Separation (Nautical Miles)
 
@@ -62,7 +62,7 @@ Aircraft on approach are sequenced with proper spacing:
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Maximum simultaneous approaches**: 4 aircraft
+- **Maximum simultaneous approaches**: 8 aircraft (base; dynamically scales 6-14 based on runway count)
 - **Stagger altitude**: Each aircraft in queue starts higher
 - **Speed adjustment**: Aircraft slow down when closing on aircraft ahead
 - **Hold pattern**: If runway occupied, leading aircraft orbits
@@ -77,9 +77,9 @@ Ground operations maintain visual separation:
 
 ### 5. Gate Management
 
-- **5 gates available**: A1, A2, A3, B1, B2
+- **Gates**: Dynamic from OSM data; fallback is 10 gates (A1-A5, B1-B5)
 - **Single occupancy**: One aircraft per gate
-- **Cooldown period**: 60 seconds after departure before gate reuse
+- **Cooldown period**: 15 minutes after departure before gate reuse (GATE_BUFFER_SECONDS = 900)
 - **Queue handling**: Aircraft without available gate hold on taxiway
 
 ## Implementation Details
@@ -93,9 +93,11 @@ Ground operations maintain visual separation:
 | `_get_required_separation()` | Calculate wake turbulence separation |
 | `_is_runway_clear()` | Check runway single occupancy |
 | `_occupy_runway()` / `_release_runway()` | Manage runway state |
-| `_check_taxi_separation()` | Verify ground traffic clearance |
+| `_check_taxi_separation()` | Distance-based ground traffic separation |
 | `_find_available_gate()` | Find unoccupied gate |
 | `_occupy_gate()` / `_release_gate()` | Manage gate assignments |
+
+**File**: `src/ingestion/_runway_ops.py`
 
 ### State Management
 
@@ -129,18 +131,17 @@ With separation implemented, the simulation now shows:
 
 ## Configuration
 
-The following constants can be adjusted in `src/ingestion/fallback.py`:
+The following constants can be adjusted in `src/ingestion/_constants.py`:
 
 ```python
 # Separation minimums (in degrees, ~60 deg = 1 NM)
 MIN_APPROACH_SEPARATION_DEG = 0.05   # 3 NM
 MIN_TAXI_SEPARATION_DEG = 0.001      # ~100m
-MIN_GATE_SEPARATION_DEG = 0.002      # ~200m
+MIN_GATE_SEPARATION_DEG = 0.010      # ~1000m
 
 # Capacity limits
-MAX_APPROACH_AIRCRAFT = 4
-MAX_PARKED_AIRCRAFT = 5  # Number of gates
-MAX_TAXI_AIRCRAFT = 2
+MAX_APPROACH_AIRCRAFT = 8  # Base value; dynamically scales 6-14 based on runway count
+MAX_PARKED_AIRCRAFT = 5    # Number of gates
 ```
 
 ## References

@@ -4,7 +4,7 @@
 
 This document tracks the V2 feature roadmap from initial gap analysis through implementation. All originally planned V2 phases (6–12) are **complete**. The roadmap now extends with V3 phases focused on multi-airport portfolio management, cross-airport benchmarking, optimization recommendations, and remaining gaps.
 
-*Last updated: 2026-05-11*
+*Last updated: 2026-05-28*
 
 ---
 
@@ -61,11 +61,11 @@ Features that exist but need validation, polish, or deeper implementation:
 | Passenger flow | No spatial visualization | Backend model only (queuing theory), no frontend particle sim | Medium |
 | Baggage | No conveyor/cart 3D | Backend tracking + DLT pipeline work, no 3D ramp visualization | Low |
 | GSE | No 3D vehicle models | Turnaround timeline UI exists, no animated GSE in 3D scene | Medium |
-| Weather | No real-time API | Synthetic METAR generation + historical parser, no live CheckWX/AWC feed | Medium |
-| ML | Models not deployed to serving endpoints | Trained locally / in notebooks, not all registered in MLflow Model Registry | High |
+| Weather | ~~No real-time API~~ | **RESOLVED** — Live METAR from aviationweather.gov now works | Done |
+| ML | Models partially deployed | **PARTIALLY RESOLVED** — Inpainting model on serving endpoint; turnaround/OBT training notebooks deployed. Not all registered in MLflow Model Registry yet. | Medium |
 | Simulation | Clock speed issues | Playback timing inconsistent at high speeds | Medium |
 | Simulation | Demo ≠ simulation path | Two separate code paths for demo mode vs simulation | Medium |
-| OpenSky | Collector fragile | Rate limits, no continuous collection, gaps in recorded data | Medium |
+| OpenSky | Collector improved | **IMPROVED** — Background poller + circuit breaker + OAuth2/basic auth. Rate limit concerns remain. | Low |
 | Report chat | What-if not validated | Code exists but not tested end-to-end on deployed app | Medium |
 
 ---
@@ -249,15 +249,12 @@ airport_groups (Lakebase)
 
 ## 6. Recommended Execution Order
 
-### Immediate (Week 1):
+V3 phases are ordered by dependency, not calendar. No fixed timeline.
+
 1. **Phase 13: Airport Group Management** — Foundation for everything else. CRUD + parallel sim.
 2. **Phase 14: Global Network View** — Highest visual impact for demos. "Here are 20 airports, all running."
-
-### Short-term (Week 2-3):
 3. **Phase 15: Benchmarking** — Once groups exist, compare them. Radar charts + leaderboard.
 4. **Phase 18: Real-Time Data** — Replace synthetic weather with live METAR (quick win for realism).
-
-### Medium-term (Week 4-6):
 5. **Phase 16: Optimization Engine** — The "so what?" layer. Recommendations backed by what-if sims.
 6. **Phase 17: Network Simulation** — Most complex. Delay propagation across connected airports.
 

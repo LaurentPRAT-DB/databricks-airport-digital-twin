@@ -27,10 +27,10 @@ All tables in `serverless_stable_3n0ihb_catalog.airport_digital_twin`:
 |-------|------|-------------|------------------|
 | `flight_status_gold` | MANAGED | Current flight positions | Real-time (30s) |
 | `flight_positions_history` | MANAGED | Historical trajectory data | Append-only |
-| `weather_observations` | MANAGED | METAR weather data | Every 15 min |
-| `flight_schedule` | MANAGED | FIDS arrival/departure | Every 5 min |
-| `baggage_events` | MANAGED | Baggage tracking events | Real-time |
-| `gse_status` | MANAGED | Ground support equipment | Every 1 min |
+| `weather_observations_gold` | MANAGED | METAR weather data | Every 15 min |
+| `flight_schedule_gold` | MANAGED | FIDS arrival/departure | Every 5 min |
+| `baggage_events_history` | MANAGED | Baggage tracking events | Real-time |
+| `gse_fleet_gold` | MANAGED | Ground support equipment | Every 1 min |
 
 ## Sharing Architecture
 
@@ -43,10 +43,10 @@ All tables in `serverless_stable_3n0ihb_catalog.airport_digital_twin`:
 │  │  Schema: airport_digital_twin                                │   │
 │  │  ├── flight_status_gold                                     │   │
 │  │  ├── flight_positions_history                               │   │
-│  │  ├── weather_observations                                   │   │
-│  │  ├── flight_schedule                                        │   │
-│  │  ├── baggage_events                                         │   │
-│  │  └── gse_status                                             │   │
+│  │  ├── weather_observations_gold                              │   │
+│  │  ├── flight_schedule_gold                                   │   │
+│  │  ├── baggage_events_history                                 │   │
+│  │  └── gse_fleet_gold                                         │   │
 │  └─────────────────────────────────────────────────────────────┘   │
 │                           │                                         │
 │                           ▼                                         │
@@ -116,19 +116,19 @@ ADD TABLE serverless_stable_3n0ihb_catalog.airport_digital_twin.flight_positions
 AS airport_digital_twin.trajectory_history;
 
 ALTER SHARE airport_digital_twin_share
-ADD TABLE serverless_stable_3n0ihb_catalog.airport_digital_twin.weather_observations
+ADD TABLE serverless_stable_3n0ihb_catalog.airport_digital_twin.weather_observations_gold
 AS airport_digital_twin.weather;
 
 ALTER SHARE airport_digital_twin_share
-ADD TABLE serverless_stable_3n0ihb_catalog.airport_digital_twin.flight_schedule
+ADD TABLE serverless_stable_3n0ihb_catalog.airport_digital_twin.flight_schedule_gold
 AS airport_digital_twin.schedule;
 
 ALTER SHARE airport_digital_twin_share
-ADD TABLE serverless_stable_3n0ihb_catalog.airport_digital_twin.baggage_events
+ADD TABLE serverless_stable_3n0ihb_catalog.airport_digital_twin.baggage_events_history
 AS airport_digital_twin.baggage;
 
 ALTER SHARE airport_digital_twin_share
-ADD TABLE serverless_stable_3n0ihb_catalog.airport_digital_twin.gse_status
+ADD TABLE serverless_stable_3n0ihb_catalog.airport_digital_twin.gse_fleet_gold
 AS airport_digital_twin.gse;
 ```
 

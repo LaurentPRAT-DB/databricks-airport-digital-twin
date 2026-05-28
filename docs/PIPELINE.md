@@ -69,10 +69,7 @@ graph TB
 **Endpoint**: `https://opensky-network.org/api/states/all`
 
 **Parameters**:
-- `lamin`: 36.0 (bounding box south)
-- `lamax`: 39.0 (bounding box north)
-- `lomin`: -124.0 (bounding box west)
-- `lomax`: -120.0 (bounding box east)
+- Bounding box is computed dynamically per airport (centered on airport coordinates with configurable radius). Not hardcoded to any specific area.
 
 **Response Format**: JSON with `states` array containing 17 fields per aircraft.
 
@@ -222,9 +219,9 @@ END
 
 **Purpose**: Low-latency serving (<10ms) for real-time frontend queries
 
-**Host**: `ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com`
+**Host**: Target-dependent — see `app.yaml` for current value.
 
-**Database**: `airport_digital_twin`
+**Database**: `databricks_postgres` / Schema: `public`
 
 **Schema**:
 ```sql
@@ -358,7 +355,7 @@ databricks pipelines get <pipeline-id>
 databricks sql "SELECT COUNT(*) FROM flight_status_gold WHERE last_seen > NOW() - INTERVAL '5 minutes'"
 
 # Check Lakebase
-psql -h <host> -d airport_digital_twin -c "SELECT COUNT(*) FROM flight_status"
+psql -h <host> -d databricks_postgres -c "SELECT COUNT(*) FROM flight_status"
 ```
 
 **Resolution**:
@@ -413,4 +410,4 @@ print(get_circuit_state())  # OPEN, CLOSED, or HALF_OPEN
 
 ---
 
-*Last updated: 2026-03-08*
+*Last updated: 2026-05-28*

@@ -13,16 +13,24 @@ Inventory of all outbound calls to external services from the Airport Digital Tw
 | **Service** | OpenSky Network REST API |
 | **File** | `app/backend/services/opensky_service.py` |
 | **Library** | `httpx.AsyncClient` |
-| **Auth** | OAuth2 client credentials (Databricks secrets `airport-digital-twin/opensky-client-id` + `opensky-client-secret`), falls back to anonymous |
+| **Auth** | 3-tier credential chain (see below) |
 | **Rate Limit** | 10 req/10s (anonymous), higher with auth |
+
+**Authentication chain (highest to lowest priority):**
+1. **Databricks secrets** (OAuth2): `airport-digital-twin/opensky-client-id` + `airport-digital-twin/opensky-client-secret`
+2. **Env vars** (OAuth2): `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET`
+3. **Env vars** (basic auth, free tier): `OPENSKY_USERNAME` / `OPENSKY_PASSWORD`
+4. **Anonymous** (lowest rate limits)
+
+Local dev uses `.env` file via python-dotenv for credential injection.
 
 **Endpoints called:**
 
-| Method | URL | Purpose | Lines |
-|--------|-----|---------|-------|
-| POST | `https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token` | OAuth2 token exchange | 74, 99-106 |
-| GET | `https://opensky-network.org/api/states/all?lamin=..&lamax=..&lomin=..&lomax=..` | Live aircraft positions within bounding box (~30nm radius) | 42, 130-143 |
-| GET | `https://opensky-network.org/api/flights/aircraft?icao24=..&begin=..&end=..` | Flight origin/destination enrichment per icao24 | 350-362 |
+| Method | URL | Purpose | Function |
+|--------|-----|---------|----------|
+| POST | `https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token` | OAuth2 token exchange | `_authenticate()` |
+| GET | `https://opensky-network.org/api/states/all?lamin=..&lamax=..&lomin=..&lomax=..` | Live aircraft positions within bounding box (~30nm radius) | `fetch_live_flights()` |
+| GET | `https://opensky-network.org/api/flights/aircraft?icao24=..&begin=..&end=..` | Flight origin/destination enrichment per icao24 | `_enrich_flight_origin()` |
 
 ---
 
@@ -38,10 +46,10 @@ Inventory of all outbound calls to external services from the Airport Digital Tw
 
 **Endpoints called:**
 
-| Method | URL | Purpose | Lines |
-|--------|-----|---------|-------|
-| POST | `https://overpass-api.de/api/interpreter` | Fetch airport features (runways, gates, taxiways, terminals) via Overpass QL | 29, 220-228 |
-| POST | `https://overpass.kumi.systems/api/interpreter` | Failover endpoint | 30, 220-228 |
+| Method | URL | Purpose | Function |
+|--------|-----|---------|----------|
+| POST | `https://overpass-api.de/api/interpreter` | Fetch airport features (runways, gates, taxiways, terminals) via Overpass QL | `fetch_osm_data()` |
+| POST | `https://overpass.kumi.systems/api/interpreter` | Failover endpoint | `fetch_osm_data()` |
 
 The query is built per ICAO code and requests `aeroway=*` features within the airport boundary. Results are cached locally at `/tmp/{icao}_osm_cache.json`.
 
@@ -83,7 +91,9 @@ The query is built per ICAO code and requests `aeroway=*` features within the ai
 | Table | Purpose |
 |-------|---------|
 | `flight_status` | Real-time flight positions (upserted by backend) |
-| `inpainting_tile_cache` | Cached inpainted satellite tiles |
+| `satellite_tile_cache` | Cached inpainted satellite tiles |
+
+Lakebase has 14 tables total (not just the two listed above). See `scripts/lakebase_schema.sql` for full schema.
 
 ---
 
@@ -98,12 +108,12 @@ The query is built per ICAO code and requests `aeroway=*` features within the ai
 
 **Endpoints called:**
 
-| Method | URL | Purpose | Lines |
-|--------|-----|---------|-------|
-| POST | `https://{DATABRICKS_HOST}/api/2.0/genie/spaces/{SPACE_ID}/start-conversation` | Start new Genie conversation | 85-92 |
-| GET | `https://{DATABRICKS_HOST}/api/2.0/genie/spaces/{SPACE_ID}/conversations/{id}/messages/{mid}` | Poll for Genie response | 85-92 |
-| GET | `https://{DATABRICKS_HOST}/api/2.0/genie/spaces/{SPACE_ID}/conversations/{id}/messages/{mid}/query-result` | Fetch SQL query result | 85-92 |
-| GET | `https://{DATABRICKS_HOST}/api/2.0/genie/spaces/{SPACE_ID}` | Validate Genie config | 348-349 |
+| Method | URL | Purpose | Function |
+|--------|-----|---------|----------|
+| POST | `https://{DATABRICKS_HOST}/api/2.0/genie/spaces/{SPACE_ID}/start-conversation` | Start new Genie conversation | `ask_genie()` |
+| GET | `https://{DATABRICKS_HOST}/api/2.0/genie/spaces/{SPACE_ID}/conversations/{id}/messages/{mid}` | Poll for Genie response | `ask_genie()` |
+| GET | `https://{DATABRICKS_HOST}/api/2.0/genie/spaces/{SPACE_ID}/conversations/{id}/messages/{mid}/query-result` | Fetch SQL query result | `ask_genie()` |
+| GET | `https://{DATABRICKS_HOST}/api/2.0/genie/spaces/{SPACE_ID}` | Validate Genie config | `validate_genie_config()` |
 
 **Genie Space ID**: `01f12612fa6314ae943d0526f5ae3a00` (configurable via `GENIE_SPACE_ID` env var).
 
@@ -120,9 +130,9 @@ The query is built per ICAO code and requests `aeroway=*` features within the ai
 
 **Endpoint called:**
 
-| Method | URL | Purpose | Lines |
-|--------|-----|---------|-------|
-| POST | `https://{DATABRICKS_HOST}/serving-endpoints/{MODEL_ENDPOINT}/invocations` | Chat completions with function calling (routes queries to Genie or MCP tools) | 154, 163-164 |
+| Method | URL | Purpose | Function |
+|--------|-----|---------|----------|
+| POST | `https://{DATABRICKS_HOST}/serving-endpoints/{MODEL_ENDPOINT}/invocations` | Chat completions with function calling (routes queries to Genie or MCP tools) | `chat_completions()` |
 
 **Model endpoint**: `databricks-claude-sonnet-4-5` (configurable via `ASSISTANT_MODEL_ENDPOINT` env var).
 
@@ -139,10 +149,10 @@ The query is built per ICAO code and requests `aeroway=*` features within the ai
 
 **Endpoints called:**
 
-| Method | URL | Purpose | Lines |
-|--------|-----|---------|-------|
-| POST | `https://{DATABRICKS_HOST}/serving-endpoints/{ENDPOINT_NAME}/invocations` | Send satellite tile image, receive inpainted (aircraft-removed) tile | 40-45 |
-| GET | `https://{DATABRICKS_HOST}/api/2.0/serving-endpoints/{ENDPOINT_NAME}` | Health check (endpoint readiness) | 89-92 |
+| Method | URL | Purpose | Function |
+|--------|-----|---------|----------|
+| POST | `https://{DATABRICKS_HOST}/serving-endpoints/{ENDPOINT_NAME}/invocations` | Send satellite tile image, receive inpainted (aircraft-removed) tile | `inpaint_tile()` |
+| GET | `https://{DATABRICKS_HOST}/api/2.0/serving-endpoints/{ENDPOINT_NAME}` | Health check (endpoint readiness) | `get_endpoint_status()` |
 
 **Endpoint name**: `airport-dt-aircraft-inpainting-dev` (configurable via `INPAINTING_ENDPOINT_NAME`).
 
@@ -159,9 +169,9 @@ The query is built per ICAO code and requests `aeroway=*` features within the ai
 
 **Endpoint called:**
 
-| Method | URL | Purpose | Lines |
-|--------|-----|---------|-------|
-| GET | `https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py?station=..&data=metar&year1=..&...` | Fetch historical METAR observations for a station + date | 21, 122-149 |
+| Method | URL | Purpose | Function |
+|--------|-----|---------|----------|
+| GET | `https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py?station=..&data=metar&year1=..&...` | Fetch historical METAR observations for a station + date | `fetch_metar_history()` |
 
 ---
 
@@ -176,9 +186,9 @@ The query is built per ICAO code and requests `aeroway=*` features within the ai
 
 **Endpoint called:**
 
-| Method | URL | Purpose | Lines |
-|--------|-----|---------|-------|
-| GET | `https://opensky-network.org/datasets/metadata/aircraftDatabase.csv` | Download ~30MB aircraft type database (icao24 → typecode). Cached locally for 7 days. | 23, 63-64 |
+| Method | URL | Purpose | Function |
+|--------|-----|---------|----------|
+| GET | `https://opensky-network.org/datasets/metadata/aircraftDatabase.csv` | Download ~30MB aircraft type database (icao24 → typecode). Cached locally for 7 days. | `_download_database()` |
 
 ---
 
@@ -209,7 +219,7 @@ The query is built per ICAO code and requests `aeroway=*` features within the ai
 
 | Field | Value |
 |-------|-------|
-| **File** | `app/frontend/src/components/Map/AirportMap.tsx:170` |
+| **File** | `app/frontend/src/components/Map/AirportMap.tsx` |
 | **URL** | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` |
 | **Auth** | None (public) |
 | **Usage** | Leaflet `TileLayer` for 2D street map base layer |
@@ -218,7 +228,7 @@ The query is built per ICAO code and requests `aeroway=*` features within the ai
 
 | Field | Value |
 |-------|-------|
-| **File** | `app/frontend/src/components/Map/AirportMap.tsx:172` |
+| **File** | `app/frontend/src/components/Map/AirportMap.tsx` |
 | **URL** | `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}` |
 | **Auth** | None (public) |
 | **Usage** | Leaflet `TileLayer` for 2D satellite base layer |
@@ -227,7 +237,7 @@ The query is built per ICAO code and requests `aeroway=*` features within the ai
 
 | Field | Value |
 |-------|-------|
-| **File** | `app/frontend/src/components/Map3D/SatelliteGround.tsx:13` |
+| **File** | `app/frontend/src/components/Map3D/SatelliteGround.tsx` |
 | **URL** | `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}` |
 | **Auth** | None (public) |
 | **Usage** | Three.js canvas texture for 3D satellite ground plane |
@@ -236,7 +246,7 @@ The query is built per ICAO code and requests `aeroway=*` features within the ai
 
 | Field | Value |
 |-------|-------|
-| **File** | `app/frontend/src/components/Map3D/GLTFAircraft.tsx:8` |
+| **File** | `app/frontend/src/components/Map3D/GLTFAircraft.tsx` |
 | **URL** | `https://www.gstatic.com/draco/versioned/decoders/1.5.6/` |
 | **Auth** | None (public CDN) |
 | **Usage** | WebAssembly decoder for Draco-compressed GLTF 3D models |

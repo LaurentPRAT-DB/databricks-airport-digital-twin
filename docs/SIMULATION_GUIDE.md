@@ -230,7 +230,7 @@ traffic_modifiers:
 
 ## Available Scenarios
 
-37 pre-built scenario files in `scenarios/`:
+38 pre-built scenario files in `scenarios/`:
 
 | Airport | Scenario | File |
 |---------|----------|------|

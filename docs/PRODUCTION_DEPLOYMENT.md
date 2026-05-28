@@ -396,7 +396,7 @@ GitHub Actions (CD)
     ├── --seed (first time only):
     │   ├── calibration profiles ──► UC Volume: calibration_profiles
     │   ├── 3D models ────────────► UC Volume: static_assets
-    │   └── lakebase_schema.sql ──► Lakebase PostgreSQL (6 tables)
+    │   └── lakebase_schema.sql ──► Lakebase PostgreSQL (14 tables)
     │
     ├── Stop + Start app ─────────► App picks up new code + env
     │

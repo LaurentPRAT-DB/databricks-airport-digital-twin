@@ -66,7 +66,7 @@ graph LR
 
 ### FeatureSet
 
-The `FeatureSet` dataclass contains 7 primary features extracted from flight data:
+The `FeatureSet` dataclass contains 12 fields extracted from flight data:
 
 ```python
 @dataclass
@@ -78,6 +78,11 @@ class FeatureSet:
     altitude_category: str    # 'ground', 'low', 'cruise'
     heading_quadrant: int     # 1=N, 2=E, 3=S, 4=W
     velocity_normalized: float  # 0-1 scale
+    wind_speed_kt: float      # Wind speed in knots
+    visibility_sm: float      # Visibility in statute miles
+    congestion_level: float   # Airport congestion (0-1)
+    inbound_delay_minutes: float  # Delay from inbound flight
+    airport_load_ratio: float # Current traffic / capacity ratio
 ```
 
 ### Feature Extraction Logic
@@ -184,27 +189,14 @@ class DelayPrediction:
     delay_category: str    # 'on_time', 'slight', 'moderate', 'severe'
 ```
 
-### Prediction Rules
+### Prediction Logic
 
-#### Base Delay Calculation
+The delay model uses a probability-based approach:
 
-| Factor | Condition | Delay Impact | Confidence Impact |
-|--------|-----------|--------------|-------------------|
-| Peak morning | hour in [7, 8, 9] | +15 min | -0.1 |
-| Peak evening | hour in [17, 18, 19] | +12 min | -0.1 |
-| Weekend | day_of_week >= 5 | -3 min | +0.05 |
-| Ground | altitude_category == "ground" | +8 min | +0.1 |
-| Low altitude | altitude_category == "low" | +3 min | 0 |
-| Cruising | altitude_category == "cruise" | -2 min | -0.1 |
-| Slow moving | velocity < 0.1 (normalized) | +5 min | 0 |
-
-#### Noise Addition
-
-Random noise of ±5 minutes is added for realistic variation:
-```python
-noise = self._random.uniform(-5.0, 5.0)
-delay_minutes = max(0.0, base_delay + noise)
-```
+1. **Delay probability** is computed from contextual factors: hour of day (peak hours increase probability), weekend (reduces probability), weather conditions (wind/visibility degrade on-time performance), congestion level, and airport load ratio.
+2. A random draw against this probability determines whether the flight is delayed.
+3. If delayed, the delay magnitude is sampled from a **log-normal distribution** (`random.lognormvariate`), producing realistic right-skewed delay distributions where most delays are moderate but occasional severe delays occur.
+4. Confidence is derived from how many input signals are available and consistent.
 
 #### Delay Categories
 
@@ -240,11 +232,13 @@ predictions = predictor.predict_batch(flights)
 
 ### Overview
 
-The gate recommendation model assigns optimal gates to incoming flights using a scoring algorithm that considers:
-- Gate availability
-- Terminal matching (domestic vs international)
-- Proximity to runway
-- Flight delay status
+The gate recommendation model assigns optimal gates to incoming flights using an OSM-driven approach. Gates are dynamically loaded from the airport's OpenStreetMap data via the `from_osm_gate()` constructor. When OSM data is unavailable, the model falls back to a default set of 10 gates (A1-A5, B1-B5).
+
+### Key Types
+
+- **`GateSize` enum**: `SMALL`, `MEDIUM`, `LARGE`, `SUPER` — determines aircraft-gate compatibility
+- **`GateStatus` enum**: `AVAILABLE`, `OCCUPIED`, `DELAYED`, `MAINTENANCE`
+- **`from_osm_gate()` constructor**: builds Gate objects from OSM parking_position nodes
 
 ### GateRecommendation Output
 
@@ -257,73 +251,19 @@ class GateRecommendation:
     estimated_taxi_time: int  # Minutes
 ```
 
-### Gate Configuration
+### Scoring Algorithm (5 Factors)
 
-**Terminal A** (Domestic): Gates A1-A5
-**Terminal B** (International): Gates B1-B5
-
-```python
-class GateStatus(Enum):
-    AVAILABLE = "available"
-    OCCUPIED = "occupied"
-    DELAYED = "delayed"
-    MAINTENANCE = "maintenance"
-```
-
-### Scoring Algorithm
-
-```python
-def _score_gate(self, gate: Gate, flight: dict) -> float:
-    score = 0.0
-
-    # Availability (50% weight)
-    if gate.status == GateStatus.AVAILABLE:
-        score += 0.5
-    elif gate.status == GateStatus.DELAYED:
-        score += 0.2
-    else:
-        return 0.0  # Occupied/maintenance gates excluded
-
-    # Terminal matching (25% weight)
-    is_international = self._is_international_flight(callsign)
-    if is_international and gate.terminal == "B":
-        score += 0.25
-    elif not is_international and gate.terminal == "A":
-        score += 0.25
-    else:
-        score += 0.1  # Usable but not optimal
-
-    # Runway proximity (15% weight)
-    gate_number = int(gate.gate_id[1:])
-    proximity_score = (6 - gate_number) / 5 * 0.15
-    score += max(0, proximity_score)
-
-    # Delay penalty (10% impact)
-    if flight.get("delay_minutes", 0) > 30:
-        score -= 0.1
-
-    return min(1.0, max(0.0, score))
-```
-
-### International Flight Detection
-
-```python
-def _is_international_flight(self, callsign: str) -> bool:
-    domestic_prefixes = {"AAL", "UAL", "DAL", "SWA", "JBU", "NKS", "ASA", "FFT", "SKW"}
-    prefix = callsign[:3].upper()
-    return prefix not in domestic_prefixes
-```
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| **Availability** | 40% | Gate must be unoccupied and not in maintenance |
+| **Operator** | 20% | Airline-gate affinity (home terminal preference) |
+| **Terminal** | 15% | Domestic/international terminal matching |
+| **Size** | 15% | Aircraft-gate size compatibility (GateSize enum) |
+| **Proximity** | 10% | Haversine distance from runway threshold |
 
 ### Taxi Time Estimation
 
-Base time: 5 minutes, +1 minute per gate position from runway.
-
-```python
-def _estimate_taxi_time(self, gate: Gate) -> int:
-    base_time = 5
-    gate_number = int(gate.gate_id[1:])
-    return base_time + (gate_number - 1)
-```
+Taxi time is computed using **haversine distance** from the runway exit point to the gate position, converted to minutes at typical ground speed. This replaces the fixed per-gate-number formula.
 
 ### Usage Example
 
@@ -434,6 +374,47 @@ for area in areas:
 # Get only bottlenecks (HIGH/CRITICAL)
 bottlenecks = predictor.get_bottlenecks(flights)
 ```
+
+---
+
+## Turnaround Model
+
+**Module**: `src/ml/turnaround_model.py`
+
+### Overview
+
+Predicts gate occupancy duration (time from parking to pushback). Uses a two-stage architecture for progressive refinement as more information becomes available.
+
+### Key Classes
+
+- **`TurnaroundPredictor`**: Single-stage CatBoost model for turnaround duration
+- **`TwoStageTurnaroundPredictor`**: Combines a coarse prediction (schedule-only features) with a refined prediction (full gate-side context)
+
+### Model Type
+
+CatBoost regressor with native categorical feature support. Trained on calibrated simulation data.
+
+---
+
+## OBT Model (Departure Punctuality)
+
+**Module**: `src/ml/obt_model.py`
+
+### Overview
+
+Predicts departure punctuality as the AOBT - SOBT offset (Actual Off-Block Time minus Scheduled Off-Block Time) in minutes. Positive values indicate late departures.
+
+### Key Classes
+
+- **`OBTPredictor`**: Refined predictor using full context at gate parking time
+- **`OBTCoarsePredictor`**: Schedule-only predictor available 90 minutes before departure
+- **`TwoStageOBTPredictor`**: Combines coarse and refined predictions with progressive refinement
+
+### Model Type
+
+Primary: `HistGradientBoostingRegressor` (scikit-learn). Secondary: CatBoost for quantile predictions (P10/P90 intervals). Trained on calibrated simulation data with Conformalized Quantile Regression (CQR) calibration.
+
+See `docs/OBT_PIPELINE.md` for the full training, collection, and evaluation pipeline.
 
 ---
 
@@ -623,4 +604,4 @@ Returns only HIGH and CRITICAL congestion areas.
 
 ---
 
-*Last updated: 2026-03-08*
+*Last updated: 2026-05-28*

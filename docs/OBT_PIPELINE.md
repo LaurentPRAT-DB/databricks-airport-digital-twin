@@ -79,8 +79,12 @@ the model against real-world observations.
 
 ### 2.1 What the model predicts
 
-Turnaround duration in minutes — the time an aircraft spends at the gate from parking
-to pushback. The model has three stages for progressive refinement:
+The OBT model predicts departure punctuality (AOBT - SOBT offset) — the difference in
+minutes between Actual Off-Block Time and Scheduled Off-Block Time. Positive values
+indicate late departures. The turnaround model (separate, see `src/ml/turnaround_model.py`)
+predicts gate occupancy duration.
+
+The model has three stages for progressive refinement:
 
 | Stage | Horizon | When triggered | Features |
 |-------|---------|---------------|----------|
@@ -123,7 +127,7 @@ produces a JSON file with schedule, phase transitions, gate events, and weather 
 **File:** `src/ml/obt_features.py`
 
 Key functions:
-- `extract_training_data(sim_json_path)` — parses simulation JSON, joins schedule +
+- `extract_obt_training_data(sim_json_path)` — parses simulation JSON, joins schedule +
   phase_transitions + gate_events + weather to produce feature/target pairs
 - `extract_training_data_from_recording(recording_data)` — same logic for enriched
   OpenSky recorded data (in-memory dict)
@@ -143,7 +147,7 @@ Key functions:
 **Notebook:** `databricks/notebooks/train_obt_model.py`
 
 1. Reads simulation JSONs from UC Volume
-2. Extracts features + targets via `extract_training_data()`
+2. Extracts features + targets via `extract_obt_training_data()`
 3. 80/20 train/test split, stratified by airport
 4. 5-fold stratified cross-validation
 5. Trains CatBoost (preferred) or sklearn HistGradientBoostingRegressor (fallback)
@@ -435,7 +439,7 @@ The model was trained with IATA codes. When evaluating:
 | `opensky_ingestion` | `resources/opensky_ingestion_job.yml` | Every 15 min (paused by default) |
 | `opensky_enrichment` | `resources/opensky_enrichment_job.yml` | Every 30 min (paused by default) |
 | `opensky_evaluation` | `resources/opensky_evaluation_job.yml` | On-demand |
-| `obt_model_training` | `resources/obt_training_job.yml` | On-demand |
+| `obt_model_training` | `resources/turnaround_training_job.yml` | On-demand |
 | `calibration_batch` | `resources/calibration_batch_job.yml` | On-demand |
 
 ### 7.2 Python dependencies
@@ -454,7 +458,7 @@ The model was trained with IATA codes. When evaluating:
 | File | Role |
 |------|------|
 | `src/ml/obt_model.py` | OBTPredictor, OBTCoarsePredictor, OBTBoardPredictor |
-| `src/ml/obt_features.py` | OBTFeatureSet, classify_aircraft(), extract_training_data() |
+| `src/ml/obt_features.py` | OBTFeatureSet, classify_aircraft(), extract_obt_training_data() |
 | `src/inference/opensky_events.py` | OpenSkyEventInferrer (phase + gate inference) |
 | `scripts/opensky_collector.py` | Local CLI ADS-B data collector |
 | `scripts/generate_calibration_batch.py` | Generate 132-task simulation batch |

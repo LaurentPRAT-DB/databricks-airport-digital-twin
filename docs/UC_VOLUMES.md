@@ -57,7 +57,7 @@ src/calibration/profile.py → _load_from_volume(icao)
 
 | Subdirectory | Files | Description |
 |--------------|-------|-------------|
-| `models/` | 16 GLB files | 3D aircraft models (Airbus, Boeing, fighters) |
+| `models/` | 17 GLB files | 3D aircraft models (Airbus, Boeing, fighters) |
 | `airport_cache/` | 26 JSON files | Pre-computed OSM airport geometry (`airport_{ICAO}.json`) |
 
 **Volume path:** `/Volumes/serverless_stable_3n0ihb_catalog/airport_digital_twin/static_assets/`
@@ -136,7 +136,7 @@ app/backend/api/routes_debug.py:
 
 ## 4. `demo_simulations`
 
-**Resource config:** `resources/demo_simulations_volume.yml`
+**Resource config:** `resources/demo_volume.yml`
 
 **Contents:**  
 Pre-generated 24h simulation files named `demo_{ICAO}.json` for well-known airports. Used for immediate replay on airport switch without running a live simulation.
@@ -262,7 +262,7 @@ All volumes are declared as MANAGED volumes in `resources/`:
 | `resources/calibration_profiles_volume.yml` | `calibration_profiles` |
 | `resources/static_assets_volume.yml` | `static_assets` |
 | `resources/simulation_data_volume.yml` | `simulation_data` |
-| `resources/demo_simulations_volume.yml` | `demo_simulations` |
+| `resources/demo_volume.yml` | `demo_simulations` |
 | `resources/opensky_raw_volume.yml` | `opensky_raw` |
 
 Target-specific catalog/schema substitution:

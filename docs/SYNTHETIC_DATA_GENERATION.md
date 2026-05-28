@@ -53,7 +53,7 @@ WAKE_CATEGORY = {
     "A340": "HEAVY", "A350": "HEAVY", "A345": "HEAVY",
     "A320": "LARGE", "A321": "LARGE", "A319": "LARGE", "A318": "LARGE",
     "B737": "LARGE", "B738": "LARGE", "B739": "LARGE",
-    "CRJ9": "SMALL", "E175": "SMALL", "E190": "SMALL",
+    "CRJ9": "LARGE", "E175": "LARGE", "E190": "LARGE",
 }
 ```
 
@@ -83,15 +83,15 @@ For aircraft departing same runway:
 
 ```
 FLIGHT_PHASES = [
-    "APPROACH",      # 10+ NM from airport, descending
-    "FINAL",         # Within 10 NM, aligned with runway
-    "LANDING",       # Touchdown to runway exit
-    "TAXI_IN",       # Runway to gate
-    "PARKED",        # At gate
-    "PUSHBACK",      # Gate to taxiway
-    "TAXI_OUT",      # Taxiway to runway hold
-    "TAKEOFF",       # Runway to 400ft AGL
-    "DEPARTURE",     # Climbing above 400ft
+    "APPROACHING",     # 10+ NM from airport, descending
+    "LANDING",         # Touchdown to runway exit
+    "TAXI_TO_GATE",    # Runway to gate
+    "PARKED",          # At gate
+    "PUSHBACK",        # Gate to taxiway
+    "TAXI_TO_RUNWAY",  # Taxiway to runway hold
+    "TAKEOFF",         # Runway to 400ft AGL
+    "DEPARTING",       # Climbing above 400ft
+    "CRUISE",          # En-route level flight
 ]
 ```
 

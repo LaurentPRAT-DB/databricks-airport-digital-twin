@@ -155,9 +155,9 @@ END
 
 **Description**: Low-latency serving table for real-time frontend queries. Synchronized from Unity Catalog Gold table.
 
-**Database**: `airport_digital_twin`
+**Database**: `databricks_postgres`
 
-**Host**: `ep-summer-scene-d2ew95fl.database.us-east-1.cloud.databricks.com`
+**Host**: Target-dependent — see `app.yaml` for current value.
 
 **Sync Frequency**: Every 1 minute (from Delta Gold table)
 

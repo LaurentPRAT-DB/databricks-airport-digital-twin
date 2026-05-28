@@ -22,7 +22,6 @@ Welcome to the Airport Digital Twin! This guide walks you through every feature 
 - [Simulation Mode](#simulation-mode)
 - [For Data Scientists: ML Models](#for-data-scientists-ml-models)
 - [For IT Ops: Data Architecture](#for-it-ops-data-architecture)
-- [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -81,7 +80,7 @@ The dashboard has five main areas that work together:
 |---|---|---|
 | **Airport button** (e.g., "KSFO (SFO)") | Current airport | Click to switch airports |
 | **Flights: 50** | Total tracked flights | — |
-| **Data source badge** | `Live` or `Demo Mode (synthetic)` | Live = real data flowing |
+| **Data mode toggle** | `Simulation` / `Live` / `Recorded` — persists to localStorage across page reloads | Click to switch data modes |
 | **Weather badge** | Temperature, wind, visibility | Click to expand full METAR |
 | **FIDS** | Opens arrivals/departures board | Click to open |
 | **Phase legend** | Ground / Climbing / Descending / Cruising | Colors match flight markers |
@@ -190,24 +189,11 @@ The 3D view uses WebGL and runs best on Chrome or Firefox with a dedicated GPU. 
 ## Switching Airports
 
 ![Airport Selector](screenshots/02-airport-selector.png)
-*Click the airport button to reveal the dropdown with 12 presets and a custom ICAO input*
+*Click the airport button to reveal the dropdown with 29 presets (grouped by region) and a custom ICAO input*
 
 ### Preset Airports
 
-| ICAO | IATA | Airport | Region |
-|---|---|---|---|
-| KSFO | SFO | San Francisco International | US West |
-| KJFK | JFK | John F. Kennedy International | US East |
-| KLAX | LAX | Los Angeles International | US West |
-| KORD | ORD | O'Hare International | US Central |
-| KATL | ATL | Hartsfield-Jackson Atlanta | US South |
-| EGLL | LHR | London Heathrow | Europe |
-| LFPG | CDG | Charles de Gaulle | Europe |
-| OMAA | AUH | Abu Dhabi International | Middle East |
-| OMDB | DXB | Dubai International | Middle East |
-| RJTT | HND | Tokyo Haneda | Asia |
-| VHHH | HKG | Hong Kong International | Asia |
-| WSSS | SIN | Singapore Changi | Asia |
+29 airports are available, grouped by region (Americas, Europe, Middle East, Asia-Pacific, Africa). The list is fetched dynamically from the backend and may grow as new calibration profiles are added.
 
 ### Custom Airport
 
@@ -511,24 +497,10 @@ Check `GET /api/data-ops/dashboard` for:
 
 ```bash
 # Build + deploy (always use DABs)
-cd app/frontend && npm run build
-databricks bundle deploy --target dev
+./deploy.sh
 ```
 
 Never use `databricks apps deploy` directly — always go through DABs for reproducible, version-controlled deployments.
-
----
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|---|---|
-| `2` | Switch to 2D map view |
-| `3` | Switch to 3D visualization |
-| `Esc` | Deselect current flight |
-| `/` | Focus search box |
-| `Up` / `Down` | Navigate flight list |
-| `Enter` | Select highlighted flight |
 
 ---
 
@@ -579,4 +551,15 @@ The current model is rule-based (not trained on historical data) — it produces
 
 ---
 
-*Documentation updated: 2026-03-21 | Version: 3.0*
+---
+
+## Recent Additions
+
+- **PWA support**: The app is installable as a Progressive Web App with offline caching and a delay badge shown on the app icon.
+- **Live mode (OpenSky ADS-B)**: Real-time aircraft positions from the OpenSky Network with 15-second polling.
+- **Recording/playback**: Record live ADS-B sessions and replay them later with time controls.
+- **Active Gates strip**: The summary view shows a strip of currently occupied gates for at-a-glance awareness.
+
+---
+
+*Documentation updated: 2026-05-28 | Version: 4.0*
