@@ -385,10 +385,15 @@ export default function GateStatus({ highlightGateRef }: { highlightGateRef?: st
     }
   }, [highlightGateRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const occupiedGates = useMemo(
+    () => gates.filter((g) => g.status !== 'VACANT'),
+    [gates]
+  );
+
   const { congestion, isLoading: isCongestionLoading } = useCongestion();
   const { activeLevel, setActiveLevel, selectedArea, setSelectedArea } = useCongestionFilter();
 
-  const occupiedCount = gates.filter((g) => g.status !== 'VACANT').length;
+  const occupiedCount = occupiedGates.length;
   const availableCount = gates.length - occupiedCount;
 
   const selectedGate = selectedGateId ? gates.find((g) => g.id === selectedGateId) ?? null : null;
@@ -453,6 +458,29 @@ export default function GateStatus({ highlightGateRef }: { highlightGateRef?: st
         })}
       </div>
 
+      {/* Active gates strip — always visible when gates are occupied */}
+      {selectedTerminal === null && occupiedGates.length > 0 && occupiedGates.length <= 12 && (
+        <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className="text-[10px] font-medium text-blue-600 dark:text-blue-400 mb-1">Active Gates</div>
+          <div className="flex flex-wrap gap-1">
+            {occupiedGates.map((gate) => {
+              const colors = gateStatusColors[gate.status];
+              return (
+                <button
+                  key={gate.id}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${colors.bg} ${colors.text} ${colors.hover}`}
+                  title={`${gate.ref}: ${gate.status}${gate.flight ? ` — ${gate.flight.callsign || gate.flight.icao24}` : ''}`}
+                  onClick={() => { setSelectedTerminal(gate.terminal); setSelectedGateId(gate.id); }}
+                >
+                  {gate.ref}
+                  {gate.flight && <span className="ml-0.5 opacity-75">{gate.flight.callsign || gate.flight.icao24}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Summary view (All selected) */}
       {selectedTerminal === null && (
         <div className="space-y-1">
@@ -510,13 +538,14 @@ export default function GateStatus({ highlightGateRef }: { highlightGateRef?: st
               {(terminalGroups.get(selectedTerminal) || []).length} gates
             </span>
           </div>
-          <div className="grid grid-cols-6 md:grid-cols-8 gap-1">
+          <div className="grid grid-cols-6 md:grid-cols-8 gap-1 max-h-[280px] overflow-y-auto">
             {(terminalGroups.get(selectedTerminal) || []).map((gate) => {
               const colors = gateStatusColors[gate.status];
               const isSelected = selectedGateId === gate.id;
               return (
                 <button
                   key={gate.id}
+                  ref={isSelected ? (el) => el?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' }) : undefined}
                   className={`
                     aspect-square flex items-center justify-center
                     text-[10px] font-medium rounded cursor-pointer
