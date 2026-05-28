@@ -15,7 +15,7 @@
 | **Real-time simulation** | Physics-based flight state machine, 50+ concurrent aircraft, WebSocket delta streaming |
 | **Live ADS-B tracking** | OpenSky Network integration with recording and frame-by-frame replay |
 | **2D + 3D visualization** | Leaflet maps with OSM overlays, Three.js 3D with extruded terminal buildings |
-| **Multi-airport** | 12 presets (SFO, JFK, LAX, ORD, ATL, LHR, CDG, AUH, DXB, HND, HKG, SIN) + any ICAO code |
+| **Multi-airport** | 29 presets across 5 regions + any ICAO code worldwide |
 | **7 ML models** | Delay, gate assignment, congestion, turnaround, off-block time, GSE allocation, aircraft inpainting |
 | **Calibrated synthetic data** | 1,183 airport profiles from BTS, OpenSky, and OurAirports — real distributions drive simulation |
 | **Two-tier serving** | Lakehouse (Unity Catalog) for governance + Lakebase (PostgreSQL) for <10ms real-time reads |
@@ -95,10 +95,10 @@ Airport operators manage thousands of flights daily across interconnected system
 ![Weather Widget](docs/screenshots/07-weather-widget.png)
 *Header displays 29°C, 251° at 10kt wind, 100M visibility — updated every 5 minutes from NOAA*
 
-**Switch airports** — Click the airport button to choose from 12 presets or type any ICAO code.
+**Switch airports** — Click the airport button to choose from 29 presets or type any ICAO code.
 
 ![Airport Selector](docs/screenshots/02-airport-selector.png)
-*12 preset airports with search — type any ICAO code to load airports worldwide*
+*29 preset airports grouped by region — type any ICAO code to load airports worldwide*
 
 ![Airport Switching](docs/screenshots/03-airport-switching.png)
 *Progress overlay while loading airport geometry from OpenStreetMap*
@@ -106,7 +106,7 @@ Airport operators manage thousands of flights daily across interconnected system
 ![CDG Airport](docs/screenshots/10-cdg-airport.png)
 *Paris CDG loaded with real terminal, gate, taxiway, and apron data from OpenStreetMap*
 
-**3D view** — Click **3D** (or press `3`) for the Three.js visualization with aircraft at actual altitude and extruded terminal buildings.
+**3D view** — Click **3D** for the Three.js visualization with aircraft at actual altitude and extruded terminal buildings.
 
 ![3D View](docs/screenshots/08-3d-view.png)
 *SFO in 3D — extruded terminals, aircraft with callsign labels, altitude-accurate positioning*
@@ -151,17 +151,6 @@ When you select a flight, the details panel shows:
 - **Expected Delay**: Predicted minutes late, with confidence %
 - **Delay Category**: On Time / Slight / Moderate / Severe
 - **Gate Recommendations**: Top 3 gates ranked by score with reasons
-
-### Keyboard Shortcuts
-
-| Key | Action |
-|---|---|
-| `2` | Switch to 2D map |
-| `3` | Switch to 3D view |
-| `Esc` | Deselect flight |
-| `/` | Focus search box |
-| `Up` / `Down` | Navigate flight list |
-| `Enter` | Select highlighted flight |
 
 ### Mobile Experience (PWA — iOS & Android)
 
@@ -321,7 +310,7 @@ The application calls external services at runtime and during calibration. See [
 
 | Service | Purpose | Auth |
 |---|---|---|
-| OpenSky Network | Live ADS-B positions | OAuth2 (Databricks secrets) or anonymous |
+| OpenSky Network | Live ADS-B positions | OAuth2 / basic auth / anonymous (3-tier fallback) |
 | OpenStreetMap Overpass | Airport geometry (runways, gates, taxiways) | None |
 | NOAA METAR/TAF | Current weather conditions | None |
 
@@ -440,7 +429,6 @@ Models are tracked in MLflow. Training runs log feature importance, train/valida
 
 ## Development
 
-> For the full technical specification (20 sections), see [SPECIFICATION.md](docs/SPECIFICATION.md).
 > For design principles, see [Development Philosophy](docs/DEVELOPMENT_PHILOSOPHY.md).
 
 ### Architecture
@@ -593,7 +581,7 @@ graph TB
 | **FIDS** | `components/FIDS/` | Arrivals/departures display board |
 | **GateStatus** | `components/GateStatus/` | Terminal gate occupancy and congestion levels |
 | **Weather** | `components/Weather/` | METAR/TAF widget |
-| **AirportSelector** | `components/AirportSelector/` | Airport picker — 12 presets + any ICAO code |
+| **AirportSelector** | `components/AirportSelector/` | Airport picker — 29 presets + any ICAO code |
 | **DataOps** | `components/DataOps/` | Pipeline health dashboard |
 | **GenieChat** | `components/GenieChat/` | Natural language query interface |
 
@@ -625,7 +613,7 @@ Only changed fields are sent per flight. Bandwidth stays under 2 KB/s for 100+ f
 | **FAA NASR** | `src/formats/faa/` | US FAA | Runway and facility database |
 | **MSFS BGL** | `src/formats/msfs/` | Microsoft | Flight Simulator scenery data |
 
-> For import format details, see [Airport Data Import](docs/AIRPORT_DATA_IMPORT.md) and [MSFS BGL Import](docs/MSFS_BGL_IMPORT.md).
+> For MSFS scenery import details, see [MSFS BGL Import](docs/MSFS_BGL_IMPORT.md).
 
 ### Simulation Engine
 
@@ -729,10 +717,8 @@ docs/                  # Technical documentation + screenshots
 | [UC Volumes](docs/UC_VOLUMES.md) | Admins | Volume inventory, population, and access patterns |
 | [External API Calls](docs/external_api_calls.md) | Admins | Full inventory of outbound service dependencies |
 | [Security Audit](docs/SECURITY_AUDIT.md) | Admins | Security review findings |
-| [Technical Specification](docs/SPECIFICATION.md) | Developers | Full as-built spec (20 sections) |
 | [Data Pipeline](docs/PIPELINE.md) | Developers | DLT Bronze/Silver/Gold architecture |
 | [Data Dictionary](docs/DATA_DICTIONARY.md) | Developers | Schema definitions for all tables |
-| [Airport Data Import](docs/AIRPORT_DATA_IMPORT.md) | Developers | AIXM, OSM, IFC, AIDM, FAA import formats |
 | [MSFS BGL Import](docs/MSFS_BGL_IMPORT.md) | Developers | Microsoft Flight Simulator scenery data import |
 | [Development Philosophy](docs/DEVELOPMENT_PHILOSOPHY.md) | Developers | Design principles |
 | [ML Models](docs/ML_MODELS.md) | Data Scientists | Delay, gate, congestion, turnaround, OBT model internals |
