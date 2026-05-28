@@ -11,7 +11,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install ultralytics>=8.0 opencv-python-headless>=4.8 torch torchvision pillow mlflow pydantic>=2.5 pyyaml simple-lama-inpainting
+# MAGIC %pip install ultralytics>=8.3 opencv-python-headless>=4.8 torch torchvision pillow mlflow pydantic>=2.5 pyyaml simple-lama-inpainting
 
 # COMMAND ----------
 
@@ -64,22 +64,19 @@ print(f"Volume ready: {VOLUME_PATH}")
 
 from ultralytics import YOLO
 
-YOLO_OBB_URL = "https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8s-obb.pt"
+YOLO_OBB_URL = "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8s-obb.pt"
 
-if not os.path.exists(YOLO_WEIGHTS_VOLUME):
-    print("Downloading YOLOv8s-OBB weights (DOTA satellite aircraft detection)...")
-    local_path = Path("/tmp/yolov8s-obb.pt")
-    urllib.request.urlretrieve(YOLO_OBB_URL, str(local_path))
-    shutil.copy2(str(local_path), YOLO_WEIGHTS_VOLUME)
-    print(f"Cached YOLO OBB weights at {YOLO_WEIGHTS_VOLUME} ({local_path.stat().st_size / 1e6:.1f} MB)")
+# Always re-download to ensure latest version (v8.4.0)
+print("Downloading YOLOv8s-OBB weights (DOTA satellite aircraft detection, v8.4.0)...")
+local_path = Path("/tmp/yolov8s-obb.pt")
+urllib.request.urlretrieve(YOLO_OBB_URL, str(local_path))
+shutil.copy2(str(local_path), YOLO_WEIGHTS_VOLUME)
+print(f"Cached YOLO OBB weights at {YOLO_WEIGHTS_VOLUME} ({local_path.stat().st_size / 1e6:.1f} MB)")
 
-    # Verify it loads
-    model = YOLO(YOLO_WEIGHTS_VOLUME)
-    print(f"YOLO OBB model loaded: {len(model.names)} classes, task={model.task}")
-    print(f"Classes: {model.names}")
-else:
-    size_mb = os.path.getsize(YOLO_WEIGHTS_VOLUME) / 1e6
-    print(f"YOLO OBB weights already cached at {YOLO_WEIGHTS_VOLUME} ({size_mb:.1f} MB)")
+# Verify it loads and detects correctly
+model = YOLO(YOLO_WEIGHTS_VOLUME)
+print(f"YOLO OBB model loaded: {len(model.names)} classes, task={model.task}")
+print(f"Classes: {model.names}")
 
 # COMMAND ----------
 
@@ -135,9 +132,10 @@ with tempfile.TemporaryDirectory() as tmp:
         "yolo_weights": YOLO_WEIGHTS_VOLUME,
         "lama_weights_dir": LAMA_WEIGHTS_DIR,
         "lama_weights_file": LAMA_WEIGHTS_FILE,
-        "confidence_threshold": 0.35,
+        "confidence_threshold": 0.25,
         "mask_dilation_px": 10,
         "max_detection_ratio": 0.03,
+        "imgsz": 640,
     }
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
@@ -154,7 +152,7 @@ with tempfile.TemporaryDirectory() as tmp:
             {
                 "pip": [
                     "simple-lama-inpainting",
-                    "ultralytics>=8.0",
+                    "ultralytics>=8.3",
                     "opencv-python-headless>=4.8",
                     "torch>=2.0",
                     "torchvision",
@@ -196,9 +194,10 @@ with tempfile.TemporaryDirectory() as tmp:
 
             self._yolo_weights = config.get("yolo_weights", "yolov8n.pt")
             self._lama_weights = config.get("lama_weights_file")
-            self._confidence = config.get("confidence_threshold", 0.35)
+            self._confidence = config.get("confidence_threshold", 0.25)
             self._dilation = config.get("mask_dilation_px", 10)
             self._max_det_ratio = config.get("max_detection_ratio", 0.03)
+            self._imgsz = config.get("imgsz", 640)
 
             # Load YOLO
             from ultralytics import YOLO
@@ -261,9 +260,10 @@ with tempfile.TemporaryDirectory() as tmp:
                 pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
                 image_np = np.array(pil_image)
 
-                # Detect aircraft
+                # Detect aircraft — imgsz=640 upscales 256px tiles for better detection
                 yolo_results = self._yolo.predict(
-                    image_np, conf=self._confidence, device=self._device, verbose=False
+                    image_np, conf=self._confidence, device=self._device,
+                    imgsz=self._imgsz, verbose=False
                 )
 
                 # Collect detections from YOLO results
