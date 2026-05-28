@@ -741,38 +741,8 @@ class SimulationEngine:
 
             # Detect phase transitions
             if new_phase != old_phase:
-                self._phase_count_transition(old_phase.value, new_phase.value)
-                self.recorder.record_phase_transition(
-                    self.sim_time, icao24, state.callsign,
-                    old_phase.value, new_phase.value,
-                    state.latitude, state.longitude, state.altitude,
-                    state.aircraft_type, state.assigned_gate,
-                )
-                # Flag that a landing-related transition happened so
-                # _capture_positions records all flights this tick.
-                if FlightPhase.LANDING in (old_phase, new_phase):
-                    self._landing_transition_this_tick = True
-
-                # Track flights that reach PARKED (for baggage + passenger flow)
-                if new_phase == FlightPhase.PARKED:
-                    sched = self._find_schedule_entry(icao24)
-                    if sched:
-                        self._completed_flights.append({
-                            "icao24": icao24,
-                            "callsign": state.callsign,
-                            "schedule": sched,
-                            "parked_time": self.sim_time,
-                        })
-                        # Process arrival passengers
-                        if sched.get("flight_type") == "arrival":
-                            self._passenger_flow.process_arrival(
-                                flight_number=state.callsign,
-                                aircraft_type=sched.get("aircraft_type", "A320"),
-                                parked_time=self.sim_time,
-                            )
-
-                # Go-around check: APPROACHING → LANDING transition
-                # Skip probabilistic go-around after 2+ prior attempts (let them land)
+                # Go-around check: intercept APPROACHING → LANDING before recording
+                go_around_triggered = False
                 if (old_phase == FlightPhase.APPROACHING
                         and new_phase == FlightPhase.LANDING
                         and new_state.go_around_count < 2
@@ -780,11 +750,6 @@ class SimulationEngine:
                     from src.ingestion.fallback import _release_runway, VREF_SPEEDS
                     from src.ingestion.fallback import _get_arrival_runway_name
                     _release_runway(icao24, _get_arrival_runway_name())
-                    # Transition to ENROUTE (not APPROACHING wp 0) so the
-                    # aircraft flies FORWARD on current heading, climbs, then
-                    # re-sequences via the holding pattern logic.
-                    # Keep current heading — already correct from approach.
-                    self._phase_count_transition("landing", "enroute")
                     new_state.phase = FlightPhase.ENROUTE
                     new_state.waypoint_index = 0
                     new_state.go_around_target_alt = max(1500.0, new_state.altitude + 300)
@@ -794,6 +759,8 @@ class SimulationEngine:
                     new_state.go_around_count += 1
                     new_state.holding_phase_time = 0.0
                     new_state.holding_inbound = True
+                    # Record as approaching→enroute (landing never happened)
+                    self._phase_count_transition(old_phase.value, "enroute")
                     self.recorder.record_phase_transition(
                         self.sim_time, icao24, state.callsign,
                         "approaching", "enroute",
@@ -809,6 +776,39 @@ class SimulationEngine:
                     )
                     if new_state.go_around_count >= 3:
                         self._divert_flight(icao24, new_state)
+                    self._landing_transition_this_tick = True
+                    go_around_triggered = True
+
+                if not go_around_triggered:
+                    self._phase_count_transition(old_phase.value, new_phase.value)
+                    self.recorder.record_phase_transition(
+                        self.sim_time, icao24, state.callsign,
+                        old_phase.value, new_phase.value,
+                        state.latitude, state.longitude, state.altitude,
+                        state.aircraft_type, state.assigned_gate,
+                    )
+                    # Flag that a landing-related transition happened so
+                    # _capture_positions records all flights this tick.
+                    if FlightPhase.LANDING in (old_phase, new_phase):
+                        self._landing_transition_this_tick = True
+
+                # Track flights that reach PARKED (for baggage + passenger flow)
+                if new_phase == FlightPhase.PARKED and not go_around_triggered:
+                    sched = self._find_schedule_entry(icao24)
+                    if sched:
+                        self._completed_flights.append({
+                            "icao24": icao24,
+                            "callsign": state.callsign,
+                            "schedule": sched,
+                            "parked_time": self.sim_time,
+                        })
+                        # Process arrival passengers
+                        if sched.get("flight_type") == "arrival":
+                            self._passenger_flow.process_arrival(
+                                flight_number=state.callsign,
+                                aircraft_type=sched.get("aircraft_type", "A320"),
+                                parked_time=self.sim_time,
+                            )
 
         # Divert airborne flights if all runways closed
         if not self.capacity.active_runways:
