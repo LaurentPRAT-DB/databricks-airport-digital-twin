@@ -7,31 +7,31 @@ The assistant is an LLM-powered conversational interface embedded in the main pa
 ## High-Level Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Frontend: GenieChat component                                       │
-│  (floating panel, right-side drawer)                                 │
-│                                                                      │
-│  POST /api/assistant/ask          → new conversation                 │
-│  POST /api/assistant/followup     → continue conversation            │
+┌────────────────────────────────────────────────────────────────────. . ┐
+│  Frontend: GenieChat component                                         │
+│  (floating panel, right-side drawer)                                   │
+│                                                                        │
+│  POST /api/assistant/ask          → new conversation                   │
+│  POST /api/assistant/followup     → continue conversation              │
 │  POST /api/assistant/explain      → explain simulation event (no tools)│
-│  POST /api/assistant/report-chat  → report analysis + what-if         │
-└──────────────┬───────────────────────────────────────────────────────┘
+│  POST /api/assistant/report-chat  → report analysis + what-if          │
+└──────────────┬──────────────────────────────────────────────────────. ─┘
                │
                ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Backend: assistant_router (app/backend/api/assistant.py)             │
+│  Backend: assistant_router (app/backend/api/assistant.py)            │
 │                                                                      │
 │  1. Authenticate (OAuth OBO token or SDK fallback)                   │
 │  2. Build tool definitions (MCP tools + query_genie function)        │
-│  3. Call Databricks FM Endpoint (OpenAI-compatible API)               │
+│  3. Call Databricks FM Endpoint (OpenAI-compatible API)              │
 │  4. If LLM returns tool_calls → execute tools → feed results back    │
 │  5. Loop up to MAX_TOOL_ROUNDS (3) until LLM produces final answer   │
-│  6. Return structured response with answer, sources, SQL, data        │
+│  6. Return structured response with answer, sources, SQL, data       │
 └──────────────┬─────────────────────┬─────────────────────────────────┘
                │                     │
     ┌──────────▼──────┐    ┌────────▼──────────────┐
-    │  Genie Space    │    │  MCP Tool Layer        │
-    │  (Historical)   │    │  (Real-Time)           │
+    │  Genie Space    │    │  MCP Tool Layer       │
+    │  (Historical)   │    │  (Real-Time)          │
     └─────────────────┘    └───────────────────────┘
 ```
 
