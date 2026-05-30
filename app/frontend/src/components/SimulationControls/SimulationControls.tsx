@@ -520,9 +520,23 @@ function PausedBar({
 
 /** Minimal status bar shown in Live (OpenSky) mode. */
 function LiveBar({ flightCount, lastUpdated, airport }: { flightCount: number; lastUpdated: string | null; airport: string }) {
+  const liveBarRef = useRef<HTMLDivElement>(null);
   const [recording, setRecording] = useState(false);
   const [recStatus, setRecStatus] = useState<{ frames?: number; elapsed_seconds?: number; filename?: string } | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const el = liveBarRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      document.documentElement.style.setProperty('--playbar-h', `${entry.contentRect.height + 16}px`);
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty('--playbar-h');
+    };
+  }, []);
 
   const timeStr = lastUpdated
     ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour12: true, hour: 'numeric', minute: '2-digit', second: '2-digit' })
@@ -595,7 +609,7 @@ function LiveBar({ flightCount, lastUpdated, airport }: { flightCount: number; l
   };
 
   return (
-    <div className="fixed left-0 right-0 z-[1500] bg-emerald-900/95 backdrop-blur text-white px-4 py-3 shadow-lg bottom-[var(--tab-bar-h)] md:bottom-0">
+    <div ref={liveBarRef} className="fixed left-0 right-0 z-[1500] bg-emerald-900/95 backdrop-blur text-white px-4 py-3 shadow-lg bottom-[var(--tab-bar-h)] md:bottom-0">
       <div className="flex items-center gap-4 max-w-screen-xl mx-auto">
         {/* Live indicator */}
         <div className="flex items-center gap-2">
