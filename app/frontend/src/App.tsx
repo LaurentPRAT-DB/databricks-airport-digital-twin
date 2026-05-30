@@ -1095,11 +1095,11 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
       {showKPI && <KPIDashboard onClose={() => setShowKPI(false)} />}
       <GenieChat hideFab externalOpen={showChat} onClose={() => setShowChat(false)} />
-      <BottomRightControls onOpenChat={() => setShowChat(true)} />
+      <BottomRightControls onOpenChat={() => setShowChat(v => !v)} />
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List + recorded mode indicator */}
         <div className="w-64 flex-shrink-0 flex flex-col overflow-hidden">
-          <div className="flex-1 min-h-0 overflow-hidden" style={{ paddingBottom: 'var(--playbar-h, 0px)' }}>
+          <div className="flex-1 min-h-0 overflow-hidden">
             <FlightList />
           </div>
           {dataMode === 'recorded' && (

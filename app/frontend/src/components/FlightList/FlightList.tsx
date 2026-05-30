@@ -113,7 +113,7 @@ export default function FlightList() {
       </div>
 
       {/* Flight list */}
-      <div className="flex-1 overflow-y-auto" data-testid="flight-list-scroll">
+      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'var(--playbar-h, 0px)' }} data-testid="flight-list-scroll">
         {isAirportSwitching ? (
           <div className="p-4 text-center text-slate-500 dark:text-slate-400">
             <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
