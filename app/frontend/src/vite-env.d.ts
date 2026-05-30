@@ -5,6 +5,7 @@ declare const __BUILD_TIME__: string;
 
 interface ImportMetaEnv {
   readonly VITE_API_URL: string;
+  readonly VITE_BRAND: string;
 }
 
 interface ImportMeta {

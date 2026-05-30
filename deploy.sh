@@ -20,11 +20,14 @@ cd "$(dirname "$0")"
 
 # Parse arguments
 TARGET="dev"
+BRAND="${BRAND:-databricks}"
 for arg in "$@"; do
   case "$arg" in
     --seed) SEED=true ;;
     --target) :;; # next arg is the target value
-    *) [[ "${_prev_arg:-}" == "--target" ]] && TARGET="$arg" ;;
+    --brand) :;;  # next arg is the brand value
+    *) [[ "${_prev_arg:-}" == "--target" ]] && TARGET="$arg"
+       [[ "${_prev_arg:-}" == "--brand" ]] && BRAND="$arg" ;;
   esac
   _prev_arg="$arg"
 done
@@ -92,12 +95,20 @@ git rev-parse --short HEAD > GIT_COMMIT 2>/dev/null || true
 git rev-list --count HEAD > BUILD_NUMBER 2>/dev/null || true
 
 # ── Step 1: Build frontend ───────────────────────────────────────────
-echo "Step 1: Build frontend"
-if [[ -n "$SKIP_BUILD" ]]; then
-  info "Skipped (SKIP_BUILD=1)"
+echo "Step 1: Build frontend (brand: $BRAND)"
+# Copy brand logo to public/ for the build
+BRAND_DIR="app/frontend/brands/$BRAND"
+if [[ -d "$BRAND_DIR" ]]; then
+  cp "$BRAND_DIR/logo.svg" app/frontend/public/company-logo.svg
+  ok "Brand logo copied from $BRAND_DIR/logo.svg"
 else
-  (cd app/frontend && npm run build) > /dev/null 2>&1 \
-    && ok "Frontend built" \
+  fail "Brand directory not found: $BRAND_DIR"; exit 1
+fi
+if [[ -n "$SKIP_BUILD" ]]; then
+  info "Skipped build (SKIP_BUILD=1)"
+else
+  (cd app/frontend && VITE_BRAND="$BRAND" npm run build) > /dev/null 2>&1 \
+    && ok "Frontend built (VITE_BRAND=$BRAND)" \
     || { fail "Frontend build failed"; exit 1; }
 fi
 

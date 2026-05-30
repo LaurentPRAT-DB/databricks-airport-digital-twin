@@ -36,7 +36,7 @@ describe('Header', () => {
   describe('Company logo', () => {
     it('renders Databricks logo', () => {
       render(<Header />)
-      expect(screen.getByAltText('Databricks')).toBeInTheDocument()
+      expect(screen.getByAltText('Company Logo')).toBeInTheDocument()
     })
   })
 

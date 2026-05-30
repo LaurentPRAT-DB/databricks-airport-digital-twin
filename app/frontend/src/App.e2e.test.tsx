@@ -823,7 +823,7 @@ describe('End-to-end user interaction flows', () => {
       const header = screen.getByRole('banner')
 
       // Company logo in header
-      expect(within(header).getByAltText('Databricks')).toBeInTheDocument()
+      expect(within(header).getByAltText('Company Logo')).toBeInTheDocument()
 
       // Connection status — compact dot with tooltip
       await waitFor(() => {
