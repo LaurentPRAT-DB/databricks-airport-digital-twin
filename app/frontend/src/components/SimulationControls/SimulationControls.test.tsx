@@ -127,12 +127,12 @@ describe('SimulationControls', () => {
       expect(screen.getByText('Preparing Simulation...')).toBeInTheDocument();
     });
 
-    it('shows Simulation file picker button in idle state', () => {
+    it('shows Simulation manager button in idle state', () => {
       mockSim = createMockSim({ isActive: false, isLoading: false });
       render(
         <SimulationControls {...defaultProps()} demoReady={false} backendReady={false} />
       );
-      expect(screen.getByTitle('Create, load, or monitor simulations')).toBeInTheDocument();
+      expect(screen.getByTitle('Manage simulations')).toBeInTheDocument();
     });
 
     it('shows playback bar when simulation is active and playing', () => {
@@ -377,46 +377,16 @@ describe('SimulationControls', () => {
     });
   });
 
-  describe('restart after exit', () => {
-    it('shows Start Simulation button after demo was auto-started then stopped', async () => {
-      // Start with demo auto-starting
+  describe('auto-start on mode switch', () => {
+    it('auto-starts demo when demoReady and simulation mode', async () => {
       mockSim = createMockSim();
-      const { rerender } = render(
-        <SimulationControls {...defaultProps()} demoReady={true} currentAirport="KSFO" />
-      );
-
-      // Demo was auto-started (loadDemo called)
-      await waitFor(() => {
-        expect(mockSim.loadDemo).toHaveBeenCalledWith('KSFO');
-      });
-
-      // Now sim is stopped (user clicked Exit) — sim becomes inactive
-      mockSim = createMockSim({ isActive: false, isLoading: false });
-      rerender(
-        <SimulationControls {...defaultProps()} demoReady={true} currentAirport="KSFO" />
-      );
-
-      expect(screen.getByText('Start Simulation')).toBeInTheDocument();
-    });
-
-    it('calls loadDemo when Start Simulation clicked', async () => {
-      mockSim = createMockSim();
-      const { rerender } = render(
+      render(
         <SimulationControls {...defaultProps()} demoReady={true} currentAirport="KSFO" />
       );
 
       await waitFor(() => {
-        expect(mockSim.loadDemo).toHaveBeenCalled();
+        expect(mockSim.loadDemo).toHaveBeenCalledWith('KSFO');
       });
-
-      // Sim stopped
-      mockSim = createMockSim({ isActive: false, isLoading: false });
-      rerender(
-        <SimulationControls {...defaultProps()} demoReady={true} currentAirport="KSFO" />
-      );
-
-      fireEvent.click(screen.getByText('Start Simulation'));
-      expect(mockSim.loadDemo).toHaveBeenCalledWith('KSFO');
     });
   });
 
@@ -425,7 +395,7 @@ describe('SimulationControls', () => {
       mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
-      fireEvent.click(screen.getByTitle('Create, load, or monitor simulations'));
+      fireEvent.click(screen.getByTitle('Manage simulations'));
       expect(screen.getByText('Simulation Manager')).toBeInTheDocument();
     });
 
@@ -433,7 +403,7 @@ describe('SimulationControls', () => {
       mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
-      fireEvent.click(screen.getByTitle('Create, load, or monitor simulations'));
+      fireEvent.click(screen.getByTitle('Manage simulations'));
       expect(screen.getByText('Simulation Manager')).toBeInTheDocument();
 
       fireEvent.click(screen.getByText('\u00d7'));
@@ -444,7 +414,7 @@ describe('SimulationControls', () => {
       mockSim = createMockSim();
       render(<SimulationControls {...defaultProps()} backendReady={false} demoReady={false} />);
 
-      fireEvent.click(screen.getByTitle('Create, load, or monitor simulations'));
+      fireEvent.click(screen.getByTitle('Manage simulations'));
       expect(screen.getByText('Create')).toBeInTheDocument();
       expect(screen.getByText('Saved')).toBeInTheDocument();
       expect(screen.getByText('Load')).toBeInTheDocument();

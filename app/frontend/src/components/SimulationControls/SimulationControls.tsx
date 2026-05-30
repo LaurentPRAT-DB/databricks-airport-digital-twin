@@ -1082,22 +1082,6 @@ export function SimulationControls({
       );
     }
 
-    // Idle — offer restart when demo was previously running
-    if (demoAutoStarted && currentAirport && !sim.isLoading) {
-      return (
-        <button
-          onClick={() => sim.loadDemo(currentAirport)}
-          className="flex items-center gap-2 h-8 bg-indigo-600 hover:bg-indigo-500 px-3 rounded-lg text-sm transition-colors"
-          title="Restart simulation"
-        >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <polygon points="6,4 16,10 6,16" />
-          </svg>
-          Start Simulation
-        </button>
-      );
-    }
-
     return null;
   };
 
@@ -1109,11 +1093,15 @@ export function SimulationControls({
     if (dataMode !== 'simulation' && sim.isActive) {
       sim.stop();
     }
+    if (dataMode === 'simulation' && !sim.isActive && !sim.isLoading && currentAirport && demoReady) {
+      sim.loadDemo(currentAirport);
+      setDemoAutoStarted(true);
+    }
     if (dataMode === 'recorded') {
       sim.fetchRecordings();
       setShowRecordingPicker(true);
     }
-  }, [dataMode, sim]);
+  }, [dataMode, sim, currentAirport, demoReady]);
 
   const handleLoadRecording = async (airport: string, date: string, hint?: { state_count?: number; first_seen?: string; last_seen?: string }) => {
     setShowRecordingPicker(false);
@@ -1137,19 +1125,18 @@ export function SimulationControls({
         <>
           {renderHeaderButton()}
 
-          {/* Simulation manager button */}
+          {/* Simulation manager button (icon-only) */}
           <button
             onClick={() => {
               sim.fetchFiles();
               setShowManager(true);
             }}
-            className="flex items-center gap-1.5 h-8 bg-slate-700 hover:bg-slate-600 px-3 rounded-lg text-sm transition-colors"
-            title="Create, load, or monitor simulations"
+            className="flex items-center justify-center w-8 h-8 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+            title="Manage simulations"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
             </svg>
-            Simulation
           </button>
         </>
       )}
@@ -1226,35 +1213,12 @@ export function SimulationControls({
         <LiveBar flightCount={contextFlights.length} lastUpdated={contextLastUpdated} airport={currentAirport || 'KSFO'} />
       )}
 
-      {/* Recorded mode controls */}
-      {dataMode === 'recorded' && (
-        <>
-          {/* Loading indicator while fetching recording data */}
-          {sim.isLoading && (
-            <div className="flex items-center gap-2 px-3 py-1.5 text-sm text-amber-300">
-              <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-              Loading recording...
-            </div>
-          )}
-
-          {/* Load recording button (shown when no recording is playing and not loading) */}
-          {!sim.isActive && !sim.isLoading && (
-            <button
-              onClick={() => {
-                sim.fetchRecordings();
-                setShowRecordingPicker(true);
-              }}
-              className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-lg text-sm transition-colors"
-              title="Load recorded ADS-B data"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              Load Recording
-            </button>
-          )}
-
-        </>
+      {/* Recorded mode — loading indicator */}
+      {dataMode === 'recorded' && sim.isLoading && (
+        <div className="flex items-center gap-2 px-3 py-1.5 text-sm text-amber-300">
+          <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          Loading recording...
+        </div>
       )}
 
       {/* Recording picker modal */}
