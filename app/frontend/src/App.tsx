@@ -1099,7 +1099,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List + recorded mode indicator */}
         <div className="w-64 flex-shrink-0 flex flex-col overflow-hidden">
-          <div className="flex-1 min-h-0" style={{ marginBottom: 'var(--playbar-h, 0px)' }}>
+          <div className="flex-1 min-h-0 overflow-hidden" style={{ paddingBottom: 'var(--playbar-h, 0px)' }}>
             <FlightList />
           </div>
           {dataMode === 'recorded' && (
