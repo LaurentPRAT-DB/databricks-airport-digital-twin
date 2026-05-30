@@ -25,7 +25,7 @@ export default function Header({ onShowFIDS, onShowKPI, simulationControls, data
   }, [setSelectedFlight, loadAirport]);
 
   return (
-    <header className="bg-slate-800 text-white px-4 flex items-center h-14 shadow-lg z-[1002] relative">
+    <header className="bg-slate-800 text-white px-4 flex items-center h-16 shadow-lg z-[1002] relative">
       {/* Airport switch progress overlay */}
       {switchProgress && (!switchProgress.done || switchProgress.error) && (
         <div className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center">
@@ -36,8 +36,8 @@ export default function Header({ onShowFIDS, onShowKPI, simulationControls, data
         </div>
       )}
 
-      {/* Left — App title */}
-      <div className="flex-shrink-0 mr-4">
+      {/* Left — App title (aligned with left panel w-64) */}
+      <div className="w-64 flex-shrink-0">
         <h1 className="text-lg font-bold leading-tight">Airport Digital Twin</h1>
         <div className="flex items-center gap-2">
           <span
@@ -59,46 +59,56 @@ export default function Header({ onShowFIDS, onShowKPI, simulationControls, data
         </div>
       </div>
 
-      {/* Center — all action buttons */}
-      <div className="flex-1 flex items-center justify-center gap-2">
+      {/* Center — fills space between left panel and right panel */}
+      <div className="flex-1 flex items-center gap-3">
+        {/* Airport selector — aligned with start of map (end of left panel) */}
         <AirportSelector
           currentAirport={currentAirport || undefined}
           onAirportChange={handleAirportChange}
           isLoading={isLoadingAirport}
         />
 
-        {dataModeToggle}
+        {/* Mode toggles + simulation controls */}
+        <div className="flex items-center gap-1.5">
+          {dataModeToggle}
+          {simulationControls}
+        </div>
 
-        <WeatherWidget station={currentAirport || undefined} />
+        {/* Spacer */}
+        <div className="flex-1" />
 
-        {simulationControls}
+        {/* Weather + KPI + FIDS grouped together */}
+        <div className="flex items-center gap-2">
+          <WeatherWidget station={currentAirport || undefined} />
 
-        {onShowKPI && (
-          <button
-            onClick={onShowKPI}
-            className="flex items-center gap-1.5 h-8 bg-slate-700 hover:bg-slate-600 px-3 rounded-lg text-sm transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            <span>KPI</span>
-          </button>
-        )}
+          {onShowKPI && (
+            <button
+              onClick={onShowKPI}
+              className="flex items-center gap-1.5 h-8 bg-slate-700 hover:bg-slate-600 px-3 rounded-lg text-sm transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <span>KPI</span>
+            </button>
+          )}
 
-        {onShowFIDS && (
-          <button
-            onClick={onShowFIDS}
-            className="flex items-center gap-1.5 h-8 bg-slate-700 hover:bg-slate-600 px-3 rounded-lg text-sm transition-colors"
-          >
-            <span>FIDS</span>
-          </button>
-        )}
+          {onShowFIDS && (
+            <button
+              onClick={onShowFIDS}
+              className="flex items-center gap-1.5 h-8 bg-slate-700 hover:bg-slate-600 px-3 rounded-lg text-sm transition-colors"
+            >
+              <span>FIDS</span>
+            </button>
+          )}
+        </div>
 
+        {/* Platform links — right edge aligns with right panel left edge */}
         <PlatformLinks />
       </div>
 
-      {/* Right — Company logo */}
-      <div className="flex-shrink-0 ml-4">
+      {/* Right — Logo only (aligned with right panel w-80) */}
+      <div className="w-80 flex-shrink-0 flex items-center justify-end">
         <CompanyLogo />
       </div>
 

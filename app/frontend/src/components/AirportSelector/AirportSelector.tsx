@@ -183,7 +183,7 @@ export default function AirportSelector({
         onClick={() => { if (!isOpen) setLoadError(null); setIsOpen(!isOpen); }}
         disabled={isLoading}
         className={`
-          flex items-center gap-2 h-8 px-3 rounded-lg text-sm font-medium
+          flex items-center gap-2 h-8 min-w-[180px] px-3 rounded-lg text-sm font-medium
           transition-colors
           ${isLoading
             ? 'bg-slate-600 text-slate-400 cursor-wait'

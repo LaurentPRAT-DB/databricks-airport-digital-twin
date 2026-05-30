@@ -68,6 +68,15 @@ export default function PlatformLinks() {
       .then(data => {
         if (data.platform?.workspace_url) {
           setLinks(buildLinks(data.platform));
+        } else {
+          setLinks(buildLinks({
+            workspace_url: data.platform?.workspace_url || 'https://demo.cloud.databricks.com',
+            catalog: data.platform?.catalog || 'main',
+            schema: data.platform?.schema || 'airport_digital_twin',
+            dashboard_id: data.platform?.dashboard_id || 'demo-dashboard',
+            genie_space_id: data.platform?.genie_space_id || 'demo-genie',
+            lakebase_project_id: data.platform?.lakebase_project_id || 'demo-lakebase',
+          }));
         }
       })
       .catch(() => {}); // silent — links just won't appear
