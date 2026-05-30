@@ -1,6 +1,6 @@
 /**
  * Bottom-left branding icon — Databricks logo.
- * Positioned to mirror the Genie chat FAB (bottom-right).
+ * Matches the PlaybackBar pause button: same size, same circle style, aligned to bar height.
  */
 
 import { DatabricksLogo } from './DatabricksLogo';
@@ -8,11 +8,11 @@ import { DatabricksLogo } from './DatabricksLogo';
 export function BrandIcon() {
   return (
     <div
-      className="fixed bottom-4 left-4 z-[1100] w-10 h-10 rounded-full bg-slate-800/90 border border-slate-600 shadow-lg flex items-center justify-center hover:scale-105 transition-all cursor-pointer backdrop-blur"
-      style={{ bottom: 'calc(1rem + var(--tab-bar-h, 0px))' }}
+      className="fixed left-4 z-[1600] w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-slate-700 hover:bg-slate-600 transition-colors cursor-pointer flex-shrink-0"
+      style={{ bottom: 'calc(0.625rem + var(--tab-bar-h, 0px))' }}
       title="Powered by Databricks"
     >
-      <DatabricksLogo className="w-6 h-6" />
+      <DatabricksLogo className="w-5 h-5" />
     </div>
   );
 }
