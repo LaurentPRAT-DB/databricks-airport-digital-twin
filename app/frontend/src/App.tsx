@@ -20,6 +20,7 @@ import { useConnectionHealth } from './hooks/useConnectionHealth';
 import { useViewportState, SharedViewport } from './hooks/useViewportState';
 import { debugLogger } from './utils/debugLogger';
 import SimulationControls, { DataModeToggle } from './components/SimulationControls/SimulationControls';
+import AirportSelector from './components/AirportSelector/AirportSelector';
 import { MaintenanceOverlay } from './components/MaintenanceOverlay/MaintenanceOverlay';
 import { BottomRightControls } from './components/BottomRightControls/BottomRightControls';
 import { ConnectionStatus } from './components/ConnectionStatus';
@@ -727,7 +728,12 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
     return () => clearTimeout(timer);
   }, []);
   const { flights, filteredFlights, selectedFlight, setSelectedFlight, dataMode, setDataMode } = useFlightContext();
-  const { currentAirport, loadAirport, initializeDefaultAirport, demoReady: wsDemoReady } = useAirportConfigContext();
+  const { currentAirport, isLoading: isLoadingAirport, loadAirport, initializeDefaultAirport, demoReady: wsDemoReady } = useAirportConfigContext();
+
+  const handleAirportChange = useCallback((icaoCode: string) => {
+    setSelectedFlight(null);
+    return loadAirport(icaoCode);
+  }, [setSelectedFlight, loadAirport]);
 
   // Auto-switch to Info tab when a flight is newly selected on mobile
   const prevSelectedForTab = useRef(selectedFlight);
@@ -925,6 +931,14 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   // Shared map view (used in both desktop and mobile layouts)
   const mapView = (
     <div className="flex-1 overflow-hidden relative">
+      {/* Airport selector — top-left of map */}
+      <div className="absolute top-3 left-3 z-[1001]">
+        <AirportSelector
+          currentAirport={currentAirport || undefined}
+          onAirportChange={handleAirportChange}
+          isLoading={isLoadingAirport}
+        />
+      </div>
       <ViewToggle viewMode={viewMode} onToggle={setViewMode} satellite={satellite} onSatelliteToggle={setSatellite} inpainting={inpainting} onInpaintingToggle={setInpainting} airportIcao={currentAirport ?? undefined} staleTileCount={staleTileCount} warmingUp={inpaintingWarmingUp} tileActivityLog={tileActivityLog} mapZoom={viewport?.zoom ?? 13} inpaintingAvailable={inpaintingAvailable} />
       <div className={`absolute inset-0 ${viewMode === '2d' ? '' : 'invisible pointer-events-none'}`}>
         <Suspense fallback={<MapLoadingFallback label="Loading Map..." />}>

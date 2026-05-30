@@ -1,9 +1,8 @@
-import { useCallback, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useFlightContext } from '../../context/FlightContext';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import PlatformLinks from '../PlatformLinks/PlatformLinks';
 import WeatherWidget from '../Weather/WeatherWidget';
-import AirportSelector from '../AirportSelector/AirportSelector';
 import AirportSwitchProgress from '../AirportSelector/AirportSwitchProgress';
 import { CompanyLogo } from '../BrandIcon/CompanyLogo';
 
@@ -16,14 +15,8 @@ interface HeaderProps {
 }
 
 export default function Header({ onShowFIDS, onShowKPI, simulationControls, dataModeToggle, initTimings }: HeaderProps) {
-  const { error, setSelectedFlight } = useFlightContext();
-  const { currentAirport, isLoading: isLoadingAirport, error: airportError, loadAirport, switchProgress } = useAirportConfigContext();
-
-  // Clear flight selection before switching airports to avoid stale data
-  const handleAirportChange = useCallback((icaoCode: string) => {
-    setSelectedFlight(null);
-    return loadAirport(icaoCode);
-  }, [setSelectedFlight, loadAirport]);
+  const { error } = useFlightContext();
+  const { currentAirport, error: airportError, switchProgress } = useAirportConfigContext();
 
   return (
     <header className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between shadow-lg z-[1002] relative">
@@ -37,32 +30,29 @@ export default function Header({ onShowFIDS, onShowKPI, simulationControls, data
         </div>
       )}
       <div className="flex items-center gap-4">
-        <h1 className="text-xl font-bold">Airport Digital Twin</h1>
-        <span
-          className="text-xs text-slate-500"
-          title={`Built ${__BUILD_TIME__}`}
-        >
-          v{__APP_VERSION__}
-        </span>
-        {initTimings && typeof initTimings.total_ready === 'number' && (
-          <span
-            className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/60 text-emerald-400 font-mono"
-            title={Object.entries(initTimings)
-              .map(([k, v]) => `${k}: ${typeof v === 'number' ? `${(v * 1000).toFixed(0)}ms` : v}`)
-              .join('\n')}
-          >
-            init {(initTimings.total_ready as number).toFixed(1)}s
-          </span>
-        )}
+        <div>
+          <h1 className="text-xl font-bold leading-tight">Airport Digital Twin</h1>
+          <div className="flex items-center gap-2">
+            <span
+              className="text-[10px] text-slate-500"
+              title={`Built ${__BUILD_TIME__}`}
+            >
+              v{__APP_VERSION__}
+            </span>
+            {initTimings && typeof initTimings.total_ready === 'number' && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/60 text-emerald-400 font-mono"
+                title={Object.entries(initTimings)
+                  .map(([k, v]) => `${k}: ${typeof v === 'number' ? `${(v * 1000).toFixed(0)}ms` : v}`)
+                  .join('\n')}
+              >
+                init {(initTimings.total_ready as number).toFixed(1)}s
+              </span>
+            )}
+          </div>
+        </div>
 
-        {/* Airport Selector */}
-        <AirportSelector
-          currentAirport={currentAirport || undefined}
-          onAirportChange={handleAirportChange}
-          isLoading={isLoadingAirport}
-        />
-
-        {/* Data mode toggle — fixed position next to airport selector */}
+        {/* Data mode toggle */}
         {dataModeToggle}
       </div>
 
