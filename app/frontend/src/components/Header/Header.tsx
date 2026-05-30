@@ -1,8 +1,9 @@
-import { type ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
 import { useFlightContext } from '../../context/FlightContext';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import PlatformLinks from '../PlatformLinks/PlatformLinks';
 import WeatherWidget from '../Weather/WeatherWidget';
+import AirportSelector from '../AirportSelector/AirportSelector';
 import AirportSwitchProgress from '../AirportSelector/AirportSwitchProgress';
 import { CompanyLogo } from '../BrandIcon/CompanyLogo';
 
@@ -15,8 +16,13 @@ interface HeaderProps {
 }
 
 export default function Header({ onShowFIDS, onShowKPI, simulationControls, dataModeToggle, initTimings }: HeaderProps) {
-  const { error } = useFlightContext();
-  const { currentAirport, error: airportError, switchProgress } = useAirportConfigContext();
+  const { error, setSelectedFlight } = useFlightContext();
+  const { currentAirport, isLoading: isLoadingAirport, error: airportError, loadAirport, switchProgress } = useAirportConfigContext();
+
+  const handleAirportChange = useCallback((icaoCode: string) => {
+    setSelectedFlight(null);
+    return loadAirport(icaoCode);
+  }, [setSelectedFlight, loadAirport]);
 
   return (
     <header className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between shadow-lg z-[1002] relative">
@@ -51,6 +57,13 @@ export default function Header({ onShowFIDS, onShowKPI, simulationControls, data
             )}
           </div>
         </div>
+
+        {/* Airport Selector */}
+        <AirportSelector
+          currentAirport={currentAirport || undefined}
+          onAirportChange={handleAirportChange}
+          isLoading={isLoadingAirport}
+        />
 
         {/* Data mode toggle */}
         {dataModeToggle}
