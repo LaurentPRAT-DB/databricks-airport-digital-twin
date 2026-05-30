@@ -35,6 +35,9 @@ pip-delete-this-directory.txt
 # Generated reports
 reports/
 
+# Brand logo (copied from brands/<company>/logo.svg at build time)
+app/frontend/public/company-logo.svg
+
 # Unit test / coverage reports
 htmlcov/
 .tox/

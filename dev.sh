@@ -22,6 +22,10 @@ else
     UVICORN_LOG_LEVEL="info"
 fi
 
+# Brand — copy logo for local dev (default: databricks)
+BRAND="${BRAND:-databricks}"
+cp "app/frontend/brands/$BRAND/logo.svg" app/frontend/public/company-logo.svg 2>/dev/null || true
+
 # Demo defaults — override via environment variables
 export DEMO_MODE="${DEMO_MODE:-true}"
 export DEMO_DEFAULT_AIRPORT="${DEMO_DEFAULT_AIRPORT:-KSFO}"
