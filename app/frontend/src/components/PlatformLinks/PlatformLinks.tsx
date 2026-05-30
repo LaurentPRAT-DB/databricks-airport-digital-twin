@@ -79,7 +79,7 @@ export default function PlatformLinks() {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
+        className="flex items-center gap-1.5 h-8 px-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
         title="Databricks Platform Links"
       >
         <span className="text-sm">🔧</span>

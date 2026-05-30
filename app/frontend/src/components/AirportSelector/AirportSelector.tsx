@@ -183,7 +183,7 @@ export default function AirportSelector({
         onClick={() => { if (!isOpen) setLoadError(null); setIsOpen(!isOpen); }}
         disabled={isLoading}
         className={`
-          flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium
+          flex items-center gap-2 h-8 px-3 rounded-lg text-sm font-medium
           transition-colors
           ${isLoading
             ? 'bg-slate-600 text-slate-400 cursor-wait'
@@ -216,7 +216,7 @@ export default function AirportSelector({
           onClick={handleReload}
           disabled={isLoading || reloading}
           className={`
-            p-1.5 rounded-lg transition-colors
+            h-8 w-8 flex items-center justify-center rounded-lg transition-colors
             ${reloading
               ? 'bg-slate-600 text-slate-400 cursor-wait'
               : 'bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white'

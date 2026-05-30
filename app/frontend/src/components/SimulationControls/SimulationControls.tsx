@@ -796,10 +796,10 @@ function RecordingPicker({
 /** Toggle button for switching between Simulation, Live, and Recorded data modes. */
 export function DataModeToggle({ mode, onChange, showLive = true }: { mode: DataMode; onChange: (mode: DataMode) => void; showLive?: boolean }) {
   return (
-    <div className="flex items-center bg-slate-700 rounded-lg p-0.5">
+    <div className="flex items-center h-8 bg-slate-700 rounded-lg p-0.5">
       <button
         onClick={() => onChange('simulation')}
-        className={`px-2.5 py-1 rounded-md text-sm font-medium transition-colors ${
+        className={`h-full px-2.5 rounded-md text-sm font-medium transition-colors ${
           mode === 'simulation'
             ? 'bg-indigo-600 text-white shadow-sm'
             : 'text-slate-300 hover:text-white'
@@ -810,7 +810,7 @@ export function DataModeToggle({ mode, onChange, showLive = true }: { mode: Data
       {showLive && (
         <button
           onClick={() => onChange('live')}
-          className={`px-2.5 py-1 rounded-md text-sm font-medium transition-colors ${
+          className={`h-full px-2.5 rounded-md text-sm font-medium transition-colors ${
             mode === 'live'
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-300 hover:text-white'
@@ -821,7 +821,7 @@ export function DataModeToggle({ mode, onChange, showLive = true }: { mode: Data
       )}
       <button
         onClick={() => onChange('recorded')}
-        className={`px-2.5 py-1 rounded-md text-sm font-medium transition-colors ${
+        className={`h-full px-2.5 rounded-md text-sm font-medium transition-colors ${
           mode === 'recorded'
             ? 'bg-amber-600 text-white shadow-sm'
             : 'text-slate-300 hover:text-white'
@@ -1066,7 +1066,7 @@ export function SimulationControls({
     // Simulation paused (airport switched)
     if (sim.switchPaused) {
       return (
-        <div className="flex items-center gap-2 bg-amber-600 px-3 py-1.5 rounded-lg text-sm">
+        <div className="flex items-center gap-2 h-8 bg-amber-600 px-3 rounded-lg text-sm">
           <span className="text-amber-100">Simulation Paused</span>
         </div>
       );
@@ -1075,7 +1075,7 @@ export function SimulationControls({
     // Demo generating
     if (sim.isLoading || (backendReady && !demoReady && !sim.isActive)) {
       return (
-        <div className="flex items-center gap-2 bg-slate-600 px-3 py-1.5 rounded-lg text-sm opacity-80">
+        <div className="flex items-center gap-2 h-8 bg-slate-600 px-3 rounded-lg text-sm opacity-80">
           <div className="w-3 h-3 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
           <span className="text-slate-300">Preparing Simulation...</span>
         </div>
@@ -1087,7 +1087,7 @@ export function SimulationControls({
       return (
         <button
           onClick={() => sim.loadDemo(currentAirport)}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-sm transition-colors"
+          className="flex items-center gap-2 h-8 bg-indigo-600 hover:bg-indigo-500 px-3 rounded-lg text-sm transition-colors"
           title="Restart simulation"
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -1143,7 +1143,7 @@ export function SimulationControls({
               sim.fetchFiles();
               setShowManager(true);
             }}
-            className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm transition-colors"
+            className="flex items-center gap-1.5 h-8 bg-slate-700 hover:bg-slate-600 px-3 rounded-lg text-sm transition-colors"
             title="Create, load, or monitor simulations"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
