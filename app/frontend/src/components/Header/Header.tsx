@@ -36,7 +36,7 @@ export default function Header({ onShowFIDS, onShowKPI, simulationControls, data
         </div>
       )}
       <div className="flex items-center gap-4">
-        <div>
+        <div className="w-60 flex-shrink-0">
           <h1 className="text-xl font-bold leading-tight">Airport Digital Twin</h1>
           <div className="flex items-center gap-2">
             <span
