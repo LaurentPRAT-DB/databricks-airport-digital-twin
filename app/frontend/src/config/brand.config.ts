@@ -135,6 +135,8 @@ export const brand = {
     icon192: '/icons/icon-192.png',
     // Bottom-left branding — uses inline DatabricksLogo component
     brandMark: 'databricks',
+    // Top-right company logo — 'databricks-wordmark' for inline SVG, or a path for custom image
+    companyLogo: 'databricks-wordmark',
   },
 
   // ── Layout ──────────────────────────────────────────────────────────────
