@@ -272,23 +272,21 @@ function PlaybackBar({ sim, isRecorded = false, savedReport, setSavedReport }: {
   return (
     <>
     <div ref={barRef} className={`fixed left-0 right-0 z-[1500] backdrop-blur text-white px-4 py-3 shadow-lg bottom-[var(--tab-bar-h)] md:bottom-0 ${isRecorded ? 'bg-slate-900/95 border-t-2 border-amber-500/60' : 'bg-slate-900/95'}`}>
-      {/* Event legend — anchored above playbar, aligned with left panel */}
-      {visibleEventTypes.length > 0 && (
-        <div className="absolute left-0 w-64 bottom-full hidden md:block">
-          <div className="mx-3 mb-2 bg-slate-800/95 backdrop-blur rounded-lg border border-slate-700 px-3 py-2 shadow-lg max-h-[6.5rem] overflow-y-auto">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider block mb-1">Events</span>
-            <div className="flex flex-col gap-0.5">
+      <div className="flex items-center gap-2 md:gap-4 max-w-screen-xl mx-auto">
+        {/* Event legend — inline in playbar */}
+        {visibleEventTypes.length > 0 && (
+          <div className="hidden md:flex items-center gap-2 border-r border-slate-700 pr-3 mr-1 max-h-10 overflow-y-auto">
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider whitespace-nowrap">Events</span>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
               {visibleEventTypes.map((type) => (
-                <div key={type} className="flex items-center gap-1.5">
+                <div key={type} className="flex items-center gap-1">
                   <div className={`w-2 h-2 rounded-sm flex-shrink-0 ${EVENT_COLORS[type] || 'bg-gray-400'}`} />
-                  <span className="text-[10px] text-slate-400">{EVENT_LABELS[type] || type}</span>
+                  <span className="text-[10px] text-slate-400 whitespace-nowrap">{EVENT_LABELS[type] || type}</span>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-      )}
-      <div className="flex items-center gap-2 md:gap-4 max-w-screen-xl mx-auto">
+        )}
         {/* Play/Pause */}
         <button
           onClick={sim.togglePlayPause}

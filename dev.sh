@@ -24,7 +24,11 @@ fi
 
 # Brand — copy logo for local dev (default: databricks)
 BRAND="${BRAND:-databricks}"
-cp "app/frontend/brands/$BRAND/logo.svg" app/frontend/public/company-logo.svg 2>/dev/null || true
+if [[ -f "app/frontend/brands/$BRAND/logo.svg" ]]; then
+  cp "app/frontend/brands/$BRAND/logo.svg" app/frontend/public/company-logo.svg
+else
+  cp app/frontend/public/no-company-logo.jpeg app/frontend/public/company-logo.jpeg 2>/dev/null || true
+fi
 
 # Demo defaults — override via environment variables
 export DEMO_MODE="${DEMO_MODE:-true}"

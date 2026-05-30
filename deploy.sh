@@ -98,9 +98,12 @@ git rev-list --count HEAD > BUILD_NUMBER 2>/dev/null || true
 echo "Step 1: Build frontend (brand: $BRAND)"
 # Copy brand logo to public/ for the build
 BRAND_DIR="app/frontend/brands/$BRAND"
-if [[ -d "$BRAND_DIR" ]]; then
+if [[ -d "$BRAND_DIR" ]] && [[ -f "$BRAND_DIR/logo.svg" ]]; then
   cp "$BRAND_DIR/logo.svg" app/frontend/public/company-logo.svg
   ok "Brand logo copied from $BRAND_DIR/logo.svg"
+elif [[ -f "app/frontend/public/no-company-logo.jpeg" ]]; then
+  cp "app/frontend/public/no-company-logo.jpeg" app/frontend/public/company-logo.jpeg
+  ok "No brand logo found — using generic fallback (no-company-logo.jpeg)"
 else
   fail "Brand directory not found: $BRAND_DIR"; exit 1
 fi
