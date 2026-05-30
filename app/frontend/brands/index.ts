@@ -5,6 +5,7 @@
 
 import { brand as databricks } from './databricks/brand.config';
 import { brand as sita } from './sita.aero/brand.config';
+import { brand as aia } from './aia.gr/brand.config';
 
 // Use structural type to allow different literal values across brands
 type BrandShape = {
@@ -23,6 +24,7 @@ type BrandShape = {
 const BRANDS: Record<string, BrandShape> = {
   databricks,
   'sita.aero': sita,
+  'aia.gr': aia,
 };
 
 const key = import.meta.env.VITE_BRAND || 'databricks';
