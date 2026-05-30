@@ -7,7 +7,12 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"DM Sans"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
+      },
       colors: {
+        'databricks-red': '#FF3621',
+        'databricks-dark': '#1B3139',
         'airport-ground': '#6b7280',
         'airport-climbing': '#22c55e',
         'airport-descending': '#f97316',
