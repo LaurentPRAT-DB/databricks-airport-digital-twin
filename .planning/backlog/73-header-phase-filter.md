@@ -1,12 +1,14 @@
 ---
-status: backlog
+status: complete
 area: frontend
-related: []
+related:
+  - app/frontend/src/components/Header/PhaseFilter.tsx
+  - app/frontend/src/components/BottomRightControls/BottomRightControls.tsx
 ---
 
 # Header Redesign: Compact Legend with Phase Filtering
 
-**Status:** NOT YET IMPLEMENTED (backlog)
+**Status:** COMPLETE — Legend moved to bottom-right floating controls (2026-05-30)
 
 ## Context
 
