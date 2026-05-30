@@ -33,10 +33,10 @@ describe('Header', () => {
     })
   })
 
-  describe('Dark mode toggle', () => {
-    it('renders dark mode toggle button', () => {
+  describe('Company logo', () => {
+    it('renders Databricks logo', () => {
       render(<Header />)
-      expect(screen.getByTitle(/switch to dark mode/i)).toBeInTheDocument()
+      expect(screen.getByAltText('Databricks')).toBeInTheDocument()
     })
   })
 
@@ -49,32 +49,10 @@ describe('Header', () => {
     })
   })
 
-  describe('Legend / Phase filter', () => {
-    it('renders Legend button', async () => {
+  describe('Legend / Phase filter (moved to BottomRightControls)', () => {
+    it('legend button is no longer in the header', async () => {
       render(<Header />)
-      expect(screen.getByRole('button', { name: /legend/i })).toBeInTheDocument()
-    })
-
-    it('opens dropdown on click showing phase names and descriptions', async () => {
-      const user = userEvent.setup()
-      render(<Header />)
-
-      await user.click(screen.getByRole('button', { name: /legend/i }))
-
-      expect(screen.getByText(/parked/i)).toBeInTheDocument()
-      expect(screen.getByText(/takeoff/i)).toBeInTheDocument()
-      expect(screen.getByText(/approaching/i)).toBeInTheDocument()
-      expect(screen.getByText(/enroute/i)).toBeInTheDocument()
-    })
-
-    it('shows Select All and Deselect All buttons in dropdown', async () => {
-      const user = userEvent.setup()
-      render(<Header />)
-
-      await user.click(screen.getByRole('button', { name: /legend/i }))
-
-      expect(screen.getByText('Select All')).toBeInTheDocument()
-      expect(screen.getByText('Deselect All')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /legend/i })).not.toBeInTheDocument()
     })
   })
 

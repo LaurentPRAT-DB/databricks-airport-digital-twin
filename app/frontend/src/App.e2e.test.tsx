@@ -822,8 +822,8 @@ describe('End-to-end user interaction flows', () => {
 
       const header = screen.getByRole('banner')
 
-      // Legend button in header
-      expect(within(header).getByRole('button', { name: /legend/i })).toBeInTheDocument()
+      // Company logo in header
+      expect(within(header).getByAltText('Databricks')).toBeInTheDocument()
 
       // Connection status — compact dot with tooltip
       await waitFor(() => {
