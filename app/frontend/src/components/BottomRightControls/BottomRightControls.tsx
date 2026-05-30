@@ -8,6 +8,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../../context/ThemeContext';
 import { useFlightContext } from '../../context/FlightContext';
 import { PHASE_BG_CLASSES, PHASE_LABELS } from '../../utils/phaseUtils';
+import { DatabricksLogo } from '../BrandIcon/DatabricksLogo';
 
 const PHASE_GROUPS: { label: string; phases: { key: string; description: string }[] }[] = [
   {
@@ -63,14 +64,22 @@ export function BottomRightControls() {
 
   return (
     <div
-      className="fixed right-4 z-[1100] flex flex-col items-center gap-3"
-      style={{ bottom: 'calc(4.5rem + var(--tab-bar-h, 0px))' }}
+      className="fixed right-16 z-[1100] flex flex-row items-center gap-2"
+      style={{ bottom: 'calc(1rem + var(--tab-bar-h, 0px))' }}
     >
+      {/* Databricks brand icon */}
+      <div
+        className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-slate-700 hover:bg-slate-600 transition-colors cursor-pointer shadow-lg"
+        title="Powered by Databricks"
+      >
+        <DatabricksLogo className="w-5 h-5" />
+      </div>
+
       {/* Legend */}
       <div ref={legendRef} className="relative">
         <button
           onClick={() => setLegendOpen(o => !o)}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-700 hover:bg-slate-600 transition-colors text-white shadow-lg"
+          className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-slate-700 hover:bg-slate-600 transition-colors text-white shadow-lg"
           title="Flight phase legend"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
@@ -137,7 +146,7 @@ export function BottomRightControls() {
       {/* Dark mode toggle */}
       <button
         onClick={toggleTheme}
-        className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-700 hover:bg-slate-600 transition-colors text-white shadow-lg"
+        className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-slate-700 hover:bg-slate-600 transition-colors text-white shadow-lg"
         title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       >
         {isDark ? (

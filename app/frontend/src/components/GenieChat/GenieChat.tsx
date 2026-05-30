@@ -289,11 +289,11 @@ export default function GenieChat({ hideFab, externalOpen, onClose, compact }: G
       {!isOpen && !hideFab && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-4 right-4 z-[1100] w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-lg flex items-center justify-center transition-all hover:scale-105"
+          className="fixed bottom-4 right-4 z-[1100] w-9 h-9 md:w-10 md:h-10 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-lg flex items-center justify-center transition-all hover:scale-105"
           title="Ask Airport Operations Assistant"
           data-testid="genie-fab"
         >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
         </button>
