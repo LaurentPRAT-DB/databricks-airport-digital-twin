@@ -61,6 +61,7 @@ The config has these sections — all are required:
 | `logo` | Logo references and brand mark identifier |
 | `layout` | Header bg color, sidebar widths, z-indexes |
 | `components` | Tailwind class overrides for buttons, cards, badges, navbar, modals |
+| `defaultAirport` | (optional) ICAO code to load on startup (e.g. `'LSGG'`) |
 
 ### 4. Key fields to change
 
@@ -119,6 +120,14 @@ layout: {
   // ...
 }
 ```
+
+**Default Airport** (optional):
+
+```typescript
+defaultAirport: 'LSGG',  // ICAO code — app opens at this airport on startup
+```
+
+When set, the app skips the system default and loads this airport immediately. Use the customer's primary hub airport.
 
 **Components** — update Tailwind classes with your colors:
 
@@ -228,10 +237,12 @@ Tools: [UIColors.app](https://uicolors.app), [Tailwind color generator](https://
 
 - [ ] Created `app/frontend/brands/<name>/` directory
 - [ ] Created `brand.config.ts` with all required sections
+- [ ] Set `defaultAirport` to customer's primary hub (optional)
 - [ ] Added white/light logo SVG
 - [ ] Created `index.ts` re-export
 - [ ] Registered brand in `brands/index.ts` loader
 - [ ] Tested locally: `VITE_BRAND=<name> npm run dev`
 - [ ] Verified header renders correctly (logo + colors)
+- [ ] Verified correct airport loads on startup
 - [ ] Verified buttons, cards, badges use new colors
-- [ ] Deployed: `./deploy.sh --brand <name>`
+- [ ] Deployed: `./deploy.sh --brand <name> --target <target>`
