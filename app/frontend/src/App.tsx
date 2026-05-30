@@ -1094,8 +1094,8 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
       <Header onShowFIDS={() => setShowFIDS(true)} onShowKPI={() => setShowKPI(true)} simulationControls={simulationControlsNode} dataModeToggle={dataModeToggleNode} initTimings={initTimings} />
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
       {showKPI && <KPIDashboard onClose={() => setShowKPI(false)} />}
-      <GenieChat />
-      <BottomRightControls />
+      <GenieChat hideFab externalOpen={showChat} onClose={() => setShowChat(false)} />
+      <BottomRightControls onOpenChat={() => setShowChat(true)} />
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List + recorded mode indicator */}
         <div className="w-64 flex-shrink-0 flex flex-col overflow-hidden">
