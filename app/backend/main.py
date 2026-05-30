@@ -739,6 +739,29 @@ if FRONTEND_DIST.exists():
             return FileResponse(svg_file, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
         raise HTTPException(status_code=404, detail="Favicon not found")
 
+    # Serve company logo (brand-specific, copied at build time)
+    @app.get("/company-logo.svg")
+    async def serve_company_logo_svg():
+        logo = FRONTEND_DIST / "company-logo.svg"
+        if logo.exists():
+            return FileResponse(logo, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=3600"})
+        raise HTTPException(status_code=404, detail="Company logo not found")
+
+    @app.get("/company-logo.jpeg")
+    async def serve_company_logo_jpeg():
+        logo = FRONTEND_DIST / "company-logo.jpeg"
+        if logo.exists():
+            return FileResponse(logo, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=3600"})
+        raise HTTPException(status_code=404, detail="Company logo not found")
+
+    # Serve Databricks logo (legacy path)
+    @app.get("/databricks-logo.svg")
+    async def serve_databricks_logo():
+        logo = FRONTEND_DIST / "databricks-logo.svg"
+        if logo.exists():
+            return FileResponse(logo, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
+        raise HTTPException(status_code=404, detail="Logo not found")
+
     # Serve service worker with correct MIME type
     @app.get("/sw.js")
     async def serve_service_worker():
