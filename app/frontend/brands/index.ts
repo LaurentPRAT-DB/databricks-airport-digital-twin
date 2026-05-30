@@ -17,6 +17,7 @@ type BrandShape = {
   logo: Record<string, string>;
   layout: Record<string, any>;
   components: Record<string, any>;
+  defaultAirport?: string;
 };
 
 const BRANDS: Record<string, BrandShape> = {

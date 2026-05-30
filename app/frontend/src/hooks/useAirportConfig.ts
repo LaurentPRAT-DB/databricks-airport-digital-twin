@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { brand } from '../../brands';
 import {
   AirportConfig,
   ConfigResponse,
@@ -561,8 +562,8 @@ export function useAirportConfig(): UseAirportConfigReturn {
     } catch {
       // Fall through to fallback
     }
-    // Fallback if /api/config is unavailable or missing the field
-    await loadAirport('KSFO');
+    // Fallback: use brand default, then KSFO
+    await loadAirport(brand.defaultAirport || 'KSFO');
   }, [loadAirport]);
 
   /**

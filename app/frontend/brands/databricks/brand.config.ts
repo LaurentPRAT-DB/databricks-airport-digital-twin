@@ -199,6 +199,8 @@ export const brand = {
       size: 'w-12 h-12',
     },
   },
+  // ── Default Airport ──────────────────────────────────────────────────────
+  defaultAirport: 'KSFO',
 } as const;
 
 export type BrandConfig = typeof brand;
