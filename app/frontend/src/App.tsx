@@ -21,6 +21,7 @@ import { useViewportState, SharedViewport } from './hooks/useViewportState';
 import { debugLogger } from './utils/debugLogger';
 import SimulationControls, { DataModeToggle } from './components/SimulationControls/SimulationControls';
 import { MaintenanceOverlay } from './components/MaintenanceOverlay/MaintenanceOverlay';
+import { BrandIcon } from './components/BrandIcon/BrandIcon';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { Flight } from './types/flight';
 
@@ -1094,6 +1095,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
       {showFIDS && <FIDS onClose={() => setShowFIDS(false)} simTime={simTime} />}
       {showKPI && <KPIDashboard onClose={() => setShowKPI(false)} />}
       <GenieChat />
+      <BrandIcon />
       <main className="flex-1 flex overflow-hidden">
         {/* Left panel: Flight List + recorded mode indicator */}
         <div className="w-64 flex-shrink-0 flex flex-col overflow-hidden">
