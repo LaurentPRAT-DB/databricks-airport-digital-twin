@@ -72,6 +72,16 @@ LAKEBASE_PROJECT="${LAKEBASE_PROJECT:-airport-digital-twin}"
 LAKEBASE_BRANCH="${LAKEBASE_BRANCH:-production}"
 LAKEBASE_HOST="${LAKEBASE_HOST:-}"
 SKIP_BUILD="${SKIP_BUILD:-}"
+
+# Brand → default airport mapping (must match brand.config.ts defaultAirport)
+_brand_default_airport() {
+  case "$BRAND" in
+    sita.aero) echo "LSGG" ;;
+    aia.gr)    echo "LGAV" ;;
+    *)         echo "KSFO" ;;
+  esac
+}
+DEMO_DEFAULT_AIRPORT="${DEMO_DEFAULT_AIRPORT:-$(_brand_default_airport)}"
 SEED="${SEED:-}"
 
 ok()   { echo "  ✓ $1"; }
@@ -165,6 +175,7 @@ overrides = {
     'DATABRICKS_CATALOG': '$UC_CATALOG',
     'DATABRICKS_SCHEMA': '$UC_SCHEMA',
     'DATABRICKS_WAREHOUSE_ID': '$WAREHOUSE_ID',
+    'DEMO_DEFAULT_AIRPORT': '$DEMO_DEFAULT_AIRPORT',
 }
 for env in cfg.get('env', []):
     if env.get('name') in overrides:
