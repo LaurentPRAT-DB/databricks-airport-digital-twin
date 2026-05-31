@@ -246,32 +246,46 @@ try:
     me = w.current_user.me()
 
     import psycopg2
-    conn = psycopg2.connect(
-        host=lb_host, port=5432, dbname="databricks_postgres",
-        user=me.user_name, password=cred.token, sslmode="require"
-    )
-    conn.autocommit = True
-    cur = conn.cursor()
+    import time as _time
 
-    cur.execute(f'GRANT USAGE ON SCHEMA public TO "{app_sp}"')
-    cur.execute(f'GRANT CREATE ON SCHEMA public TO "{app_sp}"')
-    cur.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{app_sp}"')
-    cur.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "{app_sp}"')
+    def _run_grants():
+        conn = psycopg2.connect(
+            host=lb_host, port=5432, dbname="databricks_postgres",
+            user=me.user_name, password=cred.token, sslmode="require"
+        )
+        conn.autocommit = True
+        cur = conn.cursor()
 
-    # Grant on all existing tables
-    cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
-    tables = [row[0] for row in cur.fetchall()]
-    for t in tables:
-        cur.execute(f'GRANT ALL PRIVILEGES ON TABLE "{t}" TO "{app_sp}"')
+        cur.execute(f'GRANT USAGE ON SCHEMA public TO "{app_sp}"')
+        cur.execute(f'GRANT CREATE ON SCHEMA public TO "{app_sp}"')
+        cur.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{app_sp}"')
+        cur.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "{app_sp}"')
 
-    # Grant on all existing sequences (required for INSERT with serial/identity columns)
-    cur.execute("SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public'")
-    sequences = [row[0] for row in cur.fetchall()]
-    for s in sequences:
-        cur.execute(f'GRANT ALL PRIVILEGES ON SEQUENCE "{s}" TO "{app_sp}"')
+        cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        tables = [row[0] for row in cur.fetchall()]
+        for t in tables:
+            cur.execute(f'GRANT ALL PRIVILEGES ON TABLE "{t}" TO "{app_sp}"')
 
-    conn.close()
-    print(f"  [OK] Lakebase SQL grants on {len(tables)} table(s), {len(sequences)} sequence(s)")
+        cur.execute("SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public'")
+        sequences = [row[0] for row in cur.fetchall()]
+        for s in sequences:
+            cur.execute(f'GRANT ALL PRIVILEGES ON SEQUENCE "{s}" TO "{app_sp}"')
+
+        conn.close()
+        return len(tables), len(sequences)
+
+    # Retry up to 3 times — handles transient "tuple concurrently updated" errors
+    for _attempt in range(3):
+        try:
+            _n_tables, _n_seqs = _run_grants()
+            print(f"  [OK] Lakebase SQL grants on {_n_tables} table(s), {_n_seqs} sequence(s)")
+            break
+        except Exception as _grant_err:
+            if _attempt < 2 and "concurrently updated" in str(_grant_err):
+                print(f"  [RETRY] Lakebase grant race detected, retrying in 2s...")
+                _time.sleep(2)
+            else:
+                raise _grant_err
 
 except ImportError as e:
     print(f"  [SKIP] Lakebase role (missing dependency: {e})")
