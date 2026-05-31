@@ -90,7 +90,6 @@ from src.ingestion._flight_lifecycle import (
     _get_turnaround_congestion_factor,
     _get_turnaround_international_factor,
     _get_turnaround_day_of_week_factor,
-    _gate_last_delay,
     _GATE_PHASES,
     _build_turnaround_schedule,
     _get_aircraft_type_for_airline,

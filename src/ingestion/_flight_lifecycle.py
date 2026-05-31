@@ -117,86 +117,56 @@ from src.ingestion._taxi_routing import (
 )
 
 
-# Calibration override: when set (> 0), the physics turnaround uses this
-# median gate time (in minutes) from BTS OTP data instead of the GSE model's
-# nominal timing.  The simulation engine populates this from the airport profile.
-_calibration_gate_minutes: float = 0.0
+# ============================================================================
+# CALIBRATION STATE — single dataclass holds all per-run calibration params
+# ============================================================================
+
+from src.ingestion._calibration_state import SimCalibration
+
+_calibration = SimCalibration()
+
+
+def reset_calibration() -> None:
+    """Reset all calibration state to defaults. Called between simulation runs."""
+    global _calibration
+    _calibration = SimCalibration()
 
 
 def set_calibration_gate_minutes(minutes: float) -> None:
     """Set calibrated median gate turnaround time (minutes). 0 disables."""
-    global _calibration_gate_minutes
-    _calibration_gate_minutes = minutes
-
-
-# Calibration: BTS taxi-out mean time in seconds.  When set (> 0), the
-# taxi_to_runway phase adds a departure-queue hold so total taxi-out duration
-# (waypoint travel + hold) matches the real-world BTS mean.
-_calibration_taxi_out_target_s: float = 0.0
-_calibration_taxi_out_p95_s: float = 0.0
-# Estimated seconds the waypoint path alone takes (set once per airport).
-_calibration_taxi_out_waypoint_s: float = 0.0
+    _calibration.gate_minutes = minutes
 
 
 def set_calibration_taxi_out(mean_minutes: float, waypoint_travel_s: float = 180.0, p95_minutes: float = 0.0) -> None:
-    """Set calibrated taxi-out target from BTS OTP data.
-
-    Args:
-        mean_minutes: BTS mean taxi-out time in minutes (e.g. 20.1 for SFO).
-        waypoint_travel_s: estimated seconds the sim's waypoint path takes
-            without any hold (default 180s ~ 3 min at 25 kts over 5 waypoints).
-        p95_minutes: BTS P95 taxi-out time. Used to cap queue hold.
-    """
-    global _calibration_taxi_out_target_s, _calibration_taxi_out_waypoint_s, _calibration_taxi_out_p95_s
-    _calibration_taxi_out_target_s = mean_minutes * 60.0
-    _calibration_taxi_out_waypoint_s = waypoint_travel_s
-    _calibration_taxi_out_p95_s = p95_minutes * 60.0 if p95_minutes > 0 else mean_minutes * 60.0 * 1.8
-
-
-# Calibration: BTS taxi-in mean time in seconds.  When set (> 0), the
-# taxi_to_gate phase adds an arrival hold so total taxi-in duration
-# (waypoint travel + hold) matches the real-world BTS mean.
-_calibration_taxi_in_target_s: float = 0.0
-_calibration_taxi_in_waypoint_s: float = 0.0
-_calibration_taxi_in_p95_s: float = 0.0
+    """Set calibrated taxi-out target from BTS OTP data."""
+    _calibration.taxi_out_target_s = mean_minutes * 60.0
+    _calibration.taxi_out_waypoint_s = waypoint_travel_s
+    _calibration.taxi_out_p95_s = p95_minutes * 60.0 if p95_minutes > 0 else mean_minutes * 60.0 * 1.8
 
 
 def set_calibration_taxi_in(mean_minutes: float, waypoint_travel_s: float = 120.0, p95_minutes: float = 0.0) -> None:
-    """Set calibrated taxi-in target from BTS OTP data.
-
-    Args:
-        mean_minutes: BTS mean taxi-in time in minutes (e.g. 7.6 for SFO).
-        waypoint_travel_s: estimated seconds the sim's waypoint path takes
-            without any hold (default 120s ~ 2 min at 30 kts inbound).
-        p95_minutes: BTS P95 taxi-in time. Used to cap arrival hold.
-    """
-    global _calibration_taxi_in_target_s, _calibration_taxi_in_waypoint_s, _calibration_taxi_in_p95_s
-    _calibration_taxi_in_target_s = mean_minutes * 60.0
-    _calibration_taxi_in_waypoint_s = waypoint_travel_s
-    _calibration_taxi_in_p95_s = p95_minutes * 60.0 if p95_minutes > 0 else mean_minutes * 60.0 * 2.0
-
-
-# ============================================================================
-# WEATHER STATE — updated by simulation engine each weather tick
-# ============================================================================
-
-_current_weather: Dict[str, float] = {"wind_speed_kts": 0.0, "visibility_sm": 10.0}
+    """Set calibrated taxi-in target from BTS OTP data."""
+    _calibration.taxi_in_target_s = mean_minutes * 60.0
+    _calibration.taxi_in_waypoint_s = waypoint_travel_s
+    _calibration.taxi_in_p95_s = p95_minutes * 60.0 if p95_minutes > 0 else mean_minutes * 60.0 * 2.0
 
 
 def set_current_weather(wind_speed_kts: float, visibility_sm: float) -> None:
     """Called by simulation engine after each weather update."""
-    _current_weather["wind_speed_kts"] = wind_speed_kts
-    _current_weather["visibility_sm"] = visibility_sm
+    _calibration.weather_wind_kts = wind_speed_kts
+    _calibration.weather_visibility_sm = visibility_sm
+
+
+def get_current_weather() -> Dict[str, float]:
+    """Return current weather state as dict (backward compat)."""
+    return {"wind_speed_kts": _calibration.weather_wind_kts, "visibility_sm": _calibration.weather_visibility_sm}
 
 
 def _get_turnaround_weather_factor() -> float:
-    """Weather impact on ground handling operations.
-
-    High winds slow fueling/cargo; low visibility slows ramp movement.
-    """
+    """Weather impact on ground handling operations."""
     factor = 1.0
-    wind = _current_weather.get("wind_speed_kts", 0.0)
-    vis = _current_weather.get("visibility_sm", 10.0)
+    wind = _calibration.weather_wind_kts
+    vis = _calibration.weather_visibility_sm
 
     if wind > 50:
         factor += 0.25
@@ -213,8 +183,6 @@ def _get_turnaround_weather_factor() -> float:
         factor += 0.05
 
     return factor
-
-
 
 
 def _get_turnaround_congestion_factor() -> float:
@@ -241,16 +209,10 @@ def _get_turnaround_international_factor(state: "FlightState") -> float:
         return 1.25
     return 1.0
 
-# ============================================================================
-# GATE-KEYED INBOUND DELAY TRACKING (for reactionary delay prediction)
-# ============================================================================
-
-_gate_last_delay: Dict[str, float] = {}
-
 
 def get_gate_last_delay(gate_id: str) -> float:
     """Return the delay of the last inbound flight at this gate (minutes)."""
-    return _gate_last_delay.get(gate_id, 0.0)
+    return _calibration.gate_last_delay.get(gate_id, 0.0)
 
 
 def get_airport_load_ratio() -> float:
@@ -923,7 +885,7 @@ def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
             if state.assigned_gate:
                 _h = (hash(state.icao24) ^ hash(state.callsign[:3] if state.callsign else "")) & 0xFFFF
                 inbound_delay = (5 + ((_h >> 8) % 41)) if ((_h >> 4) % 5 == 0) else 0
-                _gate_last_delay[state.assigned_gate] = float(inbound_delay)
+                _calibration.gate_last_delay[state.assigned_gate] = float(inbound_delay)
             # Snap to gate position, then offset away from terminal
             gate_pos = get_gates().get(state.assigned_gate)
             if gate_pos:
@@ -987,13 +949,13 @@ def _update_parked(state: FlightState, dt: float) -> None:
 
     # Realistic turnaround: use calibrated BTS data if available,
     # otherwise fall back to GSE model timing
-    if _calibration_gate_minutes > 0:
+    if _calibration.gate_minutes > 0:
         # Calibrated: use BTS OTP median turnaround (already gate-only time)
         category = get_aircraft_category(state.aircraft_type)
         if category == "wide_body":
-            gate_minutes = _calibration_gate_minutes * 1.4
+            gate_minutes = _calibration.gate_minutes * 1.4
         else:
-            gate_minutes = _calibration_gate_minutes
+            gate_minutes = _calibration.gate_minutes
     else:
         # Fallback: GSE model total minus taxi/pushback phases
         timing = get_turnaround_timing(state.aircraft_type)
@@ -1739,9 +1701,9 @@ def _update_taxi_to_runway(state: FlightState, dt: float) -> FlightState | None:
     else:
         _, _, dep_hdg, _ = _get_takeoff_runway_geometry()
         state.heading = _smooth_heading(state.heading, dep_hdg, 5.0, dt)
-        if not state.departure_queue_set and _calibration_taxi_out_target_s > 0:
-            queue_base = max(0.0, _calibration_taxi_out_target_s - _calibration_taxi_out_waypoint_s)
-            p95_budget = max(0.0, _calibration_taxi_out_p95_s - _calibration_taxi_out_waypoint_s) * 0.7
+        if not state.departure_queue_set and _calibration.taxi_out_target_s > 0:
+            queue_base = max(0.0, _calibration.taxi_out_target_s - _calibration.taxi_out_waypoint_s)
+            p95_budget = max(0.0, _calibration.taxi_out_p95_s - _calibration.taxi_out_waypoint_s) * 0.7
             state.departure_queue_hold_s = min(queue_base * random.uniform(0.70, 1.10), p95_budget)
             state.departure_queue_set = True
             if state.departure_queue_hold_s > 0:
@@ -1751,7 +1713,7 @@ def _update_taxi_to_runway(state: FlightState, dt: float) -> FlightState | None:
         dep_rwy = _get_departure_runway_name()
         runway_clear = _is_runway_clear(dep_rwy)
         state.phase_progress += dt
-        p95_exceeded = (_calibration_taxi_out_p95_s > 0
+        p95_exceeded = (_calibration.taxi_out_p95_s > 0
                         and state.phase_progress > 180.0)
         if runway_clear or p95_exceeded:
             runway_st = _get_runway_state(dep_rwy)

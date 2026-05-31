@@ -11,7 +11,7 @@ import pytest
 from src.ingestion.fallback import (
     AIRLINE_TURNAROUND_FACTOR,
     _DEFAULT_AIRLINE_FACTOR,
-    _current_weather,
+    get_current_weather,
     _get_turnaround_weather_factor,
     set_current_weather,
 )
@@ -136,11 +136,11 @@ class TestWeatherTurnaroundFactor:
 class TestSetCurrentWeather:
     def test_updates_module_state(self):
         set_current_weather(25.0, 3.0)
-        assert _current_weather["wind_speed_kts"] == 25.0
-        assert _current_weather["visibility_sm"] == 3.0
+        assert get_current_weather()["wind_speed_kts"] == 25.0
+        assert get_current_weather()["visibility_sm"] == 3.0
 
     def test_reset_to_calm(self):
         set_current_weather(50.0, 0.5)
         set_current_weather(0.0, 10.0)
-        assert _current_weather["wind_speed_kts"] == 0.0
-        assert _current_weather["visibility_sm"] == 10.0
+        assert get_current_weather()["wind_speed_kts"] == 0.0
+        assert get_current_weather()["visibility_sm"] == 10.0

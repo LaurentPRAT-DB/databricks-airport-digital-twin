@@ -52,6 +52,7 @@ from src.ingestion.fallback import (
     DEPARTURE_WAYPOINTS,
     apply_airport_offset,
     reset_airport_offset,
+    reset_calibration,
     set_calibration_gate_minutes,
     set_calibration_taxi_out,
     set_calibration_taxi_in,
@@ -350,6 +351,8 @@ class SimulationEngine:
 
     def _reset_global_state(self) -> None:
         """Reset fallback.py global state for a clean simulation."""
+        reset_calibration()
+
         # Set calibrated gate turnaround time from profile (0 = use GSE model)
         set_calibration_gate_minutes(self.airport_profile.turnaround_median_min)
 

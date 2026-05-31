@@ -178,18 +178,18 @@ from src.ingestion._taxi_routing import (  # noqa: F401
 )
 
 from src.ingestion._flight_lifecycle import (  # noqa: F401
-    _current_weather,
+    reset_calibration,
     set_calibration_gate_minutes,
     set_calibration_taxi_out,
     set_calibration_taxi_in,
     set_current_weather,
+    get_current_weather,
     _get_turnaround_weather_factor,
     _get_turnaround_congestion_factor,
     _get_turnaround_day_of_week_factor,
     _get_turnaround_international_factor,
     get_gate_last_delay,
     get_airport_load_ratio,
-    _gate_last_delay,
     _get_aircraft_type_for_airline,
     _is_international_airport,
     _get_origin_country,
