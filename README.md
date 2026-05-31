@@ -24,6 +24,7 @@
 | **LLM-powered reports** | Post-simulation narrative reports with interactive chat and what-if simulation |
 | **Platform integration** | Lakeview dashboards, Genie NL queries, Unity Catalog, MLflow, Data Lineage |
 | **Data format importers** | AIXM, OSM, IFC, AIDM, FAA NASR, MSFS BGL |
+| **Multi-brand** | White-label system — swappable logo, colors, default airport per brand (Databricks, SITA, Athens Airport) |
 | **CI/CD** | GitHub Actions — CI on push (Python + frontend tests), CD on merge to main (DABs deploy + post-deploy verification) |
 | **~4,700 tests** | Python + frontend + 3 Databricks workspace jobs |
 
@@ -129,6 +130,11 @@ Airport operators manage thousands of flights daily across interconnected system
 | **Unity Catalog** | Browse all tables and schemas |
 
 ### Three Data Modes
+
+The mode toggle is action-driven — clicking a mode immediately activates it:
+- **Simulation** → auto-starts the demo (re-click to restart if stopped)
+- **Recorded** → auto-opens the recording picker (re-click to reopen)
+- **Live** → connects to OpenSky Network (visible only when API is responding)
 
 | Mode | Source | Use Case |
 |---|---|---|
@@ -274,6 +280,25 @@ Five managed volumes under `serverless_stable_3n0ihb_catalog.airport_digital_twi
 | `opensky_raw` | Raw ADS-B JSONL from OpenSky Network | 92 MB+ |
 
 > For volume details, population methods, and runtime access patterns, see [UC Volumes Reference](docs/UC_VOLUMES.md).
+
+### Multi-Brand System
+
+The application supports white-label branding — switch visual identity per deployment target.
+
+| Brand | Default Airport | Logo | Config |
+|---|---|---|---|
+| `databricks` | KSFO | Databricks wordmark | `brands/databricks/brand.config.ts` |
+| `sita.aero` | LSGG | SITA wordmark | `brands/sita.aero/brand.config.ts` |
+| `aia.gr` | LGAV | Athens Airport crest + "International Airport" | `brands/aia.gr/brand.config.ts` |
+
+```bash
+BRAND=aia.gr ./dev.sh          # Local dev with Athens Airport brand
+./deploy.sh --brand sita.aero  # Deploy with SITA brand
+```
+
+Brand config controls: colors, typography, logo, default airport, company name (displayed next to vertical logos), and component styling.
+
+> For full customization guide, see [Branding Guide](docs/BRANDING_GUIDE.md).
 
 ### Environment Variables
 
@@ -649,7 +674,9 @@ After a simulation completes, an LLM-powered report generator can produce a narr
 ### Local Development
 
 ```bash
-./dev.sh  # Starts FastAPI backend + React dev server, opens http://localhost:3000
+./dev.sh                   # Starts backend + frontend at http://localhost:3000 (databricks brand)
+BRAND=aia.gr ./dev.sh      # Start with Athens Airport brand
+BRAND=sita.aero ./dev.sh   # Start with SITA brand
 ```
 
 ### Directory Structure
@@ -714,11 +741,15 @@ docs/                  # Technical documentation + screenshots
 | [Data Sources & KPIs](docs/AIRPORT_DATA_SOURCES_AND_KPIS.md) | Operators | Open aviation data catalog + KPI reference |
 | [Production Deployment](docs/PRODUCTION_DEPLOYMENT.md) | Admins | First-time workspace setup, secrets, network access |
 | [Backup & Restore](docs/BACKUP_AND_RESTORE.md) | Admins | Portable backup and cross-workspace migration |
+| [Branding Guide](docs/BRANDING_GUIDE.md) | Admins | White-label brand customization (logo, colors, defaults) |
 | [UC Volumes](docs/UC_VOLUMES.md) | Admins | Volume inventory, population, and access patterns |
 | [External API Calls](docs/external_api_calls.md) | Admins | Full inventory of outbound service dependencies |
 | [Security Audit](docs/SECURITY_AUDIT.md) | Admins | Security review findings |
+| [Databricks Dependencies (EU)](docs/DATABRICKS_DEPENDENCIES_EU.md) | Admins | EU workspace resource requirements |
 | [Data Pipeline](docs/PIPELINE.md) | Developers | DLT Bronze/Silver/Gold architecture |
 | [Data Dictionary](docs/DATA_DICTIONARY.md) | Developers | Schema definitions for all tables |
+| [Assistant Architecture](docs/ASSISTANT_ARCHITECTURE.md) | Developers | Unified LLM assistant (Genie + MCP routing) |
+| [OpenSky Integration](docs/OPENSKY_INTEGRATION.md) | Developers | Live ADS-B tracking, recording, and replay |
 | [MSFS BGL Import](docs/MSFS_BGL_IMPORT.md) | Developers | Microsoft Flight Simulator scenery data import |
 | [Development Philosophy](docs/DEVELOPMENT_PHILOSOPHY.md) | Developers | Design principles |
 | [ML Models](docs/ML_MODELS.md) | Data Scientists | Delay, gate, congestion, turnaround, OBT model internals |
@@ -727,6 +758,7 @@ docs/                  # Technical documentation + screenshots
 | [Synthetic Data](docs/SYNTHETIC_DATA_GENERATION.md) | Data Scientists | Synthetic data generation constraints |
 | [Aircraft Separation](docs/AIRCRAFT_SEPARATION.md) | Data Scientists | FAA/ICAO separation standards |
 | [Simulation Guide](docs/SIMULATION_GUIDE.md) | All | Run deterministic airport simulations |
+| [Simulation User Guide](docs/simulation_user_guide.md) | All | UI-focused simulation playback guide |
 | [Delta Sharing](docs/DELTA_SHARING.md) | All | Cross-organization data sharing |
 | [V2 Roadmap](docs/ROADMAP_V2.md) | All | Feature roadmap |
 
