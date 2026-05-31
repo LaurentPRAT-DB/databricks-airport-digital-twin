@@ -1,58 +1,59 @@
 /**
  * SITA.AERO brand configuration.
- * Colors and fonts extracted from sita.aero website CSS.
+ * Light theme with navy/sky-blue palette per sita.aero corporate identity.
+ * Navy: #003366 | Blue: #0066CC | Sky: #00A3E0 | Light: #F5F5F5
  */
 
 export const brand = {
   colors: {
     databricks: {
-      red: '#4c3de3',
-      redHover: '#3a2ec4',
-      redLight: '#7b6ef0',
-      dark: '#1e1e1e',
-      darkHover: '#2d2d2d',
-      light: '#e8e8e3',
+      red: '#003366',
+      redHover: '#002244',
+      redLight: '#0066CC',
+      dark: '#003366',
+      darkHover: '#002244',
+      light: '#F5F5F5',
     },
     primary: {
-      50: '#f5f3ff',
-      100: '#ede9fe',
-      200: '#ddd6fe',
-      300: '#c4b5fd',
-      400: '#a78bfa',
-      500: '#4c3de3',
-      600: '#3a2ec4',
-      700: '#2e25a0',
-      800: '#231c7c',
-      900: '#1a1560',
+      50: '#E6F4FB',
+      100: '#CCE9F7',
+      200: '#99D3EF',
+      300: '#66BDE7',
+      400: '#33A7DF',
+      500: '#0066CC',
+      600: '#005CB8',
+      700: '#004D99',
+      800: '#003D7A',
+      900: '#003366',
     },
     secondary: {
-      400: '#33b5e5',
-      500: '#0095da',
-      600: '#0077b0',
+      400: '#33B8E8',
+      500: '#00A3E0',
+      600: '#0082B3',
     },
     accent: {
-      emerald: '#2b3e2b',
-      amber: '#fef387',
-      red: '#d0021b',
+      emerald: '#008A5E',
+      amber: '#E68A00',
+      red: '#CC3333',
     },
     neutrals: {
-      50: '#f5f5f5',
-      100: '#e8e8e3',
-      200: '#d9d9d4',
-      300: '#b8b8b3',
-      400: '#787878',
-      500: '#5a5a5a',
-      600: '#3d3d3d',
-      700: '#2d2d2d',
-      800: '#1e1e1e',
-      900: '#0a0a0b',
+      50: '#FFFFFF',
+      100: '#F5F5F5',
+      200: '#E8E8E8',
+      300: '#D0D0D0',
+      400: '#999999',
+      500: '#666666',
+      600: '#4D4D4D',
+      700: '#333333',
+      800: '#1A1A1A',
+      900: '#0D0D0D',
       950: '#050505',
     },
     flightPhase: {
-      ground: '#787878',
-      climbing: '#2b3e2b',
-      descending: '#d0021b',
-      cruising: '#0095da',
+      ground: '#666666',
+      climbing: '#008A5E',
+      descending: '#CC3333',
+      cruising: '#00A3E0',
     },
   },
 
@@ -105,13 +106,13 @@ export const brand = {
   },
   shadows: {
     sm: '0 1px 2px rgba(0, 0, 0, 0.05)',
-    md: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-    lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-    xl: '0 4px 20px rgba(0, 0, 0, 0.4)',
+    md: '0 4px 6px -1px rgba(0, 0, 0, 0.08)',
+    lg: '0 10px 15px -3px rgba(0, 0, 0, 0.08)',
+    xl: '0 4px 20px rgba(0, 0, 0, 0.12)',
   },
   backdrop: {
     blur: 'backdrop-blur',
-    overlay: 'rgba(0, 0, 0, 0.5)',
+    overlay: 'rgba(0, 0, 0, 0.4)',
   },
 
   logo: {
@@ -126,7 +127,7 @@ export const brand = {
   layout: {
     header: {
       height: '56px',
-      bg: 'bg-[#1e1e1e]',
+      bg: 'bg-[#003366]',
       zIndex: 1002,
     },
     sidebar: {
@@ -135,7 +136,7 @@ export const brand = {
     },
     playbackBar: {
       zIndex: 1500,
-      bg: 'bg-[#1e1e1e]/95',
+      bg: 'bg-[#003366]/95',
     },
     genieChat: {
       zIndex: 1100,
@@ -152,29 +153,29 @@ export const brand = {
   components: {
     button: {
       base: 'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
-      primary: 'bg-[#4c3de3] hover:bg-[#3a2ec4] text-white',
-      secondary: 'bg-[#2d2d2d] hover:bg-[#3d3d3d] text-white',
-      ghost: 'hover:bg-[#2d2d2d] text-[#b8b8b3]',
+      primary: 'bg-[#0066CC] hover:bg-[#005CB8] text-white',
+      secondary: 'bg-[#003366] hover:bg-[#002244] text-white',
+      ghost: 'hover:bg-[#E6F4FB] text-[#003366]',
     },
     card: {
       base: 'rounded-lg border',
-      light: 'bg-white border-[#e8e8e3]',
-      dark: 'bg-[#2d2d2d] border-[#3d3d3d]',
+      light: 'bg-white border-[#E8E8E8]',
+      dark: 'bg-[#003366] border-[#004D99]',
     },
     badge: {
       base: 'px-1.5 py-0.5 rounded text-[10px] font-mono',
-      success: 'bg-[#2b3e2b]/60 text-[#bbe8ee]',
-      warning: 'bg-[#fef387]/20 text-[#fef387]',
-      error: 'bg-[#d0021b]/20 text-[#d0021b]',
+      success: 'bg-[#008A5E]/10 text-[#008A5E]',
+      warning: 'bg-[#E68A00]/10 text-[#E68A00]',
+      error: 'bg-[#CC3333]/10 text-[#CC3333]',
     },
     navbar: {
-      bg: 'bg-[#1e1e1e]',
+      bg: 'bg-[#003366]',
       text: 'text-white',
-      activeBorder: 'border-[#4c3de3]',
+      activeBorder: 'border-[#00A3E0]',
     },
     modal: {
-      overlay: 'fixed inset-0 z-[2000] bg-black/50',
-      panel: 'bg-white dark:bg-[#1e1e1e] rounded-xl shadow-2xl',
+      overlay: 'fixed inset-0 z-[2000] bg-black/40',
+      panel: 'bg-white dark:bg-[#003366] rounded-xl shadow-2xl',
     },
     fab: {
       base: 'fixed z-[1100] rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105',
