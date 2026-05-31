@@ -38,17 +38,17 @@ class DataGeneratorService:
 
     def __init__(
         self,
-        airport: str = DEFAULT_AIRPORT_IATA,
-        weather_station: str = DEFAULT_AIRPORT_ICAO,
+        airport: str | None = None,
+        weather_station: str | None = None,
         weather_interval_seconds: int = 600,    # 10 minutes
         schedule_interval_seconds: int = 60,    # 1 minute
         baggage_interval_seconds: int = 30,     # 30 seconds
         gse_interval_seconds: int = 30,         # 30 seconds
         snapshot_interval_seconds: int = 15,    # 15 seconds
     ):
-        self._airport = airport
-        self._weather_station = weather_station
-        self._current_airport_icao = weather_station  # e.g. "KSFO"
+        self._airport = airport or DEFAULT_AIRPORT_IATA
+        self._weather_station = weather_station or DEFAULT_AIRPORT_ICAO
+        self._current_airport_icao = self._weather_station
         self._weather_interval = weather_interval_seconds
         self._schedule_interval = schedule_interval_seconds
         self._baggage_interval = baggage_interval_seconds
