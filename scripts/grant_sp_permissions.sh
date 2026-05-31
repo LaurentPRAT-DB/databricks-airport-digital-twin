@@ -256,29 +256,49 @@ try:
         conn.autocommit = True
         cur = conn.cursor()
 
+        # Schema-level grants (idempotent, low conflict risk)
         cur.execute(f'GRANT USAGE ON SCHEMA public TO "{app_sp}"')
         cur.execute(f'GRANT CREATE ON SCHEMA public TO "{app_sp}"')
         cur.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{app_sp}"')
         cur.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "{app_sp}"')
 
+        # Skip tables where SP already has ALL privileges
         cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
         tables = [row[0] for row in cur.fetchall()]
+        granted_tables = 0
         for t in tables:
-            cur.execute(f'GRANT ALL PRIVILEGES ON TABLE "{t}" TO "{app_sp}"')
+            cur.execute(
+                "SELECT has_table_privilege(%s, %s, 'SELECT')",
+                (app_sp, f'public."{t}"')
+            )
+            if not cur.fetchone()[0]:
+                cur.execute(f'GRANT ALL PRIVILEGES ON TABLE "{t}" TO "{app_sp}"')
+                granted_tables += 1
 
+        # Skip sequences where SP already has USAGE
         cur.execute("SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public'")
         sequences = [row[0] for row in cur.fetchall()]
+        granted_seqs = 0
         for s in sequences:
-            cur.execute(f'GRANT ALL PRIVILEGES ON SEQUENCE "{s}" TO "{app_sp}"')
+            cur.execute(
+                "SELECT has_sequence_privilege(%s, %s, 'USAGE')",
+                (app_sp, f'public."{s}"')
+            )
+            if not cur.fetchone()[0]:
+                cur.execute(f'GRANT ALL PRIVILEGES ON SEQUENCE "{s}" TO "{app_sp}"')
+                granted_seqs += 1
 
         conn.close()
-        return len(tables), len(sequences)
+        return len(tables), len(sequences), granted_tables, granted_seqs
 
     # Retry up to 3 times — handles transient "tuple concurrently updated" errors
     for _attempt in range(3):
         try:
-            _n_tables, _n_seqs = _run_grants()
-            print(f"  [OK] Lakebase SQL grants on {_n_tables} table(s), {_n_seqs} sequence(s)")
+            _n_tables, _n_seqs, _new_tables, _new_seqs = _run_grants()
+            if _new_tables or _new_seqs:
+                print(f"  [OK] Lakebase SQL grants on {_n_tables} table(s), {_n_seqs} sequence(s) ({_new_tables} new table grants, {_new_seqs} new seq grants)")
+            else:
+                print(f"  [OK] Lakebase SQL grants on {_n_tables} table(s), {_n_seqs} sequence(s) (all already granted)")
             break
         except Exception as _grant_err:
             if _attempt < 2 and "concurrently updated" in str(_grant_err):
