@@ -130,7 +130,7 @@ class PhaseResolver:
         )
 
     def resolve_approaching(self, icao24: str, state: FlightState) -> PhaseResolution:
-        """Handle stuck approach: force-land to clear the sequence."""
+        """Handle stuck approach: divert after repeated go-arounds, else force-land."""
         from src.ingestion.fallback import (
             _is_runway_clear, _get_arrival_runway_name,
         )
@@ -141,9 +141,11 @@ class PhaseResolver:
         if not _is_runway_scenario_open(arr_rwy):
             return self._diversion_resolution(icao24, state)
 
-        if not _is_runway_clear(arr_rwy) and state.go_around_count < 2:
-            return PhaseResolution(reset_phase_time="approaching", phase_time_value=600.0)
+        # After multiple go-arounds with runway still busy → divert
+        if state.go_around_count >= 2 and not _is_runway_clear(arr_rwy):
+            return self._diversion_resolution(icao24, state)
 
+        # Otherwise force landing (runway is clear or first approach)
         return PhaseResolution(
             new_phase=FlightPhase.LANDING,
             state_mutations={"waypoint_index": 0, "altitude": 200.0},
@@ -177,9 +179,7 @@ class PhaseResolver:
             return PhaseResolution(mark_exit=True)
 
         arr_rwy = _get_arrival_runway_name()
-        if state.go_around_count >= 3:
-            return self._diversion_resolution(icao24, state)
-        if state.go_around_count >= 2 and not _is_runway_scenario_open(arr_rwy):
+        if state.go_around_count >= 2:
             return self._diversion_resolution(icao24, state)
 
         if state.altitude > 5000:
@@ -232,7 +232,7 @@ class PhaseResolver:
             },
         )
 
-        if new_go_around_count >= 3:
+        if new_go_around_count >= 2:
             resolution.divert_to = self._pick_alternate()
 
         return resolution

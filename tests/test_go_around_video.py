@@ -343,6 +343,12 @@ class TestGA04NoBackwardMovement:
             post = ga["post_ga"]
             if len(post) < 5:
                 continue
+
+            # Skip diverted flights — flying far from airport is expected
+            last_phase = post[-1].get("phase", "")
+            if last_phase in ("enroute", "departing") and post[-1].get("altitude", 0) > 5000:
+                continue
+
             checked += 1
 
             # Check all post-GA positions stay within 35 NM

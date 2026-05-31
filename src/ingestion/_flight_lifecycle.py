@@ -1186,7 +1186,7 @@ def _execute_go_around(state: FlightState, reason: str = "runway_busy") -> None:
     state.holding_inbound = True
     _clear_arrival_runway_assignment(state.icao24)
 
-    if state.go_around_count >= 3:
+    if state.go_around_count >= 2:
         emit_phase_transition(
             state.icao24, state.callsign,
             FlightPhase.APPROACHING.value, FlightPhase.ENROUTE.value,

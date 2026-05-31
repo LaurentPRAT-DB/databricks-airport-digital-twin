@@ -736,6 +736,8 @@ class SimulationEngine:
 
             # Resolve stuck flights by forcing phase transitions
             max_time = self._max_phase_seconds.get(phase_key)
+            if phase_key == "approaching" and new_state.go_around_count > 0:
+                max_time = 300.0  # 5 min max for re-approach after go-around
             if max_time and elapsed > max_time:
                 self._force_advance(icao24, new_state)
 
@@ -774,7 +776,7 @@ class SimulationEngine:
                         {"callsign": state.callsign, "icao24": icao24,
                          "attempt": new_state.go_around_count, "weather": self.capacity.current_category},
                     )
-                    if new_state.go_around_count >= 3:
+                    if new_state.go_around_count >= 2:
                         self._divert_flight(icao24, new_state)
                     self._landing_transition_this_tick = True
                     go_around_triggered = True
