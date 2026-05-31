@@ -15,7 +15,9 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from src.ingestion._state import FlightState, FlightPhase, _set_phase
-from src.ingestion._flight_lifecycle import _update_flight_state, _calibration
+from src.ingestion._flight_lifecycle import _update_flight_state
+import src.ingestion._flight_lifecycle as _flc
+from src.ingestion._flight_lifecycle import set_calibration_taxi_out, reset_calibration
 from src.ingestion._constants import TAKEOFF_PERFORMANCE, _DEFAULT_TAKEOFF_PERF, VREF_SPEEDS, _DEFAULT_VREF
 
 
@@ -424,10 +426,13 @@ class TestTaxiToRunway:
         )
         _set_phase(state, FlightPhase.TAXI_TO_RUNWAY)
 
-        with patch.object(_calibration, 'taxi_out_target_s', 120.0), \
-             patch.object(_calibration, 'taxi_out_waypoint_s', 60.0), \
-             patch.object(_calibration, 'taxi_out_p95_s', 200.0):
+        _flc._calibration.taxi_out_target_s = 120.0
+        _flc._calibration.taxi_out_waypoint_s = 60.0
+        _flc._calibration.taxi_out_p95_s = 200.0
+        try:
             result = _update_flight_state(state, 2.0)
+        finally:
+            reset_calibration()
 
         assert result.departure_queue_set is True
         # Queue hold = min(60 * random(0.7,1.1), (200-60)*0.7=98) → 42-66s
@@ -465,8 +470,8 @@ class TestTaxiToRunway:
         )
         _set_phase(state, FlightPhase.TAXI_TO_RUNWAY)
 
-        with patch.object(_calibration, 'taxi_out_target_s', 0.0):
-            result = _update_flight_state(state, 2.0)
+        reset_calibration()
+        result = _update_flight_state(state, 2.0)
 
         assert result.phase == FlightPhase.TAKEOFF
         assert result.takeoff_subphase == "lineup"
@@ -485,8 +490,8 @@ class TestTaxiToRunway:
         )
         _set_phase(state, FlightPhase.TAXI_TO_RUNWAY)
 
-        with patch("src.ingestion._flight_lifecycle._is_runway_clear", return_value=False), \
-             patch.object(_calibration, 'taxi_out_target_s', 0.0):
+        reset_calibration()
+        with patch("src.ingestion._flight_lifecycle._is_runway_clear", return_value=False):
             result = _update_flight_state(state, 2.0)
 
         assert result.phase == FlightPhase.TAXI_TO_RUNWAY
@@ -509,8 +514,8 @@ class TestTaxiToRunway:
         )
         _set_phase(state, FlightPhase.TAXI_TO_RUNWAY)
 
-        with patch("src.ingestion._flight_lifecycle._get_runway_state", return_value=mock_rwy_state), \
-             patch.object(_calibration, 'taxi_out_target_s', 0.0):
+        reset_calibration()
+        with patch("src.ingestion._flight_lifecycle._get_runway_state", return_value=mock_rwy_state):
             result = _update_flight_state(state, 2.0)
 
         assert result.phase == FlightPhase.TAXI_TO_RUNWAY
