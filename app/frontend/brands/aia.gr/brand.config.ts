@@ -184,6 +184,7 @@ export const brand = {
   },
 
   defaultAirport: 'LGAV',
+  companyName: 'International Airport',
 } as const;
 
 export type BrandConfig = typeof brand;

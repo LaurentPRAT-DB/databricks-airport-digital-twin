@@ -24,6 +24,7 @@ fi
 
 # Brand — copy logo for local dev (default: databricks)
 BRAND="${BRAND:-databricks}"
+export VITE_BRAND="$BRAND"
 if [[ -f "app/frontend/brands/$BRAND/logo.svg" ]]; then
   cp "app/frontend/brands/$BRAND/logo.svg" app/frontend/public/company-logo.svg
 else
