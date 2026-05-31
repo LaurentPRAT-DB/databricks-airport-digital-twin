@@ -364,15 +364,13 @@ class SimulationEngine:
             set_calibration_taxi_out(0.0)
 
         # Set calibrated taxi-in hold from BTS OTP data.
-        # Estimate actual waypoint travel time (including congestion) so the
-        # hold doesn't overshoot. Taxi separation adds ~50-150% to bare path
-        # time depending on traffic density.
         if profile.taxi_in_mean_min > 0:
             waypoint_s = self._estimate_taxi_in_travel_s()
-            flights_per_hour = (self.config.arrivals + self.config.departures) / max(self.config.duration_hours, 1)
-            congestion_factor = 1.0 + min(flights_per_hour / 10.0, 2.0)
-            effective_travel_s = waypoint_s * congestion_factor
-            set_calibration_taxi_in(profile.taxi_in_mean_min, waypoint_travel_s=effective_travel_s)
+            set_calibration_taxi_in(
+                profile.taxi_in_mean_min,
+                waypoint_travel_s=waypoint_s,
+                p95_minutes=profile.taxi_in_p95_min,
+            )
         else:
             set_calibration_taxi_in(0.0)
 

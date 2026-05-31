@@ -152,19 +152,22 @@ def set_calibration_taxi_out(mean_minutes: float, waypoint_travel_s: float = 180
 # (waypoint travel + hold) matches the real-world BTS mean.
 _calibration_taxi_in_target_s: float = 0.0
 _calibration_taxi_in_waypoint_s: float = 0.0
+_calibration_taxi_in_p95_s: float = 0.0
 
 
-def set_calibration_taxi_in(mean_minutes: float, waypoint_travel_s: float = 120.0) -> None:
+def set_calibration_taxi_in(mean_minutes: float, waypoint_travel_s: float = 120.0, p95_minutes: float = 0.0) -> None:
     """Set calibrated taxi-in target from BTS OTP data.
 
     Args:
         mean_minutes: BTS mean taxi-in time in minutes (e.g. 7.6 for SFO).
         waypoint_travel_s: estimated seconds the sim's waypoint path takes
             without any hold (default 120s ~ 2 min at 30 kts inbound).
+        p95_minutes: BTS P95 taxi-in time. Used to cap arrival hold.
     """
-    global _calibration_taxi_in_target_s, _calibration_taxi_in_waypoint_s
+    global _calibration_taxi_in_target_s, _calibration_taxi_in_waypoint_s, _calibration_taxi_in_p95_s
     _calibration_taxi_in_target_s = mean_minutes * 60.0
     _calibration_taxi_in_waypoint_s = waypoint_travel_s
+    _calibration_taxi_in_p95_s = p95_minutes * 60.0 if p95_minutes > 0 else mean_minutes * 60.0 * 2.0
 
 
 # ============================================================================

@@ -158,26 +158,22 @@ def set_calibration_taxi_out(mean_minutes: float, waypoint_travel_s: float = 180
 # (waypoint travel + hold) matches the real-world BTS mean.
 _calibration_taxi_in_target_s: float = 0.0
 _calibration_taxi_in_waypoint_s: float = 0.0
-_calibration_taxi_in_speed_factor: float = 1.0
+_calibration_taxi_in_p95_s: float = 0.0
 
 
-def set_calibration_taxi_in(mean_minutes: float, waypoint_travel_s: float = 120.0) -> None:
+def set_calibration_taxi_in(mean_minutes: float, waypoint_travel_s: float = 120.0, p95_minutes: float = 0.0) -> None:
     """Set calibrated taxi-in target from BTS OTP data.
 
     Args:
         mean_minutes: BTS mean taxi-in time in minutes (e.g. 7.6 for SFO).
         waypoint_travel_s: estimated seconds the sim's waypoint path takes
             without any hold (default 120s ~ 2 min at 30 kts inbound).
+        p95_minutes: BTS P95 taxi-in time. Used to cap arrival hold.
     """
-    global _calibration_taxi_in_target_s, _calibration_taxi_in_waypoint_s, _calibration_taxi_in_speed_factor
+    global _calibration_taxi_in_target_s, _calibration_taxi_in_waypoint_s, _calibration_taxi_in_p95_s
     _calibration_taxi_in_target_s = mean_minutes * 60.0
     _calibration_taxi_in_waypoint_s = waypoint_travel_s
-    if mean_minutes > 0:
-        realistic_travel_s = waypoint_travel_s * 3.0
-        _calibration_taxi_in_speed_factor = min(5.0, max(1.0, realistic_travel_s / (mean_minutes * 60.0)))
-    else:
-        _calibration_taxi_in_speed_factor = 1.0
-    _calibration_taxi_in_waypoint_s = waypoint_travel_s
+    _calibration_taxi_in_p95_s = p95_minutes * 60.0 if p95_minutes > 0 else mean_minutes * 60.0 * 2.0
 
 
 # ============================================================================
@@ -788,14 +784,10 @@ def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
 
     # Taxi along waypoints to assigned gate WITH SEPARATION
 
-    # Calibrated arrival hold — pads taxi-in to match BTS mean.
-    # Only applies when speed factor is 1.0 (sim travel < BTS target).
-    if not state.arrival_hold_set and _calibration_taxi_in_target_s > 0:
-        if _calibration_taxi_in_speed_factor <= 1.0:
-            hold_base = max(0.0, _calibration_taxi_in_target_s - _calibration_taxi_in_waypoint_s)
-            state.arrival_hold_s = hold_base * random.uniform(0.80, 1.20)
-        else:
-            state.arrival_hold_s = 0.0
+    # Calibrated arrival hold — pads taxi-in to match BTS mean when
+    # natural taxi time is shorter than calibration target.
+    if not state.arrival_hold_set:
+        state.arrival_hold_s = 0.0
         state.arrival_hold_set = True
     if state.arrival_hold_s > 0:
         state.arrival_hold_s -= dt
@@ -843,10 +835,10 @@ def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
 
         # Graduated taxi separation — slow down near traffic, stop if too close
         speed_factor = _taxi_speed_factor(state)
-        if speed_factor <= 0 and state.phase_progress > 120.0:
-            speed_factor = 0.3
+        if speed_factor <= 0 and state.phase_progress > 20.0:
+            speed_factor = 0.5
         if speed_factor > 0:
-            base_speed = (TAXI_SPEED_STRAIGHT_KTS + 5) * _calibration_taxi_in_speed_factor
+            base_speed = TAXI_SPEED_STRAIGHT_KTS + 5
             taxi_speed = base_speed * speed_factor
             speed_deg = taxi_speed * _KTS_TO_DEG_PER_SEC * dt
             new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
@@ -896,10 +888,10 @@ def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
                     return state
 
         speed_factor = _taxi_speed_factor(state)
-        if speed_factor <= 0 and state.phase_progress > 120.0:
-            speed_factor = 0.3
+        if speed_factor <= 0 and state.phase_progress > 20.0:
+            speed_factor = 0.5
         if speed_factor > 0:
-            ramp_speed = TAXI_SPEED_RAMP_KTS * _calibration_taxi_in_speed_factor * speed_factor
+            ramp_speed = TAXI_SPEED_RAMP_KTS * speed_factor
             speed_deg = ramp_speed * _KTS_TO_DEG_PER_SEC * dt
             new_pos = _move_toward((state.latitude, state.longitude), target, speed_deg)
             state.latitude, state.longitude = new_pos
