@@ -145,7 +145,14 @@ class PhaseResolver:
         if state.go_around_count >= 2 and not _is_runway_clear(arr_rwy):
             return self._diversion_resolution(icao24, state)
 
-        # Otherwise force landing (runway is clear or first approach)
+        # Runway occupied — wait (retry next tick)
+        if not _is_runway_clear(arr_rwy):
+            return PhaseResolution(
+                reset_phase_time="approaching",
+                phase_time_value=600.0,
+            )
+
+        # Runway clear — force landing
         return PhaseResolution(
             new_phase=FlightPhase.LANDING,
             state_mutations={"waypoint_index": 0, "altitude": 200.0},
