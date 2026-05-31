@@ -681,6 +681,7 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
   const [, setSimulationActive] = useState(false);
   const [simTime, setSimTime] = useState<string | null>(null);
   const [openskyAvailable, setOpenskyAvailable] = useState(false);
+  const [dataModeReclick, setDataModeReclick] = useState(0);
   const [mobileTab, setMobileTab] = useState<MobileTab>('map');
   const [showChat, setShowChat] = useState(false);
   const [inpaintingAvailable, setInpaintingAvailable] = useState(true);
@@ -915,11 +916,12 @@ function AppContent({ handleSimFlightsChange, handleTrajectoryProviderChange, ha
       backendReady={backendReady}
       currentAirport={currentAirport}
       demoReady={wsDemoReady}
+      dataModeReclick={dataModeReclick}
     />
   );
 
   const dataModeToggleNode = (
-    <DataModeToggle mode={dataMode} onChange={setDataMode} showLive={openskyAvailable} />
+    <DataModeToggle mode={dataMode} onChange={setDataMode} onActivate={() => setDataModeReclick(c => c + 1)} showLive={openskyAvailable} />
   );
 
   // Shared map view (used in both desktop and mobile layouts)

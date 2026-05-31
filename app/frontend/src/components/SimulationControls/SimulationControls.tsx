@@ -794,11 +794,19 @@ function RecordingPicker({
 
 
 /** Toggle button for switching between Simulation, Live, and Recorded data modes. */
-export function DataModeToggle({ mode, onChange, showLive = true }: { mode: DataMode; onChange: (mode: DataMode) => void; showLive?: boolean }) {
+export function DataModeToggle({ mode, onChange, onActivate, showLive = true }: { mode: DataMode; onChange: (mode: DataMode) => void; onActivate?: (mode: DataMode) => void; showLive?: boolean }) {
+  const handleClick = (target: DataMode) => {
+    if (target === mode) {
+      onActivate?.(target);
+    } else {
+      onChange(target);
+    }
+  };
+
   return (
     <div className="flex items-center h-8 bg-slate-700 rounded-lg p-0.5">
       <button
-        onClick={() => onChange('simulation')}
+        onClick={() => handleClick('simulation')}
         className={`h-full px-2.5 rounded-md text-sm font-medium transition-colors ${
           mode === 'simulation'
             ? 'bg-indigo-600 text-white shadow-sm'
@@ -809,7 +817,7 @@ export function DataModeToggle({ mode, onChange, showLive = true }: { mode: Data
       </button>
       {showLive && (
         <button
-          onClick={() => onChange('live')}
+          onClick={() => handleClick('live')}
           className={`h-full px-2.5 rounded-md text-sm font-medium transition-colors ${
             mode === 'live'
               ? 'bg-emerald-600 text-white shadow-sm'
@@ -820,7 +828,7 @@ export function DataModeToggle({ mode, onChange, showLive = true }: { mode: Data
         </button>
       )}
       <button
-        onClick={() => onChange('recorded')}
+        onClick={() => handleClick('recorded')}
         className={`h-full px-2.5 rounded-md text-sm font-medium transition-colors ${
           mode === 'recorded'
             ? 'bg-amber-600 text-white shadow-sm'
@@ -856,6 +864,7 @@ export function SimulationControls({
   backendReady,
   currentAirport,
   demoReady,
+  dataModeReclick,
 }: {
   onFlightsChange: (flights: import('../../types/flight').Flight[] | null) => void;
   onActiveChange: (active: boolean) => void;
@@ -866,6 +875,7 @@ export function SimulationControls({
   backendReady?: boolean;
   currentAirport?: string | null;
   demoReady?: boolean;
+  dataModeReclick?: number;
 }) {
   const sim = useSimulationReplay();
   const { dataMode, flights: contextFlights, lastUpdated: contextLastUpdated } = useFlightContext();
@@ -1099,6 +1109,18 @@ export function SimulationControls({
 
     return null;
   };
+
+  // Re-click on active mode — open picker/restart if idle
+  useEffect(() => {
+    if (!dataModeReclick) return;
+    if (dataMode === 'recorded' && !sim.isActive && !sim.isLoading) {
+      sim.fetchRecordings();
+      setShowRecordingPicker(true);
+    }
+    if (dataMode === 'simulation' && !sim.isActive && !sim.isLoading && currentAirport && demoReady) {
+      sim.loadDemo(currentAirport);
+    }
+  }, [dataModeReclick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // React to dataMode changes (toggle now lives in Header)
   const prevDataMode = useRef(dataMode);
