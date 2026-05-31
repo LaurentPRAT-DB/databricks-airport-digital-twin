@@ -273,11 +273,11 @@ function PlaybackBar({ sim, isRecorded = false, savedReport, setSavedReport }: {
     <>
     <div ref={barRef} className={`fixed left-0 right-0 z-[1500] backdrop-blur text-white px-4 py-3 shadow-lg bottom-[var(--tab-bar-h)] md:bottom-0 ${isRecorded ? 'bg-slate-900/95 border-t-2 border-amber-500/60' : 'bg-slate-900/95'}`}>
       <div className="flex items-center gap-2 md:gap-4 max-w-screen-xl mx-auto">
-        {/* Event legend — inline in playbar */}
+        {/* Event legend — inline, max 4 visible, scroll for rest */}
         {visibleEventTypes.length > 0 && (
-          <div className="hidden md:flex items-center gap-2 border-r border-slate-700 pr-3 mr-1 max-h-10 overflow-y-auto">
+          <div className="hidden md:flex items-center gap-2 border-r border-slate-700 pr-3 mr-1 flex-shrink-0">
             <span className="text-[10px] text-slate-500 uppercase tracking-wider whitespace-nowrap">Events</span>
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+            <div className="flex flex-col gap-0.5 max-h-[4.5rem] overflow-y-auto pr-1">
               {visibleEventTypes.map((type) => (
                 <div key={type} className="flex items-center gap-1">
                   <div className={`w-2 h-2 rounded-sm flex-shrink-0 ${EVENT_COLORS[type] || 'bg-gray-400'}`} />
@@ -1079,6 +1079,21 @@ export function SimulationControls({
           <div className="w-3 h-3 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
           <span className="text-slate-300">Preparing Simulation...</span>
         </div>
+      );
+    }
+
+    // Idle in simulation mode — show Run button
+    if (dataMode === 'simulation' && !sim.isActive && !sim.isLoading && demoReady && currentAirport) {
+      return (
+        <button
+          onClick={() => { setDemoAutoStarted(true); setSavedReport(null); sim.loadDemo(currentAirport); }}
+          className="flex items-center gap-1.5 h-8 bg-blue-600 hover:bg-blue-500 px-3 rounded-lg text-sm text-white transition-colors"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <polygon points="6,4 16,10 6,16" />
+          </svg>
+          <span>Run Simulation</span>
+        </button>
       );
     }
 
