@@ -9,7 +9,11 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch, AsyncMock
 
-from app.backend.services.data_generator_service import (
+import app.backend.demo_config as _demo_config
+_demo_config.DEFAULT_AIRPORT_ICAO = "KSFO"
+_demo_config.DEFAULT_AIRPORT_IATA = "SFO"
+
+from app.backend.services.data_generator_service import (  # noqa: E402
     DataGeneratorService,
     get_data_generator_service,
 )
