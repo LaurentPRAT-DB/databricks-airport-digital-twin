@@ -425,11 +425,12 @@ class TestTaxiToRunway:
         _set_phase(state, FlightPhase.TAXI_TO_RUNWAY)
 
         with patch("src.ingestion._flight_lifecycle._calibration_taxi_out_target_s", 120.0), \
-             patch("src.ingestion._flight_lifecycle._calibration_taxi_out_waypoint_s", 60.0):
+             patch("src.ingestion._flight_lifecycle._calibration_taxi_out_waypoint_s", 60.0), \
+             patch("src.ingestion._flight_lifecycle._calibration_taxi_out_p95_s", 200.0):
             result = _update_flight_state(state, 2.0)
 
         assert result.departure_queue_set is True
-        # Queue hold should be ~60s * [0.8, 1.2] = 48-72s
+        # Queue hold = min(60 * random(0.7,1.1), (200-60)*0.7=98) → 42-66s
         assert 40.0 <= result.departure_queue_hold_s <= 80.0
 
     def test_departure_queue_counts_down(self):
