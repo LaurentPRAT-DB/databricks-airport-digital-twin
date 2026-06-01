@@ -24,6 +24,7 @@ from app.backend.models.schedule import (
     ScheduleResponse,
 )
 from app.backend.services.lakebase_service import get_lakebase_service
+from app.backend.services.flifo_service import get_flifo_service
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,11 @@ def _dict_to_scheduled_flight(data: dict) -> ScheduledFlight:
         estimated_time=_parse_datetime(data["estimated_time"]) if data.get("estimated_time") else None,
         actual_time=_parse_datetime(data["actual_time"]) if data.get("actual_time") else None,
         gate=data.get("gate"),
+        terminal=data.get("terminal"),
+        stand=data.get("stand"),
+        belt=data.get("belt"),
+        registration=data.get("registration"),
+        codeshares=data.get("codeshares"),
         status=status,
         delay_minutes=data.get("delay_minutes", 0),
         delay_reason=data.get("delay_reason"),
@@ -174,23 +180,41 @@ class ScheduleService:
         if live_flights:
             logger.debug(f"FIDS {flight_type}s: {len(live_flights)} live flights from map")
 
-        # 2. Get background schedule data (Lakebase or generator)
+        # 2. Get background schedule data (FLIFO → Lakebase → generator)
         #    Reserve space for live flights in the limit
         bg_limit = max(10, limit - len(live_flights))
         background_flights: list[dict] = []
-        lakebase = get_lakebase_service()
-        if lakebase.is_available:
-            lb_data = lakebase.get_schedule(
+
+        # 2a. FLIFO (real flight data if configured)
+        flifo = get_flifo_service()
+        if flifo.is_available:
+            flifo_data = flifo.get_schedule(
+                airport_iata=self._airport,
                 flight_type=flight_type,
                 hours_behind=hours_behind,
                 hours_ahead=hours_ahead,
                 limit=bg_limit,
-                airport_icao=self._airport_icao,
             )
-            if lb_data:
-                background_flights = lb_data
-                logger.debug(f"FIDS {flight_type}s: {len(lb_data)} from Lakebase")
+            if flifo_data:
+                background_flights = flifo_data
+                logger.debug(f"FIDS {flight_type}s: {len(flifo_data)} from FLIFO")
 
+        # 2b. Lakebase (persisted data)
+        if not background_flights:
+            lakebase = get_lakebase_service()
+            if lakebase.is_available:
+                lb_data = lakebase.get_schedule(
+                    flight_type=flight_type,
+                    hours_behind=hours_behind,
+                    hours_ahead=hours_ahead,
+                    limit=bg_limit,
+                    airport_icao=self._airport_icao,
+                )
+                if lb_data:
+                    background_flights = lb_data
+                    logger.debug(f"FIDS {flight_type}s: {len(lb_data)} from Lakebase")
+
+        # 2c. Schedule generator (synthetic fallback)
         if not background_flights:
             now = sim_time or datetime.now(timezone.utc)
             cutoff = now - timedelta(hours=hours_behind)

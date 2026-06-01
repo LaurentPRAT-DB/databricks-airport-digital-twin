@@ -12,6 +12,11 @@ class Settings:
         self.OPENSKY_CLIENT_ID: Optional[str] = os.getenv("OPENSKY_CLIENT_ID")
         self.OPENSKY_CLIENT_SECRET: Optional[str] = os.getenv("OPENSKY_CLIENT_SECRET")
 
+        # FLIFO API credentials (optional - for real flight data)
+        self.FLIFO_BASE_URL: Optional[str] = os.getenv("FLIFO_BASE_URL")
+        self.FLIFO_CLIENT_ID: Optional[str] = os.getenv("FLIFO_CLIENT_ID")
+        self.FLIFO_CLIENT_SECRET: Optional[str] = os.getenv("FLIFO_CLIENT_SECRET")
+
         # Landing zone path for raw data
         self.LANDING_PATH: str = os.getenv("LANDING_PATH", "/mnt/data/landing")
 
