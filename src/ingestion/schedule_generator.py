@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, TYPE_CHECKING
 
 from src.ingestion.fallback import get_gates
+from src.ingestion.fallback import get_gate_terminals
 
 if TYPE_CHECKING:
     from src.calibration.profile import AirportProfile, AirportProfileLoader
@@ -726,6 +727,7 @@ def generate_daily_schedule(
 
     # Track gate occupancy to prevent overlapping assignments
     available_gates = list(get_gates().keys())
+    gate_terminal_map = get_gate_terminals()
     gate_timeline: dict[str, list[tuple[datetime, datetime]]] = {}
 
     # Generate flights for each hour
@@ -773,6 +775,7 @@ def generate_daily_schedule(
                 "estimated_time": None,
                 "actual_time": None,
                 "gate": gate,
+                "terminal": gate_terminal_map.get(gate),
                 "status": "on_time",
                 "delay_minutes": 0,
                 "delay_reason": None,

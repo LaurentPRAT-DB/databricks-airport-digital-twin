@@ -69,6 +69,11 @@ class ScheduledFlight(BaseModel):
     aircraft_type: Optional[str] = Field(None, description="Aircraft type code")
     flight_type: FlightType = Field(..., description="Arrival or departure")
     icao24: Optional[str] = Field(None, description="ICAO24 address if tracked")
+    terminal: Optional[str] = Field(None, description="Terminal assignment")
+    stand: Optional[str] = Field(None, description="Physical stand/parking position")
+    belt: Optional[str] = Field(None, description="Baggage carousel number (arrivals)")
+    registration: Optional[str] = Field(None, description="Aircraft registration")
+    codeshares: Optional[list[str]] = Field(None, description="Codeshare flight numbers")
 
 
 class ScheduleResponse(BaseModel):

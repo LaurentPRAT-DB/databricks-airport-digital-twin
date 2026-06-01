@@ -404,6 +404,29 @@ def reload_gates() -> Dict[str, tuple]:
     return gates
 
 
+def get_gate_terminals() -> Dict[str, str]:
+    """Get gate-to-terminal mapping from OSM data.
+
+    Returns:
+        Dict mapping gate ref (e.g., "A1") to terminal name (e.g., "1", "A").
+        Empty dict if no terminal data available.
+    """
+    try:
+        from app.backend.services.airport_config_service import get_airport_config_service
+        service = get_airport_config_service()
+        config = service.get_config()
+        osm_gates = config.get("gates", [])
+        mapping = {}
+        for gate in osm_gates:
+            ref = gate.get("ref") or gate.get("id")
+            terminal = gate.get("terminal")
+            if ref and terminal:
+                mapping[str(ref)] = str(terminal)
+        return mapping
+    except Exception:
+        return {}
+
+
 GATES = _DEFAULT_GATES
 
 # ============================================================================

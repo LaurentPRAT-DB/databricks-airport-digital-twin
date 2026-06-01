@@ -428,6 +428,17 @@ class LakebaseService:
                             f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
                             f"airport_icao VARCHAR(4) NOT NULL DEFAULT 'KSFO'"
                         )
+                    # Add FLIFO-prep columns to flight_schedule
+                    for col, typedef in [
+                        ("terminal", "VARCHAR(20)"),
+                        ("stand", "VARCHAR(20)"),
+                        ("belt", "VARCHAR(10)"),
+                        ("registration", "VARCHAR(10)"),
+                        ("data_source", "VARCHAR(20) DEFAULT 'synthetic'"),
+                    ]:
+                        cur.execute(
+                            f"ALTER TABLE flight_schedule ADD COLUMN IF NOT EXISTS {col} {typedef}"
+                        )
                     conn.commit()
             self._airport_columns_ensured = True
             logger.debug("Ensured airport_icao columns exist on all tables")
@@ -686,10 +697,11 @@ class LakebaseService:
                 "airport_icao", "flight_number", "airline", "airline_code", "origin", "destination",
                 "scheduled_time", "estimated_time", "actual_time", "gate", "status",
                 "delay_minutes", "delay_reason", "aircraft_type", "flight_type",
+                "terminal", "stand", "belt", "registration", "data_source",
             )
             values = [
                 tuple(
-                    {**flight, "airport_icao": airport_icao}.get(c)
+                    {**flight, "airport_icao": airport_icao, "data_source": flight.get("data_source", "synthetic")}.get(c)
                     for c in _cols
                 )
                 for flight in flights
@@ -702,7 +714,8 @@ class LakebaseService:
                         INSERT INTO flight_schedule (
                             airport_icao, flight_number, airline, airline_code, origin, destination,
                             scheduled_time, estimated_time, actual_time, gate, status,
-                            delay_minutes, delay_reason, aircraft_type, flight_type
+                            delay_minutes, delay_reason, aircraft_type, flight_type,
+                            terminal, stand, belt, registration, data_source
                         ) VALUES %s
                         ON CONFLICT (airport_icao, flight_number, scheduled_time) DO UPDATE SET
                             airline = EXCLUDED.airline,
@@ -712,6 +725,11 @@ class LakebaseService:
                             estimated_time = EXCLUDED.estimated_time,
                             actual_time = EXCLUDED.actual_time,
                             gate = EXCLUDED.gate,
+                            terminal = EXCLUDED.terminal,
+                            stand = EXCLUDED.stand,
+                            belt = EXCLUDED.belt,
+                            registration = EXCLUDED.registration,
+                            data_source = EXCLUDED.data_source,
                             status = EXCLUDED.status,
                             delay_minutes = EXCLUDED.delay_minutes,
                             delay_reason = EXCLUDED.delay_reason,

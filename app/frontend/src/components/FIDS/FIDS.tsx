@@ -17,6 +17,11 @@ interface ScheduledFlight {
   delay_minutes: number;
   aircraft_type: string;
   flight_type: 'arrival' | 'departure';
+  terminal?: string | null;
+  stand?: string | null;
+  belt?: string | null;
+  registration?: string | null;
+  codeshares?: string[] | null;
 }
 
 /** Buffered arrival entry — keeps landed flights visible on the FIDS board. */
@@ -458,6 +463,7 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
                   <th className="px-2 md:px-4 py-2 md:py-3">Flight</th>
                   <th className="px-2 md:px-4 py-2 md:py-3">{activeTab === 'arrivals' ? 'From' : 'To'}</th>
                   <th className="px-2 md:px-4 py-2 md:py-3">Gate</th>
+                  {activeTab === 'arrivals' && <th className="px-2 md:px-4 py-2 md:py-3 hidden md:table-cell">Belt</th>}
                   <th className="px-2 md:px-4 py-2 md:py-3 hidden md:table-cell">Status</th>
                   <th className="px-2 md:px-4 py-2 md:py-3 text-right hidden md:table-cell">Remarks</th>
                 </tr>
@@ -512,8 +518,14 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
                       {activeTab === 'arrivals' ? flight.origin : flight.destination}
                     </td>
                     <td className="px-2 md:px-4 py-2 md:py-3 font-mono text-blue-400 text-xs md:text-sm">
+                      {flight.terminal && <span className="text-slate-500 text-[10px] mr-1">T{flight.terminal}</span>}
                       {flight.gate || '-'}
                     </td>
+                    {activeTab === 'arrivals' && (
+                      <td className="px-2 md:px-4 py-2 md:py-3 font-mono text-emerald-400 text-xs md:text-sm hidden md:table-cell">
+                        {flight.belt || '-'}
+                      </td>
+                    )}
                     <td className="px-2 md:px-4 py-2 md:py-3 hidden md:table-cell">
                       <span className={STATUS_COLORS[flight.status] || 'text-slate-300'}>
                         {STATUS_LABELS[flight.status] || flight.status}
