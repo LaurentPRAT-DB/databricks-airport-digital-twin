@@ -5,6 +5,8 @@ command:
   - "0.0.0.0"
   - "--port"
   - "8000"
+  - "--workers"
+  - "2"
   - "--log-level"
   - "info"
 
@@ -76,6 +78,16 @@ env:
   # Genie Space for Airport Operations Assistant
   - name: GENIE_SPACE_ID
     value: "01f12612fa6314ae943d0526f5ae3a00"
+
+  # FLIFO API (SITA FlightInfo) — embedded mock for dev, real API for prod
+  - name: FLIFO_MOCK_MODE
+    value: "true"
+  - name: FLIFO_BASE_URL
+    value: "http://localhost:8000/mock/flifo"
+  - name: FLIFO_CLIENT_ID
+    value: "test"
+  - name: FLIFO_CLIENT_SECRET
+    value: "test"
 
   # OpenSky Network API credentials: stored in Databricks secrets
   # scope: airport-digital-twin, keys: opensky-username, opensky-password

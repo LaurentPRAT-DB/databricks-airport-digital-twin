@@ -517,6 +517,12 @@ app.include_router(data_ops_router)
 app.include_router(simulation_router)
 app.include_router(opensky_router)
 app.include_router(collector_router)
+
+# Mount embedded FLIFO mock when FLIFO_MOCK_MODE is enabled
+if os.getenv("FLIFO_MOCK_MODE", "").lower() in ("true", "1", "yes"):
+    from tools.flifo_mock.server import app as flifo_mock_app
+    app.mount("/mock/flifo", flifo_mock_app)
+    logger.info("FLIFO mock server mounted at /mock/flifo")
 app.include_router(genie_router)
 app.include_router(inpainting_router)
 app.include_router(mcp_router)
