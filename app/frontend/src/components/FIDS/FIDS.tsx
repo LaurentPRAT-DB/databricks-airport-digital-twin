@@ -557,7 +557,15 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
           {simClockDisplay && (
             <span className="font-mono text-slate-300 text-sm">{simClockDisplay}</span>
           )}
-          <span>{dataSource === 'opensky_recorded' ? 'Real ADS-B recorded data' : dataSource === 'opensky' ? 'Live ADS-B data' : 'Synthetic data for demo'}</span>
+          <span className="flex items-center gap-2">
+            {flights.some(f => f.terminal || f.belt || (f.flight_number.match(/^[A-Z]{2}\d/) !== null)) && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-900/50 border border-emerald-700/50 rounded text-emerald-400 text-[10px] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                FLIFO
+              </span>
+            )}
+            {dataSource === 'opensky_recorded' ? 'Real ADS-B recorded data' : dataSource === 'opensky' ? 'Live ADS-B data' : 'Synthetic data'}
+          </span>
         </div>
       </div>
     </div>

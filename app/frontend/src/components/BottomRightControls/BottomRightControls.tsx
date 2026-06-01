@@ -3,7 +3,7 @@
  * All same-size circles, same horizontal line as playbar/live bar.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../../context/ThemeContext';
 import { useFlightContext } from '../../context/FlightContext';
 import { PHASE_BG_CLASSES, PHASE_LABELS } from '../../utils/phaseUtils';
@@ -11,29 +11,6 @@ import { DatabricksLogo } from '../BrandIcon/DatabricksLogo';
 
 interface Props {
   onOpenChat?: () => void;
-}
-
-function useFlifoToggle() {
-  const [flifoEnabled, setFlifoEnabled] = useState<boolean | null>(null);
-  const [configured, setConfigured] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/schedule/flifo/status')
-      .then(r => r.json())
-      .then(data => {
-        setConfigured(data.configured);
-        setFlifoEnabled(data.enabled);
-      })
-      .catch(() => setConfigured(false));
-  }, []);
-
-  const toggle = useCallback(async () => {
-    const next = !flifoEnabled;
-    setFlifoEnabled(next);
-    await fetch(`/api/schedule/flifo/toggle?enabled=${next}`, { method: 'POST' });
-  }, [flifoEnabled]);
-
-  return { configured, flifoEnabled, toggle };
 }
 
 const PHASE_GROUPS: { label: string; phases: { key: string; description: string }[] }[] = [
@@ -75,7 +52,6 @@ export function BottomRightControls({ onOpenChat }: Props) {
   const { hiddenPhases, togglePhase, setHiddenPhases } = useFlightContext();
   const [legendOpen, setLegendOpen] = useState(false);
   const legendRef = useRef<HTMLDivElement>(null);
-  const { configured: flifoConfigured, flifoEnabled, toggle: toggleFlifo } = useFlifoToggle();
 
   useEffect(() => {
     if (!legendOpen) return;
@@ -94,21 +70,6 @@ export function BottomRightControls({ onOpenChat }: Props) {
       className="fixed right-4 z-[1600] flex flex-row items-center gap-2"
       style={{ bottom: 'calc(0.5rem + var(--tab-bar-h, 0px))' }}
     >
-      {/* FLIFO toggle */}
-      {flifoConfigured && (
-        <button
-          onClick={toggleFlifo}
-          className={`w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-full transition-colors text-white shadow-lg ${
-            flifoEnabled ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 hover:bg-slate-600'
-          }`}
-          title={flifoEnabled ? 'FLIFO data feed active — click to disable' : 'FLIFO data feed disabled — click to enable'}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 5v14M9 5v14M15 5l-3 14M18 5l-3 14M4 7h16M4 12h16M4 17h16" />
-          </svg>
-        </button>
-      )}
-
       {/* Legend */}
       <div ref={legendRef} className="relative">
         <button
