@@ -63,6 +63,7 @@ export default function PlatformLinks() {
   const [links, setLinks] = useState<PlatformLink[]>([]);
   const [flifoEnabled, setFlifoEnabled] = useState<boolean | null>(null);
   const [flifoConfigured, setFlifoConfigured] = useState(false);
+  const [flifoError, setFlifoError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/schedule/flifo/status')
@@ -70,6 +71,7 @@ export default function PlatformLinks() {
       .then(data => {
         setFlifoConfigured(data.configured);
         setFlifoEnabled(data.enabled);
+        setFlifoError(data.last_error || null);
       })
       .catch(() => {});
   }, []);
@@ -178,10 +180,16 @@ export default function PlatformLinks() {
                     <span className="text-xl">✈️</span>
                     <div className="text-left">
                       <div className="text-sm font-medium text-slate-200">FLIFO Data Feed</div>
-                      <div className="text-xs text-slate-400">SITA flight schedule API</div>
+                      <div className="text-xs text-slate-400">
+                        {flifoError ? (
+                          <span className="text-amber-400">Unreachable — using fallback</span>
+                        ) : (
+                          'SITA flight schedule API'
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className={`w-9 h-5 rounded-full transition-colors relative ${flifoEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}>
+                  <div className={`w-9 h-5 rounded-full transition-colors relative ${flifoEnabled ? (flifoError ? 'bg-amber-500' : 'bg-emerald-500') : 'bg-slate-600'}`}>
                     <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${flifoEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
                   </div>
                 </button>

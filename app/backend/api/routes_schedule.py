@@ -70,6 +70,7 @@ async def get_flifo_status():
         "active": queue.is_active,
         "queued_arrivals": len(queue._arrivals),
         "queued_departures": len(queue._departures),
+        "last_error": flifo._last_error,
     }
 
 
