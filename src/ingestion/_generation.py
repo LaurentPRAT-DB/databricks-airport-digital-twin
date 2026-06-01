@@ -298,6 +298,11 @@ def get_flights_as_schedule(
             sched_dt = datetime.fromisoformat(scheduled_time)
             estimated_time = (sched_dt + timedelta(minutes=delay_minutes)).isoformat()
 
+        # Assign baggage belt for arrived arrivals (deterministic from callsign hash)
+        belt = None
+        if is_arrival and status == "arrived" and state.assigned_gate:
+            belt = str((_h % 12) + 1)
+
         schedule.append({
             "flight_number": callsign,
             "airline": airline_name,
@@ -308,6 +313,7 @@ def get_flights_as_schedule(
             "estimated_time": estimated_time,
             "actual_time": now.isoformat() if status in ("arrived", "departed") else None,
             "gate": state.assigned_gate,
+            "belt": belt,
             "status": status,
             "delay_minutes": delay_minutes,
             "delay_reason": "Late arrival" if delay_minutes > 0 and is_arrival else ("Gate hold" if delay_minutes > 0 else None),
