@@ -1,6 +1,7 @@
 """SITA FLIFO API client with OAuth2 and retry logic."""
 
 import logging
+import os
 import time
 from typing import Optional
 
@@ -27,12 +28,16 @@ class FlifoClient:
         self._client_secret = client_secret
         self._token: Optional[str] = None
         self._token_expiry: float = 0
+        # Skip OAuth when using embedded mock (no token endpoint needed)
+        self._skip_auth = os.getenv("FLIFO_MOCK_MODE", "").lower() in ("true", "1", "yes")
 
     @property
     def is_configured(self) -> bool:
         return bool(self._base_url and self._client_id and self._client_secret)
 
     def _get_token(self) -> str:
+        if self._skip_auth:
+            return "embedded-mock-no-auth"
         if self._token and time.time() < self._token_expiry - 60:
             return self._token
 

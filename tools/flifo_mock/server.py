@@ -3,6 +3,7 @@
 Run: uv run uvicorn tools.flifo_mock.server:app --port 8089
 """
 
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -11,6 +12,17 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Query
 from tools.flifo_mock.auth import issue_token, validate_token
 from tools.flifo_mock.generator import generate_flights
 from tools.flifo_mock.models import FlightResponse, TokenResponse
+
+# When embedded in main app, skip auth (already behind Databricks auth)
+_EMBEDDED_MODE = os.getenv("FLIFO_MOCK_MODE", "").lower() in ("true", "1", "yes")
+
+
+def _no_auth():
+    """No-op auth dependency for embedded mode."""
+    return "embedded"
+
+
+_auth_dep = _no_auth if _EMBEDDED_MODE else validate_token
 
 app = FastAPI(
     title="FLIFO Mock Server",
@@ -44,7 +56,7 @@ def get_flights_by_airport(
     toDate: Optional[str] = Query(None, description="ISO datetime end"),
     status: Optional[str] = Query(None, description="Filter by status code"),
     limit: int = Query(30, ge=1, le=200),
-    _token: str = Depends(validate_token),
+    _token: str = Depends(_auth_dep),
 ):
     """Get flights for an airport — main FLIFO endpoint."""
     airport_iata = airport_iata.upper()
@@ -82,7 +94,7 @@ def get_flights_by_airline(
     fromDate: Optional[str] = Query(None),
     toDate: Optional[str] = Query(None),
     limit: int = Query(20, ge=1, le=200),
-    _token: str = Depends(validate_token),
+    _token: str = Depends(_auth_dep),
 ):
     """Get flights for an airline across all airports."""
     airline_iata = airline_iata.upper()
@@ -115,7 +127,7 @@ def get_flights_by_airline(
 @app.get("/flightinfo/v2/flights/{flight_number}", response_model=FlightResponse)
 def get_flight_by_number(
     flight_number: str,
-    _token: str = Depends(validate_token),
+    _token: str = Depends(_auth_dep),
 ):
     """Get a specific flight by flight number."""
     # Generate a single record matching this flight number
