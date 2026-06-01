@@ -277,6 +277,9 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
       const origin = f.origin_airport || (isArrival ? ORIGIN_AIRPORTS[h % ORIGIN_AIRPORTS.length] : localIata);
       const destination = f.destination_airport || (isArrival ? localIata : ORIGIN_AIRPORTS[(h >> 4) % ORIGIN_AIRPORTS.length]);
 
+      // Assign belt for arrived arrivals (deterministic from hash)
+      const belt = (isArrival && status === 'arrived' && f.assigned_gate) ? String((h % 12) + 1) : null;
+
       const entry: ScheduledFlight = {
         flight_number: callsign,
         airline,
@@ -287,6 +290,7 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
         estimated_time: estimatedTime ? estimatedTime.toISOString() : null,
         actual_time: (status === 'arrived' || status === 'departed') ? (estimatedTime || schedTime).toISOString() : null,
         gate: f.assigned_gate || null,
+        belt,
         status,
         delay_minutes: delayMin,
         aircraft_type: f.aircraft_type || 'A320',
