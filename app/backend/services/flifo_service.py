@@ -11,6 +11,7 @@ from typing import Optional
 
 from src.ingestion.flifo_client import FlifoClient
 from src.ingestion.flifo_mapper import map_flifo_response
+from app.backend.services.lakebase_service import get_lakebase_service
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,10 @@ class FlifoService:
             self._cache[cache_key] = (time.time(), mapped)
             self._last_error = None
             logger.info(f"FLIFO: fetched {len(mapped)} flights for {airport_iata}/{flight_type}")
+
+            # Persist to Lakebase for analytics/ML pipelines
+            self._persist_to_lakebase(mapped, airport_iata)
+
             return mapped[:limit]
 
         except Exception as e:
@@ -83,6 +88,28 @@ class FlifoService:
             if cached:
                 return cached[1][:limit]
             return None
+
+
+    def _persist_to_lakebase(self, flights: list[dict], airport_iata: str) -> None:
+        """Write FLIFO data to Lakebase for DLT pipeline and ML models."""
+        try:
+            lakebase = get_lakebase_service()
+            if not lakebase.is_available:
+                return
+
+            # Resolve ICAO from IATA for Lakebase (uses airport_icao)
+            from src.ingestion.schedule_generator import AIRPORT_COORDINATES
+            airport_icao = f"K{airport_iata}" if len(airport_iata) == 3 else airport_iata
+            for code, coords in AIRPORT_COORDINATES.items():
+                if code == airport_iata:
+                    airport_icao = f"K{airport_iata}"
+                    break
+
+            count = lakebase.upsert_schedule(flights, airport_icao=airport_icao)
+            if count > 0:
+                logger.debug(f"FLIFO: persisted {count} flights to Lakebase")
+        except Exception as e:
+            logger.warning(f"FLIFO: Lakebase persistence failed (non-fatal): {e}")
 
 
 _flifo_service: Optional[FlifoService] = None
