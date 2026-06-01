@@ -25,6 +25,7 @@ from app.backend.models.schedule import (
 )
 from app.backend.services.lakebase_service import get_lakebase_service
 from app.backend.services.flifo_service import get_flifo_service
+from src.ingestion.callsign_reconciler import normalize as normalize_callsign
 
 logger = logging.getLogger(__name__)
 
@@ -231,11 +232,13 @@ class ScheduleService:
                 )
 
         # 3. Merge: live flights always included, background fills the rest
-        seen_numbers = {f["flight_number"] for f in live_flights}
+        #    Normalize callsigns for dedup (ICAO UAL123 == IATA UA123)
+        seen_numbers = {normalize_callsign(f["flight_number"]) for f in live_flights}
         background_deduped = []
         for f in background_flights:
-            if f["flight_number"] not in seen_numbers:
-                seen_numbers.add(f["flight_number"])
+            normalized = normalize_callsign(f["flight_number"])
+            if normalized not in seen_numbers:
+                seen_numbers.add(normalized)
                 background_deduped.append(f)
 
         # 4. Sort each group, then interleave: live flights always appear
