@@ -456,15 +456,15 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
               <div className="text-red-400">{error}</div>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed">
               <thead className="bg-slate-800 sticky top-0">
                 <tr className="text-left text-slate-400 uppercase text-[10px] md:text-xs">
-                  <th className="px-2 md:px-4 py-2 md:py-3">Time</th>
-                  <th className="px-2 md:px-4 py-2 md:py-3">Flight</th>
-                  <th className="px-2 md:px-4 py-2 md:py-3">{activeTab === 'arrivals' ? 'From' : 'To'}</th>
-                  <th className="px-2 md:px-4 py-2 md:py-3">Gate</th>
-                  {activeTab === 'arrivals' && <th className="px-2 md:px-4 py-2 md:py-3 hidden md:table-cell">Belt</th>}
-                  <th className="px-2 md:px-4 py-2 md:py-3 hidden md:table-cell">Status</th>
+                  <th className="px-2 md:px-4 py-2 md:py-3 w-[60px] md:w-[80px]">Time</th>
+                  <th className="px-2 md:px-4 py-2 md:py-3 w-[100px] md:w-[140px]">Flight</th>
+                  <th className="px-2 md:px-4 py-2 md:py-3 w-[50px] md:w-[60px]">{activeTab === 'arrivals' ? 'From' : 'To'}</th>
+                  <th className="px-2 md:px-4 py-2 md:py-3 w-[60px] md:w-[70px]">Gate</th>
+                  {activeTab === 'arrivals' && <th className="px-2 md:px-4 py-2 md:py-3 w-[40px] md:w-[50px] hidden md:table-cell">Belt</th>}
+                  <th className="px-2 md:px-4 py-2 md:py-3 w-[80px] md:w-[90px] hidden md:table-cell">Status</th>
                   <th className="px-2 md:px-4 py-2 md:py-3 text-right hidden md:table-cell">Remarks</th>
                 </tr>
               </thead>
