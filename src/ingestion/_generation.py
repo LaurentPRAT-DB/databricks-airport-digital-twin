@@ -365,16 +365,63 @@ def _soft_cull_excess(target: int) -> None:
             _flight_states.pop(_cull_id, None)
 
 
+def _try_spawn_from_queue(queue, local_iata: str) -> bool:
+    """Try to spawn a flight from the FLIFO schedule queue.
+
+    Returns True if a flight was spawned, False if queue empty/unavailable.
+    """
+    if not queue.is_active:
+        return False
+
+    # Try arrivals and departures alternately
+    flight = queue.next_arrival() or queue.next_departure()
+    if not flight:
+        return False
+
+    callsign = flight.get("flight_number", "").strip()
+    if not callsign or callsign in _flight_states._callsigns:
+        return False
+
+    icao24 = fake.hexify(text="^^^^^^", upper=False)
+    if icao24 in _flight_states:
+        return False
+
+    phase_str = queue.get_phase_for_flight(flight)
+    phase_map = {
+        "APPROACHING": FlightPhase.APPROACHING,
+        "TAXI_TO_GATE": FlightPhase.TAXI_TO_GATE,
+        "PARKED": FlightPhase.PARKED,
+        "TAXI_TO_RUNWAY": FlightPhase.TAXI_TO_RUNWAY,
+    }
+    selected_phase = phase_map.get(phase_str, FlightPhase.APPROACHING)
+
+    origin = flight.get("origin")
+    dest = flight.get("destination")
+
+    _flight_states[icao24] = _create_new_flight(
+        icao24, callsign, selected_phase, origin=origin, destination=dest
+    )
+    logger.debug(f"FLIFO spawn: {callsign} phase={phase_str} {origin}→{dest}")
+    return True
+
+
 def _spawn_flights_to_target(target: int, profile) -> None:
     """Spawn new flights until reaching target count."""
     from src.ingestion.fallback import get_current_airport_iata, get_gates
+    from src.ingestion._schedule_queue import get_schedule_queue
 
     if len(_flight_states) >= target:
         return
 
     local_iata = get_current_airport_iata()
+    queue = get_schedule_queue()
 
     while len(_flight_states) < target:
+        # Try FLIFO queue first — real flight data takes priority
+        flifo_flight = _try_spawn_from_queue(queue, local_iata)
+        if flifo_flight:
+            continue
+
         icao24 = fake.hexify(text="^^^^^^", upper=False)
         if icao24 in _flight_states:
             continue
@@ -591,7 +638,8 @@ def generate_synthetic_flights(
         Dict with 'time' (int) and 'states' (list of lists) matching
         the OpenSky /states/all response format.
     """
-    from src.ingestion.fallback import get_gates
+    from src.ingestion.fallback import get_gates, get_current_airport_iata
+    from src.ingestion._schedule_queue import get_schedule_queue
 
     osm_rwy = _get_osm_primary_runway()
     if osm_rwy is None:
@@ -604,6 +652,9 @@ def generate_synthetic_flights(
     current_time = datetime.now(timezone.utc).timestamp()
     dt = min(current_time - _st._last_update, 5.0) if _st._last_update > 0 else 1.0
     _st._last_update = current_time
+
+    # Refresh FLIFO schedule queue (no-op if not configured or recently refreshed)
+    get_schedule_queue().refresh(get_current_airport_iata())
 
     _init_gate_states()
     _cull_exited_flights()
