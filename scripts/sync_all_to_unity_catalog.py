@@ -123,7 +123,8 @@ def fetch_schedule_from_lakebase() -> list[dict]:
                 SELECT
                     flight_number, airline, airline_code, origin, destination,
                     scheduled_time, estimated_time, actual_time, gate, status,
-                    delay_minutes, delay_reason, aircraft_type, flight_type
+                    delay_minutes, delay_reason, aircraft_type, flight_type,
+                    terminal, stand, belt, registration, data_source
                 FROM flight_schedule
                 ORDER BY scheduled_time
                 """
@@ -301,11 +302,17 @@ def sync_schedule_to_delta(flights: list[dict], catalog: str, schema: str) -> in
                         delay_reason = {_quote_value(f.get('delay_reason'))},
                         aircraft_type = {_quote_value(f.get('aircraft_type'))},
                         flight_type = {_quote_value(f.get('flight_type'))},
+                        terminal = {_quote_value(f.get('terminal'))},
+                        stand = {_quote_value(f.get('stand'))},
+                        belt = {_quote_value(f.get('belt'))},
+                        registration = {_quote_value(f.get('registration'))},
+                        data_source = {_quote_value(f.get('data_source'))},
                         synced_at = CURRENT_TIMESTAMP()
                     WHEN NOT MATCHED THEN INSERT (
                         flight_number, airline, airline_code, origin, destination,
                         scheduled_time, estimated_time, actual_time, gate, status,
-                        delay_minutes, delay_reason, aircraft_type, flight_type
+                        delay_minutes, delay_reason, aircraft_type, flight_type,
+                        terminal, stand, belt, registration, data_source
                     ) VALUES (
                         {_quote_value(f.get('flight_number'))}, {_quote_value(f.get('airline'))},
                         {_quote_value(f.get('airline_code'))}, {_quote_value(f.get('origin'))},
@@ -313,7 +320,10 @@ def sync_schedule_to_delta(flights: list[dict], catalog: str, schema: str) -> in
                         {_quote_value(f.get('estimated_time'))}, {_quote_value(f.get('actual_time'))},
                         {_quote_value(f.get('gate'))}, {_quote_value(f.get('status'))},
                         {_quote_value(f.get('delay_minutes'))}, {_quote_value(f.get('delay_reason'))},
-                        {_quote_value(f.get('aircraft_type'))}, {_quote_value(f.get('flight_type'))}
+                        {_quote_value(f.get('aircraft_type'))}, {_quote_value(f.get('flight_type'))},
+                        {_quote_value(f.get('terminal'))}, {_quote_value(f.get('stand'))},
+                        {_quote_value(f.get('belt'))}, {_quote_value(f.get('registration'))},
+                        {_quote_value(f.get('data_source'))}
                     )
                 """)
 

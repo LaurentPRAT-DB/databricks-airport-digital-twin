@@ -788,7 +788,8 @@ class LakebaseService:
                         SELECT
                             flight_number, airline, airline_code, origin, destination,
                             scheduled_time, estimated_time, actual_time, gate, status,
-                            delay_minutes, delay_reason, aircraft_type, flight_type
+                            delay_minutes, delay_reason, aircraft_type, flight_type,
+                            terminal, stand, belt, registration, data_source
                         FROM flight_schedule
                         WHERE airport_icao = %s
                         AND scheduled_time BETWEEN NOW() - INTERVAL '%s hours' AND NOW() + INTERVAL '%s hours'
