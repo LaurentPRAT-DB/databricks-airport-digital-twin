@@ -58,14 +58,32 @@ class ScheduleQueue:
         self._spawned: set[str] = set()
         self._last_refresh: float = 0
         self._available = False
+        self._created_at: float = time.time()
+        self._enabled = True
 
     @property
     def is_active(self) -> bool:
-        return self._available and (len(self._arrivals) > 0 or len(self._departures) > 0)
+        return self._enabled and self._available and (len(self._arrivals) > 0 or len(self._departures) > 0)
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, value: bool) -> None:
+        self._enabled = value
+        if not value:
+            self._available = False
 
     def refresh(self, airport_iata: str) -> None:
         """Fetch from FLIFO service, populate queues. Called periodically."""
+        if not self._enabled:
+            return
+
         now = time.time()
+        # Skip first 10s after creation to avoid blocking startup
+        if now - self._created_at < 10:
+            return
         if now - self._last_refresh < REFRESH_INTERVAL_S:
             return
 

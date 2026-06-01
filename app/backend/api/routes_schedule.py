@@ -7,6 +7,8 @@ from fastapi import APIRouter, Query
 
 from app.backend.models.schedule import ScheduleResponse
 from app.backend.services.schedule_service import get_schedule_service
+from app.backend.services.flifo_service import get_flifo_service
+from src.ingestion._schedule_queue import get_schedule_queue
 
 router = APIRouter(prefix="/api", tags=["schedule"])
 
@@ -55,6 +57,28 @@ async def get_departures(
         limit=limit,
         sim_time=parsed_sim_time,
     )
+
+
+@router.get("/schedule/flifo/status")
+async def get_flifo_status():
+    """Get FLIFO data feed status."""
+    flifo = get_flifo_service()
+    queue = get_schedule_queue()
+    return {
+        "configured": flifo.is_available,
+        "enabled": queue.enabled,
+        "active": queue.is_active,
+        "queued_arrivals": len(queue._arrivals),
+        "queued_departures": len(queue._departures),
+    }
+
+
+@router.post("/schedule/flifo/toggle")
+async def toggle_flifo(enabled: bool = Query(...)):
+    """Enable or disable FLIFO data feed."""
+    queue = get_schedule_queue()
+    queue.enabled = enabled
+    return {"enabled": queue.enabled}
 
 
 @router.get("/schedule/audit")
