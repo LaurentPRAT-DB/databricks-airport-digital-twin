@@ -142,6 +142,20 @@ The mode toggle is action-driven — clicking a mode immediately activates it:
 | **Live** | OpenSky Network ADS-B | Real-time monitoring, recording |
 | **Recorded** | JSONL files (local) or Delta tables (cloud) | Replay past sessions, analysis |
 
+### FLIFO Data Feed (SITA FlightInfo API)
+
+Real flight schedule data from SITA's FLIFO API — provides gate assignments, terminal, baggage belt, delay codes, and codeshares that the simulation engine alone cannot generate.
+
+| | Without FLIFO | With FLIFO |
+|---|---|---|
+| Callsigns | Random (UAL4521) | Real (UA123) |
+| Terminal | — | T1, T2, T3 |
+| Baggage belt | Hash-based | Real carousel assignment |
+| Delay codes | Generic text | IATA codes (81=ATC, 86=weather) |
+| Codeshares | — | LH7234, AI3986 |
+
+FLIFO is **optional** — the app works identically without it. Toggle on/off via Platform menu in the UI. See [`docs/FLIFO_CONFIGURATION.md`](docs/FLIFO_CONFIGURATION.md) for setup.
+
 ### Flight Phase Color Codes
 
 | Color | Phase | Meaning |
