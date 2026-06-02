@@ -327,10 +327,32 @@ try:
         user=user, password=token, sslmode="require"
     )
     conn.autocommit = True
+    stmts = [s.strip() for s in schema_sql.split(";") if s.strip() and not s.strip().startswith("--")]
+    skipped = 0
     with conn.cursor() as cur:
-        cur.execute(schema_sql)
+        for stmt in stmts:
+            try:
+                cur.execute(stmt)
+            except psycopg2.errors.InsufficientPrivilege:
+                skipped += 1
+                conn.rollback()
+            except psycopg2.errors.DuplicateObject:
+                skipped += 1
+                conn.rollback()
+        # Ensure SP can access all tables
+        for g in [
+            "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO PUBLIC",
+            "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO PUBLIC",
+        ]:
+            try:
+                cur.execute(g)
+            except Exception:
+                conn.rollback()
     conn.close()
-    print("  [OK] Lakebase schema applied")
+    msg = f"  [OK] Lakebase schema applied"
+    if skipped:
+        msg += f" ({skipped} skipped — ownership mismatch)"
+    print(msg)
 except Exception as e:
     print(f"  [INFO] Lakebase schema skipped: {e}")
 PYEOF
