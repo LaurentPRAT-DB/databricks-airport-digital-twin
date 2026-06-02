@@ -62,6 +62,17 @@ class FlightState:
     cruise_altitude: float = 0.0               # Target cruise FL (hemispheric rule)
     star_name: str = ""                          # Assigned STAR procedure name
     sid_name: str = ""                           # Assigned SID procedure name
+    # FLIFO ground-truth metadata (populated when flight seeded from FLIFO)
+    registration: Optional[str] = None
+    terminal: Optional[str] = None
+    belt: Optional[str] = None
+    scheduled_time_iso: Optional[str] = None
+    estimated_time_iso: Optional[str] = None
+    actual_time_iso: Optional[str] = None
+    flifo_delay_minutes: int = 0
+    delay_reason: Optional[str] = None
+    codeshares: Optional[List[str]] = None
+    data_source: str = "synthetic"
 
 
 # Maximum simultaneous aircraft on approach (approach + landing)

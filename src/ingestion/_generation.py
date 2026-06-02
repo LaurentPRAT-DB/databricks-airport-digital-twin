@@ -276,50 +276,88 @@ def get_flights_as_schedule(
 
         _h = ((hash(icao24) * 2654435761) ^ hash(airline_code)) & 0xFFFFFFFF
 
-        delay_minutes = 0
-        if is_arrival:
-            if state.holding_phase_time > 0:
-                delay_minutes = max(1, int(state.holding_phase_time / 60))
-            elif state.go_around_target_alt > 0:
-                delay_minutes = 5
-            elif (_h >> 4) % 10 == 0:
-                delay_minutes = 5 + ((_h >> 8) % 20)
+        # FLIFO ground-truth: use stored metadata when available
+        if state.data_source == "flifo":
+            delay_minutes = state.flifo_delay_minutes
+            if delay_minutes > 0 and status in ("scheduled", "on_time"):
+                status = "delayed"
+
+            scheduled_time = state.scheduled_time_iso or _compute_scheduled_time(state, is_arrival, now, _h)
+            estimated_time = state.estimated_time_iso
+            actual_time = state.actual_time_iso
+            if not actual_time and status in ("arrived", "departed"):
+                actual_time = now.isoformat()
+
+            belt = state.belt
+            if not belt and is_arrival and status == "arrived" and state.assigned_gate:
+                belt = str((_h % 12) + 1)
+
+            schedule.append({
+                "flight_number": callsign,
+                "airline": airline_name,
+                "airline_code": airline_code,
+                "origin": origin,
+                "destination": destination,
+                "scheduled_time": scheduled_time,
+                "estimated_time": estimated_time,
+                "actual_time": actual_time,
+                "gate": state.assigned_gate,
+                "terminal": state.terminal,
+                "belt": belt,
+                "registration": state.registration,
+                "codeshares": state.codeshares,
+                "status": status,
+                "delay_minutes": delay_minutes,
+                "delay_reason": state.delay_reason,
+                "aircraft_type": state.aircraft_type,
+                "flight_type": flight_type,
+                "data_source": "flifo",
+            })
         else:
-            if (_h >> 4) % 5 == 0:
-                delay_minutes = 5 + ((_h >> 8) % 41)
+            delay_minutes = 0
+            if is_arrival:
+                if state.holding_phase_time > 0:
+                    delay_minutes = max(1, int(state.holding_phase_time / 60))
+                elif state.go_around_target_alt > 0:
+                    delay_minutes = 5
+                elif (_h >> 4) % 10 == 0:
+                    delay_minutes = 5 + ((_h >> 8) % 20)
+            else:
+                if (_h >> 4) % 5 == 0:
+                    delay_minutes = 5 + ((_h >> 8) % 41)
 
-        if delay_minutes > 0 and status in ("scheduled", "on_time"):
-            status = "delayed"
+            if delay_minutes > 0 and status in ("scheduled", "on_time"):
+                status = "delayed"
 
-        scheduled_time = _compute_scheduled_time(state, is_arrival, now, _h)
+            scheduled_time = _compute_scheduled_time(state, is_arrival, now, _h)
 
-        estimated_time = None
-        if delay_minutes > 0:
-            sched_dt = datetime.fromisoformat(scheduled_time)
-            estimated_time = (sched_dt + timedelta(minutes=delay_minutes)).isoformat()
+            estimated_time = None
+            if delay_minutes > 0:
+                sched_dt = datetime.fromisoformat(scheduled_time)
+                estimated_time = (sched_dt + timedelta(minutes=delay_minutes)).isoformat()
 
-        # Assign baggage belt for arrived arrivals (deterministic from callsign hash)
-        belt = None
-        if is_arrival and status == "arrived" and state.assigned_gate:
-            belt = str((_h % 12) + 1)
+            belt = None
+            if is_arrival and status == "arrived" and state.assigned_gate:
+                belt = str((_h % 12) + 1)
 
-        schedule.append({
-            "flight_number": callsign,
-            "airline": airline_name,
-            "airline_code": airline_code,
-            "origin": origin,
-            "destination": destination,
-            "scheduled_time": scheduled_time,
-            "estimated_time": estimated_time,
-            "actual_time": now.isoformat() if status in ("arrived", "departed") else None,
-            "gate": state.assigned_gate,
-            "belt": belt,
-            "status": status,
-            "delay_minutes": delay_minutes,
-            "delay_reason": "Late arrival" if delay_minutes > 0 and is_arrival else ("Gate hold" if delay_minutes > 0 else None),
-            "aircraft_type": state.aircraft_type,
-            "flight_type": flight_type,
-        })
+            schedule.append({
+                "flight_number": callsign,
+                "airline": airline_name,
+                "airline_code": airline_code,
+                "origin": origin,
+                "destination": destination,
+                "scheduled_time": scheduled_time,
+                "estimated_time": estimated_time,
+                "actual_time": now.isoformat() if status in ("arrived", "departed") else None,
+                "gate": state.assigned_gate,
+                "belt": belt,
+                "status": status,
+                "delay_minutes": delay_minutes,
+                "delay_reason": "Late arrival" if delay_minutes > 0 and is_arrival else ("Gate hold" if delay_minutes > 0 else None),
+                "aircraft_type": state.aircraft_type,
+                "flight_type": flight_type,
+                "data_source": "synthetic",
+            })
 
     return schedule
 
@@ -403,11 +441,24 @@ def _try_spawn_from_queue(queue, local_iata: str) -> bool:
 
     origin = flight.get("origin")
     dest = flight.get("destination")
+    gate = flight.get("gate")
 
     _flight_states[icao24] = _create_new_flight(
-        icao24, callsign, selected_phase, origin=origin, destination=dest
+        icao24, callsign, selected_phase, origin=origin, destination=dest,
+        preferred_gate=gate,
+        aircraft_type_override=flight.get("aircraft_type"),
+        registration=flight.get("registration"),
+        terminal=flight.get("terminal"),
+        belt=flight.get("belt"),
+        scheduled_time_iso=flight.get("scheduled_time"),
+        estimated_time_iso=flight.get("estimated_time"),
+        actual_time_iso=flight.get("actual_time"),
+        flifo_delay_minutes=flight.get("delay_minutes", 0),
+        delay_reason=flight.get("delay_reason"),
+        codeshares=flight.get("codeshares"),
+        data_source="flifo",
     )
-    logger.debug(f"FLIFO spawn: {callsign} phase={phase_str} {origin}→{dest}")
+    logger.debug(f"FLIFO spawn: {callsign} phase={phase_str} {origin}→{dest} gate={gate}")
     return True
 
 

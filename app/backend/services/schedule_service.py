@@ -233,6 +233,24 @@ class ScheduleService:
 
         # 3. Merge: live flights always included, background fills the rest
         #    Normalize callsigns for dedup (ICAO UAL123 == IATA UA123)
+        #    When FLIFO data exists for a live synthetic flight, overlay ground-truth metadata
+        flifo_by_callsign: dict[str, dict] = {}
+        if background_flights and background_flights[0].get("data_source") == "flifo":
+            for f in background_flights:
+                flifo_by_callsign[normalize_callsign(f["flight_number"])] = f
+
+        for lf in live_flights:
+            if lf.get("data_source") == "synthetic" and flifo_by_callsign:
+                norm = normalize_callsign(lf["flight_number"])
+                flifo_rec = flifo_by_callsign.get(norm)
+                if flifo_rec:
+                    for key in ("terminal", "belt", "registration", "codeshares",
+                                "delay_reason", "estimated_time", "actual_time"):
+                        if flifo_rec.get(key) and not lf.get(key):
+                            lf[key] = flifo_rec[key]
+                    if flifo_rec.get("delay_minutes") and not lf.get("delay_minutes"):
+                        lf["delay_minutes"] = flifo_rec["delay_minutes"]
+
         seen_numbers = {normalize_callsign(f["flight_number"]) for f in live_flights}
         background_deduped = []
         for f in background_flights:

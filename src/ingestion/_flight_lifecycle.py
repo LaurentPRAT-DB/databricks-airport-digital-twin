@@ -82,6 +82,7 @@ from src.ingestion._runway_ops import (
     _release_runway,
     _find_available_gate,
     _find_overflow_gate,
+    _resolve_preferred_gate,
     _occupy_gate,
     _release_gate,
     _check_taxi_separation,
@@ -389,11 +390,32 @@ def _build_turnaround_schedule(
 def _create_new_flight(
     icao24: str, callsign: str, phase: FlightPhase,
     origin: Optional[str] = None, destination: Optional[str] = None,
+    preferred_gate: Optional[str] = None,
+    aircraft_type_override: Optional[str] = None,
+    registration: Optional[str] = None,
+    terminal: Optional[str] = None,
+    belt: Optional[str] = None,
+    scheduled_time_iso: Optional[str] = None,
+    estimated_time_iso: Optional[str] = None,
+    actual_time_iso: Optional[str] = None,
+    flifo_delay_minutes: int = 0,
+    delay_reason: Optional[str] = None,
+    codeshares: Optional[list] = None,
+    data_source: str = "synthetic",
 ) -> FlightState:
     """Create a new flight in the specified phase with proper separation."""
     from src.ingestion.fallback import get_airport_center, get_current_airport_iata, get_gates
     is_intl = _is_international_airport(origin or "") or _is_international_airport(destination or "")
-    aircraft_type = _get_aircraft_type_for_airline(callsign, is_international=is_intl)
+    aircraft_type = aircraft_type_override or _get_aircraft_type_for_airline(callsign, is_international=is_intl)
+
+    # FLIFO kwargs to propagate through recursive overflow calls
+    _flifo_kw = dict(
+        aircraft_type_override=aircraft_type_override,
+        registration=registration, terminal=terminal, belt=belt,
+        scheduled_time_iso=scheduled_time_iso, estimated_time_iso=estimated_time_iso,
+        actual_time_iso=actual_time_iso, flifo_delay_minutes=flifo_delay_minutes,
+        delay_reason=delay_reason, codeshares=codeshares, data_source=data_source,
+    )
 
     if phase == FlightPhase.APPROACHING:
         # Start on approach from the origin direction WITH PROPER WAKE TURBULENCE SEPARATION
@@ -411,7 +433,7 @@ def _create_new_flight(
         # Limit simultaneous approaches (scaled to airport runway count)
         if approaching_count + landing_count >= get_max_approach_aircraft():
             # Too many on approach - start as enroute instead
-            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
+            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination, preferred_gate=preferred_gate, **_flifo_kw)
 
         # Calculate position based on actual aircraft positions (not just count)
         last_aircraft = _find_last_aircraft_on_approach()
@@ -444,7 +466,7 @@ def _create_new_flight(
 
         # Pre-assign a gate so it shows as INBOUND on the gate status panel
         _init_gate_states()
-        pre_gate = _find_available_gate()
+        pre_gate = _resolve_preferred_gate(preferred_gate) or _find_available_gate()
         if pre_gate:
             _occupy_gate(icao24, pre_gate)
 
@@ -497,17 +519,27 @@ def _create_new_flight(
             waypoint_index=best_wp_idx,
             origin_airport=origin,
             destination_airport=destination,
+            registration=registration,
+            terminal=terminal,
+            belt=belt,
+            scheduled_time_iso=scheduled_time_iso,
+            estimated_time_iso=estimated_time_iso,
+            actual_time_iso=actual_time_iso,
+            flifo_delay_minutes=flifo_delay_minutes,
+            delay_reason=delay_reason,
+            codeshares=codeshares,
+            data_source=data_source,
         )
 
     elif phase == FlightPhase.PARKED:
         # Start at a gate, nose facing toward the nearest terminal center
         _init_gate_states()
 
-        # Find an available gate
-        gate = _find_available_gate()
+        # Use FLIFO-assigned gate if valid, else find any available
+        gate = _resolve_preferred_gate(preferred_gate) or _find_available_gate()
         if gate is None:
             # All gates occupied - switch to approaching or enroute
-            return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination)
+            return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination, preferred_gate=preferred_gate, **_flifo_kw)
 
         lat, lon = get_gates()[gate]
         _occupy_gate(icao24, gate)
@@ -563,6 +595,16 @@ def _create_new_flight(
             parked_since=get_time() - initial_time_at_gate,
             turnaround_phase=current_phase,
             turnaround_schedule=schedule,
+            registration=registration,
+            terminal=terminal,
+            belt=belt,
+            scheduled_time_iso=scheduled_time_iso,
+            estimated_time_iso=estimated_time_iso,
+            actual_time_iso=actual_time_iso,
+            flifo_delay_minutes=flifo_delay_minutes,
+            delay_reason=delay_reason,
+            codeshares=codeshares,
+            data_source=data_source,
         )
 
     elif phase == FlightPhase.ENROUTE:
@@ -637,6 +679,16 @@ def _create_new_flight(
             aircraft_type=aircraft_type,
             origin_airport=origin,
             destination_airport=destination,
+            registration=registration,
+            terminal=terminal,
+            belt=belt,
+            scheduled_time_iso=scheduled_time_iso,
+            estimated_time_iso=estimated_time_iso,
+            actual_time_iso=actual_time_iso,
+            flifo_delay_minutes=flifo_delay_minutes,
+            delay_reason=delay_reason,
+            codeshares=codeshares,
+            data_source=data_source,
         )
 
     elif phase == FlightPhase.TAXI_TO_GATE:
@@ -646,12 +698,12 @@ def _create_new_flight(
         # Check if runway is occupied - if so, can't spawn here
         arrival_rwy = _get_arrival_runway_name()
         if not _is_runway_clear(arrival_rwy):
-            return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination)
+            return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination, preferred_gate=preferred_gate, **_flifo_kw)
 
-        gate = _find_available_gate()
+        gate = _resolve_preferred_gate(preferred_gate) or _find_available_gate()
         if gate is None:
             # No gates available
-            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
+            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination, preferred_gate=preferred_gate, **_flifo_kw)
 
         # Compute taxi route from runway to gate (uses OSM graph when available)
         taxi_route = _get_taxi_waypoints_arrival(gate)
@@ -666,7 +718,7 @@ def _create_new_flight(
                 dist = _distance_between(spawn_pos, (other.latitude, other.longitude))
                 if dist < MIN_TAXI_SEPARATION_DEG * 2:  # Buffer for spawn position
                     # Taxiway congested - spawn as approaching instead
-                    return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination)
+                    return _create_new_flight(icao24, callsign, FlightPhase.APPROACHING, origin=origin, destination=destination, preferred_gate=preferred_gate, **_flifo_kw)
 
         _occupy_gate(icao24, gate)
 
@@ -693,17 +745,27 @@ def _create_new_flight(
             origin_airport=origin,
             destination_airport=destination,
             taxi_route=taxi_route,
+            registration=registration,
+            terminal=terminal,
+            belt=belt,
+            scheduled_time_iso=scheduled_time_iso,
+            estimated_time_iso=estimated_time_iso,
+            actual_time_iso=actual_time_iso,
+            flifo_delay_minutes=flifo_delay_minutes,
+            delay_reason=delay_reason,
+            codeshares=codeshares,
+            data_source=data_source,
         )
 
     elif phase == FlightPhase.TAXI_TO_RUNWAY:
         # Departing, starting from a gate position
         _init_gate_states()
 
-        # Find an available gate for the departing aircraft
-        gate = _find_available_gate()
+        # Use FLIFO-assigned gate if valid, else find any available
+        gate = _resolve_preferred_gate(preferred_gate) or _find_available_gate()
         if gate is None:
             # All gates occupied - can't spawn departing aircraft
-            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
+            return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination, preferred_gate=preferred_gate, **_flifo_kw)
 
         lat, lon = get_gates()[gate]
         _occupy_gate(icao24, gate)
@@ -734,10 +796,20 @@ def _create_new_flight(
             origin_airport=origin,
             destination_airport=destination,
             taxi_route=taxi_route,
+            registration=registration,
+            terminal=terminal,
+            belt=belt,
+            scheduled_time_iso=scheduled_time_iso,
+            estimated_time_iso=estimated_time_iso,
+            actual_time_iso=actual_time_iso,
+            flifo_delay_minutes=flifo_delay_minutes,
+            delay_reason=delay_reason,
+            codeshares=codeshares,
+            data_source=data_source,
         )
 
     # Default: random enroute
-    return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination)
+    return _create_new_flight(icao24, callsign, FlightPhase.ENROUTE, origin=origin, destination=destination, preferred_gate=preferred_gate, **_flifo_kw)
 
 
 def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
