@@ -269,6 +269,37 @@ def _generate_flight_number(airline: dict, rng: random.Random) -> str:
     return f"{airline['iata']}{num}"
 
 
+def _load_airport_weights(airport_iata: str) -> Optional[dict[str, float]]:
+    """Load airline weights from calibration profile if available.
+
+    Returns dict of IATA code → weight, or None if no profile found.
+    """
+    try:
+        from src.calibration.profile import AirportProfileLoader
+        from src.ingestion.callsign_reconciler import to_iata
+
+        loader = AirportProfileLoader()
+        icao = f"K{airport_iata}" if len(airport_iata) == 3 else airport_iata
+        profile = loader.get_profile(icao)
+
+        if not profile or not profile.airline_shares:
+            return None
+
+        # Convert ICAO codes to IATA codes
+        weights: dict[str, float] = {}
+        for icao_code, share in profile.airline_shares.items():
+            iata_code = to_iata(f"{icao_code}100")
+            if iata_code:
+                iata_code = iata_code[:-3]  # Strip the "100" flight number
+                weights[iata_code] = share
+            else:
+                weights[icao_code] = share
+
+        return weights if weights else None
+    except Exception:
+        return None
+
+
 def generate_flights(
     airport_iata: str,
     direction: Optional[str] = None,
@@ -298,14 +329,38 @@ def generate_flights(
 
     rng = random.Random(seed)
 
-    # Build weighted airline list
-    weights = [a["weight"] for a in AIRLINES]
+    # Use airport profile weights if available, otherwise hardcoded
+    profile_weights = _load_airport_weights(airport_iata)
+    if profile_weights:
+        # Build airline list from profile — match against known airlines
+        airline_list = []
+        weight_list = []
+        for airline in AIRLINES:
+            w = profile_weights.get(airline["iata"], 0.0)
+            if w > 0:
+                airline_list.append(airline)
+                weight_list.append(w)
+        # Add remaining airlines at minimal weight for variety
+        if airline_list:
+            min_w = min(weight_list) * 0.1
+            for airline in AIRLINES:
+                if airline["iata"] not in profile_weights:
+                    airline_list.append(airline)
+                    weight_list.append(min_w)
+        else:
+            airline_list = AIRLINES
+            weight_list = [a["weight"] for a in AIRLINES]
+    else:
+        airline_list = AIRLINES
+        weight_list = [a["weight"] for a in AIRLINES]
+
+    weights = weight_list
 
     records: list[FlightRecord] = []
     window_seconds = int((to_time - from_time).total_seconds())
 
     for _ in range(count):
-        airline = rng.choices(AIRLINES, weights=weights, k=1)[0]
+        airline = rng.choices(airline_list, weights=weights, k=1)[0]
         flight_dir = direction or rng.choice(["arrival", "departure"])
 
         # Distribute flights with peak-hour weighting
