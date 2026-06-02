@@ -130,7 +130,11 @@ def generate_credential(endpoint_name: str, profile: str) -> str:
 
 
 def run_schema_sql(host: str, user: str, token: str, schema_file: Path):
-    """Run schema SQL against Lakebase. All statements are idempotent."""
+    """Run schema SQL against Lakebase. All statements are idempotent.
+
+    Executes each statement individually so that non-critical failures
+    (e.g. COMMENT ON a table owned by another role) don't abort the whole schema.
+    """
     import psycopg2
 
     conn = psycopg2.connect(
@@ -141,7 +145,24 @@ def run_schema_sql(host: str, user: str, token: str, schema_file: Path):
     cur = conn.cursor()
 
     sql = schema_file.read_text()
-    cur.execute(sql)
+    # Split on semicolons, filter empty/comment-only fragments
+    statements = [s.strip() for s in sql.split(";") if s.strip() and not s.strip().startswith("--")]
+
+    skipped = 0
+    for stmt in statements:
+        try:
+            cur.execute(stmt)
+        except psycopg2.errors.InsufficientPrivilege:
+            # Non-critical: COMMENT ON or ALTER on tables owned by another role
+            skipped += 1
+            conn.rollback()  # reset transaction state after error
+        except psycopg2.errors.DuplicateObject:
+            # Index/constraint already exists
+            skipped += 1
+            conn.rollback()
+
+    if skipped:
+        print(f"  Note: {skipped} statement(s) skipped (insufficient privilege or duplicate)", file=sys.stderr)
 
     # Report created tables
     cur.execute(
@@ -152,10 +173,16 @@ def run_schema_sql(host: str, user: str, token: str, schema_file: Path):
     print(f"  Schema applied: {len(tables)} table(s) in public schema", file=sys.stderr)
 
     # Grant public access (so app SP can read/write without explicit role)
-    cur.execute("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO PUBLIC")
-    cur.execute("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO PUBLIC")
-    cur.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO PUBLIC")
-    cur.execute("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO PUBLIC")
+    for grant_sql in [
+        "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO PUBLIC",
+        "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO PUBLIC",
+        "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO PUBLIC",
+        "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO PUBLIC",
+    ]:
+        try:
+            cur.execute(grant_sql)
+        except psycopg2.errors.InsufficientPrivilege:
+            conn.rollback()
 
     cur.close()
     conn.close()
