@@ -129,6 +129,33 @@ def generate_credential(endpoint_name: str, profile: str) -> str:
     return json.loads(result.stdout)["token"]
 
 
+def _split_sql(sql: str) -> list[str]:
+    """Split SQL on semicolons, respecting $$-quoted function bodies."""
+    stmts = []
+    current = []
+    in_dollar = False
+    for line in sql.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("--") and not current:
+            continue
+        if "$$" in line:
+            count = line.count("$$")
+            if count % 2 == 1:
+                in_dollar = not in_dollar
+        current.append(line)
+        if not in_dollar and stripped.endswith(";"):
+            stmt = "\n".join(current).strip()
+            if stmt and stmt != ";":
+                stmts.append(stmt.rstrip(";"))
+            current = []
+    if current:
+        stmt = "\n".join(current).strip()
+        if stmt and stmt != ";":
+            stmts.append(stmt.rstrip(";"))
+    # Filter out comment-only fragments
+    return [s for s in stmts if any(l.strip() and not l.strip().startswith("--") for l in s.split("\n"))]
+
+
 def run_schema_sql(host: str, user: str, token: str, schema_file: Path):
     """Run schema SQL against Lakebase. All statements are idempotent.
 
@@ -145,8 +172,7 @@ def run_schema_sql(host: str, user: str, token: str, schema_file: Path):
     cur = conn.cursor()
 
     sql = schema_file.read_text()
-    # Split on semicolons, filter empty/comment-only fragments
-    statements = [s.strip() for s in sql.split(";") if s.strip() and not s.strip().startswith("--")]
+    statements = _split_sql(sql)
 
     skipped = 0
     for stmt in statements:

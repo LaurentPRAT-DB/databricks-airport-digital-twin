@@ -322,12 +322,33 @@ try:
     with open("scripts/lakebase_schema.sql") as f:
         schema_sql = f.read()
 
+    # Split respecting $$-quoted PL/pgSQL function bodies
+    def split_sql(sql):
+        stmts, current, in_dollar = [], [], False
+        for line in sql.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("--") and not current:
+                continue
+            if "$$" in line and line.count("$$") % 2 == 1:
+                in_dollar = not in_dollar
+            current.append(line)
+            if not in_dollar and stripped.endswith(";"):
+                stmt = "\n".join(current).strip()
+                if stmt and stmt != ";":
+                    stmts.append(stmt.rstrip(";"))
+                current = []
+        if current:
+            stmt = "\n".join(current).strip()
+            if stmt and stmt != ";":
+                stmts.append(stmt.rstrip(";"))
+        return [s for s in stmts if any(l.strip() and not l.strip().startswith("--") for l in s.split("\n"))]
+
     conn = psycopg2.connect(
         host=lb_host, port=5432, dbname="databricks_postgres",
         user=user, password=token, sslmode="require"
     )
     conn.autocommit = True
-    stmts = [s.strip() for s in schema_sql.split(";") if s.strip() and not s.strip().startswith("--")]
+    stmts = split_sql(schema_sql)
     skipped = 0
     with conn.cursor() as cur:
         for stmt in stmts:
@@ -339,7 +360,6 @@ try:
             except psycopg2.errors.DuplicateObject:
                 skipped += 1
                 conn.rollback()
-        # Ensure SP can access all tables
         for g in [
             "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO PUBLIC",
             "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO PUBLIC",
