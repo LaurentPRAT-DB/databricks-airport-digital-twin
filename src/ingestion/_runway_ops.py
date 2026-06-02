@@ -416,6 +416,20 @@ def _find_available_gate() -> Optional[str]:
     return random.choice(available)
 
 
+def _resolve_preferred_gate(preferred: Optional[str]) -> Optional[str]:
+    """Return preferred gate if it exists in OSM data and is currently available."""
+    if not preferred:
+        return None
+    _init_gate_states()
+    if preferred not in _gate_states:
+        return None
+    state = _gate_states[preferred]
+    current_time = get_time()
+    if state.occupied_by is None and current_time >= state.available_at:
+        return preferred
+    return None
+
+
 def _find_overflow_gate() -> Optional[str]:
     """Find a gate for overflow (all occupied). Distributes across gates.
 
