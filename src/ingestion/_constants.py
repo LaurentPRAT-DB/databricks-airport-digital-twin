@@ -420,4 +420,4 @@ _SFO_CENTER = (37.6213, -122.379)
 
 # Minimum gates to avoid constant saturation with moderate flight counts
 MIN_GATES_FOR_OPERATIONS = 15
-MAX_OVERFLOW_STANDS = 10  # Maximum dynamically generated remote parking positions
+MAX_OVERFLOW_STANDS = 130  # Maximum dynamically generated remote parking positions

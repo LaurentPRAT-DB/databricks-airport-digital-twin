@@ -641,7 +641,7 @@ class TestGateManagement:
 
     def test_find_available_gate_all_occupied(self):
         """Test no available gate when all are occupied."""
-        for gate in GATES:
+        for gate in _gate_states:
             _occupy_gate(f"test_{gate}", gate)
 
         available = _find_available_gate()

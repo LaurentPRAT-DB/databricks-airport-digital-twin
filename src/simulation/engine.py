@@ -265,6 +265,17 @@ class SimulationEngine:
         self._spawned_indices: set[int] = set()
         self._spawn_scan_start: int = 0  # low-water mark for schedule scan
 
+        # Build linked_arrival map: dep_idx → arrival_idx (for delay cascade)
+        self._linked_arrival_idx: dict[int, int] = {}
+        callsign_to_idx = {}
+        for i, f in enumerate(self.flight_schedule):
+            if f["flight_type"] == "arrival":
+                callsign_to_idx[f["flight_number"]] = i
+        for i, f in enumerate(self.flight_schedule):
+            linked = f.get("linked_arrival")
+            if linked and linked in callsign_to_idx:
+                self._linked_arrival_idx[i] = callsign_to_idx[linked]
+
         # Track completed flights for baggage generation
         self._completed_flights: list[dict] = []
 
@@ -648,6 +659,20 @@ class SimulationEngine:
                 origin = flight["origin"]
                 dest = flight["destination"]
             else:
+                # Delay cascade: defer departure until linked arrival completes turnaround
+                arr_idx = self._linked_arrival_idx.get(idx)
+                if arr_idx is not None:
+                    arr_icao24 = f"sim{arr_idx:05d}"
+                    arr_state = _flight_states.get(arr_icao24)
+                    if arr_state is not None and arr_state.phase != FlightPhase.PUSHBACK:
+                        if arr_state.phase in (FlightPhase.APPROACHING, FlightPhase.LANDING,
+                                               FlightPhase.TAXI_TO_GATE):
+                            continue  # Inbound hasn't parked yet — defer
+                        if arr_state.phase == FlightPhase.PARKED:
+                            min_turnaround_s = 15 * 60  # min 15min before departure can spawn
+                            if arr_state.time_at_gate < min_turnaround_s:
+                                continue  # Still in turnaround — defer
+
                 phase = FlightPhase.PARKED
                 origin = flight["origin"]
                 dest = flight["destination"]

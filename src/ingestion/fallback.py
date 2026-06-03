@@ -375,8 +375,31 @@ def get_gates() -> Dict[str, tuple]:
         else:
             gates = _generate_default_gates_around_center(get_airport_center())
 
-    if len(gates) < MIN_GATES_FOR_OPERATIONS:
-        overflow = _generate_overflow_stands(gates, MIN_GATES_FOR_OPERATIONS - len(gates))
+    # Scale gate count using calibration profile turnaround time.
+    # Longer turnarounds = more gates needed for same throughput.
+    # Base: 50 flights target × (turnaround_h / cycle_h) × buffer
+    min_gates = MIN_GATES_FOR_OPERATIONS
+    try:
+        from src.ingestion.schedule_generator import _get_profile_loader
+        iata = get_current_airport_iata()
+        profile = _get_profile_loader().get_profile(iata)
+        if profile and profile.turnaround_median_min > 0:
+            # Peak hour fraction × daily ops estimate gives peak concurrent flights
+            peak_frac = max(profile.hourly_profile) if profile.hourly_profile else 0.07
+            # Typical busy airport: 500-1200 daily ops. Use turnaround to scale.
+            # Concurrent gates needed ≈ peak_hourly_rate × turnaround_hours
+            # With peak_frac ~0.07 and 800 daily ops → 56 peak flights/hour
+            # × 1.17h turnaround = ~65 gates
+            daily_ops_estimate = max(400, int(1.0 / max(peak_frac, 0.01)))
+            peak_hourly = daily_ops_estimate * peak_frac
+            turnaround_hours = profile.turnaround_median_min / 60
+            gate_estimate = int(peak_hourly * turnaround_hours * 1.2)
+            min_gates = max(MIN_GATES_FOR_OPERATIONS, min(gate_estimate, 150))
+    except Exception:
+        pass
+
+    if len(gates) < min_gates:
+        overflow = _generate_overflow_stands(gates, min_gates - len(gates))
         gates.update(overflow)
 
     try:
