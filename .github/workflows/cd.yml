@@ -27,7 +27,7 @@ on:
         default: false
 
 concurrency:
-  group: cd-deploy
+  group: cd-${{ github.event.inputs.target || 'prod' }}
   cancel-in-progress: false
 
 env:
