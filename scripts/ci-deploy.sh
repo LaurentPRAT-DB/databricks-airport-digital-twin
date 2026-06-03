@@ -208,8 +208,19 @@ if [[ -z "$BUNDLE_DIR" ]]; then
 fi
 
 if [[ -z "$APP_SP" ]]; then
-  fail "Could not detect app SP (app may not exist yet)"
-  exit 1
+  # App may need a start/deploy cycle to generate its SP — try starting it
+  info "SP not found — starting app to trigger SP creation..."
+  databricks apps start "$APP_NAME" --no-wait 2>/dev/null || true
+  for i in $(seq 1 12); do
+    sleep 10
+    APP_JSON=$(databricks apps get "$APP_NAME" --output json 2>/dev/null || echo "{}")
+    APP_SP=$(echo "$APP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null || true)
+    [[ -n "$APP_SP" ]] && break
+  done
+  if [[ -z "$APP_SP" ]]; then
+    fail "Could not detect app SP after start (app may not exist)"
+    exit 1
+  fi
 fi
 if [[ -z "$BUNDLE_DIR" ]]; then
   info "Could not determine bundle dir — skipping workspace permissions"
