@@ -31,13 +31,16 @@ PROJECT_ROOT="$(pwd)"
 # Parse flags
 TARGET="prod"
 SEED=false
+BRAND="${BRAND:-databricks}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --target) TARGET="${2:-prod}"; shift 2 ;;
     --seed)   SEED=true; shift ;;
+    --brand)  BRAND="${2:-databricks}"; shift 2 ;;
     *)        TARGET="$1"; shift ;;
   esac
 done
+export VITE_BRAND="$BRAND"
 
 # Validate required env vars
 if [[ -z "${DATABRICKS_HOST:-}" ]]; then

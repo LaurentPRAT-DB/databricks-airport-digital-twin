@@ -6,12 +6,21 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: "Deployment target (dev or prod)"
+        description: "Deployment target"
         type: choice
         options:
           - prod
           - dev
+          - free
         default: prod
+      brand:
+        description: "Frontend brand (logo + default airport)"
+        type: choice
+        options:
+          - databricks
+          - aia.gr
+          - sita.aero
+        default: databricks
       seed:
         description: "Seed data (first-time deploy: uploads calibration profiles, 3D models, Lakebase schema)"
         type: boolean
@@ -28,10 +37,12 @@ env:
   DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
   DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
   TARGET: ${{ github.event.inputs.target || 'prod' }}
+  BRAND: ${{ github.event.inputs.brand || 'databricks' }}
 
 jobs:
   deploy:
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    environment: ${{ github.event.inputs.target || 'prod' }}
     timeout-minutes: 30
     outputs:
       app-url: ${{ steps.deploy.outputs.app_url }}
@@ -101,7 +112,15 @@ jobs:
 
       - name: Build frontend
         working-directory: app/frontend
-        run: ./node_modules/.bin/tsc && ./node_modules/.bin/vite build
+        env:
+          VITE_BRAND: ${{ github.event.inputs.brand || 'databricks' }}
+        run: |
+          BRAND="${VITE_BRAND}"
+          BRAND_DIR="brands/${BRAND}"
+          if [[ -f "${BRAND_DIR}/logo.svg" ]]; then
+            cp "${BRAND_DIR}/logo.svg" public/company-logo.svg
+          fi
+          ./node_modules/.bin/tsc && ./node_modules/.bin/vite build
 
       - name: Deploy via DABs
         id: deploy
