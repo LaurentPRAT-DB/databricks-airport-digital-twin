@@ -32,7 +32,7 @@ env:
 jobs:
   deploy:
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     outputs:
       app-url: ${{ steps.deploy.outputs.app_url }}
       git-commit: ${{ steps.meta.outputs.sha }}
