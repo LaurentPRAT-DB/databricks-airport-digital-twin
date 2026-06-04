@@ -97,6 +97,7 @@ fi
 ok()   { echo "  [OK] $1"; }
 fail() { echo "  [FAIL] $1"; }
 info() { echo "  [INFO] $1"; }
+warn() { echo "  [WARN] $1"; }
 
 run_sql() {
   local stmt="$1"
