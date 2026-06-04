@@ -312,7 +312,6 @@ def _get_taxi_waypoints_arrival(gate_ref: str, start_pos: tuple = None) -> List[
         service = get_airport_config_service()
         graph = service.taxiway_graph
         if graph:
-            # Use aircraft's rollout position when available, else threshold
             if start_pos:
                 route_start = (start_pos[1], start_pos[0])  # (lat, lon) for graph
             else:
@@ -329,6 +328,14 @@ def _get_taxi_waypoints_arrival(gate_ref: str, start_pos: tuple = None) -> List[
                     diag_log("TAXI_ROUTE_GRAPH", datetime.now(timezone.utc),
                              gate=gate_ref, points=len(route), direction="arrival")
                     return [(lon, lat) for lat, lon in route]
+                else:
+                    logger.warning("TAXI graph find_route returned %s for gate %s (start=%s, gate_pos=%s, nodes=%d)",
+                                   route, gate_ref, route_start, gate_pos, len(graph.nodes))
+            else:
+                logger.warning("TAXI graph skip: route_start=%s gate_pos=%s gate_ref=%s",
+                               route_start, gate_pos, gate_ref)
+        else:
+            logger.debug("TAXI graph not available yet")
     except ImportError:
         pass
     except Exception as e:
