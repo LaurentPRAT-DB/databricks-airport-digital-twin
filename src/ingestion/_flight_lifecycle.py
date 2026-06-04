@@ -1190,7 +1190,8 @@ def _update_landing(state: FlightState, dt: float) -> None:
                 if pre_gate and pre_gate in _gate_states and _gate_states[pre_gate].occupied_by == state.icao24:
                     _release_gate(state.icao24, pre_gate)
                 state.assigned_gate = None
-                state.taxi_route = None  # Use default arrival waypoints
+                # Route toward airport center (will be re-routed once a gate frees up)
+                state.taxi_route = _get_taxi_waypoints_arrival("A1", start_pos=rollout_pos)
 
         # Prepend current position to taxi route so the aircraft taxis
         # smoothly from the runway rollout end to the first taxiway
