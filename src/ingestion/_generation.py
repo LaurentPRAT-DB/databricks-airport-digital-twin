@@ -376,7 +376,7 @@ def _cull_exited_flights() -> None:
         # Sanity: ground-phase aircraft impossibly far from airport (>5km) — position anomaly
         if state.on_ground and center:
             dist = _distance_between((state.latitude, state.longitude), center)
-            if dist > 0.045:  # ~5km
+            if dist > 0.025:  # ~2.8km — airport perimeter
                 logger.warning("Culling %s (%s): ground phase %s but %.1fkm from airport",
                                icao24, state.callsign, state.phase.value, dist * 111)
                 if state.assigned_gate:
