@@ -173,8 +173,48 @@ class TaxiwayGraph:
             ):
                 self._add_edge(gate_id, nid)
 
-        # 5. Penalize edges that pass through terminal buildings
+        # 4b. Terminal perimeter ring — synthetic taxiway nodes around each building
+        # This gives Dijkstra a navigable path around the terminal when
+        # no OSM taxiway connects both sides of a building.
         building_polygons = self._extract_building_polygons(config)
+        perimeter_added = 0
+        for poly in building_polygons:
+            if len(poly) < 3:
+                continue
+            ring_ids = []
+            for lat, lon in poly:
+                # Offset outward from centroid by ~30m so nodes sit just outside the building
+                clat = sum(p[0] for p in poly) / len(poly)
+                clon = sum(p[1] for p in poly) / len(poly)
+                dlat = lat - clat
+                dlon = lon - clon
+                dist = math.sqrt(dlat ** 2 + dlon ** 2)
+                if dist > 1e-8:
+                    offset_m = 30  # meters outside building edge
+                    offset_deg = offset_m / 111_000
+                    olat = lat + (dlat / dist) * offset_deg
+                    olon = lon + (dlon / dist) * offset_deg
+                else:
+                    olat, olon = lat, lon
+                nid = self._get_or_create_node(olat, olon)
+                ring_ids.append(nid)
+                # Connect to nearest taxiway node
+                nearest = self._find_nearest_node(olat, olon, exclude={nid})
+                if nearest is not None:
+                    d = _haversine_m(olat, olon, self.nodes[nearest][0], self.nodes[nearest][1])
+                    if d < 400:
+                        self._add_edge(nid, nearest)
+            # Chain ring nodes into a navigable perimeter loop
+            for i in range(len(ring_ids)):
+                a = ring_ids[i]
+                b = ring_ids[(i + 1) % len(ring_ids)]
+                if a != b:
+                    self._add_edge(a, b)
+                    perimeter_added += 1
+        if perimeter_added:
+            logger.info("Added %d perimeter edges around %d terminal building(s)", perimeter_added, len(building_polygons))
+
+        # 5. Penalize edges that pass through terminal buildings
         if building_polygons:
             penalized = self._penalize_building_edges(building_polygons)
             if penalized:
