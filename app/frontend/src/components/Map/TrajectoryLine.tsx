@@ -136,12 +136,23 @@ export default function TrajectoryLine() {
     return [];
   }, [usesReplayTrajectory, simPoints, apiTrajectory]);
 
+  // For ground-phase aircraft (taxi), show only the ground portion of the
+  // trajectory — the approach segment passes over buildings at altitude and
+  // looks wrong projected onto the 2D map.
+  const isOnGround = selectedFlight?.on_ground === true || (selectedFlight?.altitude != null && selectedFlight.altitude < 50);
+  const displayPoints = useMemo(() => {
+    if (!isOnGround) return validPoints;
+    // Keep only points at or near ground level (< 200ft)
+    const groundPoints = validPoints.filter(p => p.altitude === null || p.altitude < 200);
+    return groundPoints.length >= 2 ? groundPoints : validPoints;
+  }, [validPoints, isOnGround]);
+
   // Split trajectory into traveled (past) and remaining (future) at the
   // aircraft's current position.  The split index is the closest trajectory
   // point to the live position.
   const { traveledPositions, remainingPositions } = useMemo(() => {
-    if (validPoints.length < 2 || !selectedFlight?.latitude || !selectedFlight?.longitude) {
-      const all: [number, number][] = validPoints.map((p) => [p.latitude, p.longitude]);
+    if (displayPoints.length < 2 || !selectedFlight?.latitude || !selectedFlight?.longitude) {
+      const all: [number, number][] = displayPoints.map((p) => [p.latitude, p.longitude]);
       return { traveledPositions: all, remainingPositions: [] as [number, number][] };
     }
 
@@ -151,10 +162,10 @@ export default function TrajectoryLine() {
     // Find closest trajectory point to aircraft — search BACKWARD so that
     // when the aircraft revisits the same airspace (go-around), we find
     // the most recent pass, not the first one.
-    let bestIdx = validPoints.length - 1;
+    let bestIdx = displayPoints.length - 1;
     let bestDist = Infinity;
-    for (let i = validPoints.length - 1; i >= 0; i--) {
-      const d = distSq(validPoints[i].latitude, validPoints[i].longitude, curLat, curLon);
+    for (let i = displayPoints.length - 1; i >= 0; i--) {
+      const d = distSq(displayPoints[i].latitude, displayPoints[i].longitude, curLat, curLon);
       if (d < bestDist) {
         bestDist = d;
         bestIdx = i;
@@ -165,27 +176,27 @@ export default function TrajectoryLine() {
     const currentPos: [number, number] = [curLat, curLon];
 
     // Traveled: start → closest point → current position
-    const traveled: [number, number][] = validPoints
+    const traveled: [number, number][] = displayPoints
       .slice(0, bestIdx + 1)
       .map((p) => [p.latitude, p.longitude]);
     traveled.push(currentPos);
 
     // Remaining: current position → rest of trajectory
     const remaining: [number, number][] = [currentPos];
-    for (let i = bestIdx + 1; i < validPoints.length; i++) {
-      remaining.push([validPoints[i].latitude, validPoints[i].longitude]);
+    for (let i = bestIdx + 1; i < displayPoints.length; i++) {
+      remaining.push([displayPoints[i].latitude, displayPoints[i].longitude]);
     }
 
     return { traveledPositions: traveled, remainingPositions: remaining };
-  }, [validPoints, selectedFlight?.latitude, selectedFlight?.longitude]);
+  }, [displayPoints, selectedFlight?.latitude, selectedFlight?.longitude]);
 
   // Determine if the trajectory is mostly on-ground (taxi) vs airborne.
   // Ground trajectories are NOT smoothed — smoothing pulls lines through buildings.
   const avgAltitude = useMemo(() => {
-    if (validPoints.length === 0) return 0;
-    const sum = validPoints.reduce((acc, p) => acc + (p.altitude ?? 0), 0);
-    return sum / validPoints.length;
-  }, [validPoints]);
+    if (displayPoints.length === 0) return 0;
+    const sum = displayPoints.reduce((acc, p) => acc + (p.altitude ?? 0), 0);
+    return sum / displayPoints.length;
+  }, [displayPoints]);
   const isGroundTrajectory = avgAltitude < 200;
 
   // Split polylines at large gaps (e.g. go-around enroute segments that are
