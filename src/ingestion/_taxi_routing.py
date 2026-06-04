@@ -306,6 +306,7 @@ def _get_taxi_waypoints_arrival(gate_ref: str, start_pos: tuple = None) -> List[
 
     Returns list of (lon, lat) tuples matching existing waypoint format.
     """
+    logger.info("TAXI_ROUTE_CALL gate=%s start_pos=%s", gate_ref, start_pos)
     try:
         from app.backend.services.airport_config_service import get_airport_config_service
         from src.ingestion._approach_departure import _get_runway_threshold
@@ -347,13 +348,16 @@ def _get_taxi_waypoints_arrival(gate_ref: str, start_pos: tuple = None) -> List[
     if gate_ref and gate_pos:
         route = _build_arrival_taxi_route(gate_pos, start_pos=start_pos)
         if route and len(route) >= 2:
-            diag_log("TAXI_ROUTE_GEOMETRY", datetime.now(timezone.utc),
-                     gate=gate_ref, points=len(route), direction="arrival")
+            logger.info("TAXI_ROUTE_GEOMETRY gate=%s points=%d", gate_ref, len(route))
             return route
+        else:
+            logger.warning("TAXI geometry fallback returned %s for gate %s", route, gate_ref)
+    else:
+        logger.warning("TAXI geometry skip: gate_ref=%s gate_pos=%s total_gates=%d",
+                       gate_ref, gate_pos, len(get_gates()))
 
     # Last resort: generic waypoints (offset for non-SFO airports)
-    diag_log("TAXI_ROUTE_STATIC", datetime.now(timezone.utc),
-             gate=gate_ref, direction="arrival")
+    logger.warning("TAXI_ROUTE_STATIC fallback for gate=%s (graph and geometry both failed)", gate_ref)
     from src.ingestion.fallback import TAXI_WAYPOINTS_ARRIVAL
     return list(TAXI_WAYPOINTS_ARRIVAL)
 
