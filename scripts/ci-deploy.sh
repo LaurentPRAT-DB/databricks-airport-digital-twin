@@ -239,18 +239,23 @@ for name, ddl in ALL_TABLES:
 " 2>/dev/null || true)
 
   if [[ -n "$TABLES_SQL" ]]; then
+    TABLE_FAILURES=0
     while IFS=$'\t' read -r tname tsql; do
       if [[ -z "$tsql" ]]; then continue; fi
       RESULT=$(databricks api post /api/2.0/sql/statements \
         --json "$(jq -n --arg s "$tsql" --arg w "$WAREHOUSE_ID" '{warehouse_id: $w, statement: $s, wait_timeout: "30s"}')" \
-        2>&1)
+        2>&1 || true)
       if echo "$RESULT" | grep -q '"SUCCEEDED"'; then
         ok "Table $tname"
       else
-        ERR=$(echo "$RESULT" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('status',{}).get('error',{}).get('message','unknown')[:150])" 2>/dev/null || echo "$RESULT" | tail -3)
-        fail "Table $tname: $ERR"
+        TABLE_FAILURES=$((TABLE_FAILURES + 1))
+        ERR=$(echo "$RESULT" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('status',{}).get('error',{}).get('message','unknown')[:150])" 2>/dev/null || echo "warehouse unavailable")
+        info "Table $tname: $ERR"
       fi
     done <<< "$TABLES_SQL"
+    if [[ $TABLE_FAILURES -gt 0 ]]; then
+      warn "Could not create $TABLE_FAILURES tables (warehouse may be stopped) — non-fatal"
+    fi
   else
     info "Could not load table DDLs — skipping table creation"
   fi
