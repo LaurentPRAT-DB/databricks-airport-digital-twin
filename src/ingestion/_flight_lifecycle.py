@@ -1353,10 +1353,11 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
 
         if state.altitude <= DECISION_HEIGHT_FT:
             # Must be near runway threshold to transition to LANDING
+            # _get_runway_threshold() returns (lon, lat) — swap for _distance_between which expects (lat, lon)
             rwy_threshold = _get_runway_threshold()
             if rwy_threshold:
                 dist_to_rwy = _distance_between(
-                    (state.latitude, state.longitude), rwy_threshold
+                    (state.latitude, state.longitude), (rwy_threshold[1], rwy_threshold[0])
                 )
                 if dist_to_rwy > 0.03:  # >3.3km from threshold — still too far, keep descending
                     state.altitude = float(DECISION_HEIGHT_FT)
@@ -1415,10 +1416,11 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
             return state
         else:
             # Must be near runway to land — not still far out
+            # _get_runway_threshold() returns (lon, lat) — swap for _distance_between
             rwy_threshold = _get_runway_threshold()
             if rwy_threshold:
                 dist_to_rwy = _distance_between(
-                    (state.latitude, state.longitude), rwy_threshold
+                    (state.latitude, state.longitude), (rwy_threshold[1], rwy_threshold[0])
                 )
                 if dist_to_rwy > 0.03:
                     state.altitude = float(DECISION_HEIGHT_FT)
