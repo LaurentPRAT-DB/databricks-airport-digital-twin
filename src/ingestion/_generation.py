@@ -363,13 +363,25 @@ def get_flights_as_schedule(
 
 
 def _cull_exited_flights() -> None:
-    """Remove departed flights that left visibility radius."""
+    """Remove departed flights that left visibility radius and ground-phase anomalies."""
+    from src.ingestion.fallback import get_airport_center
+    center = get_airport_center()
     for icao24 in list(_flight_states.keys()):
         state = _flight_states[icao24]
         if state.phase == FlightPhase.ENROUTE and state.phase_progress == -1.0:
             if state.assigned_gate:
                 _release_gate(icao24, state.assigned_gate)
             del _flight_states[icao24]
+            continue
+        # Sanity: ground-phase aircraft impossibly far from airport (>5km) — position anomaly
+        if state.on_ground and center:
+            dist = _distance_between((state.latitude, state.longitude), center)
+            if dist > 0.045:  # ~5km
+                logger.warning("Culling %s (%s): ground phase %s but %.1fkm from airport",
+                               icao24, state.callsign, state.phase.value, dist * 111)
+                if state.assigned_gate:
+                    _release_gate(icao24, state.assigned_gate)
+                del _flight_states[icao24]
 
 
 def _compute_target_count(count: int, gate_count: int, profile) -> int:
