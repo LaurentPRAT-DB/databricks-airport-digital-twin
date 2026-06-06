@@ -160,6 +160,7 @@ scripts/capture_landing_evidence.mjs
 video_output/
 catboost_info/
 screenshots/
+!docs/screenshots/
 
 # Credentials (never commit)
 *credentials*.json

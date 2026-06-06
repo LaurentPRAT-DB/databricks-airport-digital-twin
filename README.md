@@ -778,6 +778,61 @@ docs/                  # Technical documentation + screenshots
 
 ---
 
+## Knowledge Graph
+
+Interactive architecture explorer powered by [Understand Anything](https://github.com/nicobailey/understand-anything). Visualizes all 1,008 source files as a navigable graph with 9 architectural layers, cross-module dependency edges, and a 13-step guided tour.
+
+**Run locally:**
+```bash
+cd ~/.understand-anything-plugin/packages/dashboard
+GRAPH_DIR=/path/to/this/repo UNDERSTAND_ACCESS_TOKEN=local npx vite --port 5555
+# Open http://localhost:5555/?token=local
+```
+
+**Update after code changes:**
+```bash
+# Incremental — only re-analyzes files changed since last commit
+/understand
+```
+
+| Metric | Value |
+|--------|-------|
+| Nodes | 1,502 |
+| Edges | 1,362 |
+| Architecture layers | 9 |
+| Tour steps | 13 |
+| Files analyzed | 1,008 |
+
+### Architecture Layers
+
+| Layer | Files | Description |
+|-------|-------|-------------|
+| Frontend Application | 175 | React/TypeScript UI — Leaflet 2D, Three.js 3D, WebSocket |
+| Backend API | 50 | FastAPI REST + WebSocket + service layer |
+| Core Simulation Engine | 88 | Flight lifecycle, trajectory gen, OSM ingestion, format parsers |
+| ML and Calibration | 31 | CatBoost/sklearn models, training pipelines, airport profiles |
+| Databricks Platform | 39 | DLT notebooks, test runners, OpenSky collectors |
+| Infrastructure and Deployment | 36 | DABs configs, CI/CD, deploy scripts |
+| Configuration and Data | 255 | Scenario configs, cached airport data, demo fixtures |
+| Scripts and Tools | 60 | CLI utilities, FLIFO mock server |
+| Documentation and Planning | 278 | Planning docs, technical specs, audit reports |
+
+### Screenshots (2026-06-06)
+
+**Project Overview** — 9 layers with inter-layer dependency edges:
+
+![Knowledge Graph Overview](docs/screenshots/understand-overview.png)
+
+**Learn Mode** — Full graph with all nodes visible:
+
+![Learn View](docs/screenshots/understand-learn-view.png)
+
+**Layer Drill-Down** — Core Simulation Engine (88 files):
+
+![Core Engine Layer](docs/screenshots/understand-core-engine.png)
+
+---
+
 ## License
 
 Internal Databricks Field Engineering demo.
