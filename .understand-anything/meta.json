@@ -1,0 +1,14 @@
+{
+  "gitCommitHash": "879f6da31efa1ebc4b491ae3ce8788bf9d1fb503",
+  "generatedAt": "2026-06-06T10:08:45.066671Z",
+  "fingerprint": "72f9017a2ff8dd48",
+  "stats": {
+    "nodes": 1502,
+    "edges": 1362,
+    "layers": 9,
+    "tourSteps": 13,
+    "filesAnalyzed": 1008,
+    "batchCount": 41
+  },
+  "sizeKB": 1150.5
+}

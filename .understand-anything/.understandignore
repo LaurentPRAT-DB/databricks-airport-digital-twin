@@ -1,0 +1,116 @@
+# .understandignore — patterns for files/dirs to exclude from analysis
+# Syntax: same as .gitignore (globs, # comments, ! negation, trailing / for dirs)
+# Lines below are suggestions — uncomment to activate.
+# Use ! prefix to force-include something excluded by defaults.
+#
+# Built-in defaults (always excluded unless negated):
+#   node_modules/, .git/, dist/, build/, obj/, *.lock, *.min.js, etc.
+#
+# --- From .gitignore (uncomment to exclude) ---
+
+# .DS_Store
+# *.py[cod]
+# *$py.class
+# .Python
+# develop-eggs/
+# downloads/
+# eggs/
+# .eggs/
+# lib/
+# lib64/
+# parts/
+# sdist/
+# var/
+# wheels/
+# *.egg-info/
+# .installed.cfg
+# *.egg
+# *.manifest
+# *.spec
+# pip-log.txt
+# pip-delete-this-directory.txt
+# reports/
+# app/frontend/public/company-logo.svg
+# htmlcov/
+# .tox/
+# .nox/
+# .coverage
+# .coverage.*
+# nosetests.xml
+# coverage.xml
+# *.cover
+# *.py,cover
+# .hypothesis/
+# .pytest_cache/
+# ENV/
+# env/
+# *.swp
+# *.swo
+# .ipynb_checkpoints/
+# .env
+# .env.local
+# data/*
+# !data/cache/
+# data/cache/last_airport.txt
+# data/cache/simulations/
+# !data/fallback/
+# !data/demo/
+# !data/calibration/
+# data/calibration/*
+# !data/calibration/data_sources.json
+# !data/calibration/raw/
+# data/calibration/raw/*
+# !data/calibration/raw/openflights_routes.dat
+# !data/calibration/raw/openflights_airlines.dat
+# !data/calibration/raw/airports.csv
+# !data/calibration/raw/runways.csv
+# !data/calibration/profiles/
+data/calibration/profiles/
+# app/frontend/node_modules/
+# mlruns/
+# *.pyc
+# .pytest_cache/
+# .env
+# .env.local
+# app/frontend/dist/
+# *.egg-info/
+# .claude/
+# .planning/debug/
+# .planning/audits/
+# .planning/fixes/11-approach-trajectory-fix/
+# .planning/fixes/40-lakebase-auth-fix/
+# .planning/fixes/43-ux-review-fixes/
+# .planning/fixes/46-ux-review-v3-fixes/
+# /package.json
+# /package-lock.json
+# docs/email_*.md
+# app/frontend/coverage/
+# app/frontend/test-results/
+# app/frontend/data/
+# test-results/
+# tests/output/
+# simulation_output/
+# simulation_output_*.json
+# simulation_output.json
+# sim_*.json
+# scripts/capture_landing_evidence.mjs
+# video_output/
+# catboost_info/
+# screenshots/
+# *credentials*.json
+# *secret*
+# /GIT_COMMIT
+# /BUILD_NUMBER
+# graphify-out/
+
+# --- Detected directories (uncomment to exclude) ---
+
+tests/
+# docs/
+# scripts/
+
+# --- Test file patterns (uncomment to exclude) ---
+
+# *.test.*
+# *.spec.*
+# *.snap
