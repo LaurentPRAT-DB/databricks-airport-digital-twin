@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: complete
 area: deployment
 related:
   - .planning/backlog/lakebase-delta-sync.md

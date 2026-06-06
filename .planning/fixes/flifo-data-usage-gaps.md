@@ -1,5 +1,5 @@
 ---
-status: active
+status: complete
 area: flifo
 related:
   - .planning/features/flifo-integration.md

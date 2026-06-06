@@ -1,6 +1,6 @@
 ---
 title: "FLIFO → Simulation Seeding"
-status: proposed
+status: complete
 area: ingestion
 priority: medium
 related:

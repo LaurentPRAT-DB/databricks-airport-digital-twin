@@ -1,6 +1,6 @@
 ---
 title: "Local FLIFO Mock Server"
-status: proposed
+status: complete
 area: ingestion
 priority: medium
 related:
