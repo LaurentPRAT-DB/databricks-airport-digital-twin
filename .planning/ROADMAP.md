@@ -11,6 +11,8 @@ updated: 2026-06-06
 
 This roadmap covers the **46 remaining backlog items** organized by category.
 
+*Last updated: 2026-06-06*
+
 ---
 
 ## 1. Simulation Realism & Accuracy (10 items)
