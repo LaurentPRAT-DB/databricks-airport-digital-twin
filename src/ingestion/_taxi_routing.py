@@ -213,20 +213,15 @@ def _build_arrival_taxi_route(
         spine_between.reverse()
     route.extend(spine_between)
 
-    # Turnoff → apron perimeter → gate (routes around the terminal building)
+    # Turnoff → apron → gate (direct path from taxiway to gate)
     route.append(turnoff)
-    term_lat, term_lon = term
-    gate_dlat = gate_lat - term_lat
-    gate_dlon = gate_lon - term_lon
+    turnoff_lon, turnoff_lat = turnoff
+    gate_dlat = gate_lat - turnoff_lat
+    gate_dlon = gate_lon - turnoff_lon
     gate_dist = math.sqrt(gate_dlat ** 2 + gate_dlon ** 2)
-    if gate_dist > 1e-8:
-        # Apron radius = distance from terminal center to taxiway line midpoint.
-        # This keeps the apron waypoint outside the building footprint.
-        tw_mid_lon = (tw_start[0] + tw_end[0]) / 2
-        tw_mid_lat = (tw_start[1] + tw_end[1]) / 2
-        apron_radius = math.sqrt((term_lat - tw_mid_lat) ** 2 + (term_lon - tw_mid_lon) ** 2)
-        apron_lat = term_lat + (gate_dlat / gate_dist) * apron_radius
-        apron_lon = term_lon + (gate_dlon / gate_dist) * apron_radius
+    if gate_dist > 0.0005:
+        apron_lat = turnoff_lat + gate_dlat * 0.5
+        apron_lon = turnoff_lon + gate_dlon * 0.5
         route.append((apron_lon, apron_lat))
     route.append((gate_lon, gate_lat))
 
