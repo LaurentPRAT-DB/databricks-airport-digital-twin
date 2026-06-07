@@ -1313,6 +1313,10 @@ class TestFinalApproachRunwayAlignment:
     final approach fix (~5-10 NM from threshold).
     """
 
+    def setup_method(self):
+        from src.ingestion._approach_departure import reset_approach_caches
+        reset_approach_caches()
+
     def test_final_waypoints_aligned_with_runway_heading(self):
         """The last few approach waypoints should follow the runway heading.
 

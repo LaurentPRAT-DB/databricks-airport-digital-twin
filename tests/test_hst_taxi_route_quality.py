@@ -28,7 +28,7 @@ def hst_sim():
         departures=5,
         duration_hours=6.0,
         time_step_seconds=2.0,
-        seed=99,
+        seed=42,
         diagnostics=True,
     )
     engine = SimulationEngine(config)
