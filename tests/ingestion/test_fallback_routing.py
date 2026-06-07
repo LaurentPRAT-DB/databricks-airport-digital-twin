@@ -427,17 +427,18 @@ class TestAircraftFollowsRoute:
 
     def test_taxi_to_gate_advances_through_waypoints(self):
         """Aircraft should increment waypoint_index as it reaches each waypoint."""
+        gate_name = list(_DEFAULT_GATES.keys())[0]
         state = _make_state(
             phase=FlightPhase.TAXI_TO_GATE,
             lat=TAXI_WAYPOINTS_ARRIVAL[0][1],
             lon=TAXI_WAYPOINTS_ARRIVAL[0][0],
-            gate="G1",
+            gate=gate_name,
             taxi_route=TAXI_WAYPOINTS_ARRIVAL,
             waypoint_index=0,
         )
         _flight_states[state.icao24] = state
         _init_gate_states()
-        _occupy_gate(state.icao24, "G1")
+        _occupy_gate(state.icao24, gate_name)
 
         # Simulate many ticks to advance through waypoints
         max_index_reached = 0
@@ -452,19 +453,20 @@ class TestAircraftFollowsRoute:
 
     def test_taxi_to_gate_moves_toward_current_waypoint(self):
         """Each tick, aircraft should move closer to the current target waypoint."""
+        gate_name = list(_DEFAULT_GATES.keys())[0]
         wp0 = TAXI_WAYPOINTS_ARRIVAL[0]
         # Start slightly before the first waypoint
         state = _make_state(
             phase=FlightPhase.TAXI_TO_GATE,
             lat=wp0[1] - 0.002,
             lon=wp0[0] - 0.002,
-            gate="G1",
+            gate=gate_name,
             taxi_route=TAXI_WAYPOINTS_ARRIVAL,
             waypoint_index=0,
         )
         _flight_states[state.icao24] = state
         _init_gate_states()
-        _occupy_gate(state.icao24, "G1")
+        _occupy_gate(state.icao24, gate_name)
 
         target = (wp0[1], wp0[0])
         initial_dist = _distance_between((state.latitude, state.longitude), target)
@@ -695,16 +697,17 @@ class TestGroundMovementLifecycle:
 
     def test_aircraft_stays_on_ground_during_taxi(self):
         """Aircraft altitude remains 0 and on_ground=True during all taxi phases."""
+        gate_name = list(_DEFAULT_GATES.keys())[0]
         state = _make_state(
             phase=FlightPhase.TAXI_TO_GATE,
             lat=TAXI_WAYPOINTS_ARRIVAL[0][1],
             lon=TAXI_WAYPOINTS_ARRIVAL[0][0],
-            gate="G1",
+            gate=gate_name,
             taxi_route=TAXI_WAYPOINTS_ARRIVAL,
         )
         _flight_states[state.icao24] = state
         _init_gate_states()
-        _occupy_gate(state.icao24, "G1")
+        _occupy_gate(state.icao24, gate_name)
 
         for _ in range(300):
             state = _update_flight_state(state, 1.0)

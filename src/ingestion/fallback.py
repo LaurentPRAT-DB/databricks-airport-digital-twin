@@ -262,29 +262,6 @@ RUNWAY_28R_EAST = RUNWAY_10L_THRESHOLD
 
 TERMINAL_CENTER = (37.615, -122.391)
 
-_DEFAULT_GATES = {
-    "G1": (37.6145, -122.3955),
-    "G2": (37.6140, -122.3945),
-    "G3": (37.6135, -122.3935),
-    "G4": (37.6130, -122.3925),
-    "A1": (37.6155, -122.3900),
-    "A2": (37.6150, -122.3890),
-    "A3": (37.6145, -122.3880),
-    "B1": (37.6165, -122.3850),
-    "B2": (37.6160, -122.3840),
-    "B3": (37.6155, -122.3830),
-    "B4": (37.6150, -122.3820),
-    "C1": (37.6175, -122.3800),
-    "C2": (37.6170, -122.3790),
-    "C3": (37.6165, -122.3780),
-    "E1": (37.6180, -122.3760),
-    "E2": (37.6175, -122.3750),
-    "E3": (37.6170, -122.3740),
-    "F1": (37.6185, -122.3720),
-    "F2": (37.6180, -122.3710),
-    "F3": (37.6175, -122.3700),
-}
-
 _loaded_gates: Optional[Dict[str, tuple]] = None
 
 
@@ -311,6 +288,9 @@ def _generate_default_gates_around_center(center: tuple, count: int = 20) -> Dic
             gates[ref] = (gate_lat, gate_lon)
 
     return gates
+
+
+_DEFAULT_GATES: dict = _generate_default_gates_around_center(_SFO_CENTER, count=20)
 
 
 def _generate_overflow_stands(existing_gates: Dict[str, tuple], count: int) -> Dict[str, tuple]:
@@ -369,11 +349,7 @@ def get_gates() -> Dict[str, tuple]:
         pass
 
     if gates is None:
-        iata = get_current_airport_iata()
-        if iata == "SFO":
-            gates = dict(_DEFAULT_GATES)
-        else:
-            gates = _generate_default_gates_around_center(get_airport_center())
+        gates = _generate_default_gates_around_center(get_airport_center())
 
     # Scale gate count using calibration profile turnaround time.
     # Longer turnarounds = more gates needed for same throughput.

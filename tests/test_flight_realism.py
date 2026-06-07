@@ -1143,10 +1143,10 @@ class TestGateLoadingAndOverflow:
         )
 
     def test_default_gates_cover_multiple_boarding_areas(self):
-        """Fallback gates should span multiple SFO boarding areas."""
+        """Fallback gates should span multiple concourses."""
         prefixes = {gate[0] for gate in _DEFAULT_GATES}
-        assert len(prefixes) >= 5, (
-            f"Expected gates in >=5 boarding areas, got: {sorted(prefixes)}"
+        assert len(prefixes) >= 2, (
+            f"Expected gates in >=2 concourses, got: {sorted(prefixes)}"
         )
 
     def test_overflow_stands_generated_when_gates_few(self):

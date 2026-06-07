@@ -595,34 +595,14 @@ class TestGateManagement:
             _gate_states[gate].available_at = 0
 
     def test_gates_exist(self):
-        """Test all 20 gates are defined (real SFO terminal layout across 6 boarding areas)."""
-        assert len(GATES) == 20
-        # International Terminal - Boarding Area G
-        assert "G1" in GATES
-        assert "G2" in GATES
-        assert "G3" in GATES
-        assert "G4" in GATES
-        # International Terminal - Boarding Area A
-        assert "A1" in GATES
-        assert "A2" in GATES
-        assert "A3" in GATES
-        # Domestic Terminal 1 - Boarding Area B
-        assert "B1" in GATES
-        assert "B2" in GATES
-        assert "B3" in GATES
-        assert "B4" in GATES
-        # Domestic Terminal 2 - Boarding Area C
-        assert "C1" in GATES
-        assert "C2" in GATES
-        assert "C3" in GATES
-        # Domestic Terminal 3 - Boarding Area E
-        assert "E1" in GATES
-        assert "E2" in GATES
-        assert "E3" in GATES
-        # Domestic Terminal 3 - Boarding Area F
-        assert "F1" in GATES
-        assert "F2" in GATES
-        assert "F3" in GATES
+        """Test generated fallback gates have expected structure."""
+        assert len(GATES) >= 15
+        prefixes = {g[0] for g in GATES}
+        assert len(prefixes) >= 2, f"Expected multiple concourses, got: {sorted(prefixes)}"
+        for name, pos in GATES.items():
+            assert isinstance(pos, tuple) and len(pos) == 2
+            assert -90 <= pos[0] <= 90, f"Invalid lat for {name}"
+            assert -180 <= pos[1] <= 180, f"Invalid lon for {name}"
 
     def test_find_available_gate_all_free(self):
         """Test finding available gate when all are free."""
