@@ -1135,11 +1135,19 @@ def _update_landing(state: FlightState, dt: float) -> None:
             state.on_ground = True
             state.vertical_rate = 0
     else:
-        # On-ground rollout: decelerate with reverse thrust + brakes (~5 kts/s)
+        # On-ground rollout: reverse thrust + wheel brakes
+        # Real-world decel ~3-4 kts/s (reverse thrust dominant phase),
+        # increasing to ~5 kts/s below 60kt when brakes take over.
         state.altitude = 0
         state.on_ground = True
         state.vertical_rate = 0
-        state.velocity = max(25, state.velocity - 5.0 * dt)
+        if state.velocity > 60:
+            # High-speed phase: reverse thrust only (~3.5 kts/s)
+            decel_rate = 3.5
+        else:
+            # Low-speed phase: wheel brakes dominant (~5 kts/s)
+            decel_rate = 5.0
+        state.velocity = max(15, state.velocity - decel_rate * dt)
 
     # Early runway release: vacate when on ground and past initial rollout
     # Real airports: aircraft clears active runway within ~20-30s via high-speed exit
@@ -1148,8 +1156,8 @@ def _update_landing(state: FlightState, dt: float) -> None:
         _release_runway(state.icao24, arrival_rwy)
         state._runway_released = True
 
-    if state.on_ground and state.velocity <= 30:
-        # Rollout complete — exit runway to taxiway
+    if state.on_ground and state.velocity <= 55:
+        # High-speed turnoff: aircraft vacates runway at ~50-60kt via angled exit
         emit_phase_transition(
             state.icao24, state.callsign,
             FlightPhase.LANDING.value, FlightPhase.TAXI_TO_GATE.value,
