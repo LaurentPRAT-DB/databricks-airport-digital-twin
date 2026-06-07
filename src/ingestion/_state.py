@@ -54,6 +54,7 @@ class FlightState:
     parked_since: float = 0.0                  # time.time() when aircraft entered PARKED phase
     turnaround_phase: str = ""                 # Current turnaround sub-phase (e.g. "deboarding")
     turnaround_schedule: Optional[Dict] = None # {phase: {"start_offset_s", "duration_s", "done", "started"}}
+    turnaround_target_s: float = 0.0            # Gate time threshold before pushback (computed once at PARKED entry)
     departure_queue_hold_s: float = 0.0        # Remaining departure queue hold (seconds, calibrated)
     departure_queue_set: bool = False           # True once the hold has been computed
     arrival_hold_s: float = 0.0                 # Remaining arrival taxi hold (seconds, calibrated)

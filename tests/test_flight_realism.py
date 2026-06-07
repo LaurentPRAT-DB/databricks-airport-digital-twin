@@ -971,11 +971,12 @@ class TestGateTurnaroundTiming:
         """
         flight = _create_new_flight(
             "ta_narrow", "UAL100", FlightPhase.PARKED,
-            origin="JFK", destination="SFO"
+            origin="JFK", destination="SFO",
+            aircraft_type_override="A320"
         )
         _flight_states["ta_narrow"] = flight
         flight.time_at_gate = 0
-        flight.aircraft_type = "A320"
+        flight.turnaround_target_s = 0.0
 
         # Simulate 10 minutes (600 seconds)
         for _ in range(600):
@@ -1000,11 +1001,12 @@ class TestGateTurnaroundTiming:
         try:
             flight = _create_new_flight(
                 "ta_comp", "UAL200", FlightPhase.PARKED,
-                origin="JFK", destination="SFO"
+                origin="JFK", destination="SFO",
+                aircraft_type_override="A320"
             )
             _flight_states["ta_comp"] = flight
             flight.time_at_gate = 0
-            flight.aircraft_type = "A320"
+            flight.turnaround_target_s = 0.0
 
             # Simulate 45 minutes (2700 seconds)
             for _ in range(2700):

@@ -73,6 +73,7 @@ from src.ingestion._approach_departure import (
     _get_departure_runway,
     _get_arrival_runway_name,
     _bearing_to_airport,
+    reset_approach_caches,
 )
 from src.ingestion._taxi_routing import (
     _get_taxi_waypoints_arrival,
@@ -102,6 +103,16 @@ from src.ingestion._flight_lifecycle import (
 )
 
 fake = Faker()
+
+_icao_to_iata_map: Optional[Dict[str, str]] = None
+
+
+def _get_icao_to_iata_map() -> Dict[str, str]:
+    global _icao_to_iata_map
+    if _icao_to_iata_map is None:
+        from src.ingestion.airport_table import AIRPORTS as _apt_table
+        _icao_to_iata_map = {v[2]: k for k, v in _apt_table.items()}
+    return _icao_to_iata_map
 
 
 def get_flight_turnaround_info(icao24: str) -> Optional[Dict[str, Any]]:
@@ -512,8 +523,7 @@ def _spawn_flights_to_target(target: int, profile) -> None:
         try:
             from src.ingestion.airport_table import AIRPORTS as _apt_table
             _apt_entry = _apt_table.get(local_iata)
-            _icao_to_iata_map = {v[2]: k for k, v in _apt_table.items()}
-            _resolved_iata = _icao_to_iata_map.get(local_iata, local_iata)
+            _resolved_iata = _get_icao_to_iata_map().get(local_iata, local_iata)
             _apt_entry2 = _apt_table.get(_resolved_iata)
             _check = _apt_entry or _apt_entry2
             if _check and _check[3] == "UA":
@@ -1493,6 +1503,7 @@ def reset_synthetic_state() -> dict:
     # Clear flight state only — airport center is managed by the activate endpoint
     _flight_states.clear()
     _bearing_cache.clear()
+    reset_approach_caches()
     _st._last_update = 0.0
     _st.reset_max_approach_cache()
     _runway_states.clear()

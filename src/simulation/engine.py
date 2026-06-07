@@ -392,8 +392,9 @@ class SimulationEngine:
         _gate_states.clear()
         _fb._occupied_gate_count = 0
         from src.ingestion._state import reset_max_approach_cache, set_max_approach_aircraft
-        from src.ingestion._approach_departure import reset_arrival_runway_state, set_arrival_runways
+        from src.ingestion._approach_departure import reset_arrival_runway_state, set_arrival_runways, reset_approach_caches
         reset_max_approach_cache()
+        reset_approach_caches()
         set_max_approach_aircraft(len(self.capacity.all_runways))
         reset_arrival_runway_state()
         set_arrival_runways(sorted(self.capacity.active_runways))

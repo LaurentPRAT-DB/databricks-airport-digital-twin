@@ -88,7 +88,6 @@ from src.ingestion._runway_ops import (
     _check_taxi_separation,
     _taxi_speed_factor,
     _count_aircraft_in_phase,
-    _get_approach_queue_position,
 )
 from src.ingestion._approach_departure import (
     _get_approach_waypoints,
@@ -575,7 +574,7 @@ def _create_new_flight(
                     current_phase = p_name
                     break
 
-        return FlightState(
+        state = FlightState(
             icao24=icao24,
             callsign=callsign,
             latitude=lat,
@@ -606,6 +605,8 @@ def _create_new_flight(
             codeshares=codeshares,
             data_source=data_source,
         )
+        state.turnaround_target_s = _compute_turnaround_target(state)
+        return state
 
     elif phase == FlightPhase.ENROUTE:
         # Spawn on edge of visibility circle at bearing from origin airport
@@ -950,6 +951,7 @@ def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
             _set_phase(state, FlightPhase.PARKED)
             state.velocity = 0
             state.time_at_gate = 0
+            state.turnaround_target_s = _compute_turnaround_target(state)
             state.parked_since = get_time()
             _occupy_gate(state.icao24, state.assigned_gate)
             # Record inbound delay for reactionary delay prediction
@@ -983,6 +985,36 @@ def _update_taxi_to_gate(state: FlightState, dt: float) -> None:
             )
             state.turnaround_phase = "chocks_on"
 
+
+
+def _compute_turnaround_target(state: FlightState) -> float:
+    """Compute the gate turnaround duration (seconds) for a parked flight.
+
+    Called once when entering PARKED phase. Incorporates calibration data,
+    aircraft category, airline factors, weather, congestion, and jitter.
+    """
+    if _calibration.gate_minutes > 0:
+        category = get_aircraft_category(state.aircraft_type)
+        if category == "wide_body":
+            gate_minutes = _calibration.gate_minutes * 1.4
+        else:
+            gate_minutes = _calibration.gate_minutes
+    else:
+        timing = get_turnaround_timing(state.aircraft_type)
+        total_min = timing["total_minutes"]
+        non_gate_min = (timing["phases"].get("arrival_taxi", 0)
+                        + timing["phases"].get("pushback", 0)
+                        + timing["phases"].get("departure_taxi", 0))
+        gate_minutes = total_min - non_gate_min
+    gate_seconds = gate_minutes * 60
+    airline_code = state.callsign[:3] if state.callsign and len(state.callsign) >= 3 else ""
+    airline_factor = AIRLINE_TURNAROUND_FACTOR.get(airline_code, _DEFAULT_AIRLINE_FACTOR)
+    weather_factor = _get_turnaround_weather_factor()
+    congestion_factor = _get_turnaround_congestion_factor()
+    intl_factor = _get_turnaround_international_factor(state)
+    dow_factor = _get_turnaround_day_of_week_factor()
+    combined_factor = airline_factor * weather_factor * congestion_factor * intl_factor * dow_factor
+    return gate_seconds * combined_factor * random.uniform(0.95, 1.05)
 
 
 def _update_parked(state: FlightState, dt: float) -> None:
@@ -1019,35 +1051,9 @@ def _update_parked(state: FlightState, dt: float) -> None:
                 active_phase = p_name
         state.turnaround_phase = active_phase
 
-    # Realistic turnaround: use calibrated BTS data if available,
-    # otherwise fall back to GSE model timing
-    if _calibration.gate_minutes > 0:
-        # Calibrated: use BTS OTP median turnaround (already gate-only time)
-        category = get_aircraft_category(state.aircraft_type)
-        if category == "wide_body":
-            gate_minutes = _calibration.gate_minutes * 1.4
-        else:
-            gate_minutes = _calibration.gate_minutes
-    else:
-        # Fallback: GSE model total minus taxi/pushback phases
-        timing = get_turnaround_timing(state.aircraft_type)
-        total_min = timing["total_minutes"]  # 45 min narrow-body, 90 min wide-body
-        non_gate_min = (timing["phases"].get("arrival_taxi", 0)
-                        + timing["phases"].get("pushback", 0)
-                        + timing["phases"].get("departure_taxi", 0))
-        gate_minutes = total_min - non_gate_min
-    gate_seconds = gate_minutes * 60
-    # Feature-dependent turnaround: airline + weather + congestion + international
-    airline_code = state.callsign[:3] if state.callsign and len(state.callsign) >= 3 else ""
-    airline_factor = AIRLINE_TURNAROUND_FACTOR.get(airline_code, _DEFAULT_AIRLINE_FACTOR)
-    weather_factor = _get_turnaround_weather_factor()
-    congestion_factor = _get_turnaround_congestion_factor()
-    intl_factor = _get_turnaround_international_factor(state)
-    dow_factor = _get_turnaround_day_of_week_factor()
-    combined_factor = airline_factor * weather_factor * congestion_factor * intl_factor * dow_factor
-    # +/-10% jitter (reduced from 20% since factors explain more variance)
-    target = gate_seconds * combined_factor * random.uniform(0.9, 1.1)
-    if state.time_at_gate > target:
+    if state.turnaround_target_s == 0.0:
+        state.turnaround_target_s = _compute_turnaround_target(state)
+    if state.time_at_gate > state.turnaround_target_s:
         # Ensure correct origin/dest for departure: origin=local, dest=new airport
         local_iata = get_current_airport_iata()
         if state.origin_airport != local_iata:
@@ -1292,7 +1298,6 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                 target_alt = wp[2]
 
         has_separation = _check_approach_separation(state)
-        queue_pos = _get_approach_queue_position(state.icao24)
 
         total_wps = len(approach_wps)
         progress = state.waypoint_index / max(1, total_wps - 1)

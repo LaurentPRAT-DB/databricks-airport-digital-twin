@@ -84,15 +84,22 @@ def _bearing_to_airport(dest_iata: str) -> float:
     return (bearing + 360) % 360
 
 
-# ── OSM runway data ─────────────────────────────────────────────────────────
+# ── Caches (cleared on airport switch via reset_approach_caches) ─────────────
+
+_cached_osm_primary_runway: Optional[dict] = None
+_osm_primary_runway_resolved: bool = False
+_approach_waypoints_cache: Dict[Optional[str], list] = {}
 
 
 def _get_osm_primary_runway() -> Optional[dict]:
     """Get the primary (longest) runway from OSM config data.
 
     Returns the runway dict with 'geoPoints' [{latitude, longitude}, ...] or None
-    if no OSM runway data is available.
+    if no OSM runway data is available. Result is cached per airport session.
     """
+    global _cached_osm_primary_runway, _osm_primary_runway_resolved
+    if _osm_primary_runway_resolved:
+        return _cached_osm_primary_runway
     try:
         from app.backend.services.airport_config_service import get_airport_config_service
         service = get_airport_config_service()
@@ -100,11 +107,17 @@ def _get_osm_primary_runway() -> Optional[dict]:
         runways = config.get("osmRunways", [])
         if not runways:
             logger.debug("[DIAG] _get_osm_primary_runway: osmRunways empty/missing, config keys=%s", list(config.keys())[:15])
+            _cached_osm_primary_runway = None
+            _osm_primary_runway_resolved = True
             return None
         best = max(runways, key=lambda r: len(r.get("geoPoints", [])))
         if len(best.get("geoPoints", [])) < 2:
             logger.warning("[DIAG] _get_osm_primary_runway: best runway has <2 geoPoints: ref=%s, pts=%d", best.get("ref"), len(best.get("geoPoints", [])))
+            _cached_osm_primary_runway = None
+            _osm_primary_runway_resolved = True
             return None
+        _cached_osm_primary_runway = best
+        _osm_primary_runway_resolved = True
         return best
     except Exception as e:
         logger.warning("_get_osm_primary_runway failed: %s", e)
@@ -330,6 +343,15 @@ def reset_arrival_runway_state() -> None:
     _override_arrival_runways = []
 
 
+def reset_approach_caches() -> None:
+    """Clear all approach/departure caches (call on airport switch)."""
+    global _cached_osm_primary_runway, _osm_primary_runway_resolved
+    global _approach_waypoints_cache
+    _cached_osm_primary_runway = None
+    _osm_primary_runway_resolved = False
+    _approach_waypoints_cache.clear()
+
+
 def _get_departure_runway() -> Optional[tuple]:
     """Get the departure runway start (lon, lat) from OSM data.
 
@@ -425,6 +447,9 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     South, West) based on origin bearing quadrant, all converging to the same
     final approach fix on the ILS.
     """
+    if origin_iata in _approach_waypoints_cache:
+        return _approach_waypoints_cache[origin_iata]
+
     rwy_threshold = _get_runway_threshold()
     rwy_heading = _get_runway_heading()
     if rwy_threshold is None or rwy_heading is None:
@@ -506,7 +531,9 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
         pt = _point_on_circle(anchor_lat, anchor_lon, bearing, dist)
         base_wps.append((pt[1], pt[0], alt))
 
-    return transition_wps + base_wps + final_wps
+    result = transition_wps + base_wps + final_wps
+    _approach_waypoints_cache[origin_iata] = result
+    return result
 
 
 # ── SID departure waypoints ─────────────────────────────────────────────────
