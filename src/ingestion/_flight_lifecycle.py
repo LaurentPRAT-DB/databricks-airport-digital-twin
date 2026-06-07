@@ -1276,10 +1276,10 @@ def _execute_go_around(state: FlightState, reason: str = "runway_busy") -> None:
 
 def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
     """APPROACHING phase: descent on approach waypoints with separation."""
-    # Go-around flights stuck in re-approach for >10 min: force divert
+    # Go-around flights stuck in re-approach for >15 min: force divert
     if state.go_around_count > 0:
         state.go_around_hold_until += dt
-        if state.go_around_hold_until > 600:
+        if state.go_around_hold_until > 900:
             _execute_go_around(state, reason="approach_timeout")
             return state
 
@@ -1300,6 +1300,8 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
         has_separation = _check_approach_separation(state)
 
         total_wps = len(approach_wps)
+        if state.go_around_count > 0 and state.waypoint_index >= total_wps - 7:
+            state.go_around_hold_until = 0.0
         progress = state.waypoint_index / max(1, total_wps - 1)
         n_transition = max(0, len(approach_wps) - 7)
         if n_transition > 0 and state.waypoint_index < n_transition:
@@ -1321,7 +1323,10 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
             if dist < req_sep * 1.5:
                 speed_slow = max(0.5, dist / (req_sep * 1.5))
         if not has_separation:
-            speed_slow = min(speed_slow, 0.6)
+            if state.go_around_count > 0:
+                speed_slow = min(speed_slow, 0.85)
+            else:
+                speed_slow = min(speed_slow, 0.6)
 
         vref = VREF_SPEEDS.get(state.aircraft_type, _DEFAULT_VREF)
         speed_ceiling = MAX_SPEED_BELOW_FL100_KTS if state.altitude < 10000 else MAX_VELOCITY_KTS
