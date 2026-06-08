@@ -562,7 +562,7 @@ export default function FIDS({ onClose, simTime }: FIDSProps) {
             <span className="font-mono text-slate-300 text-sm">{simClockDisplay}</span>
           )}
           <span className="flex items-center gap-2">
-            {flights.some(f => f.terminal || f.belt || (f.flight_number.match(/^[A-Z]{2}\d/) !== null)) && (
+            {[...arrivals, ...departures].some(f => f.terminal || f.belt || f.registration || (f.codeshares && f.codeshares.length > 0)) && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-900/50 border border-emerald-700/50 rounded text-emerald-400 text-[10px] font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 FLIFO
