@@ -110,7 +110,7 @@ jobs:
           npm_config_registry: ${{ runner.environment == 'github-hosted' && 'https://registry.npmjs.org/' || 'https://npm-proxy.dev.databricks.com/' }}
         run: |
           rm -rf node_modules
-          npm install --no-audit --no-fund
+          npm install --no-audit --no-fund --legacy-peer-deps
           test -d node_modules/typescript || { echo "::error::npm install failed — typescript not installed"; exit 1; }
 
       - name: Build frontend
