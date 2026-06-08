@@ -9,10 +9,10 @@ on:
         description: "Deployment target"
         type: choice
         options:
-          - prod
           - dev
+          - prod
           - free
-        default: prod
+        default: dev
       brand:
         description: "Frontend brand (logo + default airport)"
         type: choice
@@ -27,7 +27,7 @@ on:
         default: false
 
 concurrency:
-  group: cd-${{ github.event.inputs.target || 'prod' }}
+  group: cd-${{ github.event.inputs.target || 'dev' }}
   cancel-in-progress: false
 
 env:
@@ -36,13 +36,13 @@ env:
   DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
   DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
   DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
-  TARGET: ${{ github.event.inputs.target || 'prod' }}
+  TARGET: ${{ github.event.inputs.target || 'dev' }}
   BRAND: ${{ github.event.inputs.brand || 'databricks' }}
 
 jobs:
   deploy:
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
-    environment: ${{ github.event.inputs.target || 'prod' }}
+    environment: ${{ github.event.inputs.target || 'dev' }}
     timeout-minutes: 30
     outputs:
       app-url: ${{ steps.deploy.outputs.app_url }}
@@ -104,7 +104,7 @@ jobs:
       - name: Install frontend dependencies
         working-directory: app/frontend
         env:
-          npm_config_registry: ${{ runner.environment == 'github-hosted' && 'https://registry.npmjs.org/' || 'https://npm-proxy.dev.databricks.com/' }}
+          npm_config_registry: https://registry.npmjs.org/
         run: |
           rm -rf node_modules
           npm ci --no-audit --no-fund
