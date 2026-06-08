@@ -214,6 +214,18 @@ class TaxiwayGraph:
                 if a != b:
                     self._add_edge(a, b)
                     perimeter_added += 1
+
+            # 4c. Connect gate nodes to nearest perimeter ring nodes.
+            # Gates inside buildings need a penalty-free path from outside:
+            # outer_taxiway → ring_node (no penalty) → gate (exempt edge).
+            if ring_ids:
+                for gate_id in self._gate_nodes:
+                    gate_lat, gate_lon = self.nodes[gate_id]
+                    for ring_nid in ring_ids:
+                        rlat, rlon = self.nodes[ring_nid]
+                        d = _haversine_m(gate_lat, gate_lon, rlat, rlon)
+                        if d < 200:
+                            self._add_edge(gate_id, ring_nid)
         if perimeter_added:
             logger.info("Added %d perimeter edges around %d terminal building(s)", perimeter_added, len(building_polygons))
 
