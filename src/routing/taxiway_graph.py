@@ -67,6 +67,7 @@ class TaxiwayGraph:
         """
         self.nodes: dict[int, tuple[float, float]] = {}  # node_id → (lat, lon)
         self.edges: dict[int, list[tuple[int, float]]] = {}  # node_id → [(neighbor, dist)]
+        self._gate_nodes: set[int] = set()  # nodes representing gates (exempt from building penalty)
         self._snap_tolerance = snap_tolerance
         self._next_id = 0
         # Spatial grid index for O(1) nearest-neighbor lookups.
@@ -161,6 +162,7 @@ class TaxiwayGraph:
 
         # 4. Gate nodes → multiple nearby taxiway nodes
         # Connect to several neighbors so Dijkstra can route around buildings.
+        self._gate_nodes.clear()
         for gate in config.get("gates", []):
             geo = gate.get("geo", {})
             lat = geo.get("latitude")
@@ -168,6 +170,7 @@ class TaxiwayGraph:
             if lat is None or lon is None:
                 continue
             gate_id = self._get_or_create_node(float(lat), float(lon))
+            self._gate_nodes.add(gate_id)
             for nid in self._find_nearest_nodes(
                 float(lat), float(lon), k=5, max_dist_m=500, exclude={gate_id}
             ):
@@ -334,9 +337,16 @@ class TaxiwayGraph:
             lons = [p[1] for p in poly]
             poly_bounds.append((min(lats), max(lats), min(lons), max(lons)))
         for node_id, neighbors in self.edges.items():
+            # Gate nodes sit inside terminal buildings by definition —
+            # their edges are apron access, not building crossings
+            if node_id in self._gate_nodes:
+                continue
             lat_a, lon_a = self.nodes[node_id]
             new_neighbors = []
             for neighbor_id, weight in neighbors:
+                if neighbor_id in self._gate_nodes:
+                    new_neighbors.append((neighbor_id, weight))
+                    continue
                 lat_b, lon_b = self.nodes[neighbor_id]
                 hits_building = False
                 for t in samples:
