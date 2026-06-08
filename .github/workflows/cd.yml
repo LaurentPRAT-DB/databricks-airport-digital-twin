@@ -104,7 +104,7 @@ jobs:
       - name: Install frontend dependencies
         working-directory: app/frontend
         env:
-          npm_config_registry: https://registry.npmjs.org/
+          npm_config_registry: ${{ runner.environment == 'github-hosted' && 'https://registry.npmjs.org/' || 'https://npm-proxy.dev.databricks.com/' }}
         run: |
           rm -rf node_modules
           npm ci --no-audit --no-fund
