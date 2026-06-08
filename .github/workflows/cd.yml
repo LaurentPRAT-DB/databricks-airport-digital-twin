@@ -1,7 +1,9 @@
 name: CD
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -41,6 +43,7 @@ env:
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     environment: ${{ github.event.inputs.target || 'dev' }}
     timeout-minutes: 30
@@ -107,7 +110,7 @@ jobs:
           npm_config_registry: ${{ runner.environment == 'github-hosted' && 'https://registry.npmjs.org/' || 'https://npm-proxy.dev.databricks.com/' }}
         run: |
           rm -rf node_modules
-          npm ci --no-audit --no-fund
+          npm install --no-audit --no-fund
           test -d node_modules/typescript || { echo "::error::npm install failed — typescript not installed"; exit 1; }
 
       - name: Build frontend

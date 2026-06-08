@@ -59,7 +59,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: app/frontend
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Run tests
         working-directory: app/frontend
