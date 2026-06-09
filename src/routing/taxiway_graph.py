@@ -67,7 +67,8 @@ class TaxiwayGraph:
         """
         self.nodes: dict[int, tuple[float, float]] = {}  # node_id → (lat, lon)
         self.edges: dict[int, list[tuple[int, float]]] = {}  # node_id → [(neighbor, dist)]
-        self._gate_nodes: set[int] = set()  # nodes representing gates (exempt from building penalty)
+        self._gate_nodes: set[int] = set()  # nodes representing gates
+        self._ring_nodes: set[int] = set()  # perimeter ring nodes (outside buildings)
         self._snap_tolerance = snap_tolerance
         self._next_id = 0
         # Spatial grid index for O(1) nearest-neighbor lookups.
@@ -100,6 +101,7 @@ class TaxiwayGraph:
         self.nodes.clear()
         self.edges.clear()
         self._grid.clear()
+        self._ring_nodes.clear()
         self._next_id = 0
 
         # 1. Taxiway segments
@@ -200,6 +202,7 @@ class TaxiwayGraph:
                 else:
                     olat, olon = lat, lon
                 nid = self._get_or_create_node(olat, olon)
+                self._ring_nodes.add(nid)
                 ring_ids.append(nid)
                 # Connect to nearest taxiway node
                 nearest = self._find_nearest_node(olat, olon, exclude={nid})
@@ -349,14 +352,13 @@ class TaxiwayGraph:
             lons = [p[1] for p in poly]
             poly_bounds.append((min(lats), max(lats), min(lons), max(lons)))
         for node_id, neighbors in self.edges.items():
-            # Gate nodes sit inside terminal buildings by definition —
-            # their edges are apron access, not building crossings
-            if node_id in self._gate_nodes:
-                continue
             lat_a, lon_a = self.nodes[node_id]
             new_neighbors = []
             for neighbor_id, weight in neighbors:
-                if neighbor_id in self._gate_nodes:
+                # Only exempt gate↔ring edges (legitimate apron access paths).
+                # Gate→taxiway edges that cross buildings MUST be penalized.
+                if (node_id in self._gate_nodes and neighbor_id in self._ring_nodes) or \
+                   (node_id in self._ring_nodes and neighbor_id in self._gate_nodes):
                     new_neighbors.append((neighbor_id, weight))
                     continue
                 lat_b, lon_b = self.nodes[neighbor_id]

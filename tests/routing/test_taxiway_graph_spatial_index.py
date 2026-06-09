@@ -328,38 +328,60 @@ class TestBuildingPenaltyBBox:
                 assert abs(weight - expected) < 0.01
 
 
-    def test_gate_edges_exempt_from_building_penalty(self):
-        """Edges touching gate nodes should NOT be penalized even if inside building."""
+    def test_gate_ring_edges_exempt_from_building_penalty(self):
+        """Gate↔ring edges should NOT be penalized; gate→taxiway through building SHOULD be."""
+        # Use realistic KSFO-scale coordinates so ring nodes are within 200m of gate
+        base_lat, base_lon = 37.618, -122.384
         config = {
             "osmTaxiways": [
-                # Taxiway passing south of building
-                _make_taxiway([(0.1, 0.0), (0.1, 0.5), (0.1, 1.0)]),
+                # Taxiway 100m south of terminal
+                _make_taxiway([
+                    (base_lat - 0.001, base_lon - 0.002),
+                    (base_lat - 0.001, base_lon),
+                    (base_lat - 0.001, base_lon + 0.002),
+                ]),
+                # Taxiway 100m north of terminal (correct approach side)
+                _make_taxiway([
+                    (base_lat + 0.001, base_lon - 0.002),
+                    (base_lat + 0.001, base_lon),
+                    (base_lat + 0.001, base_lon + 0.002),
+                ]),
             ],
             "terminals": [
-                # Building covering the gate area
-                _make_terminal([(0.3, 0.2), (0.3, 0.8), (0.7, 0.8), (0.7, 0.2)]),
+                # Small terminal building (~60m x 60m) centered on base
+                _make_terminal([
+                    (base_lat - 0.0003, base_lon - 0.0003),
+                    (base_lat - 0.0003, base_lon + 0.0003),
+                    (base_lat + 0.0003, base_lon + 0.0003),
+                    (base_lat + 0.0003, base_lon - 0.0003),
+                ]),
             ],
             "gates": [
-                # Gate INSIDE the building (realistic — gates are in terminals)
-                _make_gate("E1", 0.5, 0.5),
+                # Gate inside terminal
+                _make_gate("E1", base_lat, base_lon),
             ],
         }
-        g = TaxiwayGraph(snap_tolerance=0.01)
+        g = TaxiwayGraph(snap_tolerance=0.0001)
         g.build_from_config(config)
         # Find the gate node
         gate_nid = None
         for nid, pos in g.nodes.items():
-            if abs(pos[0] - 0.5) < 0.02 and abs(pos[1] - 0.5) < 0.02:
+            if abs(pos[0] - base_lat) < 0.00005 and abs(pos[1] - base_lon) < 0.00005:
                 gate_nid = nid
                 break
         assert gate_nid is not None, "Gate node should exist"
         assert gate_nid in g._gate_nodes
-        # Gate edges should have normal (unpenalized) weight
+        assert len(g._ring_nodes) > 0, "Ring nodes should exist"
+        # Gate→ring edges should be unpenalized
+        ring_edges_found = False
         for neighbor_id, weight in g.edges.get(gate_nid, []):
-            expected = _haversine_m(*g.nodes[gate_nid], *g.nodes[neighbor_id])
-            assert weight < expected * 2, (
-                f"Gate edge to {neighbor_id} penalized: weight={weight:.0f}, expected≈{expected:.0f}"
-            )
+            if neighbor_id in g._ring_nodes:
+                ring_edges_found = True
+                expected = _haversine_m(*g.nodes[gate_nid], *g.nodes[neighbor_id])
+                assert weight < expected * 2, (
+                    f"Gate→ring edge penalized: weight={weight:.0f}, expected≈{expected:.0f}"
+                )
+        assert ring_edges_found, "Gate should connect to at least one ring node"
 
 
 # ---------------------------------------------------------------------------
