@@ -381,6 +381,10 @@ export function useSimulationReplay(): UseSimulationReplayResult {
         console.warn('Demo simulation still generating after retries for', airportIcao);
         return;
       }
+      if (res.status === 404) {
+        console.info(`No demo file for ${airportIcao}, live synthetic mode active`);
+        return;
+      }
       if (!res.ok) throw new Error(`Failed to load demo: ${res.statusText}`);
       const data: SimulationData = await res.json();
       setSimData(data);

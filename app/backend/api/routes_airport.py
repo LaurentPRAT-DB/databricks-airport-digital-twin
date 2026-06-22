@@ -720,10 +720,12 @@ async def _activate_airport_inner(icao_code: str, user: str, broadcaster) -> Non
             from app.backend.services.demo_simulation_service import get_demo_simulation_service
             try:
                 demo_svc = get_demo_simulation_service()
-                if not demo_svc.has_demo(icao_code):
-                    await asyncio.to_thread(demo_svc.generate_demo, icao_code)
-                    logger.info(f"[DIAG] Background demo generation for {icao_code} complete")
+                # Always signal demo_ready immediately — live synthetic generator
+                # already produces flights via WS. Demo file is optional (replay mode).
                 await broadcaster.broadcast({"type": "demo_ready", "data": {"icao": icao_code}})
+                if not demo_svc.has_demo(icao_code):
+                    await asyncio.to_thread(demo_svc.generate_demo_isolated, icao_code)
+                    logger.info(f"[DIAG] Background demo generation for {icao_code} complete")
             except Exception as e:
                 logger.error(f"Background demo generation failed for {icao_code}: {e}")
 
