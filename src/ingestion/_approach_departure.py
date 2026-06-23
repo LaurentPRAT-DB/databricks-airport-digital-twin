@@ -482,7 +482,7 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     approach_course = (rwy_heading + 180) % 360
 
     if origin_iata is None:
-        entry_dir = (approach_course + 180) % 360
+        entry_dir = approach_course
     else:
         bearing_to_apt = _bearing_from_airport(origin_iata)
         entry_dir = (bearing_to_apt + 180) % 360

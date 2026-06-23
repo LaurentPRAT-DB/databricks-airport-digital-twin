@@ -19,7 +19,7 @@ from src.ingestion._approach_departure import (
     _osm_runway_endpoints,
     reset_approach_caches,
 )
-from src.ingestion.fallback import set_airport_center
+from src.ingestion.fallback import get_airport_center, get_current_airport_iata, set_airport_center
 
 
 # ── Fixtures: realistic runway data from OSM ──────────────────────────────────
@@ -163,6 +163,14 @@ class TestApproachWaypointsUseOsm:
     def _provide_osm_runway_data(self):
         """Override conftest's autouse fixture — let real _get_osm_primary_runway run."""
         yield
+
+    @pytest.fixture(autouse=True)
+    def _restore_airport_center(self):
+        """Restore global airport center after each test to avoid polluting other tests."""
+        prev_center = get_airport_center()
+        prev_iata = get_current_airport_iata()
+        yield
+        set_airport_center(prev_center[0], prev_center[1], prev_iata)
 
     def setup_method(self):
         reset_approach_caches()
