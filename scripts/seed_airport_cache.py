@@ -64,15 +64,18 @@ def main():
         """)
         conn.commit()
 
-    # Check existing
+    # Check existing — only skip if cached entry has osmRunways
     with conn.cursor() as cur:
-        cur.execute("SELECT icao_code FROM airport_config_cache")
-        existing = {r[0] for r in cur.fetchall()}
+        cur.execute(
+            "SELECT icao_code FROM airport_config_cache "
+            "WHERE config_json ? 'osmRunways' AND jsonb_array_length(config_json->'osmRunways') > 0"
+        )
+        valid_existing = {r[0] for r in cur.fetchall()}
 
     if args.force:
         to_seed = WELL_KNOWN_AIRPORTS
     else:
-        to_seed = [a for a in WELL_KNOWN_AIRPORTS if a not in existing]
+        to_seed = [a for a in WELL_KNOWN_AIRPORTS if a not in valid_existing]
 
     if not to_seed:
         print(f"All {len(WELL_KNOWN_AIRPORTS)} airports already cached. Nothing to do.")
