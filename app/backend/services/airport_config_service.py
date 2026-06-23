@@ -621,9 +621,11 @@ class AirportConfigService:
         t0 = time.monotonic()
         logger.info(f"Tier 1: Trying Lakebase cache for {icao_code}...")
         if self.load_from_lakebase_cache(icao_code):
-            elapsed = time.monotonic() - t0
-            logger.info(f"[DIAG] Tier 1 HIT in {elapsed:.3f}s — loaded {icao_code} from Lakebase cache")
-            return "lakebase_cache"
+            if self._current_config.get("osmRunways"):
+                elapsed = time.monotonic() - t0
+                logger.info(f"[DIAG] Tier 1 HIT in {elapsed:.3f}s — loaded {icao_code} from Lakebase cache")
+                return "lakebase_cache"
+            logger.info(f"[DIAG] Tier 1 stale (no osmRunways) for {icao_code}, falling through")
         logger.info(f"[DIAG] Tier 1 MISS in {time.monotonic() - t0:.3f}s")
 
         # Tier 1.5: Local file cache (fast dev restarts)
@@ -632,17 +634,19 @@ class AirportConfigService:
             t_local = time.monotonic()
             try:
                 cached = json.loads(local_cache.read_text())
-                self._current_config = cached
-                self._config_ready = True
-                # Derive center from actual geometry (more reliable than stored reference)
-                center_lat, center_lon = self._compute_center_from_config()
-                if center_lat and center_lon:
-                    self.set_reference_point(center_lat, center_lon)
-                elif "reference_lat" in cached and "reference_lon" in cached:
-                    self.set_reference_point(cached["reference_lat"], cached["reference_lon"])
-                self._build_taxiway_graph()
-                logger.info(f"[DIAG] Tier 1.5 local cache HIT in {time.monotonic() - t_local:.3f}s")
-                return "local_cache"
+                if not cached.get("osmRunways"):
+                    logger.info(f"[DIAG] Tier 1.5 stale (no osmRunways) for {icao_code}, falling through")
+                else:
+                    self._current_config = cached
+                    self._config_ready = True
+                    center_lat, center_lon = self._compute_center_from_config()
+                    if center_lat and center_lon:
+                        self.set_reference_point(center_lat, center_lon)
+                    elif "reference_lat" in cached and "reference_lon" in cached:
+                        self.set_reference_point(cached["reference_lat"], cached["reference_lon"])
+                    self._build_taxiway_graph()
+                    logger.info(f"[DIAG] Tier 1.5 local cache HIT in {time.monotonic() - t_local:.3f}s")
+                    return "local_cache"
             except Exception as e:
                 logger.warning(f"[DIAG] Tier 1.5 local cache read failed: {e}")
 
@@ -650,11 +654,12 @@ class AirportConfigService:
         t1 = time.monotonic()
         logger.info(f"Tier 2: Trying Unity Catalog for {icao_code}...")
         if self.load_from_lakehouse(icao_code):
-            elapsed = time.monotonic() - t1
-            logger.info(f"[DIAG] Tier 2 HIT in {elapsed:.3f}s — loaded {icao_code} from UC")
-            # Write-through to Lakebase for next startup
-            self.save_to_lakebase_cache(icao_code)
-            return "unity_catalog"
+            if self._current_config.get("osmRunways"):
+                elapsed = time.monotonic() - t1
+                logger.info(f"[DIAG] Tier 2 HIT in {elapsed:.3f}s — loaded {icao_code} from UC")
+                self.save_to_lakebase_cache(icao_code)
+                return "unity_catalog"
+            logger.info(f"[DIAG] Tier 2 stale (no osmRunways) for {icao_code}, falling through")
         logger.info(f"[DIAG] Tier 2 MISS in {time.monotonic() - t1:.3f}s")
 
         # Tier 3: OSM fallback
