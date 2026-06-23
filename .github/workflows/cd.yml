@@ -147,9 +147,9 @@ jobs:
           else
             rm -rf node_modules
             for attempt in 1 2 3; do
-              npm install --no-audit --no-fund --legacy-peer-deps && break
-              echo "::warning::npm install attempt $attempt failed, retrying in 15s..."
-              sleep 15
+              timeout 120 npm install --no-audit --no-fund --legacy-peer-deps && break
+              echo "::warning::npm install attempt $attempt failed (exit $?), retrying in 10s..."
+              sleep 10
             done
             test -d node_modules/typescript || { echo "::error::npm install failed — typescript not installed"; exit 1; }
           fi
