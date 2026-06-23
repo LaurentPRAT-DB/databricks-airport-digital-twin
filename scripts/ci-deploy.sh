@@ -54,6 +54,10 @@ fi
 
 # Prevent CLI from hitting macOS Keychain or cached profiles — use env vars only
 export DATABRICKS_CONFIG_PROFILE=""
+# Force PAT auth when DATABRICKS_TOKEN is set (skips OAuth cache/keychain entirely)
+if [[ -n "${DATABRICKS_TOKEN:-}" ]]; then
+  export DATABRICKS_AUTH_TYPE="pat"
+fi
 
 # Resolve catalog/schema from DABs bundle variables (unless overridden via env)
 if [[ -z "${UC_CATALOG:-}" || -z "${UC_SCHEMA:-}" ]]; then
