@@ -389,7 +389,7 @@ async def _background_init(app: FastAPI):
                 demo_svc = get_demo_simulation_service()
                 app.state.startup_status = "Loading demo simulation..."
                 t_demo = time.monotonic()
-                await asyncio.to_thread(demo_svc.generate_demo, airport_icao)
+                await asyncio.to_thread(demo_svc.generate_demo_isolated, airport_icao)
                 demo_ms = (time.monotonic() - t_demo) * 1000
                 source = demo_svc.get_source(airport_icao)
                 logger.info(f"INIT | Demo simulation {source} in {demo_ms:.0f}ms")

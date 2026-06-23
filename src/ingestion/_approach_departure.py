@@ -91,34 +91,53 @@ _osm_primary_runway_resolved: bool = False
 _approach_waypoints_cache: Dict[Optional[str], list] = {}
 
 
+_osm_runway_config_id: Optional[int] = None
+
+
 def _get_osm_primary_runway() -> Optional[dict]:
     """Get the primary (longest) runway from OSM config data.
 
     Returns the runway dict with 'geoPoints' [{latitude, longitude}, ...] or None
     if no OSM runway data is available. Result is cached per airport session.
+
+    Includes a staleness guard: if the underlying config dict object changed
+    (airport switch happened without proper cache clear), force re-resolve.
     """
-    global _cached_osm_primary_runway, _osm_primary_runway_resolved
-    if _osm_primary_runway_resolved:
-        return _cached_osm_primary_runway
+    global _cached_osm_primary_runway, _osm_primary_runway_resolved, _osm_runway_config_id
     try:
         from app.backend.services.airport_config_service import get_airport_config_service
         service = get_airport_config_service()
         config = service.get_config()
+        current_id = id(config)
+
+        if _osm_primary_runway_resolved and current_id == _osm_runway_config_id:
+            return _cached_osm_primary_runway
+
+        if _osm_primary_runway_resolved and current_id != _osm_runway_config_id:
+            logger.warning(
+                "[DIAG] _get_osm_primary_runway: stale cache — config object changed (prev=%s, now=%s), re-resolving",
+                _osm_runway_config_id, current_id,
+            )
+            _approach_waypoints_cache.clear()
+
         runways = config.get("osmRunways", [])
         if not runways:
             logger.info("[DIAG] _get_osm_primary_runway: osmRunways empty/missing, config keys=%s", list(config.keys())[:15])
             _cached_osm_primary_runway = None
             _osm_primary_runway_resolved = True
+            _osm_runway_config_id = current_id
             return None
         best = max(runways, key=lambda r: len(r.get("geoPoints", [])))
         if len(best.get("geoPoints", [])) < 2:
             logger.warning("[DIAG] _get_osm_primary_runway: best runway has <2 geoPoints: ref=%s, pts=%d", best.get("ref"), len(best.get("geoPoints", [])))
             _cached_osm_primary_runway = None
             _osm_primary_runway_resolved = True
+            _osm_runway_config_id = current_id
             return None
         logger.info("[DIAG] _get_osm_primary_runway: resolved ref=%s, pts=%d", best.get("ref"), len(best.get("geoPoints", [])))
         _cached_osm_primary_runway = best
         _osm_primary_runway_resolved = True
+        _osm_runway_config_id = current_id
         return best
     except Exception as e:
         logger.warning("_get_osm_primary_runway failed: %s", e)
@@ -346,10 +365,11 @@ def reset_arrival_runway_state() -> None:
 
 def reset_approach_caches() -> None:
     """Clear all approach/departure caches (call on airport switch)."""
-    global _cached_osm_primary_runway, _osm_primary_runway_resolved
+    global _cached_osm_primary_runway, _osm_primary_runway_resolved, _osm_runway_config_id
     global _approach_waypoints_cache
     _cached_osm_primary_runway = None
     _osm_primary_runway_resolved = False
+    _osm_runway_config_id = None
     _approach_waypoints_cache.clear()
 
 
