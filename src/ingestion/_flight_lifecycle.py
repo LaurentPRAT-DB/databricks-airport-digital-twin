@@ -1379,18 +1379,16 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
 
         if state.altitude <= DECISION_HEIGHT_FT:
             # Must be near runway threshold to transition to LANDING
-            # Skip check for go-around flights — they've already been on approach
-            # and may re-enter from a wider angle that doesn't converge on the threshold
-            if state.go_around_count == 0:
-                rwy_threshold = _get_runway_threshold()
-                if rwy_threshold:
-                    dist_to_rwy = _distance_between(
-                        (state.latitude, state.longitude), (rwy_threshold[1], rwy_threshold[0])
-                    )
-                    if dist_to_rwy > 0.03:  # >3.3km — still too far
-                        state.altitude = float(DECISION_HEIGHT_FT)
-                        state.vertical_rate = 0
-                        return state
+            max_dist = 0.05 if state.go_around_count > 0 else 0.03
+            rwy_threshold = _get_runway_threshold()
+            if rwy_threshold:
+                dist_to_rwy = _distance_between(
+                    (state.latitude, state.longitude), (rwy_threshold[1], rwy_threshold[0])
+                )
+                if dist_to_rwy > max_dist:
+                    state.altitude = float(DECISION_HEIGHT_FT)
+                    state.vertical_rate = 0
+                    return state
 
             arrival_rwy = _assign_arrival_runway(state.icao24)
             runway_ok = (_is_runway_scenario_open(arrival_rwy)
@@ -1443,18 +1441,16 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
             state.vertical_rate = -1500
             return state
         else:
-            # Must be near runway to land — not still far out
-            # Skip for go-around flights (already cleared for approach)
-            if state.go_around_count == 0:
-                rwy_threshold = _get_runway_threshold()
-                if rwy_threshold:
-                    dist_to_rwy = _distance_between(
-                        (state.latitude, state.longitude), (rwy_threshold[1], rwy_threshold[0])
-                    )
-                    if dist_to_rwy > 0.03:
-                        state.altitude = float(DECISION_HEIGHT_FT)
-                        state.vertical_rate = 0
-                        return state
+            max_dist = 0.05 if state.go_around_count > 0 else 0.03
+            rwy_threshold = _get_runway_threshold()
+            if rwy_threshold:
+                dist_to_rwy = _distance_between(
+                    (state.latitude, state.longitude), (rwy_threshold[1], rwy_threshold[0])
+                )
+                if dist_to_rwy > max_dist:
+                    state.altitude = float(DECISION_HEIGHT_FT)
+                    state.vertical_rate = 0
+                    return state
 
             arrival_rwy = _assign_arrival_runway(state.icao24)
             runway_ok = (_is_runway_scenario_open(arrival_rwy)
