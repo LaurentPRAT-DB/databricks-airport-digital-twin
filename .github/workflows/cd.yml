@@ -138,10 +138,12 @@ jobs:
         working-directory: app/frontend
         env:
           npm_config_registry: ${{ runner.environment == 'github-hosted' && 'https://registry.npmjs.org/' || 'https://npm-proxy.dev.databricks.com/' }}
+          NPM_PERSISTENT_CACHE: /tmp/npm-node-modules-airport
         run: |
-          # On self-hosted: reuse existing node_modules if present and lockfile unchanged
-          if [[ "${{ runner.environment }}" != "github-hosted" && -d node_modules/typescript ]]; then
-            echo "::notice::Self-hosted runner — reusing existing node_modules"
+          # On self-hosted: restore from persistent cache (survives checkout clean)
+          if [[ "${{ runner.environment }}" != "github-hosted" && -d "$NPM_PERSISTENT_CACHE/typescript" ]]; then
+            cp -a "$NPM_PERSISTENT_CACHE" node_modules
+            echo "::notice::Self-hosted runner — restored node_modules from persistent cache"
           elif [[ "${{ steps.npm-cache.outputs.cache-hit }}" == "true" ]]; then
             echo "::notice::Cache hit — skipping npm install"
           else
@@ -152,6 +154,11 @@ jobs:
               sleep 10
             done
             test -d node_modules/typescript || { echo "::error::npm install failed — typescript not installed"; exit 1; }
+          fi
+          # Persist for next run (self-hosted only, survives checkout@v4 clean)
+          if [[ "${{ runner.environment }}" != "github-hosted" && -d node_modules/typescript ]]; then
+            rm -rf "$NPM_PERSISTENT_CACHE"
+            cp -a node_modules "$NPM_PERSISTENT_CACHE"
           fi
 
       - name: Build frontend
