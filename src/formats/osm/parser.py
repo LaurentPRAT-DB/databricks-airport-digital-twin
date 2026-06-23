@@ -36,10 +36,10 @@ _DEFAULT_RETRY_DELAY = 2.0
 
 
 def _load_overpass_config() -> dict:
-    """Load Overpass API config from config/overpass_api.json, falling back to built-in defaults."""
+    """Load Overpass API config from configs/overpass_api.json, falling back to built-in defaults."""
     config_candidates = [
-        Path(__file__).resolve().parents[3] / "config" / "overpass_api.json",
-        Path.cwd() / "config" / "overpass_api.json",
+        Path(__file__).resolve().parents[3] / "configs" / "overpass_api.json",
+        Path.cwd() / "configs" / "overpass_api.json",
     ]
     for path in config_candidates:
         if path.is_file():
