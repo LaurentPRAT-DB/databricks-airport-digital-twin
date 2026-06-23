@@ -4,6 +4,7 @@ bundle:
 sync:
   include:
     - app/**
+    - app/frontend/dist/**
     - src/**
     - tests/**
     - config/**
