@@ -205,3 +205,73 @@ async def get_runway_diagnostics() -> dict:
         "config_source": config.get("source"),
         "config_ready": get_airport_config_service().config_ready,
     }
+
+
+@router.get("/debug/approach-state")
+async def get_approach_state() -> dict:
+    """Lightweight approach state check (no auth required for diagnostics)."""
+    from src.ingestion._approach_departure import (
+        _cached_osm_primary_runway,
+        _osm_primary_runway_resolved,
+        _osm_runway_config_id,
+        _approach_waypoints_cache,
+        _get_osm_primary_runway,
+        _get_runway_heading,
+        _get_runway_threshold,
+        _get_fallback_runway,
+    )
+    from app.backend.services.airport_config_service import get_airport_config_service
+
+    service = get_airport_config_service()
+    config = service.get_config()
+    osm_runways = config.get("osmRunways", [])
+
+    # Try resolving fresh
+    try:
+        fresh_rwy = _get_osm_primary_runway()
+        fresh_ref = fresh_rwy.get("ref") if fresh_rwy else None
+        fresh_pts = len(fresh_rwy.get("geoPoints", [])) if fresh_rwy else 0
+    except Exception as e:
+        fresh_ref = f"ERROR: {e}"
+        fresh_pts = 0
+
+    # Get heading
+    try:
+        heading = _get_runway_heading()
+    except Exception as e:
+        heading = f"ERROR: {e}"
+
+    # Get threshold
+    try:
+        threshold = _get_runway_threshold()
+    except Exception as e:
+        threshold = f"ERROR: {e}"
+
+    # Fallback for comparison
+    fb = _get_fallback_runway()
+
+    return {
+        "cache_state": {
+            "resolved": _osm_primary_runway_resolved,
+            "cached_ref": _cached_osm_primary_runway.get("ref") if _cached_osm_primary_runway else None,
+            "cached_pts": len(_cached_osm_primary_runway.get("geoPoints", [])) if _cached_osm_primary_runway else 0,
+            "config_id_tracked": _osm_runway_config_id,
+            "config_id_current": id(config),
+            "waypoints_cached_keys": list(_approach_waypoints_cache.keys())[:10],
+        },
+        "config": {
+            "ready": service.config_ready,
+            "osmRunways_count": len(osm_runways),
+            "top_runways": [{"ref": r.get("ref"), "pts": len(r.get("geoPoints", []))} for r in osm_runways[:5]],
+        },
+        "resolved": {
+            "fresh_ref": fresh_ref,
+            "fresh_pts": fresh_pts,
+            "heading": heading,
+            "threshold": threshold,
+        },
+        "fallback": {
+            "heading": fb[2],
+            "threshold": (fb[0][0], fb[0][1]),
+        },
+    }
