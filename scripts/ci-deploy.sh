@@ -182,10 +182,14 @@ git rev-list --count HEAD > BUILD_NUMBER 2>/dev/null || true
 # ── Step 1b: Clean stale frontend assets + DABs bundle deploy ────────
 # DABs doesn't delete old hashed asset files when new ones replace them,
 # causing index.html to reference files that don't exist on the workspace.
-BUNDLE_ASSETS="/Workspace/Users/laurent.prat@databricks.com/.bundle/airport-digital-twin/$TARGET/files/app/frontend/dist/assets"
-databricks workspace delete "$BUNDLE_ASSETS" --recursive 2>/dev/null \
-  && info "Cleaned stale frontend assets" \
-  || info "No existing assets to clean (first deploy)"
+if [[ -z "${SKIP_BUILD:-}" ]]; then
+  BUNDLE_ASSETS="/Workspace/Users/laurent.prat@databricks.com/.bundle/airport-digital-twin/$TARGET/files/app/frontend/dist/assets"
+  databricks workspace delete "$BUNDLE_ASSETS" --recursive 2>/dev/null \
+    && info "Cleaned stale frontend assets" \
+    || info "No existing assets to clean (first deploy)"
+else
+  info "SKIP_BUILD set — keeping existing frontend assets"
+fi
 
 mkdir -p ".databricks/bundle/$TARGET/bin"
 databricks bundle deploy --target "$TARGET" --force-lock 2>&1 | grep -v "^Warning:" \
