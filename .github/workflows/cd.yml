@@ -107,23 +107,24 @@ jobs:
       - name: Detect frontend changes
         id: frontend-changes
         run: |
-          # Skip build if no frontend files changed in the triggering commits
+          # Skip build if the triggering commit didn't touch frontend files.
+          # For workflow_run: check only the single triggering commit (not history window).
+          # For manual dispatch: always build unless SKIP_BUILD requested.
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             TRIGGER_SHA="${{ github.event.workflow_run.head_sha }}"
-            # Check last 5 commits for frontend changes
-            CHANGES=$(git log --name-only --pretty=format: -5 "$TRIGGER_SHA" -- app/frontend/ | grep -c . || true)
+            CHANGES=$(git diff-tree --no-commit-id --name-only -r "$TRIGGER_SHA" -- app/frontend/ | grep -c . || true)
           else
             CHANGES="1"  # Manual dispatch = always build
           fi
           if [[ "$CHANGES" == "0" ]]; then
             echo "skip_build=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::No frontend changes in recent commits — using existing dist/"
+            echo "::notice::No frontend changes in commit $TRIGGER_SHA — using existing dist/"
           else
             echo "skip_build=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Cache node_modules
-        if: steps.frontend-changes.outputs.skip_build != 'true'
+        if: steps.frontend-changes.outputs.skip_build != 'true' && runner.environment == 'github-hosted'
         id: npm-cache
         uses: actions/cache@v4
         with:
@@ -131,18 +132,25 @@ jobs:
           key: npm-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
 
       - name: Install frontend dependencies
-        if: steps.frontend-changes.outputs.skip_build != 'true' && steps.npm-cache.outputs.cache-hit != 'true'
+        if: steps.frontend-changes.outputs.skip_build != 'true'
         working-directory: app/frontend
         env:
           npm_config_registry: ${{ runner.environment == 'github-hosted' && 'https://registry.npmjs.org/' || 'https://npm-proxy.dev.databricks.com/' }}
         run: |
-          rm -rf node_modules
-          for attempt in 1 2 3; do
-            npm install --no-audit --no-fund --legacy-peer-deps && break
-            echo "::warning::npm install attempt $attempt failed, retrying in 15s..."
-            sleep 15
-          done
-          test -d node_modules/typescript || { echo "::error::npm install failed — typescript not installed"; exit 1; }
+          # On self-hosted: reuse existing node_modules if present and lockfile unchanged
+          if [[ "${{ runner.environment }}" != "github-hosted" && -d node_modules/typescript ]]; then
+            echo "::notice::Self-hosted runner — reusing existing node_modules"
+          elif [[ "${{ steps.npm-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "::notice::Cache hit — skipping npm install"
+          else
+            rm -rf node_modules
+            for attempt in 1 2 3; do
+              npm install --no-audit --no-fund --legacy-peer-deps && break
+              echo "::warning::npm install attempt $attempt failed, retrying in 15s..."
+              sleep 15
+            done
+            test -d node_modules/typescript || { echo "::error::npm install failed — typescript not installed"; exit 1; }
+          fi
 
       - name: Build frontend
         if: steps.frontend-changes.outputs.skip_build != 'true'

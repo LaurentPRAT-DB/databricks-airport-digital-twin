@@ -106,7 +106,7 @@ def _get_osm_primary_runway() -> Optional[dict]:
         config = service.get_config()
         runways = config.get("osmRunways", [])
         if not runways:
-            logger.debug("[DIAG] _get_osm_primary_runway: osmRunways empty/missing, config keys=%s", list(config.keys())[:15])
+            logger.info("[DIAG] _get_osm_primary_runway: osmRunways empty/missing, config keys=%s", list(config.keys())[:15])
             _cached_osm_primary_runway = None
             _osm_primary_runway_resolved = True
             return None
@@ -116,6 +116,7 @@ def _get_osm_primary_runway() -> Optional[dict]:
             _cached_osm_primary_runway = None
             _osm_primary_runway_resolved = True
             return None
+        logger.info("[DIAG] _get_osm_primary_runway: resolved ref=%s, pts=%d", best.get("ref"), len(best.get("geoPoints", [])))
         _cached_osm_primary_runway = best
         _osm_primary_runway_resolved = True
         return best
