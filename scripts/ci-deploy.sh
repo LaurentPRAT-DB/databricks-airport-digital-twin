@@ -52,6 +52,9 @@ if [[ -z "${DATABRICKS_TOKEN:-}" && ( -z "${DATABRICKS_CLIENT_ID:-}" || -z "${DA
   exit 1
 fi
 
+# Prevent CLI from hitting macOS Keychain or cached profiles — use env vars only
+export DATABRICKS_CONFIG_PROFILE=""
+
 # Resolve catalog/schema from DABs bundle variables (unless overridden via env)
 if [[ -z "${UC_CATALOG:-}" || -z "${UC_SCHEMA:-}" ]]; then
   BUNDLE_VARS=$(databricks bundle validate --target "$TARGET" --output json 2>/dev/null \
