@@ -104,7 +104,34 @@ jobs:
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Detect frontend changes
+        id: frontend-changes
+        run: |
+          # Skip build if no frontend files changed in the triggering commits
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            TRIGGER_SHA="${{ github.event.workflow_run.head_sha }}"
+            # Check last 5 commits for frontend changes
+            CHANGES=$(git log --name-only --pretty=format: -5 "$TRIGGER_SHA" -- app/frontend/ | grep -c . || true)
+          else
+            CHANGES="1"  # Manual dispatch = always build
+          fi
+          if [[ "$CHANGES" == "0" ]]; then
+            echo "skip_build=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::No frontend changes in recent commits — using existing dist/"
+          else
+            echo "skip_build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache node_modules
+        if: steps.frontend-changes.outputs.skip_build != 'true'
+        id: npm-cache
+        uses: actions/cache@v4
+        with:
+          path: app/frontend/node_modules
+          key: npm-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
+
       - name: Install frontend dependencies
+        if: steps.frontend-changes.outputs.skip_build != 'true' && steps.npm-cache.outputs.cache-hit != 'true'
         working-directory: app/frontend
         env:
           npm_config_registry: ${{ runner.environment == 'github-hosted' && 'https://registry.npmjs.org/' || 'https://npm-proxy.dev.databricks.com/' }}
@@ -118,6 +145,7 @@ jobs:
           test -d node_modules/typescript || { echo "::error::npm install failed — typescript not installed"; exit 1; }
 
       - name: Build frontend
+        if: steps.frontend-changes.outputs.skip_build != 'true'
         working-directory: app/frontend
         env:
           VITE_BRAND: ${{ github.event.inputs.brand || 'databricks' }}
@@ -139,6 +167,7 @@ jobs:
           fi
           scripts/ci-deploy.sh --target "$TARGET" $SEED_FLAG
         env:
+          SKIP_BUILD: ${{ steps.frontend-changes.outputs.skip_build == 'true' && '1' || '' }}
           DATABRICKS_WAREHOUSE_ID: ${{ secrets.DATABRICKS_WAREHOUSE_ID }}
           LAKEBASE_HOST: ${{ secrets.LAKEBASE_HOST }}
           LAKEBASE_ENDPOINT_NAME: ${{ secrets.LAKEBASE_ENDPOINT_NAME }}
