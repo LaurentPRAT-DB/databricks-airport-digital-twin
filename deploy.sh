@@ -294,17 +294,15 @@ else
   info "Continuing with grants — some may fail if app hasn't finished initializing"
 fi
 
-# ── Step 5b: Seed Lakebase airport cache (optional) ──────────────────
-if [[ -n "$SEED" ]]; then
-  echo "Step 5b: Seed Lakebase airport cache from UC Volume"
-  LAKEBASE_BRANCH="$TARGET"
-  [[ "$TARGET" == "prod" ]] && LAKEBASE_BRANCH="production"
-  uv run python3 scripts/seed_airport_cache.py \
-    --profile "$PROFILE" --branch "$LAKEBASE_BRANCH" \
-    --catalog "$UC_CATALOG" --schema "$UC_SCHEMA" \
-    && ok "Airport cache seeded ($LAKEBASE_BRANCH)" \
-    || fail "Airport cache seed failed (non-fatal, app will self-heal on startup)"
-fi
+# ── Step 5b: Seed Lakebase airport cache (idempotent — skips if all cached) ──
+echo "Step 5b: Ensure Lakebase airport cache is populated"
+LAKEBASE_BRANCH="$TARGET"
+[[ "$TARGET" == "prod" ]] && LAKEBASE_BRANCH="production"
+uv run python3 scripts/seed_airport_cache.py \
+  --profile "$PROFILE" --branch "$LAKEBASE_BRANCH" \
+  --catalog "$UC_CATALOG" --schema "$UC_SCHEMA" \
+  && ok "Airport cache OK ($LAKEBASE_BRANCH)" \
+  || fail "Airport cache seed failed (non-fatal, app will self-heal on startup)"
 
 # ── Step 6: Grant SP permissions (everything DABs can't manage) ──────
 echo "Step 6: Grant SP permissions"
