@@ -477,6 +477,24 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     rwy_threshold = _get_runway_threshold()
     rwy_heading = _get_runway_heading()
     _used_osm = rwy_threshold is not None and rwy_heading is not None
+
+    # Sanity: if OSM resolved but threshold is far from airport center, the data
+    # is stale (from a previous airport). Force re-resolve.
+    if _used_osm:
+        from src.ingestion.fallback import get_airport_center
+        _center = get_airport_center()
+        _dist_thr_to_center = abs(rwy_threshold[1] - _center[0]) + abs(rwy_threshold[0] - _center[1])
+        if _dist_thr_to_center > 1.0:
+            logger.warning(
+                "[DIAG] _get_approach_waypoints: OSM threshold (%.4f,%.4f) far from center (%.4f,%.4f), "
+                "dist=%.2f — forcing re-resolve",
+                rwy_threshold[0], rwy_threshold[1], _center[1], _center[0], _dist_thr_to_center,
+            )
+            reset_approach_caches()
+            rwy_threshold = _get_runway_threshold()
+            rwy_heading = _get_runway_heading()
+            _used_osm = rwy_threshold is not None and rwy_heading is not None
+
     if not _used_osm:
         fb_thr, _, fb_hdg, _ = _get_fallback_runway()
         rwy_threshold = fb_thr
