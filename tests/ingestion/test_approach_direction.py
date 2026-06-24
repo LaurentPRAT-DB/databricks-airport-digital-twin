@@ -299,3 +299,47 @@ class TestApproachWaypointsUseOsm:
                 "and find the runway — staleness guard should fire"
             )
             assert rwy["ref"] == "03R/21L"
+
+    def test_fallback_waypoints_not_cached_for_origins(self):
+        """Waypoints computed with fallback must NOT be cached.
+
+        Regression: if first call to _get_approach_waypoints happens before OSM
+        loads (returns fallback heading), the result was cached per-origin. Later
+        calls with OSM data returned stale fallback waypoints from cache.
+        """
+        from src.ingestion._approach_departure import _approach_waypoints_cache
+
+        set_airport_center(37.9364, 23.9445, "ATH")
+        reset_approach_caches()
+
+        empty_config = {"osmRunways": []}
+        full_config = _make_config(LGAV_RUNWAY)
+        svc = MagicMock()
+
+        with patch(
+            "app.backend.services.airport_config_service.get_airport_config_service",
+            return_value=svc,
+        ):
+            # Call with empty config (fallback) — should NOT cache
+            svc.get_config.return_value = empty_config
+            wps_fallback = _get_approach_waypoints("AUH")
+            assert len(wps_fallback) > 0, "Should still return waypoints (just fallback-based)"
+            assert "AUH" not in _approach_waypoints_cache, (
+                "Fallback-based waypoints must NOT be cached"
+            )
+
+            # Now config has OSM data — should compute fresh and cache
+            svc.get_config.return_value = full_config
+            reset_approach_caches()
+            wps_osm = _get_approach_waypoints("AUH")
+            assert "AUH" in _approach_waypoints_cache, (
+                "OSM-based waypoints should be cached"
+            )
+
+            # Verify the two results differ (different approach course)
+            first_wp_fallback = wps_fallback[0]
+            first_wp_osm = wps_osm[0]
+            assert first_wp_fallback != first_wp_osm, (
+                "Fallback and OSM waypoints should differ — "
+                f"fallback entry={first_wp_fallback}, osm entry={first_wp_osm}"
+            )

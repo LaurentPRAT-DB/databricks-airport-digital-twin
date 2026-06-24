@@ -134,6 +134,9 @@ def _get_osm_primary_runway() -> Optional[dict]:
             _osm_primary_runway_resolved = True
             _osm_runway_config_id = current_id
             return None
+        if _cached_osm_primary_runway is None and _approach_waypoints_cache:
+            logger.info("[DIAG] _get_osm_primary_runway: first OSM resolve — purging stale fallback waypoints")
+            _approach_waypoints_cache.clear()
         logger.info("[DIAG] _get_osm_primary_runway: resolved ref=%s, pts=%d", best.get("ref"), len(best.get("geoPoints", [])))
         _cached_osm_primary_runway = best
         _osm_primary_runway_resolved = True
@@ -473,7 +476,8 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
 
     rwy_threshold = _get_runway_threshold()
     rwy_heading = _get_runway_heading()
-    if rwy_threshold is None or rwy_heading is None:
+    _used_osm = rwy_threshold is not None and rwy_heading is not None
+    if not _used_osm:
         fb_thr, _, fb_hdg, _ = _get_fallback_runway()
         rwy_threshold = fb_thr
         rwy_heading = fb_hdg
@@ -486,6 +490,12 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
     else:
         bearing_to_apt = _bearing_from_airport(origin_iata)
         entry_dir = (bearing_to_apt + 180) % 360
+
+    logger.info(
+        "[DIAG] _get_approach_waypoints: origin=%s rwy_heading=%.1f approach_course=%.1f "
+        "entry_dir=%.1f used_osm=%s",
+        origin_iata, rwy_heading, approach_course, entry_dir, _used_osm,
+    )
 
     # Phase 2: Final approach — centered on RUNWAY THRESHOLD
     final_distances = [0.10, 0.075, 0.05, 0.035, 0.02, 0.01, 0.0]
@@ -553,7 +563,8 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
         base_wps.append((pt[1], pt[0], alt))
 
     result = transition_wps + base_wps + final_wps
-    _approach_waypoints_cache[origin_iata] = result
+    if _used_osm:
+        _approach_waypoints_cache[origin_iata] = result
     return result
 
 
