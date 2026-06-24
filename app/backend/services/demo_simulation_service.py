@@ -21,15 +21,15 @@ logger = logging.getLogger(__name__)
 _LOCAL_DEMO_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "demo"
 
 
-def _run_engine_subprocess(airport_icao: str, output_path: str, osm_runway: dict | None = None, osm_gates: dict | None = None) -> None:
+def _run_engine_subprocess(airport_icao: str, output_path: str, airport_config: dict | None = None) -> None:
     """Entry point for subprocess-based demo generation.
 
     Runs in a completely separate process — module globals are independent
     copies, so SimulationEngine cannot corrupt the parent's live state.
 
-    osm_runway: OSM runway dict from the parent process's airport_config_service.
-    osm_gates: Dict of gate_ref → (lat, lon) from parent's OSM config.
-    Both injected so the subprocess uses real airport geometry instead of fallbacks.
+    airport_config: Full OSM config dict from parent's airport_config_service.
+    Used to inject runway, gates, and build taxiway graph so the subprocess
+    produces realistic geometry instead of lat-offset fallbacks.
     """
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
@@ -52,18 +52,52 @@ def _run_engine_subprocess(airport_icao: str, output_path: str, osm_runway: dict
         ),
     )
 
-    # Inject OSM data BEFORE engine init. The subprocess has no
+    # Inject full airport config BEFORE engine init. The subprocess has no
     # airport_config_service, so all OSM lookups would fail and produce
     # wrong fallback geometry (heading 270°, synthetic gate grid, etc.).
-    if osm_runway:
-        import src.ingestion._approach_departure as _ad
-        import src.ingestion._generation as _gen
-        _ad._get_osm_primary_runway = lambda: osm_runway
-        _gen._get_osm_primary_runway = lambda: osm_runway
+    if airport_config:
+        # Runway — monkey-patch to return the primary runway from config
+        osm_runways = airport_config.get("osmRunways", [])
+        if osm_runways:
+            best = max(osm_runways, key=lambda r: len(r.get("geoPoints", [])))
+            if len(best.get("geoPoints", [])) >= 2:
+                import src.ingestion._approach_departure as _ad
+                import src.ingestion._generation as _gen
+                _ad._get_osm_primary_runway = lambda: best
+                _gen._get_osm_primary_runway = lambda: best
 
-    if osm_gates:
-        import src.ingestion.fallback as _fb
-        _fb._loaded_gates = osm_gates
+        # Gates — inject pre-parsed gate positions
+        raw_gates = airport_config.get("gates", [])
+        if raw_gates:
+            import src.ingestion.fallback as _fb
+            gates = {}
+            for gate in raw_gates:
+                ref = gate.get("ref") or gate.get("id")
+                geo = gate.get("geo", {})
+                lat = geo.get("latitude")
+                lon = geo.get("longitude")
+                if ref and lat and lon:
+                    ref_str = str(ref)
+                    numeric_part = "".join(c for c in ref_str if c.isdigit())
+                    if numeric_part and int(numeric_part) > 200:
+                        continue
+                    gates[ref_str] = (float(lat), float(lon))
+            if gates:
+                _fb._loaded_gates = gates
+
+        # Taxiway graph — rebuild from config for realistic taxi routing
+        try:
+            from src.routing.taxiway_graph import TaxiwayGraph
+            graph = TaxiwayGraph()
+            graph.build_from_config(airport_config)
+            if graph.nodes:
+                from app.backend.services.airport_config_service import get_airport_config_service
+                service = get_airport_config_service()
+                service._taxiway_graph = graph
+                service._current_config = airport_config
+                service._config_ready = True
+        except Exception:
+            pass
 
     engine = SimulationEngine(config)
     recorder = engine.run()
@@ -268,42 +302,18 @@ class DemoSimulationService:
             import multiprocessing
             output_path = Path(tempfile.gettempdir()) / f"demo_{airport_icao}.json"
 
-            # Pass OSM data to subprocess so it uses real airport geometry
-            osm_runway = None
-            osm_gates = None
-            try:
-                from src.ingestion._approach_departure import _get_osm_primary_runway
-                rwy = _get_osm_primary_runway()
-                if rwy:
-                    osm_runway = dict(rwy)
-            except Exception:
-                pass
+            # Pass full airport config to subprocess for realistic geometry
+            airport_config = None
             try:
                 from app.backend.services.airport_config_service import get_airport_config_service
-                config = get_airport_config_service().get_config()
-                raw_gates = config.get("gates", [])
-                if raw_gates:
-                    gates = {}
-                    for gate in raw_gates:
-                        ref = gate.get("ref") or gate.get("id")
-                        geo = gate.get("geo", {})
-                        lat = geo.get("latitude")
-                        lon = geo.get("longitude")
-                        if ref and lat and lon:
-                            ref_str = str(ref)
-                            numeric_part = "".join(c for c in ref_str if c.isdigit())
-                            if numeric_part and int(numeric_part) > 200:
-                                continue
-                            gates[ref_str] = (float(lat), float(lon))
-                    if gates:
-                        osm_gates = gates
+                airport_config = get_airport_config_service().get_config()
             except Exception:
                 pass
 
             ctx = multiprocessing.get_context("spawn")
             proc = ctx.Process(
                 target=_run_engine_subprocess,
-                args=(airport_icao, str(output_path), osm_runway, osm_gates),
+                args=(airport_icao, str(output_path), airport_config),
             )
             proc.start()
             proc.join(timeout=120)
