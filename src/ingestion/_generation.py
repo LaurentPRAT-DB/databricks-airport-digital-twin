@@ -1314,6 +1314,10 @@ def _trajectory_approach(
 
     threshold_wp = _traj_app_wps2[-1]
     entry_wp = _traj_app_wps2[0]
+    logger.info(
+        "[DIAG] _trajectory_approach: icao24=%s origin=%s entry=(%.4f,%.4f) threshold=(%.4f,%.4f) wps=%d",
+        icao24, origin_airport, entry_wp[0], entry_wp[1], threshold_wp[0], threshold_wp[1], len(_traj_app_wps2),
+    )
     dist_entry_to_threshold = _distance_between(
         (entry_wp[1], entry_wp[0]), (threshold_wp[1], threshold_wp[0])
     )

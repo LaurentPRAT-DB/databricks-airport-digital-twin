@@ -493,8 +493,9 @@ def _get_approach_waypoints(origin_iata: Optional[str] = None) -> list:
 
     logger.info(
         "[DIAG] _get_approach_waypoints: origin=%s rwy_heading=%.1f approach_course=%.1f "
-        "entry_dir=%.1f used_osm=%s",
+        "entry_dir=%.1f used_osm=%s rwy_threshold=(%.4f,%.4f)",
         origin_iata, rwy_heading, approach_course, entry_dir, _used_osm,
+        rwy_lon, rwy_lat,
     )
 
     # Phase 2: Final approach — centered on RUNWAY THRESHOLD

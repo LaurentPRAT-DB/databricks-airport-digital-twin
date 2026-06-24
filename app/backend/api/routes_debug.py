@@ -250,13 +250,32 @@ async def get_approach_state() -> dict:
     # Fallback for comparison
     fb = _get_fallback_runway()
 
+    # Compute approach waypoints for WAW to verify direction
+    from src.ingestion._approach_departure import _get_approach_waypoints
+    from src.ingestion.fallback import get_airport_center, get_current_airport_iata
+    import math
+
+    waw_wps = _get_approach_waypoints("WAW")
+    waw_entry = None
+    waw_threshold_wp = None
+    waw_entry_bearing = None
+    if waw_wps and len(waw_wps) >= 2:
+        waw_entry = (waw_wps[0][0], waw_wps[0][1])
+        waw_threshold_wp = (waw_wps[-1][0], waw_wps[-1][1])
+        dlat = waw_threshold_wp[1] - waw_entry[1]
+        dlon = waw_threshold_wp[0] - waw_entry[0]
+        waw_entry_bearing = (math.degrees(math.atan2(dlon, dlat)) + 360) % 360
+
     return {
+        "airport": get_current_airport_iata(),
+        "center": get_airport_center(),
         "cache_state": {
             "resolved": _osm_primary_runway_resolved,
             "cached_ref": _cached_osm_primary_runway.get("ref") if _cached_osm_primary_runway else None,
             "cached_pts": len(_cached_osm_primary_runway.get("geoPoints", [])) if _cached_osm_primary_runway else 0,
             "config_id_tracked": _osm_runway_config_id,
             "config_id_current": id(config),
+            "config_ids_match": _osm_runway_config_id == id(config),
             "waypoints_cached_keys": list(_approach_waypoints_cache.keys())[:10],
         },
         "config": {
@@ -273,5 +292,12 @@ async def get_approach_state() -> dict:
         "fallback": {
             "heading": fb[2],
             "threshold": (fb[0][0], fb[0][1]),
+        },
+        "waw_approach": {
+            "entry_lon_lat": waw_entry,
+            "threshold_lon_lat": waw_threshold_wp,
+            "entry_bearing_deg": waw_entry_bearing,
+            "num_waypoints": len(waw_wps) if waw_wps else 0,
+            "note": "entry_bearing ~179=from_north(OSM_correct), ~69=from_SW(fallback_wrong)",
         },
     }

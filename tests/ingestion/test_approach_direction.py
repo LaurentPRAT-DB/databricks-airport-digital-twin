@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.ingestion._approach_departure import (
+    _approach_waypoints_cache,
     _get_approach_waypoints,
     _get_fallback_runway,
     _get_osm_primary_runway,
@@ -342,4 +343,112 @@ class TestApproachWaypointsUseOsm:
             assert first_wp_fallback != first_wp_osm, (
                 "Fallback and OSM waypoints should differ — "
                 f"fallback entry={first_wp_fallback}, osm entry={first_wp_osm}"
+            )
+
+
+class TestApproachNotFromEast:
+    """End-to-end test: after airport switch to ATH, no approach comes from due east.
+
+    Reproduces the deployed bug: KSFO→ATH switch, flights with origins (WAW, AUH, etc.)
+    must NOT show trajectories entering from 90° (the fallback direction for lat≥30°).
+
+    NOTE: The conftest.py _provide_osm_runway_data fixture patches _get_osm_primary_runway
+    to always return SFO data. We override that by patching _get_osm_primary_runway directly
+    to return LGAV data for these tests.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_airport_center(self):
+        prev_center = get_airport_center()
+        prev_iata = get_current_airport_iata()
+        yield
+        set_airport_center(prev_center[0], prev_center[1], prev_iata)
+
+    @pytest.fixture(autouse=True)
+    def _provide_osm_runway_data(self):
+        """Override conftest fixture to provide LGAV runway for this class."""
+        with patch(
+            "src.ingestion._approach_departure._get_osm_primary_runway",
+            return_value=LGAV_RUNWAY,
+        ):
+            yield
+
+    def _entry_bearing(self, wps):
+        """Bearing from first waypoint toward runway threshold (last wp)."""
+        if len(wps) < 2:
+            return 0.0
+        first_lon, first_lat = wps[0][0], wps[0][1]
+        last_lon, last_lat = wps[-1][0], wps[-1][1]
+        dlat = last_lat - first_lat
+        dlon = last_lon - first_lon
+        bearing = math.degrees(math.atan2(dlon, dlat))
+        return (bearing + 360) % 360
+
+    def test_waw_to_ath_not_from_east(self):
+        """WAW→ATH: must NOT approach from 90° (east). Should come from NNW (~350°)."""
+        set_airport_center(37.9364, 23.9445, "ATH")
+        reset_approach_caches()
+
+        wps = _get_approach_waypoints("WAW")
+        entry_bearing = self._entry_bearing(wps)
+        diff_from_east = abs((entry_bearing - 90 + 180) % 360 - 180)
+        assert diff_from_east > 30, (
+            f"WAW→ATH entry bearing {entry_bearing:.1f}° is too close to "
+            f"due east (90°) — diff={diff_from_east:.1f}°. "
+            f"Likely using fallback heading=270° instead of OSM heading=216.89°"
+        )
+
+    def test_auh_to_ath_final_uses_osm_heading(self):
+        """AUH→ATH: final approach segment uses OSM heading (~217°), not fallback (270°)."""
+        set_airport_center(37.9364, 23.9445, "ATH")
+        reset_approach_caches()
+
+        wps = _get_approach_waypoints("AUH")
+        # Final 3 wps: aircraft heading should match runway heading (OSM ~217°)
+        final_wps = wps[-3:]
+        last_lon, last_lat = final_wps[-1][0], final_wps[-1][1]
+        first_lon, first_lat = final_wps[0][0], final_wps[0][1]
+        final_heading = math.degrees(math.atan2(last_lon - first_lon, last_lat - first_lat))
+        final_heading = (final_heading + 360) % 360
+
+        # OSM heading for ATH 21L ≈ 217°, fallback = 270°
+        diff_from_osm = abs((final_heading - 217 + 180) % 360 - 180)
+        diff_from_fallback = abs((final_heading - 270 + 180) % 360 - 180)
+        assert diff_from_osm < diff_from_fallback, (
+            f"AUH→ATH final heading {final_heading:.1f}° closer to fallback (270°, "
+            f"diff={diff_from_fallback:.1f}°) than OSM (217°, diff={diff_from_osm:.1f}°)"
+        )
+
+    def test_all_origins_final_heading_matches_osm(self):
+        """After airport switch, all origins' final approach heading matches OSM (~217°)."""
+        set_airport_center(37.9364, 23.9445, "ATH")
+        reset_approach_caches()
+
+        heading = _get_runway_heading()
+        assert heading is not None, "OSM heading should resolve"
+        assert 210 <= heading <= 225, f"Expected ATH heading ~217, got {heading}"
+
+        origins = ["WAW", "AUH", "MUC", "ARN", "BKK", "HKG", "DEL", "AMS"]
+        for origin in origins:
+            wps = _get_approach_waypoints(origin)
+            assert len(wps) > 0, f"No waypoints for {origin}"
+
+            # Final approach heading = runway heading (~217° for ATH 21L with OSM)
+            # With fallback it'd be 270°
+            final_wps = wps[-3:]
+            last_lon, last_lat = final_wps[-1][0], final_wps[-1][1]
+            first_lon, first_lat = final_wps[0][0], final_wps[0][1]
+
+            final_heading = math.degrees(math.atan2(
+                last_lon - first_lon, last_lat - first_lat
+            ))
+            final_heading = (final_heading + 360) % 360
+
+            # OSM heading ≈ 217°, fallback = 270°
+            diff_from_osm = abs((final_heading - 217 + 180) % 360 - 180)
+            diff_from_fallback = abs((final_heading - 270 + 180) % 360 - 180)
+            assert diff_from_osm < diff_from_fallback, (
+                f"{origin}→ATH final heading {final_heading:.1f}° closer to "
+                f"fallback (270°, diff={diff_from_fallback:.1f}°) than OSM "
+                f"(217°, diff={diff_from_osm:.1f}°)"
             )
