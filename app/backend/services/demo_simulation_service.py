@@ -21,11 +21,15 @@ logger = logging.getLogger(__name__)
 _LOCAL_DEMO_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "demo"
 
 
-def _run_engine_subprocess(airport_icao: str, output_path: str) -> None:
+def _run_engine_subprocess(airport_icao: str, output_path: str, osm_runway: dict | None = None) -> None:
     """Entry point for subprocess-based demo generation.
 
     Runs in a completely separate process — module globals are independent
     copies, so SimulationEngine cannot corrupt the parent's live state.
+
+    osm_runway: OSM runway dict from the parent process's airport_config_service.
+    Injected into _get_osm_primary_runway so approach paths use real runway data
+    instead of latitude-based fallback (heading 270° for lat≥30°).
     """
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
@@ -47,6 +51,16 @@ def _run_engine_subprocess(airport_icao: str, output_path: str) -> None:
             hour=6, minute=0, second=0, microsecond=0
         ),
     )
+
+    # Inject OSM runway data BEFORE engine init. The subprocess has no
+    # airport_config_service, so _get_osm_primary_runway would return None
+    # and approach paths would use fallback heading (270° for lat≥30°).
+    # Monkey-patch the function to return the parent's runway data directly.
+    if osm_runway:
+        import src.ingestion._approach_departure as _ad
+        import src.ingestion._generation as _gen
+        _ad._get_osm_primary_runway = lambda: osm_runway
+        _gen._get_osm_primary_runway = lambda: osm_runway
 
     engine = SimulationEngine(config)
     recorder = engine.run()
@@ -251,10 +265,20 @@ class DemoSimulationService:
             import multiprocessing
             output_path = Path(tempfile.gettempdir()) / f"demo_{airport_icao}.json"
 
+            # Pass OSM runway data to subprocess so it uses real approach heading
+            osm_runway = None
+            try:
+                from src.ingestion._approach_departure import _get_osm_primary_runway
+                rwy = _get_osm_primary_runway()
+                if rwy:
+                    osm_runway = dict(rwy)
+            except Exception:
+                pass
+
             ctx = multiprocessing.get_context("spawn")
             proc = ctx.Process(
                 target=_run_engine_subprocess,
-                args=(airport_icao, str(output_path)),
+                args=(airport_icao, str(output_path), osm_runway),
             )
             proc.start()
             proc.join(timeout=120)
