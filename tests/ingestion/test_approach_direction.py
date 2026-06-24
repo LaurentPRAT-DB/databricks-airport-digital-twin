@@ -345,6 +345,47 @@ class TestApproachWaypointsUseOsm:
                 f"fallback entry={first_wp_fallback}, osm entry={first_wp_osm}"
             )
 
+    def test_stale_threshold_triggers_re_resolve(self):
+        """If OSM threshold is far from airport center, force re-resolve.
+
+        Simulates: airport switched from SFO→ATH but _get_osm_primary_runway
+        still returns SFO data (stale cache). The sanity check should detect
+        the threshold is far from ATH center and force a re-resolve.
+        """
+        set_airport_center(37.9364, 23.9445, "ATH")  # ATH center
+        reset_approach_caches()
+
+        # First call returns SFO runway (stale — far from ATH)
+        # Second call (after re-resolve) returns LGAV runway
+        call_count = [0]
+
+        def _mock_osm_primary():
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                # First 2 calls: _get_runway_threshold + _get_runway_heading
+                return KSFO_RUNWAY
+            return LGAV_RUNWAY
+
+        with patch(
+            "src.ingestion._approach_departure._get_osm_primary_runway",
+            side_effect=_mock_osm_primary,
+        ):
+            wps = _get_approach_waypoints("WAW")
+            # After sanity check detects SFO threshold is far from ATH center,
+            # it re-resolves and gets LGAV. Final approach should match ATH heading.
+            final_wps = wps[-3:]
+            last_lon, last_lat = final_wps[-1][0], final_wps[-1][1]
+            first_lon, first_lat = final_wps[0][0], final_wps[0][1]
+            final_heading = math.degrees(math.atan2(last_lon - first_lon, last_lat - first_lat))
+            final_heading = (final_heading + 360) % 360
+
+            diff_from_ath = abs((final_heading - 217 + 180) % 360 - 180)
+            diff_from_sfo = abs((final_heading - 298 + 180) % 360 - 180)
+            assert diff_from_ath < diff_from_sfo, (
+                f"Stale SFO data should have been caught by sanity check. "
+                f"Final heading {final_heading:.1f}° closer to SFO (298°) than ATH (217°)"
+            )
+
 
 class TestApproachNotFromEast:
     """End-to-end test: after airport switch to ATH, no approach comes from due east.
