@@ -495,6 +495,128 @@ class TestApproachNotFromEast:
             )
 
 
+class TestAirportSwitchNoFallbackApproach:
+    """Simulate KSFO→ATH switch and verify approaching flights use OSM heading.
+
+    Reproduces the deployed race condition: user switches airports, simulation
+    starts generating flights. If OSM runway data isn't loaded yet, approaching
+    flights get fallback heading (270° for lat≥30°) which shows as a straight
+    trajectory from due east.
+
+    This test runs the FULL simulation path: reset_synthetic_state() then
+    generate_synthetic_flights() — exactly what the activate endpoint does.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_airport_center(self):
+        prev_center = get_airport_center()
+        prev_iata = get_current_airport_iata()
+        yield
+        set_airport_center(prev_center[0], prev_center[1], prev_iata)
+
+    @pytest.fixture(autouse=True)
+    def _provide_osm_runway_data(self):
+        with patch(
+            "src.ingestion._approach_departure._get_osm_primary_runway",
+            return_value=LGAV_RUNWAY,
+        ), patch(
+            "src.ingestion._generation._get_osm_primary_runway",
+            return_value=LGAV_RUNWAY,
+        ):
+            yield
+
+    def test_flights_after_switch_use_osm_heading(self):
+        """After reset+generate, approaching flights must fly runway heading (~217°)."""
+        from src.ingestion._generation import generate_synthetic_flights, reset_synthetic_state
+
+        set_airport_center(37.9364, 23.9445, "ATH")
+        reset_synthetic_state()
+
+        result = generate_synthetic_flights(count=50)
+        states = result.get("states", [])
+        assert len(states) > 0, "No flights generated"
+
+        # Phase name is at index 18 in the OpenSky state vector
+        approaching = [s for s in states if len(s) > 18 and s[18] == "approaching"]
+        if not approaching:
+            # Second call to let flights cycle into approach
+            result = generate_synthetic_flights(count=50)
+            states = result.get("states", [])
+            approaching = [s for s in states if len(s) > 18 and s[18] == "approaching"]
+
+        assert len(approaching) > 0, "No approaching flights after switch"
+
+        for flight in approaching:
+            heading = flight[10]  # heading field
+            lat = flight[6]
+            lon = flight[5]
+
+            # Bug signature: heading near 270° AND position east of airport
+            is_fallback_bug = (
+                250 < heading < 290  # heading ~270°
+                and lon > 24.05  # east of runway
+            )
+            assert not is_fallback_bug, (
+                f"Flight {flight[1]} has fallback heading {heading:.1f}° "
+                f"at ({lat:.3f}, {lon:.3f}) — OSM not used! "
+                f"Expected heading near 217° (ATH 21L)"
+            )
+
+    def test_trajectory_line_curved_after_switch(self):
+        """Trajectory API returns curved path (not straight from east) post-switch."""
+        from src.ingestion._generation import (
+            _trajectory_approach,
+            generate_synthetic_flights,
+            reset_synthetic_state,
+        )
+
+        set_airport_center(37.9364, 23.9445, "ATH")
+        reset_synthetic_state()
+        generate_synthetic_flights(count=50)
+
+        class MockState:
+            origin_airport = "FRA"
+            aircraft_type = "A320"
+            latitude = 38.1
+            longitude = 24.2
+
+        traj = _trajectory_approach(
+            current_state=MockState(),
+            icao24="switch_test",
+            callsign="TST99",
+            minutes=60,
+            limit=80,
+            end_lat=38.1,
+            end_lon=24.2,
+            end_alt=2000,
+            current_heading=220,
+        )
+
+        assert len(traj) > 2, "Trajectory should have >2 points (not fallback stub)"
+
+        bearings = []
+        for j in range(len(traj) - 1):
+            dlat = traj[j + 1]["latitude"] - traj[j]["latitude"]
+            dlon = traj[j + 1]["longitude"] - traj[j]["longitude"]
+            if abs(dlat) < 1e-8 and abs(dlon) < 1e-8:
+                continue
+            brg = math.degrees(math.atan2(dlon, dlat)) % 360
+            bearings.append(brg)
+
+        assert len(bearings) >= 2, "Need at least 2 bearing samples"
+        bearings_sorted = sorted(bearings)
+        max_gap = 0
+        for j in range(len(bearings_sorted) - 1):
+            max_gap = max(max_gap, bearings_sorted[j + 1] - bearings_sorted[j])
+        max_gap = max(max_gap, 360 - bearings_sorted[-1] + bearings_sorted[0])
+        bearing_range = 360 - max_gap
+
+        assert bearing_range > 30, (
+            f"Trajectory bearing range {bearing_range:.0f}° too small — "
+            f"straight line from east instead of curved approach"
+        )
+
+
 class TestTrajectoryBaseTurnNotStraightLine:
     """Trajectory rendering for base-turn approaches must show curved path.
 
