@@ -493,3 +493,69 @@ class TestApproachNotFromEast:
                 f"fallback (270°, diff={diff_from_fallback:.1f}°) than OSM "
                 f"(217°, diff={diff_from_osm:.1f}°)"
             )
+
+
+class TestTrajectoryBaseTurnNotStraightLine:
+    """Trajectory rendering for base-turn approaches must show curved path.
+
+    Reproduces deployed bug: aircraft on base-turn leg (northeast of threshold)
+    triggered aircraft_past_threshold heuristic, producing a 2-point straight
+    line instead of the full curved approach path.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_airport_center(self):
+        prev_center = get_airport_center()
+        prev_iata = get_current_airport_iata()
+        yield
+        set_airport_center(prev_center[0], prev_center[1], prev_iata)
+
+    @pytest.fixture(autouse=True)
+    def _provide_osm_runway_data(self):
+        with patch(
+            "src.ingestion._approach_departure._get_osm_primary_runway",
+            return_value=LGAV_RUNWAY,
+        ):
+            yield
+
+    def test_base_turn_aircraft_gets_curved_trajectory(self):
+        """Aircraft on base-turn leg must get curved trajectory, not straight line."""
+        from src.ingestion._generation import _trajectory_approach
+
+        set_airport_center(37.9364, 23.9445, "ATH")
+        reset_approach_caches()
+
+        class MockState:
+            origin_airport = "BRU"
+            aircraft_type = "A320"
+            latitude = 38.05
+            longitude = 24.12
+
+        traj = _trajectory_approach(
+            current_state=MockState(),
+            icao24="test_base_turn",
+            callsign="TST1",
+            minutes=60,
+            limit=80,
+            end_lat=38.05,
+            end_lon=24.12,
+            end_alt=2200,
+            current_heading=307,
+        )
+
+        assert len(traj) > 2, "Should not be a 2-point fallback"
+        first = traj[0]
+        last = traj[-1]
+        dlat = first["latitude"] - 37.9364
+        dlon = first["longitude"] - 23.9445
+        entry_bearing = (math.degrees(math.atan2(dlon, dlat)) + 360) % 360
+        dlat2 = last["latitude"] - 37.9364
+        dlon2 = last["longitude"] - 23.9445
+        exit_bearing = (math.degrees(math.atan2(dlon2, dlat2)) + 360) % 360
+        bearing_span = abs((entry_bearing - exit_bearing + 180) % 360 - 180)
+
+        assert bearing_span > 30, (
+            f"Trajectory bearing span {bearing_span:.0f}° too small — "
+            f"entry={entry_bearing:.0f}° exit={exit_bearing:.0f}°. "
+            f"Likely straight-line fallback instead of curved base turn."
+        )

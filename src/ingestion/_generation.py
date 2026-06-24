@@ -1318,18 +1318,23 @@ def _trajectory_approach(
         "[DIAG] _trajectory_approach: icao24=%s origin=%s entry=(%.4f,%.4f) threshold=(%.4f,%.4f) wps=%d",
         icao24, origin_airport, entry_wp[0], entry_wp[1], threshold_wp[0], threshold_wp[1], len(_traj_app_wps2),
     )
-    dist_entry_to_threshold = _distance_between(
-        (entry_wp[1], entry_wp[0]), (threshold_wp[1], threshold_wp[0])
-    )
-    dist_entry_to_aircraft = _distance_between(
-        (entry_wp[1], entry_wp[0]), (clamped_lat, clamped_lon)
-    )
+    wp_count = len(_traj_app_wps2)
+    best_wp_idx = 0
+    best_wp_dist = float('inf')
+    for _wi in range(wp_count):
+        _wd = _distance_between(
+            (clamped_lat, clamped_lon),
+            (_traj_app_wps2[_wi][1], _traj_app_wps2[_wi][0])
+        )
+        if _wd < best_wp_dist:
+            best_wp_dist = _wd
+            best_wp_idx = _wi
+
     dist_threshold_to_aircraft = _distance_between(
         (threshold_wp[1], threshold_wp[0]), (clamped_lat, clamped_lon)
     )
-
     aircraft_past_threshold = (
-        dist_entry_to_aircraft > dist_entry_to_threshold
+        best_wp_idx >= wp_count - 1
         and dist_threshold_to_aircraft > 0.02
     )
 
@@ -1344,18 +1349,6 @@ def _trajectory_approach(
         ]
         path_count = 2
     else:
-        wp_count = len(_traj_app_wps2)
-        best_wp_idx = 0
-        best_wp_dist = float('inf')
-        for _wi in range(wp_count):
-            _wd = _distance_between(
-                (clamped_lat, clamped_lon),
-                (_traj_app_wps2[_wi][1], _traj_app_wps2[_wi][0])
-            )
-            if _wd < best_wp_dist:
-                best_wp_dist = _wd
-                best_wp_idx = _wi
-
         path_wps = _traj_app_wps2[:best_wp_idx + 1]
         path_wps.append((clamped_lon, clamped_lat, final_alt))
         path_count = len(path_wps)
