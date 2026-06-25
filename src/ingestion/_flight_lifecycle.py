@@ -1426,6 +1426,7 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                     state.latitude += (cl_lat - state.latitude) * blend
                     state.longitude += (cl_lon - state.longitude) * blend
 
+        near_threshold = state.waypoint_index >= len(approach_wps) - 2
         if state.go_around_target_alt > 0 and state.altitude < state.go_around_target_alt:
             climb_fps = 25.0
             state.altitude = min(state.go_around_target_alt, state.altitude + climb_fps * dt)
@@ -1437,7 +1438,8 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
             descent_fps = max(12.0, min(20.0, abs(prof_vr) / 60.0)) if prof_vr else 12.0
             effective_target = min(prof_alt, target_alt)
             prev_alt = state.altitude
-            state.altitude = max(float(DECISION_HEIGHT_FT), _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
+            alt_floor = float(DECISION_HEIGHT_FT) if near_threshold else max(50.0, target_alt - 50)
+            state.altitude = max(alt_floor, _interpolate_altitude(state.altitude, effective_target, descent_fps * dt))
             above_path = prev_alt > target_alt + 500
             max_fpm = 1500.0 if (prev_alt > 3000 or above_path) else 800.0
             max_descent_per_tick = max_fpm / 60.0 * dt
@@ -1448,56 +1450,54 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
             else:
                 state.vertical_rate = prof_vr
 
-        if state.altitude <= DECISION_HEIGHT_FT:
-            # Must be near runway threshold AND on centerline to transition
-            rwy_threshold = _get_runway_threshold()
-            if rwy_threshold:
-                thr_lat, thr_lon = rwy_threshold[1], rwy_threshold[0]
-                dist_to_rwy = _distance_between(
-                    (state.latitude, state.longitude), (thr_lat, thr_lon)
-                )
-                lateral = _lateral_offset_from_runway(state.latitude, state.longitude)
-                if dist_to_rwy > 0.03 or (lateral is not None and lateral > 0.008):
-                    # Not aligned — fly toward threshold while holding altitude
-                    speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
-                    if dist_to_rwy > 1e-8:
-                        ratio = min(speed_deg / dist_to_rwy, 1.0)
-                        state.latitude += (thr_lat - state.latitude) * ratio
-                        state.longitude += (thr_lon - state.longitude) * ratio
-                    state.altitude = float(DECISION_HEIGHT_FT)
-                    state.vertical_rate = 0
-                    return state
-
-            arrival_rwy = _assign_arrival_runway(state.icao24)
-            runway_ok = (_is_runway_scenario_open(arrival_rwy)
-                         and (_is_runway_clear(arrival_rwy) or state.go_around_count >= 2))
-            if not runway_ok:
-                from src.ingestion._approach_departure import (
-                    _get_all_arrival_runway_names, _clear_arrival_runway_assignment,
-                )
-                all_rwys = _get_all_arrival_runway_names()
-                for alt_rwy in all_rwys:
-                    if alt_rwy == arrival_rwy:
-                        continue
-                    if _is_runway_clear(alt_rwy) and _is_runway_scenario_open(alt_rwy):
-                        _clear_arrival_runway_assignment(state.icao24)
-                        arrival_rwy = alt_rwy
-                        runway_ok = True
-                        break
-            if runway_ok:
-                emit_phase_transition(
-                    state.icao24, state.callsign,
-                    FlightPhase.APPROACHING.value, FlightPhase.LANDING.value,
-                    state.latitude, state.longitude, state.altitude,
-                    state.aircraft_type, state.assigned_gate,
-                )
-                _set_phase(state, FlightPhase.LANDING)
-                state.waypoint_index = 0
-                _occupy_runway(state.icao24, arrival_rwy)
-                _get_runway_state(arrival_rwy).last_arrival_time = get_time()
+        if near_threshold and state.altitude <= DECISION_HEIGHT_FT:
+            # Only transition to LANDING when aircraft is physically at the
+            # threshold (< 0.005° ≈ 550m). This prevents premature landing
+            # when aircraft hits decision height while still traversing
+            # final approach waypoints.
+            last_wp = approach_wps[-1]
+            thr_lat, thr_lon = last_wp[1], last_wp[0]
+            dist_to_rwy = _distance_between(
+                (state.latitude, state.longitude), (thr_lat, thr_lon)
+            )
+            if dist_to_rwy > 0.005:
+                # Not at threshold yet — keep flying along waypoints
+                pass
             else:
-                _execute_go_around(state, "runway_busy")
-                return state
+                lateral = _lateral_offset_from_runway(state.latitude, state.longitude)
+                if lateral is not None and lateral > 0.008:
+                    pass
+                else:
+                    arrival_rwy = _assign_arrival_runway(state.icao24)
+                    runway_ok = (_is_runway_scenario_open(arrival_rwy)
+                                 and (_is_runway_clear(arrival_rwy) or state.go_around_count >= 2))
+                    if not runway_ok:
+                        from src.ingestion._approach_departure import (
+                            _get_all_arrival_runway_names, _clear_arrival_runway_assignment,
+                        )
+                        all_rwys = _get_all_arrival_runway_names()
+                        for alt_rwy in all_rwys:
+                            if alt_rwy == arrival_rwy:
+                                continue
+                            if _is_runway_clear(alt_rwy) and _is_runway_scenario_open(alt_rwy):
+                                _clear_arrival_runway_assignment(state.icao24)
+                                arrival_rwy = alt_rwy
+                                runway_ok = True
+                                break
+                    if runway_ok:
+                        emit_phase_transition(
+                            state.icao24, state.callsign,
+                            FlightPhase.APPROACHING.value, FlightPhase.LANDING.value,
+                            state.latitude, state.longitude, state.altitude,
+                            state.aircraft_type, state.assigned_gate,
+                        )
+                        _set_phase(state, FlightPhase.LANDING)
+                        state.waypoint_index = 0
+                        _occupy_runway(state.icao24, arrival_rwy)
+                        _get_runway_state(arrival_rwy).last_arrival_time = get_time()
+                    else:
+                        _execute_go_around(state, "runway_busy")
+                        return state
 
         target_hdg = _calculate_heading((state.latitude, state.longitude), target)
         state.heading = _smooth_heading(state.heading, target_hdg, 3.0, dt)
@@ -1512,41 +1512,46 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                 )
                 state.heading = _smooth_heading(state.heading, next_hdg, 3.0, dt)
     else:
+        # All waypoints consumed — aircraft should be at/near threshold
+        last_wp = approach_wps[-1] if approach_wps else None
         if state.altitude > 2500 and state.go_around_count == 0:
             _execute_go_around(state, "high_altitude_at_threshold")
         elif state.altitude > DECISION_HEIGHT_FT + 200:
             # Converge toward threshold while descending
-            rwy_threshold = _get_runway_threshold()
-            if rwy_threshold:
-                thr_lat, thr_lon = rwy_threshold[1], rwy_threshold[0]
-                speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
-                d = _distance_between((state.latitude, state.longitude), (thr_lat, thr_lon))
-                if d > 1e-8:
-                    ratio = min(speed_deg / d, 1.0)
-                    state.latitude += (thr_lat - state.latitude) * ratio
-                    state.longitude += (thr_lon - state.longitude) * ratio
+            if last_wp:
+                thr_lat, thr_lon = last_wp[1], last_wp[0]
+            else:
+                rwy_threshold = _get_runway_threshold()
+                thr_lat, thr_lon = (rwy_threshold[1], rwy_threshold[0]) if rwy_threshold else (state.latitude, state.longitude)
+            speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+            d = _distance_between((state.latitude, state.longitude), (thr_lat, thr_lon))
+            if d > 1e-8:
+                ratio = min(speed_deg / d, 1.0)
+                state.latitude += (thr_lat - state.latitude) * ratio
+                state.longitude += (thr_lon - state.longitude) * ratio
             state.altitude = max(float(DECISION_HEIGHT_FT), state.altitude - 1500.0 / 60.0 * dt)
             state.vertical_rate = -1500
             return state
         else:
             # At decision height — converge toward threshold
-            rwy_threshold = _get_runway_threshold()
-            if rwy_threshold:
-                thr_lat, thr_lon = rwy_threshold[1], rwy_threshold[0]
-                dist_to_rwy = _distance_between(
-                    (state.latitude, state.longitude), (thr_lat, thr_lon)
-                )
-                lateral = _lateral_offset_from_runway(state.latitude, state.longitude)
-                if dist_to_rwy > 0.03 or (lateral is not None and lateral > 0.008):
-                    # Move toward threshold to align
-                    speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
-                    if dist_to_rwy > 1e-8:
-                        ratio = min(speed_deg / dist_to_rwy, 1.0)
-                        state.latitude += (thr_lat - state.latitude) * ratio
-                        state.longitude += (thr_lon - state.longitude) * ratio
-                    state.altitude = float(DECISION_HEIGHT_FT)
-                    state.vertical_rate = 0
-                    return state
+            if last_wp:
+                thr_lat, thr_lon = last_wp[1], last_wp[0]
+            else:
+                rwy_threshold = _get_runway_threshold()
+                thr_lat, thr_lon = (rwy_threshold[1], rwy_threshold[0]) if rwy_threshold else (state.latitude, state.longitude)
+            dist_to_rwy = _distance_between(
+                (state.latitude, state.longitude), (thr_lat, thr_lon)
+            )
+            lateral = _lateral_offset_from_runway(state.latitude, state.longitude)
+            if dist_to_rwy > 0.03 or (lateral is not None and lateral > 0.008):
+                speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+                if dist_to_rwy > 1e-8:
+                    ratio = min(speed_deg / dist_to_rwy, 1.0)
+                    state.latitude += (thr_lat - state.latitude) * ratio
+                    state.longitude += (thr_lon - state.longitude) * ratio
+                state.altitude = float(DECISION_HEIGHT_FT)
+                state.vertical_rate = 0
+                return state
 
             arrival_rwy = _assign_arrival_runway(state.icao24)
             runway_ok = (_is_runway_scenario_open(arrival_rwy)
