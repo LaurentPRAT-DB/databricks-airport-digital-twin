@@ -1674,7 +1674,18 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
             if state.go_around_count > 0:
                 approach_wps = _get_approach_waypoints(state.origin_airport)
                 if approach_wps and state.waypoint_index < len(approach_wps):
-                    wp_alt = approach_wps[state.waypoint_index][2] if len(approach_wps[state.waypoint_index]) > 2 else 3000
+                    # Place aircraft directly on the FAF to start final aligned
+                    faf_wp = approach_wps[state.waypoint_index]
+                    state.latitude = faf_wp[1]
+                    state.longitude = faf_wp[0]
+                    state.altitude = float(faf_wp[2]) if len(faf_wp) > 2 else 3000.0
+                    # Set heading to approach course (toward next waypoint)
+                    if state.waypoint_index + 1 < len(approach_wps):
+                        nxt = approach_wps[state.waypoint_index + 1]
+                        state.heading = _calculate_heading(
+                            (state.latitude, state.longitude), (nxt[1], nxt[0])
+                        )
+                    wp_alt = faf_wp[2] if len(faf_wp) > 2 else 3000
                     if wp_alt > state.altitude:
                         state.go_around_target_alt = float(wp_alt)
             _dp = get_descent_profile(state.aircraft_type)
