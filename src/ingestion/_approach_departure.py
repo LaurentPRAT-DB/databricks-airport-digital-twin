@@ -671,16 +671,15 @@ def _snap_to_nearest_waypoint(state) -> int:
 
     is_go_around = getattr(state, 'go_around_count', 0) > 0
 
-    # Go-around: always restart from the beginning of the STAR to fly the
-    # full approach path.  The aircraft is physically displaced from the
-    # approach geometry after climbing out and maneuvering, so snapping to
-    # a mid-approach waypoint causes lateral offset that persists to landing.
+    # Go-around: re-enter at the start of the FINAL APPROACH segment
+    # (last 7 waypoints, aligned with runway extended centerline).
+    # The STAR/downwind waypoints are positioned for inbound bearing from
+    # origin — after go-around the aircraft is near the runway, NOT at
+    # the STAR entry. Flying to STAR waypoint 0 sends it to the wrong
+    # side of the airport (near terminals). Instead, intercept final.
     if is_go_around:
-        for wi, wp in enumerate(approach_wps):
-            wp_alt = wp[2] if len(wp) > 2 else 0
-            if wp_alt >= state.altitude - 500:
-                return wi
-        return 0
+        final_start = max(0, len(approach_wps) - 7)
+        return final_start
 
     best_idx = 0
     best_dist = float('inf')
