@@ -1592,10 +1592,12 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
         if state.go_around_count > 0:
             approach_wps = _get_approach_waypoints(state.origin_airport)
             if approach_wps:
-                first_wp = approach_wps[0]
+                # Turn toward final approach fix (start of last 7 wps)
+                faf_idx = max(0, len(approach_wps) - 7)
+                faf_wp = approach_wps[faf_idx]
                 target_heading = _calculate_heading(
                     (state.latitude, state.longitude),
-                    (first_wp[1], first_wp[0]),
+                    (faf_wp[1], faf_wp[0]),
                 )
             else:
                 target_heading = _calculate_heading(
@@ -1645,10 +1647,11 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
         if state.go_around_count > 0:
             approach_wps = _get_approach_waypoints(state.origin_airport)
             if approach_wps and len(approach_wps) >= 2:
-                last_wp = approach_wps[-1]
+                faf_idx = max(0, len(approach_wps) - 7)
+                faf_wp = approach_wps[faf_idx]
                 approach_bearing = _calculate_heading(
                     (state.latitude, state.longitude),
-                    (last_wp[1], last_wp[0]),
+                    (faf_wp[1], faf_wp[0]),
                 )
                 hdg_err = abs((state.heading - approach_bearing + 540) % 360 - 180)
                 ga_aligned = hdg_err < 60
