@@ -414,6 +414,10 @@ class SimulationEngine:
         # Reset gate cache so simulation uses default gates
         _fb._loaded_gates = None
 
+        # Reset ground boundary radius cache (recomputed from new airport OSM data)
+        import src.ingestion._flight_lifecycle as _fl
+        _fl._cached_ground_radius = None
+
         # Offset SFO coordinates to target airport (standalone CLI mode)
         iata = self.config.airport
         if iata in AIRPORT_COORDINATES:

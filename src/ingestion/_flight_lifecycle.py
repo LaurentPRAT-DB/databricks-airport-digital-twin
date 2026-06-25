@@ -334,6 +334,37 @@ def _pick_random_destination() -> str:
     return _pick_random_airport(exclude=get_current_airport_iata())
 
 
+_cached_ground_radius: Optional[float] = None
+
+
+def _get_airport_ground_radius() -> float:
+    """Max distance from airport center to any runway endpoint + buffer.
+
+    Dynamically sized per airport from OSM data so large airports (CDG, ATL)
+    don't trigger false boundary resets on valid gate/taxiway positions.
+    """
+    global _cached_ground_radius
+    if _cached_ground_radius is not None:
+        return _cached_ground_radius
+    from app.backend.services.airport_config_service import get_airport_config_service
+    try:
+        config = get_airport_config_service().get_config()
+        runways = config.get("osmRunways", [])
+        center = get_airport_center()
+        max_dist = 0.0
+        for rwy in runways:
+            for pt in rwy.get("geoPoints", []):
+                d = math.sqrt((pt["latitude"] - center[0]) ** 2 + (pt["longitude"] - center[1]) ** 2)
+                max_dist = max(max_dist, d)
+        if max_dist > 0.01:
+            _cached_ground_radius = max_dist + 0.02
+            return _cached_ground_radius
+    except Exception:
+        pass
+    _cached_ground_radius = 0.07
+    return _cached_ground_radius
+
+
 # Gate-relevant turnaround phases in DAG order (excludes taxi/pushback sim phases)
 _GATE_PHASES = [
     "chocks_on", "deboarding", "unloading", "cleaning",
@@ -1577,7 +1608,7 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
             state.longitude += math.sin(math.radians(state.heading)) * speed_deg / max(0.01, math.cos(math.radians(state.latitude)))
             if state.altitude >= state.go_around_target_alt:
                 state.go_around_target_alt = 0.0
-                state.holding_phase_time = -180.0
+                state.holding_phase_time = -60.0
             state.heading = state.heading % 360
             return state
 
@@ -1609,12 +1640,12 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
             )
         heading_diff = (target_heading - state.heading + 540) % 360 - 180
         if state.go_around_count > 0:
-            turn_rate = 2.0
+            turn_rate = 3.0
             clockwise_diff = (target_heading - state.heading + 360) % 360
             if clockwise_diff <= 180:
                 state.heading = (state.heading + min(clockwise_diff, turn_rate * dt)) % 360
             else:
-                state.heading = (state.heading + turn_rate * dt) % 360
+                state.heading = (state.heading - min(360 - clockwise_diff, turn_rate * dt)) % 360
         else:
             turn_rate = max(0.5, min(1.5, dist_from_airport / 0.08))
             state.heading += max(-turn_rate, min(turn_rate, heading_diff)) * dt
@@ -2141,13 +2172,13 @@ def _update_flight_state(state: FlightState, dt: float) -> FlightState:
         state.vertical_rate = 0.0
 
     # Safety: ground-phase coordinate bounds check.
-    # Taxi/parked/pushback flights must stay within ~3 NM of airport center.
+    # Taxi/parked/pushback flights must stay within airport ground radius.
     # If coordinates drift beyond this (bad waypoint, graph error), reset to gate or center.
     if state.phase in (FlightPhase.TAXI_TO_GATE, FlightPhase.TAXI_TO_RUNWAY,
                        FlightPhase.PARKED, FlightPhase.PUSHBACK):
         center = get_airport_center()
         ground_dist_sq = (state.latitude - center[0]) ** 2 + (state.longitude - center[1]) ** 2
-        MAX_GROUND_DIST_SQ = 0.05 ** 2  # ~3 NM — no taxi route exceeds this
+        MAX_GROUND_DIST_SQ = _get_airport_ground_radius() ** 2
         if ground_dist_sq > MAX_GROUND_DIST_SQ:
             logger.warning(
                 "Ground flight %s at (%.5f, %.5f) is %.2f° from airport center — resetting position",
