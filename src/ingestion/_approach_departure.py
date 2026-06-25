@@ -670,7 +670,7 @@ def _snap_to_nearest_waypoint(state) -> int:
         return 0
 
     is_go_around = getattr(state, 'go_around_count', 0) > 0
-    half_idx = len(approach_wps) // 2
+    ga_max_idx = len(approach_wps) // 3
 
     best_idx = 0
     best_dist = float('inf')
@@ -695,7 +695,7 @@ def _snap_to_nearest_waypoint(state) -> int:
         )
         angle_diff = abs((bearing - state.heading + 540) % 360 - 180)
         if angle_diff <= 90 and wp_alt >= state.altitude - 500 and d < best_fwd_dist:
-            if is_go_around and wi > half_idx:
+            if is_go_around and wi > ga_max_idx:
                 continue
             best_fwd_dist = d
             best_fwd_idx = wi

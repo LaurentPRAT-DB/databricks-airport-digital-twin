@@ -1074,6 +1074,21 @@ def _update_parked(state: FlightState, dt: float) -> None:
 
 
 
+def _lateral_offset_from_runway(lat: float, lon: float) -> float | None:
+    """Perpendicular distance from runway extended centerline in degrees."""
+    rwy_threshold = _get_runway_threshold()
+    rwy_heading = _get_runway_heading()
+    if not rwy_threshold or rwy_heading is None:
+        return None
+    thr_lat, thr_lon = rwy_threshold[1], rwy_threshold[0]
+    dlat = lat - thr_lat
+    dlon = (lon - thr_lon) * math.cos(math.radians(thr_lat))
+    hdg_rad = math.radians(rwy_heading)
+    rwy_dlat = math.cos(hdg_rad)
+    rwy_dlon = math.sin(hdg_rad)
+    return abs(dlat * rwy_dlon - dlon * rwy_dlat)
+
+
 def _update_landing(state: FlightState, dt: float) -> None:
     """LANDING phase: flare, touchdown, rollout, runway exit."""
     from src.ingestion.fallback import TAXI_WAYPOINTS_ARRIVAL
@@ -1355,6 +1370,25 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
             state.latitude += dlat * ratio
             state.longitude += dlon * ratio
 
+        # Centerline correction on final approach (last 7 waypoints)
+        n_final = max(0, total_wps - 7)
+        if state.waypoint_index >= n_final:
+            lateral = _lateral_offset_from_runway(state.latitude, state.longitude)
+            if lateral is not None and lateral > 0.001:
+                rwy_heading_cl = _get_runway_heading()
+                thr_cl = _get_runway_threshold()
+                if rwy_heading_cl is not None and thr_cl:
+                    thr_lat_cl, thr_lon_cl = thr_cl[1], thr_cl[0]
+                    hdg_rad_cl = math.radians(rwy_heading_cl)
+                    d_lat = state.latitude - thr_lat_cl
+                    d_lon = (state.longitude - thr_lon_cl) * math.cos(math.radians(thr_lat_cl))
+                    along = d_lat * math.cos(hdg_rad_cl) + d_lon * math.sin(hdg_rad_cl)
+                    cl_lat = thr_lat_cl + along * math.cos(hdg_rad_cl)
+                    cl_lon = thr_lon_cl + along * math.sin(hdg_rad_cl) / math.cos(math.radians(thr_lat_cl))
+                    blend = min(0.2, lateral * 5)
+                    state.latitude += (cl_lat - state.latitude) * blend
+                    state.longitude += (cl_lon - state.longitude) * blend
+
         if state.go_around_target_alt > 0 and state.altitude < state.go_around_target_alt:
             climb_fps = 25.0
             state.altitude = min(state.go_around_target_alt, state.altitude + climb_fps * dt)
@@ -1378,14 +1412,14 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                 state.vertical_rate = prof_vr
 
         if state.altitude <= DECISION_HEIGHT_FT:
-            # Must be near runway threshold to transition to LANDING
-            max_dist = 0.05 if state.go_around_count > 0 else 0.03
+            # Must be near runway threshold AND on centerline to transition
             rwy_threshold = _get_runway_threshold()
             if rwy_threshold:
                 dist_to_rwy = _distance_between(
                     (state.latitude, state.longitude), (rwy_threshold[1], rwy_threshold[0])
                 )
-                if dist_to_rwy > max_dist:
+                lateral = _lateral_offset_from_runway(state.latitude, state.longitude)
+                if dist_to_rwy > 0.03 or (lateral is not None and lateral > 0.008):
                     state.altitude = float(DECISION_HEIGHT_FT)
                     state.vertical_rate = 0
                     return state
@@ -1441,13 +1475,13 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
             state.vertical_rate = -1500
             return state
         else:
-            max_dist = 0.05 if state.go_around_count > 0 else 0.03
             rwy_threshold = _get_runway_threshold()
             if rwy_threshold:
                 dist_to_rwy = _distance_between(
                     (state.latitude, state.longitude), (rwy_threshold[1], rwy_threshold[0])
                 )
-                if dist_to_rwy > max_dist:
+                lateral = _lateral_offset_from_runway(state.latitude, state.longitude)
+                if dist_to_rwy > 0.03 or (lateral is not None and lateral > 0.008):
                     state.altitude = float(DECISION_HEIGHT_FT)
                     state.vertical_rate = 0
                     return state
