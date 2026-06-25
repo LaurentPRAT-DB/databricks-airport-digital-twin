@@ -1654,7 +1654,11 @@ def _update_enroute(state: FlightState, dt: float) -> FlightState | None:
                     (faf_wp[1], faf_wp[0]),
                 )
                 hdg_err = abs((state.heading - approach_bearing + 540) % 360 - 180)
-                ga_aligned = hdg_err < 60
+                # Must be heading toward FAF AND close to it (within 0.05° ~5.5km)
+                dist_to_faf = _distance_between(
+                    (state.latitude, state.longitude), (faf_wp[1], faf_wp[0])
+                )
+                ga_aligned = hdg_err < 45 and dist_to_faf < 0.05
 
         if can_start_approach and dist_from_airport < reentry_radius and ga_aligned and state.altitude <= 10000:
             emit_phase_transition(
