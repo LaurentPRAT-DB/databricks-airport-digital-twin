@@ -110,6 +110,10 @@ echo "Step 1: Build frontend (brand: $BRAND)"
 BRAND_DIR="app/frontend/brands/$BRAND"
 if [[ -d "$BRAND_DIR" ]] && [[ -f "$BRAND_DIR/logo.svg" ]]; then
   cp "$BRAND_DIR/logo.svg" app/frontend/public/company-logo.svg
+  # Remove JPEG fallback for non-databricks brands (it contains the databricks logo)
+  if [[ "$BRAND" != "databricks" ]]; then
+    rm -f app/frontend/public/company-logo.jpeg
+  fi
   ok "Brand logo copied from $BRAND_DIR/logo.svg"
 elif [[ -f "app/frontend/public/no-company-logo.jpeg" ]]; then
   cp "app/frontend/public/no-company-logo.jpeg" app/frontend/public/company-logo.jpeg
