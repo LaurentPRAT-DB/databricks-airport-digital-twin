@@ -670,7 +670,17 @@ def _snap_to_nearest_waypoint(state) -> int:
         return 0
 
     is_go_around = getattr(state, 'go_around_count', 0) > 0
-    ga_max_idx = len(approach_wps) // 2
+
+    # Go-around: always restart from the beginning of the STAR to fly the
+    # full approach path.  The aircraft is physically displaced from the
+    # approach geometry after climbing out and maneuvering, so snapping to
+    # a mid-approach waypoint causes lateral offset that persists to landing.
+    if is_go_around:
+        for wi, wp in enumerate(approach_wps):
+            wp_alt = wp[2] if len(wp) > 2 else 0
+            if wp_alt >= state.altitude - 500:
+                return wi
+        return 0
 
     best_idx = 0
     best_dist = float('inf')
@@ -695,8 +705,6 @@ def _snap_to_nearest_waypoint(state) -> int:
         )
         angle_diff = abs((bearing - state.heading + 540) % 360 - 180)
         if angle_diff <= 90 and wp_alt >= state.altitude - 500 and d < best_fwd_dist:
-            if is_go_around and wi > ga_max_idx:
-                continue
             best_fwd_dist = d
             best_fwd_idx = wi
 

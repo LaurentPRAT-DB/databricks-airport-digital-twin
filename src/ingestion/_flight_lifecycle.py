@@ -1370,9 +1370,11 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
             state.latitude += dlat * ratio
             state.longitude += dlon * ratio
 
-        # Centerline correction on final approach (last 7 waypoints)
+        # Centerline correction: active for last 7 waypoints (normal flights)
+        # or ALL waypoints (go-around flights that may be laterally displaced)
         n_final = max(0, total_wps - 7)
-        if state.waypoint_index >= n_final:
+        apply_cl = state.waypoint_index >= n_final or state.go_around_count > 0
+        if apply_cl:
             lateral = _lateral_offset_from_runway(state.latitude, state.longitude)
             if lateral is not None and lateral > 0.001:
                 rwy_heading_cl = _get_runway_heading()
@@ -1385,7 +1387,11 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                     along = d_lat * math.cos(hdg_rad_cl) + d_lon * math.sin(hdg_rad_cl)
                     cl_lat = thr_lat_cl + along * math.cos(hdg_rad_cl)
                     cl_lon = thr_lon_cl + along * math.sin(hdg_rad_cl) / math.cos(math.radians(thr_lat_cl))
-                    blend = min(0.2, lateral * 5)
+                    # Stronger blend for go-around aircraft (up to 50%)
+                    if state.go_around_count > 0:
+                        blend = min(0.5, lateral * 10)
+                    else:
+                        blend = min(0.2, lateral * 5)
                     state.latitude += (cl_lat - state.latitude) * blend
                     state.longitude += (cl_lon - state.longitude) * blend
 
