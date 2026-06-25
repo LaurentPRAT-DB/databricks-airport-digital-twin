@@ -670,7 +670,7 @@ def _snap_to_nearest_waypoint(state) -> int:
         return 0
 
     is_go_around = getattr(state, 'go_around_count', 0) > 0
-    ga_max_idx = len(approach_wps) // 3
+    ga_max_idx = len(approach_wps) // 2
 
     best_idx = 0
     best_dist = float('inf')

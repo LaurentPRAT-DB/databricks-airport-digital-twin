@@ -1415,11 +1415,18 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
             # Must be near runway threshold AND on centerline to transition
             rwy_threshold = _get_runway_threshold()
             if rwy_threshold:
+                thr_lat, thr_lon = rwy_threshold[1], rwy_threshold[0]
                 dist_to_rwy = _distance_between(
-                    (state.latitude, state.longitude), (rwy_threshold[1], rwy_threshold[0])
+                    (state.latitude, state.longitude), (thr_lat, thr_lon)
                 )
                 lateral = _lateral_offset_from_runway(state.latitude, state.longitude)
                 if dist_to_rwy > 0.03 or (lateral is not None and lateral > 0.008):
+                    # Not aligned — fly toward threshold while holding altitude
+                    speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+                    if dist_to_rwy > 1e-8:
+                        ratio = min(speed_deg / dist_to_rwy, 1.0)
+                        state.latitude += (thr_lat - state.latitude) * ratio
+                        state.longitude += (thr_lon - state.longitude) * ratio
                     state.altitude = float(DECISION_HEIGHT_FT)
                     state.vertical_rate = 0
                     return state
@@ -1471,17 +1478,35 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
         if state.altitude > 2500 and state.go_around_count == 0:
             _execute_go_around(state, "high_altitude_at_threshold")
         elif state.altitude > DECISION_HEIGHT_FT + 200:
+            # Converge toward threshold while descending
+            rwy_threshold = _get_runway_threshold()
+            if rwy_threshold:
+                thr_lat, thr_lon = rwy_threshold[1], rwy_threshold[0]
+                speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+                d = _distance_between((state.latitude, state.longitude), (thr_lat, thr_lon))
+                if d > 1e-8:
+                    ratio = min(speed_deg / d, 1.0)
+                    state.latitude += (thr_lat - state.latitude) * ratio
+                    state.longitude += (thr_lon - state.longitude) * ratio
             state.altitude = max(float(DECISION_HEIGHT_FT), state.altitude - 1500.0 / 60.0 * dt)
             state.vertical_rate = -1500
             return state
         else:
+            # At decision height — converge toward threshold
             rwy_threshold = _get_runway_threshold()
             if rwy_threshold:
+                thr_lat, thr_lon = rwy_threshold[1], rwy_threshold[0]
                 dist_to_rwy = _distance_between(
-                    (state.latitude, state.longitude), (rwy_threshold[1], rwy_threshold[0])
+                    (state.latitude, state.longitude), (thr_lat, thr_lon)
                 )
                 lateral = _lateral_offset_from_runway(state.latitude, state.longitude)
                 if dist_to_rwy > 0.03 or (lateral is not None and lateral > 0.008):
+                    # Move toward threshold to align
+                    speed_deg = state.velocity * _KTS_TO_DEG_PER_SEC * dt
+                    if dist_to_rwy > 1e-8:
+                        ratio = min(speed_deg / dist_to_rwy, 1.0)
+                        state.latitude += (thr_lat - state.latitude) * ratio
+                        state.longitude += (thr_lon - state.longitude) * ratio
                     state.altitude = float(DECISION_HEIGHT_FT)
                     state.vertical_rate = 0
                     return state
