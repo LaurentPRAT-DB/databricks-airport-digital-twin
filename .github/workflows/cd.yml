@@ -225,7 +225,11 @@ jobs:
       - name: Wait for app readiness
         run: |
           APP_URL="${{ needs.deploy.outputs.app-url }}"
-          TOKEN=$(databricks auth token 2>/dev/null | jq -r '.access_token // empty' || true)
+          # OAuth M2M token — Databricks Apps require OAuth, not PAT
+          TOKEN=$(curl -s -X POST "${DATABRICKS_HOST}/oidc/v1/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials&client_id=${DATABRICKS_CLIENT_ID}&client_secret=${DATABRICKS_CLIENT_SECRET}&scope=all-apis" \
+            | jq -r '.access_token // empty' || true)
           echo "Waiting for app to be ready at $APP_URL..."
           echo "Token length: ${#TOKEN}"
           for i in $(seq 1 20); do

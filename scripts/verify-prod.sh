@@ -13,10 +13,22 @@ APP_URL="${1:?Usage: $0 <APP_URL>}"
 APP_URL="${APP_URL%/}"
 
 AUTH_HEADER=""
-if command -v databricks > /dev/null 2>&1; then
-  _TOKEN=$(databricks auth token 2>/dev/null | jq -r '.access_token // empty' 2>/dev/null || true)
+# OAuth M2M — Databricks Apps require OAuth tokens, not PATs
+if [[ -n "${DATABRICKS_CLIENT_ID:-}" && -n "${DATABRICKS_CLIENT_SECRET:-}" && -n "${DATABRICKS_HOST:-}" ]]; then
+  _TOKEN=$(curl -s -X POST "${DATABRICKS_HOST}/oidc/v1/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "grant_type=client_credentials&client_id=${DATABRICKS_CLIENT_ID}&client_secret=${DATABRICKS_CLIENT_SECRET}&scope=all-apis" \
+    | jq -r '.access_token // empty' 2>/dev/null || true)
   [[ -n "$_TOKEN" ]] && AUTH_HEADER="Authorization: Bearer $_TOKEN"
 fi
+# Fallback: databricks CLI token (works for user-interactive local runs)
+if [[ -z "$AUTH_HEADER" ]]; then
+  if command -v databricks > /dev/null 2>&1; then
+    _TOKEN=$(databricks auth token 2>/dev/null | jq -r '.access_token // empty' 2>/dev/null || true)
+    [[ -n "$_TOKEN" ]] && AUTH_HEADER="Authorization: Bearer $_TOKEN"
+  fi
+fi
+# Last resort: raw PAT (won't work for apps but fine for direct API calls)
 if [[ -z "$AUTH_HEADER" && -n "${DATABRICKS_TOKEN:-}" ]]; then
   AUTH_HEADER="Authorization: Bearer $DATABRICKS_TOKEN"
 fi
