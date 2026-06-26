@@ -14,7 +14,7 @@
 |---|---|
 | **Real-time simulation** | Physics-based flight state machine, 50+ concurrent aircraft, WebSocket delta streaming |
 | **Live ADS-B tracking** | OpenSky Network integration with recording and frame-by-frame replay |
-| **2D + 3D visualization** | Leaflet maps with OSM overlays, Three.js 3D with extruded terminal buildings |
+| **2D + 3D visualization** | MapLibre GL maps with OSM overlays, Three.js 3D with extruded terminal buildings |
 | **Multi-airport** | 29 presets across 5 regions + any ICAO code worldwide |
 | **7 ML models** | Delay, gate assignment, congestion, turnaround, off-block time, GSE allocation, aircraft inpainting |
 | **Calibrated synthetic data** | 1,183 airport profiles from BTS, OpenSky, and OurAirports — real distributions drive simulation |
@@ -512,7 +512,7 @@ graph TB
     subgraph "Application"
         API["FastAPI Backend<br/>(30+ endpoints)"]
         WS["WebSocket<br/>(delta updates)"]
-        UI["React Frontend<br/>(2D Leaflet + 3D Three.js)"]
+        UI["React Frontend<br/>(2D MapLibre + 3D Three.js)"]
         MCP["MCP Server<br/>(13 tools)"]
         AST["Unified Assistant<br/>(Genie + MCP routing)"]
     end
@@ -612,7 +612,7 @@ graph TB
 
 | Module | Path | Purpose |
 |---|---|---|
-| **Map (2D)** | `components/Map/` | Leaflet map — airport overlay, flight markers, trajectory lines, satellite inpainting |
+| **Map (2D)** | `components/Map/` | MapLibre GL map — airport overlay, flight markers, trajectory lines, satellite inpainting |
 | **Map3D** | `components/Map3D/` | Three.js 3D view — aircraft models, extruded terminals, altitude visualization |
 | **SimulationControls** | `components/SimulationControls/` | Play/pause/speed, timeline, live mode, recording controls |
 | **FlightList** | `components/FlightList/` | Searchable flight list with phase filtering |
@@ -735,7 +735,7 @@ docs/                  # Technical documentation + screenshots
 
 ## Tech Stack
 
-**Frontend**: React 18, TypeScript, Three.js, React Three Fiber, Leaflet, Tailwind CSS, Vite
+**Frontend**: React 18, TypeScript, Three.js, React Three Fiber, MapLibre GL JS, Tailwind CSS, Vite
 
 **Backend**: Python 3.13, FastAPI, UV (package manager)
 
@@ -807,7 +807,7 @@ GRAPH_DIR=/path/to/this/repo UNDERSTAND_ACCESS_TOKEN=local npx vite --port 5555
 
 | Layer | Files | Description |
 |-------|-------|-------------|
-| Frontend Application | 175 | React/TypeScript UI — Leaflet 2D, Three.js 3D, WebSocket |
+| Frontend Application | 175 | React/TypeScript UI — MapLibre 2D, Three.js 3D, WebSocket |
 | Backend API | 50 | FastAPI REST + WebSocket + service layer |
 | Core Simulation Engine | 88 | Flight lifecycle, trajectory gen, OSM ingestion, format parsers |
 | ML and Calibration | 31 | CatBoost/sklearn models, training pipelines, airport profiles |
@@ -835,4 +835,6 @@ GRAPH_DIR=/path/to/this/repo UNDERSTAND_ACCESS_TOKEN=local npx vite --port 5555
 
 ## License
 
-Internal Databricks Field Engineering demo.
+This project is licensed under the [MIT License](LICENSE).
+
+All dependencies use permissive licenses (MIT, BSD-3-Clause, Apache-2.0, ISC). No copyleft or restrictive licenses in the dependency tree.
