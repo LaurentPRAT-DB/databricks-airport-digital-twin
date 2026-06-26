@@ -26,7 +26,7 @@
 | **Data format importers** | AIXM, OSM, IFC, AIDM, FAA NASR, MSFS BGL |
 | **Multi-brand** | White-label system — swappable logo, colors, default airport per brand (Databricks, SITA, Athens Airport) |
 | **CI/CD** | GitHub Actions — CI on push (Python + frontend tests), CD on merge to main (DABs deploy + post-deploy verification) |
-| **~4,700 tests** | Python + frontend + 3 Databricks workspace jobs |
+| **~4,400 tests** | Python + frontend + 3 Databricks workspace jobs |
 
 ### Who Is This For?
 
@@ -43,7 +43,7 @@
 
 ```bash
 ./dev.sh                                  # Local dev: backend + frontend at http://localhost:3000
-uv run pytest tests/ -v                   # Run ~4,700 Python tests
+uv run pytest tests/ -v                   # Run ~3,400 Python tests
 cd app/frontend && npm test -- --run      # Run frontend tests
 ./deploy.sh                               # Deploy to Databricks (default: dev target)
 ```
@@ -604,7 +604,7 @@ graph TB
 
 | Module | Path | Purpose |
 |---|---|---|
-| **API Routes** | `app/backend/api/` | 18 FastAPI route modules — flights, schedule, weather, predictions, airport, baggage, GSE, simulation, OpenSky, data ops, inpainting, assistant, MCP, Genie, debug |
+| **API Routes** | `app/backend/api/` | 19 FastAPI route modules — flights, schedule, weather, predictions, airport, baggage, GSE, simulation, OpenSky, data ops, inpainting, assistant, MCP, Genie, FLIFO, debug |
 | **Services** | `app/backend/services/` | Business logic singletons — flight data, predictions, weather, airport config, Lakebase, Delta, OpenSky, baggage, GSE, data ops, demo simulation |
 | **Models** | `app/backend/models/` | Request/response Pydantic models |
 
@@ -698,15 +698,15 @@ BRAND=sita.aero ./dev.sh   # Start with SITA brand
 ```
 app/
   backend/
-    api/               # 18 FastAPI route modules
+    api/               # 19 FastAPI route modules
     services/          # 18 business logic singletons
     models/            # Pydantic request/response models
     main.py            # Uvicorn entry point
   frontend/
     src/
-      components/      # 17 UI component modules
-      context/         # 4 React contexts (Flight, AirportConfig, Congestion, Theme)
-      hooks/           # 11 custom hooks (WebSocket, simulation replay, predictions)
+      components/      # 20 UI component modules
+      context/         # 5 React contexts (Flight, AirportConfig, Congestion, CongestionFilter, Theme)
+      hooks/           # 25 custom hooks (WebSocket, simulation replay, predictions, viewport)
       types/           # TypeScript type definitions
     dist/              # Production build output
 
@@ -737,7 +737,7 @@ docs/                  # Technical documentation + screenshots
 
 **Frontend**: React 18, TypeScript, Three.js, React Three Fiber, MapLibre GL JS, Tailwind CSS, Vite
 
-**Backend**: Python 3.13, FastAPI, UV (package manager)
+**Backend**: Python 3.10+, FastAPI, UV (package manager)
 
 **Data Platform**: Databricks — Unity Catalog, Lakebase (PostgreSQL), DLT, MLflow, Lakeview, Genie, Model Serving
 
