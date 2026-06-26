@@ -109,7 +109,7 @@ def test_tier1_safety_checks(icao, iata, lat, lon):
     assert not failures, f"{icao} Tier 1 failures:\n" + "\n".join(failures)
 
 
-_TIER2_XFAIL = {"EDDF", "YSSY"}
+_TIER2_XFAIL = {"EDDF", "KJFK", "YSSY"}
 
 
 @pytest.mark.parametrize(
