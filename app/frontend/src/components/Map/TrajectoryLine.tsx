@@ -85,6 +85,28 @@ interface NormalizedPoint {
   timestamp: number;
 }
 
+const TRAVELED_PAINT = {
+  'line-color': '#22c55e',
+  'line-width': 3,
+  'line-opacity': 0.8,
+  'line-dasharray': [2, 1],
+};
+
+const REMAINING_PAINT = {
+  'line-color': '#3b82f6',
+  'line-width': 3,
+  'line-opacity': 0.7,
+  'line-dasharray': [1, 2],
+};
+
+const WAYPOINT_PAINT = {
+  'circle-radius': 4,
+  'circle-color': '#22c55e',
+  'circle-stroke-color': '#166534',
+  'circle-stroke-width': 1,
+  'circle-opacity': 0.8,
+};
+
 function segmentsToGeoJSON(segments: [number, number][][]): GeoJSON.FeatureCollection {
   return {
     type: 'FeatureCollection',
@@ -192,15 +214,10 @@ export default function TrajectoryLine() {
   const traveledSegments = useMemo(() => splitAtGaps(traveledPositions).map(s => isGroundTrajectory ? s : chaikinSmooth(simplify(s))), [traveledPositions, isGroundTrajectory]);
   const remainingSegments = useMemo(() => splitAtGaps(remainingPositions).map(s => isGroundTrajectory ? s : chaikinSmooth(simplify(s))), [remainingPositions, isGroundTrajectory]);
 
-  if (!showTrajectory || (traveledSegments.length === 0 && remainingSegments.length === 0)) {
-    return null;
-  }
+  const traveledGeoJSON = useMemo(() => segmentsToGeoJSON(traveledSegments), [traveledSegments]);
+  const remainingGeoJSON = useMemo(() => segmentsToGeoJSON(remainingSegments), [remainingSegments]);
 
-  const traveledGeoJSON = segmentsToGeoJSON(traveledSegments);
-  const remainingGeoJSON = segmentsToGeoJSON(remainingSegments);
-
-  // Waypoints (every Nth point)
-  const waypointGeoJSON: GeoJSON.FeatureCollection = {
+  const waypointGeoJSON = useMemo<GeoJSON.FeatureCollection>(() => ({
     type: 'FeatureCollection',
     features: validPoints
       .filter((_, i) => i % Math.max(1, Math.floor(validPoints.length / 10)) === 0)
@@ -216,7 +233,11 @@ export default function TrajectoryLine() {
           coordinates: [point.longitude, point.latitude],
         },
       })),
-  };
+  }), [validPoints]);
+
+  if (!showTrajectory || (traveledSegments.length === 0 && remainingSegments.length === 0)) {
+    return null;
+  }
 
   return (
     <>
@@ -226,12 +247,7 @@ export default function TrajectoryLine() {
           <Layer
             id="trajectory-traveled-line"
             type="line"
-            paint={{
-              'line-color': '#22c55e',
-              'line-width': 3,
-              'line-opacity': 0.8,
-              'line-dasharray': [2, 1],
-            }}
+            paint={TRAVELED_PAINT}
           />
         </Source>
       )}
@@ -242,12 +258,7 @@ export default function TrajectoryLine() {
           <Layer
             id="trajectory-remaining-line"
             type="line"
-            paint={{
-              'line-color': '#3b82f6',
-              'line-width': 3,
-              'line-opacity': 0.7,
-              'line-dasharray': [1, 2],
-            }}
+            paint={REMAINING_PAINT}
           />
         </Source>
       )}
@@ -258,13 +269,7 @@ export default function TrajectoryLine() {
           <Layer
             id="trajectory-waypoints-circle"
             type="circle"
-            paint={{
-              'circle-radius': 4,
-              'circle-color': '#22c55e',
-              'circle-stroke-color': '#166534',
-              'circle-stroke-width': 1,
-              'circle-opacity': 0.8,
-            }}
+            paint={WAYPOINT_PAINT}
           />
         </Source>
       )}

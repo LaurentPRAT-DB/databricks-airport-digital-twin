@@ -29,6 +29,41 @@ const CONGESTION_FILL: Record<string, { fill: string; border: string }> = {
   critical: { fill: '#ef4444', border: '#dc2626' },
 };
 
+const FILL_PAINT = {
+  'fill-color': ['get', 'fillColor'] as ['get', string],
+  'fill-opacity': ['get', 'fillOpacity'] as ['get', string],
+};
+
+const STROKE_PAINT = {
+  'line-color': ['get', 'strokeColor'] as ['get', string],
+  'line-width': ['get', 'strokeWidth'] as ['get', string],
+};
+
+const RUNWAY_PAINT = {
+  'line-color': '#4b5563',
+  'line-width': 8,
+  'line-opacity': 0.9,
+};
+
+const TAXIWAY_PAINT = {
+  'line-color': '#fbbf24',
+  'line-width': 3,
+  'line-opacity': 0.7,
+};
+
+const GATE_LABEL_PAINT = {
+  'text-color': '#065f46',
+  'text-halo-color': '#ffffff',
+  'text-halo-width': 1,
+};
+
+const GATE_LABEL_LAYOUT = {
+  'text-field': ['get', 'label'] as ['get', string],
+  'text-size': 10,
+  'text-offset': [0, -1.2] as [number, number],
+  'text-anchor': 'bottom' as const,
+} as const;
+
 function findCongestion(name: string | undefined, areas: CongestionArea[], areaType?: string): CongestionArea | undefined {
   if (!name || areas.length === 0) return undefined;
   const norm = name.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
@@ -71,6 +106,14 @@ export default function AirportOverlay() {
   const osmRunways = getOSMRunways();
 
   const isFilterActive = activeLevel !== null;
+
+  const gateCirclePaint = useMemo(() => ({
+    'circle-radius': gateDotRadius,
+    'circle-color': '#10b981',
+    'circle-opacity': 0.9,
+    'circle-stroke-color': '#059669',
+    'circle-stroke-width': 1,
+  }), [gateDotRadius]);
 
   // Build GeoJSON for runways
   const runwayGeoJSON = useMemo(() => {
@@ -198,106 +241,43 @@ export default function AirportOverlay() {
       {/* Aprons */}
       {apronGeoJSON.features.length > 0 && (
         <Source id="aprons" type="geojson" data={apronGeoJSON}>
-          <Layer
-            id="aprons-fill"
-            type="fill"
-            paint={{
-              'fill-color': ['get', 'fillColor'],
-              'fill-opacity': ['get', 'fillOpacity'],
-            }}
-          />
-          <Layer
-            id="aprons-stroke"
-            type="line"
-            paint={{
-              'line-color': ['get', 'strokeColor'],
-              'line-width': ['get', 'strokeWidth'],
-            }}
-          />
+          <Layer id="aprons-fill" type="fill" paint={FILL_PAINT} />
+          <Layer id="aprons-stroke" type="line" paint={STROKE_PAINT} />
         </Source>
       )}
 
       {/* Terminals */}
       {terminalGeoJSON.features.length > 0 && (
         <Source id="terminals" type="geojson" data={terminalGeoJSON}>
-          <Layer
-            id="terminals-fill"
-            type="fill"
-            paint={{
-              'fill-color': ['get', 'fillColor'],
-              'fill-opacity': ['get', 'fillOpacity'],
-            }}
-          />
-          <Layer
-            id="terminals-stroke"
-            type="line"
-            paint={{
-              'line-color': ['get', 'strokeColor'],
-              'line-width': ['get', 'strokeWidth'],
-            }}
-          />
+          <Layer id="terminals-fill" type="fill" paint={FILL_PAINT} />
+          <Layer id="terminals-stroke" type="line" paint={STROKE_PAINT} />
         </Source>
       )}
 
       {/* Runways */}
       {runwayGeoJSON.features.length > 0 && (
         <Source id="runways" type="geojson" data={runwayGeoJSON}>
-          <Layer
-            id="runways-line"
-            type="line"
-            paint={{
-              'line-color': '#4b5563',
-              'line-width': 8,
-              'line-opacity': 0.9,
-            }}
-          />
+          <Layer id="runways-line" type="line" paint={RUNWAY_PAINT} />
         </Source>
       )}
 
       {/* Taxiways */}
       {taxiwayGeoJSON.features.length > 0 && (
         <Source id="taxiways" type="geojson" data={taxiwayGeoJSON}>
-          <Layer
-            id="taxiways-line"
-            type="line"
-            paint={{
-              'line-color': '#fbbf24',
-              'line-width': 3,
-              'line-opacity': 0.7,
-            }}
-          />
+          <Layer id="taxiways-line" type="line" paint={TAXIWAY_PAINT} />
         </Source>
       )}
 
       {/* Gates as circles */}
       {gateGeoJSON.features.length > 0 && (
         <Source id="gates" type="geojson" data={gateGeoJSON}>
-          <Layer
-            id="gates-circle"
-            type="circle"
-            paint={{
-              'circle-radius': gateDotRadius,
-              'circle-color': '#10b981',
-              'circle-opacity': 0.9,
-              'circle-stroke-color': '#059669',
-              'circle-stroke-width': 1,
-            }}
-          />
+          <Layer id="gates-circle" type="circle" paint={gateCirclePaint} />
           {showGateLabels && (
             <Layer
               id="gates-labels"
               type="symbol"
-              layout={{
-                'text-field': ['get', 'label'],
-                'text-size': 10,
-                'text-offset': [0, -1.2],
-                'text-anchor': 'bottom',
-              }}
-              paint={{
-                'text-color': '#065f46',
-                'text-halo-color': '#ffffff',
-                'text-halo-width': 1,
-              }}
+              layout={GATE_LABEL_LAYOUT}
+              paint={GATE_LABEL_PAINT}
             />
           )}
         </Source>

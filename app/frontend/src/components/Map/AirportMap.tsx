@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Map, { Source, Layer, useMap } from 'react-map-gl/maplibre';
+import type maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { DEFAULT_ZOOM } from '../../constants/airportLayout';
 import AirportOverlay from './AirportOverlay';
@@ -168,6 +169,12 @@ function MapControlExposer() {
   }, [map]);
   return null;
 }
+
+const EMPTY_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {},
+  layers: [],
+};
 
 const STREET_TILES = [
   'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -362,11 +369,7 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
           zoom: initialZoom,
         }}
         style={{ width: '100%', height: '100%' }}
-        mapStyle={{
-          version: 8,
-          sources: {},
-          layers: [],
-        }}
+        mapStyle={EMPTY_STYLE}
         attributionControl={true as unknown as false}
       >
         {tileSource === 'street' && (
