@@ -28,6 +28,19 @@ from src.simulation.engine import SimulationEngine
 @pytest.fixture(scope="module")
 def flight_data():
     """Run sim, find a flight that does arrival→parked→departure full cycle."""
+    # Reset airport config service singleton — prior test modules may have loaded
+    # a different airport (e.g. YSSY) whose gates/runways would pollute this sim.
+    import app.backend.services.airport_config_service as _acs
+    _acs._service_instance = None
+    import src.ingestion._approach_departure as _ad
+    _ad._cached_osm_primary_runway = None
+    _ad._osm_primary_runway_resolved = False
+    _ad._osm_runway_config_id = None
+    _ad._approach_waypoints_cache.clear()
+    _ad._bearing_cache.clear()
+    import src.ingestion.fallback as _fb
+    _fb._loaded_gates = None
+
     config = SimulationConfig(
         airport="SFO",
         arrivals=12,
