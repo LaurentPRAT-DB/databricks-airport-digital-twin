@@ -433,9 +433,12 @@ def get_fleet_status(airport_code: str = "KSFO") -> dict:
 
     fleet = {}
     for gse_type, counts in base_fleet.items():
-        fleet[gse_type] = {
-            k: max(1, round(v * scale)) for k, v in counts.items()
-        }
+        scaled = {}
+        for k, v in counts.items():
+            if k != "total":
+                scaled[k] = max(1, round(v * scale))
+        scaled["total"] = sum(scaled.values())
+        fleet[gse_type] = scaled
 
     total_units = sum(v["total"] for v in fleet.values())
     available = sum(v["available"] for v in fleet.values())

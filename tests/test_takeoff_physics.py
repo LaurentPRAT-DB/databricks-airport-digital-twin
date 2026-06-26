@@ -42,17 +42,20 @@ def _get_departure_runway_state():
 @pytest.fixture(autouse=True)
 def _reset_runway_state():
     """Reset runway states before each test to ensure isolation."""
-    rwy = _get_runway_28R()
-    rwy.occupied_by = None
-    rwy.last_departure_time = 0.0
-    rwy.last_arrival_time = 0.0
-    rwy.last_departure_type = "LARGE"
-    # Also reset the departure runway state (may differ from 28R)
-    dep_rwy = _get_departure_runway_state()
-    dep_rwy.occupied_by = None
-    dep_rwy.last_departure_time = 0.0
-    dep_rwy.last_arrival_time = 0.0
-    dep_rwy.last_departure_type = "LARGE"
+    from src.ingestion._state import _runway_states, _runway_28L, _runway_28R
+    from src.ingestion._runway_ops import clear_runway_closures
+    _runway_states.clear()
+    _runway_28L.occupied_by = None
+    _runway_28L.last_departure_time = 0.0
+    _runway_28L.last_arrival_time = 0.0
+    _runway_28L.last_departure_type = "LARGE"
+    _runway_28R.occupied_by = None
+    _runway_28R.last_departure_time = 0.0
+    _runway_28R.last_arrival_time = 0.0
+    _runway_28R.last_departure_type = "LARGE"
+    _runway_states["28L"] = _runway_28L
+    _runway_states["28R"] = _runway_28R
+    clear_runway_closures()
     yield
 
 

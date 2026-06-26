@@ -639,10 +639,11 @@ class TestAirportOperatorView:
         if not parked:
             pytest.skip("No parked snapshots")
 
-        # SFO center: ~37.62, -122.38
+        from src.ingestion.fallback import get_airport_center
+        center_lat, center_lon = get_airport_center()
         lat, lon = parked[0]["latitude"], parked[0]["longitude"]
-        assert 37.5 < lat < 37.7, f"Gate latitude {lat} far from SFO"
-        assert -122.5 < lon < -122.3, f"Gate longitude {lon} far from SFO"
+        dist = math.sqrt((lat - center_lat)**2 + (lon - center_lon)**2)
+        assert dist < 0.05, f"Gate position ({lat:.4f}, {lon:.4f}) far from airport center ({center_lat:.4f}, {center_lon:.4f})"
 
     # --- Schedule linkage ---
 
@@ -675,19 +676,19 @@ class TestAirportOperatorView:
     # --- Landing/Takeoff on runway ---
 
     def test_O20_landing_near_runway(self, flight_data):
-        """Landing phase should occur near the airport (within 0.1° of center)."""
+        """Landing phase should occur near the airport (within 0.15° of center)."""
         positions = flight_data["positions"]
         landing = [p for p in positions if p["phase"] == "landing"]
         if not landing:
             pytest.skip("No landing snapshots")
 
-        # Check last landing position is close to airport
+        from src.ingestion.fallback import get_airport_center
+        center_lat, center_lon = get_airport_center()
         last = landing[-1]
-        # SFO center approx
-        dist = math.sqrt((last["latitude"] - 37.62)**2 + (last["longitude"] + 122.38)**2)
+        dist = math.sqrt((last["latitude"] - center_lat)**2 + (last["longitude"] - center_lon)**2)
         assert dist < 0.15, (
             f"Landing position ({last['latitude']:.4f}, {last['longitude']:.4f}) "
-            f"far from airport center"
+            f"far from airport center ({center_lat:.4f}, {center_lon:.4f})"
         )
 
     def test_O21_takeoff_from_runway(self, flight_data):
@@ -697,11 +698,13 @@ class TestAirportOperatorView:
         if not takeoff:
             pytest.skip("No takeoff snapshots")
 
+        from src.ingestion.fallback import get_airport_center
+        center_lat, center_lon = get_airport_center()
         first = takeoff[0]
-        dist = math.sqrt((first["latitude"] - 37.62)**2 + (first["longitude"] + 122.38)**2)
+        dist = math.sqrt((first["latitude"] - center_lat)**2 + (first["longitude"] - center_lon)**2)
         assert dist < 0.15, (
             f"Takeoff position ({first['latitude']:.4f}, {first['longitude']:.4f}) "
-            f"far from airport center"
+            f"far from airport center ({center_lat:.4f}, {center_lon:.4f})"
         )
 
     # --- Altitude transitions ---

@@ -1451,16 +1451,15 @@ def _update_approaching(state: FlightState, dt: float) -> FlightState | None:
                 state.vertical_rate = prof_vr
 
         if near_threshold and state.altitude <= DECISION_HEIGHT_FT:
-            # Only transition to LANDING when aircraft is physically at the
-            # threshold (< 0.005° ≈ 550m). This prevents premature landing
-            # when aircraft hits decision height while still traversing
-            # final approach waypoints.
+            # Only transition to LANDING when aircraft is physically near the
+            # threshold (< 0.01° ≈ 1.1km). This prevents premature landing
+            # when aircraft hits decision height while still far from runway.
             last_wp = approach_wps[-1]
             thr_lat, thr_lon = last_wp[1], last_wp[0]
             dist_to_rwy = _distance_between(
                 (state.latitude, state.longitude), (thr_lat, thr_lon)
             )
-            if dist_to_rwy > 0.005:
+            if dist_to_rwy > 0.01:
                 # Not at threshold yet — keep flying along waypoints
                 pass
             else:
