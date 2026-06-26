@@ -170,12 +170,6 @@ function MapControlExposer() {
   return null;
 }
 
-const EMPTY_STYLE: maplibregl.StyleSpecification = {
-  version: 8,
-  sources: {},
-  layers: [],
-};
-
 const STREET_TILES = [
   'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
   'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -184,6 +178,37 @@ const STREET_TILES = [
 const STREET_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const SAT_ATTR = '&copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, GIS User Community';
+
+const STREET_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    'street-tiles': {
+      type: 'raster',
+      tiles: STREET_TILES,
+      tileSize: 256,
+      attribution: STREET_ATTR,
+    },
+  },
+  layers: [
+    { id: 'street-raster', type: 'raster', source: 'street-tiles' },
+  ],
+};
+
+const SATELLITE_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    'satellite-tiles': {
+      type: 'raster',
+      tiles: [SAT_URL],
+      tileSize: 256,
+      attribution: SAT_ATTR,
+      maxzoom: 17,
+    },
+  },
+  layers: [
+    { id: 'satellite-raster', type: 'raster', source: 'satellite-tiles' },
+  ],
+};
 
 function InpaintingTileLayer({ airportIcao, onStaleDetected, onWarmingUp, onTileEvent }: { airportIcao?: string; onStaleDetected?: () => void; onWarmingUp?: () => void; onTileEvent?: (event: TileEvent) => void }) {
   const { current: map } = useMap();
@@ -360,6 +385,11 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
     return satellite ? 'satellite' : 'street';
   }, [satellite, inpainting, zoom]);
 
+  const mapStyle = useMemo(() => {
+    if (tileSource === 'street') return STREET_STYLE;
+    return SATELLITE_STYLE;
+  }, [tileSource]);
+
   return (
     <div className="relative h-full w-full">
       <Map
@@ -369,32 +399,9 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
           zoom: initialZoom,
         }}
         style={{ width: '100%', height: '100%' }}
-        mapStyle={EMPTY_STYLE}
+        mapStyle={mapStyle}
         attributionControl={true as unknown as false}
       >
-        {tileSource === 'street' && (
-          <Source
-            id="street-tiles"
-            type="raster"
-            tiles={STREET_TILES}
-            tileSize={256}
-            attribution={STREET_ATTR}
-          >
-            <Layer id="street-raster" type="raster" />
-          </Source>
-        )}
-        {tileSource === 'satellite' && (
-          <Source
-            id="satellite-tiles"
-            type="raster"
-            tiles={[SAT_URL]}
-            tileSize={256}
-            attribution={SAT_ATTR}
-            maxzoom={17}
-          >
-            <Layer id="satellite-raster" type="raster" />
-          </Source>
-        )}
         {tileSource === 'inpainting' && (
           <>
             <InpaintingTileLayer airportIcao={airportIcao} onStaleDetected={onStaleDetected} onWarmingUp={onWarmingUp} onTileEvent={handleTileEvent} />
