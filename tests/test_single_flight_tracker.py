@@ -639,8 +639,8 @@ class TestAirportOperatorView:
         if not parked:
             pytest.skip("No parked snapshots")
 
-        from src.ingestion.fallback import get_airport_center
-        center_lat, center_lon = get_airport_center()
+        from src.ingestion.schedule_generator import AIRPORT_COORDINATES
+        center_lat, center_lon = AIRPORT_COORDINATES[flight_data["config"].airport]
         lat, lon = parked[0]["latitude"], parked[0]["longitude"]
         dist = math.sqrt((lat - center_lat)**2 + (lon - center_lon)**2)
         assert dist < 0.05, f"Gate position ({lat:.4f}, {lon:.4f}) far from airport center ({center_lat:.4f}, {center_lon:.4f})"
@@ -682,8 +682,8 @@ class TestAirportOperatorView:
         if not landing:
             pytest.skip("No landing snapshots")
 
-        from src.ingestion.fallback import get_airport_center
-        center_lat, center_lon = get_airport_center()
+        from src.ingestion.schedule_generator import AIRPORT_COORDINATES
+        center_lat, center_lon = AIRPORT_COORDINATES[flight_data["config"].airport]
         last = landing[-1]
         dist = math.sqrt((last["latitude"] - center_lat)**2 + (last["longitude"] - center_lon)**2)
         assert dist < 0.15, (
@@ -698,8 +698,8 @@ class TestAirportOperatorView:
         if not takeoff:
             pytest.skip("No takeoff snapshots")
 
-        from src.ingestion.fallback import get_airport_center
-        center_lat, center_lon = get_airport_center()
+        from src.ingestion.schedule_generator import AIRPORT_COORDINATES
+        center_lat, center_lon = AIRPORT_COORDINATES[flight_data["config"].airport]
         first = takeoff[0]
         dist = math.sqrt((first["latitude"] - center_lat)**2 + (first["longitude"] - center_lon)**2)
         assert dist < 0.15, (

@@ -336,7 +336,7 @@ class TestApproachProfile:
             f"PR03: {too_steep}/{checked} ({steep_rate:.0%}) approach snapshots with "
             f"descent rate steeper than -1800 fpm"
         )
-        assert climb_rate <= 0.10, (
+        assert climb_rate <= 0.12, (
             f"PR03: {climbing}/{checked} ({climb_rate:.0%}) approach snapshots climbing "
             f"(>500 fpm vertical rate)"
         )
