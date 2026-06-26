@@ -227,8 +227,7 @@ function InpaintingTileLayer({ airportIcao, onStaleDetected, onWarmingUp, onTile
 
     if (!protocolRegistered.current) {
       try {
-        // @ts-expect-error maplibre addProtocol
-        maplibregl.style?.map?.addProtocol?.(protocolId, (params: { url: string }, abortController: AbortController) => {
+        (maplibregl as any).style?.map?.addProtocol?.(protocolId, (params: { url: string }, abortController: AbortController) => {
           return handleInpaintingTile(params.url, abortController, airportIcao, staleRef, warmRef, tileEventRef);
         });
       } catch {
