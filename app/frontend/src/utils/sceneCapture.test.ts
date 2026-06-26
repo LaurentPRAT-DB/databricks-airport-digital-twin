@@ -238,7 +238,7 @@ describe('captureCurrentView', () => {
     createElementSpy.mockRestore();
   });
 
-  it('returns null for 2d mode when no leaflet container exists', async () => {
+  it('returns null for 2d mode when no map container exists', async () => {
     const result = await captureCurrentView('2026-03-15T14:30:00Z', 'KSFO', '2d');
     expect(result).toBeNull();
   });

@@ -3,27 +3,16 @@ import { render } from '@testing-library/react';
 import React from 'react';
 import type { Flight } from '../../types/flight';
 
-// ── Mock react-leaflet ─────────────────────────────────────────
-vi.mock('react-leaflet', () => ({
-  Marker: ({ children, position }: { children: React.ReactNode; position: [number, number] }) => (
-    <div data-testid="marker" data-lat={position[0]} data-lng={position[1]}>
+// ── Mock react-map-gl/maplibre ─────────────────────────────────────
+vi.mock('react-map-gl/maplibre', () => ({
+  Marker: ({ children, longitude, latitude, onClick }: { children: React.ReactNode; longitude: number; latitude: number; onClick?: () => void }) => (
+    <div data-testid="marker" data-lat={latitude} data-lng={longitude} onClick={onClick}>
       {children}
     </div>
   ),
-  Tooltip: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="tooltip">{children}</div>
+  Popup: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="popup">{children}</div>
   ),
-}));
-
-// ── Mock leaflet ───────────────────────────────────────────────
-let lastDivIconHtml = '';
-vi.mock('leaflet', () => ({
-  default: {
-    divIcon: (opts: { html: string }) => {
-      lastDivIconHtml = opts.html;
-      return { options: opts };
-    },
-  },
 }));
 
 // ── Mock flight context ────────────────────────────────────────
@@ -39,7 +28,7 @@ vi.mock('../../context/FlightContext', () => ({
   }),
 }));
 
-import FlightMarker from './FlightMarker';
+import FlightMarker, { createAirplaneIconHtml } from './FlightMarker';
 
 function createFlight(overrides: Partial<Flight> = {}): Flight {
   return {
@@ -62,7 +51,6 @@ function createFlight(overrides: Partial<Flight> = {}): Flight {
 describe('FlightMarker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    lastDivIconHtml = '';
   });
 
   // ── LatLng guard tests ───────────────────────────────────────
@@ -104,40 +92,32 @@ describe('FlightMarker', () => {
   // ── ARIA label tests ─────────────────────────────────────────
   describe('ARIA labels on SVG', () => {
     it('includes aria-label with callsign in SVG', () => {
-      render(<FlightMarker flight={createFlight({ callsign: 'DAL789' })} />);
-      expect(lastDivIconHtml).toContain('aria-label="Flight DAL789"');
+      const html = createAirplaneIconHtml(270, 'approaching', false, 30, 'DAL789', 'abc123', null, undefined);
+      expect(html).toContain('aria-label="Flight DAL789"');
     });
 
     it('falls back to icao24 when callsign is null', () => {
-      render(<FlightMarker flight={createFlight({ callsign: null, icao24: 'xyz999' })} />);
-      expect(lastDivIconHtml).toContain('aria-label="Flight xyz999"');
+      const html = createAirplaneIconHtml(270, 'approaching', false, 30, null, 'xyz999', null, undefined);
+      expect(html).toContain('aria-label="Flight xyz999"');
     });
 
     it('includes role="img" on SVG', () => {
-      render(<FlightMarker flight={createFlight()} />);
-      expect(lastDivIconHtml).toContain('role="img"');
+      const html = createAirplaneIconHtml(270, 'approaching', false, 30, 'UAL456', 'abc123', null, undefined);
+      expect(html).toContain('role="img"');
     });
   });
 
   // ── Gate label tests ─────────────────────────────────────────
   describe('gate label display', () => {
     it('shows gate label for ground phase with assigned gate', () => {
-      render(
-        <FlightMarker
-          flight={createFlight({ flight_phase: 'parked', assigned_gate: 'A5' })}
-        />
-      );
-      expect(lastDivIconHtml).toContain('gate-label');
-      expect(lastDivIconHtml).toContain('A5');
+      const html = createAirplaneIconHtml(0, 'parked', false, 30, 'UAL456', 'abc123', 'A5', undefined);
+      expect(html).toContain('gate-label');
+      expect(html).toContain('A5');
     });
 
     it('does not show gate label for non-ground phase', () => {
-      render(
-        <FlightMarker
-          flight={createFlight({ flight_phase: 'enroute', assigned_gate: 'A5' })}
-        />
-      );
-      expect(lastDivIconHtml).not.toContain('gate-label');
+      const html = createAirplaneIconHtml(0, 'enroute', false, 30, 'UAL456', 'abc123', 'A5', undefined);
+      expect(html).not.toContain('gate-label');
     });
   });
 });

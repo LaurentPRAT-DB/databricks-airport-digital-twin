@@ -2,32 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from '@testing-library/react'
 import { OSMGate, OSMTerminal, OSMTaxiway, OSMRunway } from '../../types/airportFormats'
 
-// Mock react-leaflet — must be before importing the component
-vi.mock('react-leaflet', () => ({
-  GeoJSON: ({ data }: { data: unknown }) => (
-    <div data-testid="geojson">{JSON.stringify(data)}</div>
-  ),
-  CircleMarker: ({ center, radius, children }: { center: number[]; radius: number; children?: React.ReactNode }) => (
-    <div data-testid="circle-marker" data-radius={radius} data-center={center.join(',')}>
+// Mock react-map-gl/maplibre
+vi.mock('react-map-gl/maplibre', () => ({
+  Source: ({ children, id, data }: { children?: React.ReactNode; id: string; data?: unknown }) => (
+    <div data-testid={`source-${id}`} data-geojson={JSON.stringify(data)}>
       {children}
     </div>
   ),
-  Tooltip: ({ children, permanent, className }: { children?: React.ReactNode; permanent?: boolean; className?: string }) => (
-    <div
-      data-testid="tooltip"
-      data-permanent={permanent ? 'true' : 'false'}
-      data-classname={className || ''}
-    >
-      {children}
-    </div>
+  Layer: ({ id }: { id?: string }) => (
+    <div data-testid={id ? `layer-${id}` : 'layer'} />
   ),
-  Polygon: ({ children }: { children?: React.ReactNode }) => (
-    <div data-testid="polygon">{children}</div>
+  Marker: ({ children }: { children?: React.ReactNode }) => (
+    <div data-testid="marker">{children}</div>
   ),
-  Polyline: ({ children }: { children?: React.ReactNode }) => (
-    <div data-testid="polyline">{children}</div>
+  Popup: ({ children }: { children?: React.ReactNode }) => (
+    <div data-testid="popup">{children}</div>
   ),
-  useMapEvents: () => null,
+  useMap: () => ({ current: { on: vi.fn(), off: vi.fn(), getZoom: () => 14 } }),
 }))
 
 // Mock airport config context
@@ -68,7 +59,7 @@ vi.mock('../../hooks/usePredictions', () => ({
 }))
 
 vi.mock('../../context/CongestionFilterContext', () => ({
-  useCongestionFilter: () => ({ activeLevel: null, setActiveLevel: () => {} }),
+  useCongestionFilter: () => ({ activeLevel: null, setActiveLevel: () => {}, selectedArea: null, setSelectedArea: () => {} }),
 }))
 
 // Import after mocks
@@ -85,60 +76,41 @@ describe('AirportOverlay', () => {
   })
 
   describe('Gate rendering', () => {
-    it('renders OSM gates as circle markers', () => {
-      const { getAllByTestId } = render(<AirportOverlay />)
-      const markers = getAllByTestId('circle-marker')
-      expect(markers).toHaveLength(2)
+    it('renders gates source with circle layer', () => {
+      const { getByTestId } = render(<AirportOverlay />)
+      expect(getByTestId('source-gates')).toBeTruthy()
+      expect(getByTestId('layer-gates-circle')).toBeTruthy()
     })
 
-    it('uses correct gate coordinates from OSM data', () => {
-      const { getAllByTestId } = render(<AirportOverlay />)
-      const markers = getAllByTestId('circle-marker')
-      expect(markers[0].dataset.center).toBe('37.615,-122.391')
-      expect(markers[1].dataset.center).toBe('37.616,-122.392')
+    it('includes gate coordinates in GeoJSON data', () => {
+      const { getByTestId } = render(<AirportOverlay />)
+      const sourceEl = getByTestId('source-gates')
+      const data = JSON.parse(sourceEl.dataset.geojson || '{}')
+      expect(data.features).toHaveLength(2)
+      // MapLibre GeoJSON uses [lng, lat] order
+      expect(data.features[0].geometry.coordinates[0]).toBeCloseTo(-122.391)
+      expect(data.features[0].geometry.coordinates[1]).toBeCloseTo(37.615)
     })
 
-    it('displays gate ref as label text', () => {
-      const { getAllByTestId } = render(<AirportOverlay />)
-      const tooltips = getAllByTestId('tooltip')
-      expect(tooltips[0].textContent).toContain('A1')
-      expect(tooltips[1].textContent).toContain('B2')
-    })
-
-    it('at default zoom (14) shows hover-only tooltips with Gate prefix', () => {
-      // Default useState(14) < GATE_LABEL_ZOOM, so labels are hover-only
-      const { getAllByTestId } = render(<AirportOverlay />)
-      const tooltips = getAllByTestId('tooltip')
-      tooltips.forEach((t) => {
-        expect(t.dataset.permanent).toBe('false')
-      })
-      expect(tooltips[0].textContent).toBe('Gate A1')
-      expect(tooltips[1].textContent).toBe('Gate B2')
-    })
-
-    it('at default zoom (14) uses radius 3', () => {
-      const { getAllByTestId } = render(<AirportOverlay />)
-      const markers = getAllByTestId('circle-marker')
-      expect(markers[0].dataset.radius).toBe('3')
+    it('includes gate labels in feature properties', () => {
+      const { getByTestId } = render(<AirportOverlay />)
+      const sourceEl = getByTestId('source-gates')
+      const data = JSON.parse(sourceEl.dataset.geojson || '{}')
+      expect(data.features[0].properties.label).toBe('A1')
+      expect(data.features[1].properties.label).toBe('B2')
     })
   })
 
   describe('Empty data behavior', () => {
-    it('does not render gate markers when no gates available', () => {
-      mockContextValue.getGates.mockReturnValue([])
-      const { queryAllByTestId } = render(<AirportOverlay />)
-      expect(queryAllByTestId('circle-marker')).toHaveLength(0)
-    })
-
-    it('does not render GeoJSON fallback (no hardcoded data)', () => {
+    it('does not render gate source when no gates available', () => {
       mockContextValue.getGates.mockReturnValue([])
       const { queryByTestId } = render(<AirportOverlay />)
-      expect(queryByTestId('geojson')).not.toBeInTheDocument()
+      expect(queryByTestId('source-gates')).not.toBeInTheDocument()
     })
   })
 
   describe('OSM feature rendering', () => {
-    it('renders terminals as polygons', () => {
+    it('renders terminals source with fill layer', () => {
       mockContextValue.getTerminals.mockReturnValue([{
         id: 't1', name: 'Terminal 1', geoPolygon: [
           { latitude: 37.615, longitude: -122.391, altitude: 0 },
@@ -146,30 +118,33 @@ describe('AirportOverlay', () => {
           { latitude: 37.616, longitude: -122.392, altitude: 0 },
         ],
       }] as Partial<OSMTerminal>[] as OSMTerminal[])
-      const { getAllByTestId } = render(<AirportOverlay />)
-      expect(getAllByTestId('polygon')).toHaveLength(1)
+      const { getByTestId } = render(<AirportOverlay />)
+      expect(getByTestId('source-terminals')).toBeTruthy()
+      expect(getByTestId('layer-terminals-fill')).toBeTruthy()
     })
 
-    it('renders taxiways as polylines', () => {
+    it('renders taxiways source with line layer', () => {
       mockContextValue.getTaxiways.mockReturnValue([{
         id: 'tw1', name: 'A', geoPoints: [
           { latitude: 37.615, longitude: -122.391, altitude: 0 },
           { latitude: 37.616, longitude: -122.392, altitude: 0 },
         ],
       }] as Partial<OSMTaxiway>[] as OSMTaxiway[])
-      const { getAllByTestId } = render(<AirportOverlay />)
-      expect(getAllByTestId('polyline').length).toBeGreaterThanOrEqual(1)
+      const { getByTestId } = render(<AirportOverlay />)
+      expect(getByTestId('source-taxiways')).toBeTruthy()
+      expect(getByTestId('layer-taxiways-line')).toBeTruthy()
     })
 
-    it('renders runways as polylines', () => {
+    it('renders runways source with line layer', () => {
       mockContextValue.getOSMRunways.mockReturnValue([{
         id: 'rw1', name: '28L', geoPoints: [
           { latitude: 37.615, longitude: -122.391, altitude: 0 },
           { latitude: 37.620, longitude: -122.380, altitude: 0 },
         ],
       }] as Partial<OSMRunway>[] as OSMRunway[])
-      const { getAllByTestId } = render(<AirportOverlay />)
-      expect(getAllByTestId('polyline').length).toBeGreaterThanOrEqual(1)
+      const { getByTestId } = render(<AirportOverlay />)
+      expect(getByTestId('source-runways')).toBeTruthy()
+      expect(getByTestId('layer-runways-line')).toBeTruthy()
     })
   })
 })

@@ -567,7 +567,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated,
 
   // ── Event isolation: disable pointer events on map while report is open ──
   useEffect(() => {
-    const mapEl = document.querySelector('.leaflet-container') as HTMLElement | null;
+    const mapEl = document.querySelector('.maplibregl-map') as HTMLElement | null;
     if (mapEl) {
       const prev = mapEl.style.pointerEvents;
       mapEl.style.pointerEvents = 'none';
@@ -630,7 +630,7 @@ export function SimulationReport({ sim, onClose, focusEvents, onReportGenerated,
       });
 
       // Check if map is receiving pointer events through the modal
-      const mapEl = document.querySelector('.leaflet-container') as HTMLElement | null;
+      const mapEl = document.querySelector('.maplibregl-map') as HTMLElement | null;
       if (mapEl) {
         const mapCs = getComputedStyle(mapEl);
         const modalRect = modal.getBoundingClientRect();

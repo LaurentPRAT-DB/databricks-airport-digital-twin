@@ -51,8 +51,8 @@ export default defineConfig({
         manualChunks: {
           // Split Three.js and 3D libraries into separate chunk
           three: ['three', '@react-three/fiber', '@react-three/drei'],
-          // Split Leaflet/2D map into separate chunk
-          leaflet: ['leaflet', 'react-leaflet'],
+          // Split MapLibre/2D map into separate chunk
+          maplibre: ['maplibre-gl', 'react-map-gl/maplibre'],
           // Split React core
           react: ['react', 'react-dom'],
         },

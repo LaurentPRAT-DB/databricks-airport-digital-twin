@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Polyline, CircleMarker, Tooltip } from 'react-leaflet';
+import { Source, Layer, Marker } from 'react-map-gl/maplibre';
 import { useFlightContext } from '../../context/FlightContext';
 import { useTrajectory } from '../../hooks/useTrajectory';
 
@@ -8,10 +8,7 @@ export function distSq(lat1: number, lon1: number, lat2: number, lon2: number) {
   return (lat1 - lat2) ** 2 + (lon1 - lon2) ** 2;
 }
 
-/** Max gap (degrees²) before splitting a polyline — ~0.08° ≈ 5 NM.
- *  Normal 30s snapshot spacing at 180 kts is ~0.025° (0.000625 sq).
- *  Go-around climbs at 250 kts with 30s ticks can reach ~0.06° gaps. */
-const MAX_GAP_SQ = 0.08 * 0.08; // 0.0064
+const MAX_GAP_SQ = 0.08 * 0.08;
 
 /** Split a polyline into segments wherever consecutive points are far apart. */
 export function splitAtGaps(positions: [number, number][]): [number, number][][] {
@@ -45,8 +42,7 @@ export function perpendicularDist(point: [number, number], start: [number, numbe
   return Math.sqrt((px - (sx + t * dx)) ** 2 + (py - (sy + t * dy)) ** 2);
 }
 
-/** Douglas-Peucker line simplification: removes noise while preserving shape.
- *  Epsilon in degrees — 0.0001° ≈ 11m, enough to eliminate GPS/sim jitter. */
+/** Douglas-Peucker line simplification. */
 export function simplify(points: [number, number][], epsilon = 0.0001): [number, number][] {
   if (points.length < 3) return points;
   let maxDist = 0;
@@ -63,9 +59,7 @@ export function simplify(points: [number, number][], epsilon = 0.0001): [number,
   return [points[0], points[points.length - 1]];
 }
 
-/** Chaikin's corner-cutting: smooths sharp turns while preserving straight segments.
- *  Each iteration replaces each edge midpoint pair with two 25%/75% points.
- *  5 iterations gives smooth arcs even for near-180° reversals (go-arounds). */
+/** Chaikin's corner-cutting smoothing. */
 export function chaikinSmooth(points: [number, number][], iterations = 5): [number, number][] {
   if (points.length < 3) return points;
   let result = points;
@@ -83,7 +77,6 @@ export function chaikinSmooth(points: [number, number][], iterations = 5): [numb
   return result;
 }
 
-/** Normalize trajectory points from either API or simulation into a common shape. */
 interface NormalizedPoint {
   latitude: number;
   longitude: number;
@@ -92,24 +85,35 @@ interface NormalizedPoint {
   timestamp: number;
 }
 
+function segmentsToGeoJSON(segments: [number, number][][]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: segments.map((seg, i) => ({
+      type: 'Feature' as const,
+      properties: { index: i },
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: seg.map(([lat, lng]) => [lng, lat]),
+      },
+    })),
+  };
+}
+
 export default function TrajectoryLine() {
   const { selectedFlight, showTrajectory, dataSource, simTrajectoryProvider } = useFlightContext();
 
-  // Provider-based trajectory (simulation, recorded, and live with accumulated trails)
   const usesReplayTrajectory = dataSource === 'simulation' || dataSource === 'opensky_recorded' || dataSource === 'opensky';
   const { data: apiTrajectory } = useTrajectory(
     selectedFlight?.icao24 ?? null,
     showTrajectory && !usesReplayTrajectory
   );
 
-  // Replay-based trajectory (from frames — simulation, recorded, and live trails)
   const simPoints = useMemo(() => {
     if (!usesReplayTrajectory || !simTrajectoryProvider || !selectedFlight?.icao24) return null;
     return simTrajectoryProvider(selectedFlight.icao24);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usesReplayTrajectory, simTrajectoryProvider, selectedFlight?.icao24, selectedFlight?.latitude, selectedFlight?.longitude]);
 
-  // Normalize to common point format
   const validPoints: NormalizedPoint[] = useMemo(() => {
     if (usesReplayTrajectory && simPoints) {
       return simPoints
@@ -136,20 +140,13 @@ export default function TrajectoryLine() {
     return [];
   }, [usesReplayTrajectory, simPoints, apiTrajectory]);
 
-  // For ground-phase aircraft (taxi), show only the ground portion of the
-  // trajectory — the approach segment passes over buildings at altitude and
-  // looks wrong projected onto the 2D map.
   const isOnGround = selectedFlight?.on_ground === true || (selectedFlight?.altitude != null && selectedFlight.altitude < 50);
   const displayPoints = useMemo(() => {
     if (!isOnGround) return validPoints;
-    // Keep only points at or near ground level (< 200ft)
     const groundPoints = validPoints.filter(p => p.altitude === null || p.altitude < 200);
     return groundPoints.length >= 2 ? groundPoints : validPoints;
   }, [validPoints, isOnGround]);
 
-  // Split trajectory into traveled (past) and remaining (future) at the
-  // aircraft's current position.  The split index is the closest trajectory
-  // point to the live position.
   const { traveledPositions, remainingPositions } = useMemo(() => {
     if (displayPoints.length < 2 || !selectedFlight?.latitude || !selectedFlight?.longitude) {
       const all: [number, number][] = displayPoints.map((p) => [p.latitude, p.longitude]);
@@ -159,9 +156,6 @@ export default function TrajectoryLine() {
     const curLat = selectedFlight.latitude;
     const curLon = selectedFlight.longitude;
 
-    // Find closest trajectory point to aircraft — search BACKWARD so that
-    // when the aircraft revisits the same airspace (go-around), we find
-    // the most recent pass, not the first one.
     let bestIdx = displayPoints.length - 1;
     let bestDist = Infinity;
     for (let i = displayPoints.length - 1; i >= 0; i--) {
@@ -175,13 +169,11 @@ export default function TrajectoryLine() {
 
     const currentPos: [number, number] = [curLat, curLon];
 
-    // Traveled: start → closest point → current position
     const traveled: [number, number][] = displayPoints
       .slice(0, bestIdx + 1)
       .map((p) => [p.latitude, p.longitude]);
     traveled.push(currentPos);
 
-    // Remaining: current position → rest of trajectory
     const remaining: [number, number][] = [currentPos];
     for (let i = bestIdx + 1; i < displayPoints.length; i++) {
       remaining.push([displayPoints[i].latitude, displayPoints[i].longitude]);
@@ -190,8 +182,6 @@ export default function TrajectoryLine() {
     return { traveledPositions: traveled, remainingPositions: remaining };
   }, [displayPoints, selectedFlight?.latitude, selectedFlight?.longitude]);
 
-  // Determine if the trajectory is mostly on-ground (taxi) vs airborne.
-  // Ground trajectories are NOT smoothed — smoothing pulls lines through buildings.
   const avgAltitude = useMemo(() => {
     if (displayPoints.length === 0) return 0;
     const sum = displayPoints.reduce((acc, p) => acc + (p.altitude ?? 0), 0);
@@ -199,9 +189,6 @@ export default function TrajectoryLine() {
   }, [displayPoints]);
   const isGroundTrajectory = avgAltitude < 200;
 
-  // Split polylines at large gaps (e.g. go-around enroute segments that are
-  // excluded from the trajectory, causing unrealistic straight-line jumps),
-  // then smooth each segment for natural-looking curves at turns.
   const traveledSegments = useMemo(() => splitAtGaps(traveledPositions).map(s => isGroundTrajectory ? s : chaikinSmooth(simplify(s))), [traveledPositions, isGroundTrajectory]);
   const remainingSegments = useMemo(() => splitAtGaps(remainingPositions).map(s => isGroundTrajectory ? s : chaikinSmooth(simplify(s))), [remainingPositions, isGroundTrajectory]);
 
@@ -209,92 +196,98 @@ export default function TrajectoryLine() {
     return null;
   }
 
-  // Color gradient based on altitude (if available)
-  const getAltitudeColor = (altitude: number | null): string => {
-    if (altitude === null) return '#3b82f6';
-    if (altitude < 1000) return '#22c55e'; // Green - low
-    if (altitude < 5000) return '#eab308'; // Yellow - medium
-    if (altitude < 15000) return '#f97316'; // Orange - high
-    return '#ef4444'; // Red - very high
+  const traveledGeoJSON = segmentsToGeoJSON(traveledSegments);
+  const remainingGeoJSON = segmentsToGeoJSON(remainingSegments);
+
+  // Waypoints (every Nth point)
+  const waypointGeoJSON: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features: validPoints
+      .filter((_, i) => i % Math.max(1, Math.floor(validPoints.length / 10)) === 0)
+      .map((point) => ({
+        type: 'Feature' as const,
+        properties: {
+          altitude: point.altitude,
+          velocity: point.velocity,
+          time: new Date(point.timestamp * 1000).toLocaleTimeString(),
+        },
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [point.longitude, point.latitude],
+        },
+      })),
   };
 
   return (
     <>
-      {/* Traveled trajectory — green dashed line (─ ─ ─), split at gaps */}
-      {traveledSegments.map((seg, i) => (
-        <Polyline
-          key={`traveled-${i}`}
-          positions={seg}
-          pathOptions={{
-            color: '#22c55e',
-            weight: 3,
-            opacity: 0.8,
-            dashArray: '10, 5',
-          }}
-        />
-      ))}
-
-      {/* Remaining trajectory — blue dotted line (· · ·), split at gaps */}
-      {remainingSegments.map((seg, i) => (
-        <Polyline
-          key={`remaining-${i}`}
-          positions={seg}
-          pathOptions={{
-            color: '#3b82f6',
-            weight: 3,
-            opacity: 0.7,
-            dashArray: '4, 8',
-            className: 'trajectory-remaining',
-          }}
-        />
-      ))}
-
-      {/* Historical position markers (show every Nth point) */}
-      {validPoints
-        .filter((_, i) => i % Math.max(1, Math.floor(validPoints.length / 10)) === 0)
-        .map((point, index) => (
-          <CircleMarker
-            key={`trajectory-point-${index}`}
-            center={[point.latitude, point.longitude]}
-            radius={4}
-            pathOptions={{
-              color: '#166534',
-              fillColor: getAltitudeColor(point.altitude),
-              fillOpacity: 0.8,
-              weight: 1,
+      {/* Traveled trajectory — green dashed */}
+      {traveledGeoJSON.features.length > 0 && (
+        <Source id="trajectory-traveled" type="geojson" data={traveledGeoJSON}>
+          <Layer
+            id="trajectory-traveled-line"
+            type="line"
+            paint={{
+              'line-color': '#22c55e',
+              'line-width': 3,
+              'line-opacity': 0.8,
+              'line-dasharray': [2, 1],
             }}
-          >
-            <Tooltip direction="top" offset={[0, -5]}>
-              <div className="text-xs">
-                <div className="font-semibold">
-                  {new Date(point.timestamp * 1000).toLocaleTimeString()}
-                </div>
-                {point.altitude && (
-                  <div>Alt: {Math.round(point.altitude)} ft</div>
-                )}
-                {point.velocity && (
-                  <div>Speed: {Math.round(point.velocity)} kts</div>
-                )}
-              </div>
-            </Tooltip>
-          </CircleMarker>
-        ))}
+          />
+        </Source>
+      )}
+
+      {/* Remaining trajectory — blue dotted */}
+      {remainingGeoJSON.features.length > 0 && (
+        <Source id="trajectory-remaining" type="geojson" data={remainingGeoJSON}>
+          <Layer
+            id="trajectory-remaining-line"
+            type="line"
+            paint={{
+              'line-color': '#3b82f6',
+              'line-width': 3,
+              'line-opacity': 0.7,
+              'line-dasharray': [1, 2],
+            }}
+          />
+        </Source>
+      )}
+
+      {/* Waypoint markers */}
+      {waypointGeoJSON.features.length > 0 && (
+        <Source id="trajectory-waypoints" type="geojson" data={waypointGeoJSON}>
+          <Layer
+            id="trajectory-waypoints-circle"
+            type="circle"
+            paint={{
+              'circle-radius': 4,
+              'circle-color': '#22c55e',
+              'circle-stroke-color': '#166534',
+              'circle-stroke-width': 1,
+              'circle-opacity': 0.8,
+            }}
+          />
+        </Source>
+      )}
 
       {/* Start point marker */}
-      <CircleMarker
-        center={[validPoints[0].latitude, validPoints[0].longitude]}
-        radius={8}
-        pathOptions={{
-          color: '#059669',
-          fillColor: '#10b981',
-          fillOpacity: 1,
-          weight: 2,
-        }}
-      >
-        <Tooltip permanent direction="left" offset={[-10, 0]}>
-          <span className="text-xs font-medium">Start</span>
-        </Tooltip>
-      </CircleMarker>
+      {validPoints.length > 0 && (
+        <Marker
+          longitude={validPoints[0].longitude}
+          latitude={validPoints[0].latitude}
+          anchor="center"
+        >
+          <div
+            className="flex items-center justify-center"
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              backgroundColor: '#10b981',
+              border: '2px solid #059669',
+            }}
+          />
+        </Marker>
+      )}
     </>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * Scene capture utilities for 2D (Leaflet) and 3D (Three.js) views.
+ * Scene capture utilities for 2D (MapLibre) and 3D (Three.js) views.
  * Shared between the SceneCapture button and SimulationReport generator.
  */
 
@@ -75,20 +75,24 @@ export function capture3D(simTime: string | null, airport: string | null): strin
   return watermarked.toDataURL('image/png');
 }
 
-/** Load an image with CORS and return it, or null on failure. */
-function loadImage(src: string): Promise<HTMLImageElement | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
-}
-
-/** Capture the 2D map by compositing Leaflet tile images and overlays. */
+/** Capture the 2D map via MapLibre's WebGL canvas. */
 export async function capture2D(simTime: string | null, airport: string | null): Promise<string | null> {
-  const mapContainer = document.querySelector('.leaflet-container') as HTMLElement;
+  // MapLibre renders everything (tiles, overlays, markers) on a single WebGL canvas
+  const mapCanvas = document.querySelector('.maplibregl-canvas') as HTMLCanvasElement
+    ?? document.querySelector('.mapboxgl-canvas') as HTMLCanvasElement;
+
+  if (mapCanvas) {
+    const watermarked = addWatermark(mapCanvas, simTime, airport);
+    try {
+      return watermarked.toDataURL('image/png');
+    } catch {
+      // Canvas may be tainted if preserveDrawingBuffer is false
+    }
+  }
+
+  // Fallback: try to find any map container and use html2canvas-style approach
+  const mapContainer = document.querySelector('.maplibregl-map') as HTMLElement
+    ?? document.querySelector('[class*="map"]') as HTMLElement;
   if (!mapContainer) return null;
 
   const rect = mapContainer.getBoundingClientRect();
@@ -103,95 +107,30 @@ export async function capture2D(simTime: string | null, airport: string | null):
   if (!ctx) return null;
   ctx.scale(dpr, dpr);
 
-  // 1. Draw tile images (Leaflet uses <img> elements, not <canvas>)
-  // Always reload tiles with crossOrigin='anonymous' to avoid tainting
-  // the canvas. Direct drawImage from <img> without CORS headers silently
-  // taints the canvas, causing toDataURL() to throw SecurityError later.
-  const tileImages = mapContainer.querySelectorAll('.leaflet-tile-pane img.leaflet-tile');
-  let tilesDrawn = 0;
-  if (tileImages.length > 0) {
-    const tilePromises = Array.from(tileImages).map(async (tile) => {
-      const tileEl = tile as HTMLImageElement;
-      const tileRect = tileEl.getBoundingClientRect();
-      // Skip tiles outside viewport
-      if (tileRect.right < rect.left || tileRect.left > rect.right ||
-          tileRect.bottom < rect.top || tileRect.top > rect.bottom) return;
-      const tx = tileRect.left - rect.left;
-      const ty = tileRect.top - rect.top;
-      // Reload with CORS to keep canvas exportable
-      const img = await loadImage(tileEl.src);
-      if (img) {
-        try {
-          ctx.drawImage(img, tx, ty, tileRect.width, tileRect.height);
-          tilesDrawn++;
-        } catch { /* CORS rejected by server, skip tile */ }
-      }
-    });
-    await Promise.all(tilePromises);
-  }
-
-  // Fallback: also try canvas tiles (some tile layers use canvas renderer)
-  if (tilesDrawn === 0) {
-    const tileCanvases = mapContainer.querySelectorAll('.leaflet-tile-pane canvas');
-    if (tileCanvases.length > 0) {
-      for (const tc of tileCanvases) {
-        const tileCanvas = tc as HTMLCanvasElement;
-        const tileRect = tileCanvas.getBoundingClientRect();
-        const tx = tileRect.left - rect.left;
-        const ty = tileRect.top - rect.top;
-        try {
-          ctx.drawImage(tileCanvas, tx, ty, tileRect.width, tileRect.height);
-          tilesDrawn++;
-        } catch { /* CORS-tainted tile, skip */ }
-      }
+  // Try drawing the map canvas
+  const canvas = mapContainer.querySelector('canvas');
+  if (canvas) {
+    try {
+      ctx.drawImage(canvas, 0, 0, rect.width, rect.height);
+    } catch {
+      ctx.fillStyle = '#aad3df';
+      ctx.fillRect(0, 0, rect.width, rect.height);
     }
-  }
-
-  // Last resort: fill with map background color
-  if (tilesDrawn === 0) {
-    ctx.fillStyle = '#aad3df'; // OSM water color
+  } else {
+    ctx.fillStyle = '#aad3df';
     ctx.fillRect(0, 0, rect.width, rect.height);
   }
 
-  // 2. Draw SVG overlays (polylines, polygons, circles)
-  const svgs = mapContainer.querySelectorAll('.leaflet-overlay-pane svg');
-  for (const svg of svgs) {
-    const svgEl = svg as SVGSVGElement;
-    const svgRect = svgEl.getBoundingClientRect();
-    try {
-      const clone = svgEl.cloneNode(true) as SVGSVGElement;
-      // Ensure the SVG has explicit dimensions for rendering
-      clone.setAttribute('width', String(svgRect.width));
-      clone.setAttribute('height', String(svgRect.height));
-      const svgData = new XMLSerializer().serializeToString(clone);
-      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(svgBlob);
-      const img = new Image();
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject();
-        img.src = url;
-      });
-      const sx = svgRect.left - rect.left;
-      const sy = svgRect.top - rect.top;
-      ctx.drawImage(img, sx, sy, svgRect.width, svgRect.height);
-      URL.revokeObjectURL(url);
-    } catch {
-      // SVG serialization failed, skip
-    }
-  }
-
-  // 3. Draw marker pane elements (divIcon markers with aircraft icons)
-  const markerPane = mapContainer.querySelector('.leaflet-marker-pane');
-  if (markerPane) {
-    const markers = markerPane.querySelectorAll('.leaflet-marker-icon');
+  // Draw HTML marker overlays (flight markers are div elements above the canvas)
+  const markerContainer = mapContainer.querySelector('.maplibregl-marker');
+  if (markerContainer) {
+    const markers = mapContainer.querySelectorAll('.maplibregl-marker');
     for (const marker of markers) {
       const markerEl = marker as HTMLElement;
       const markerRect = markerEl.getBoundingClientRect();
       const mx = markerRect.left - rect.left;
       const my = markerRect.top - rect.top;
 
-      // Try to find an SVG inside the marker div (aircraft icons)
       const innerSvg = markerEl.querySelector('svg');
       if (innerSvg) {
         try {
@@ -202,19 +141,14 @@ export async function capture2D(simTime: string | null, airport: string | null):
           const svgData = new XMLSerializer().serializeToString(clone);
           const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
           const url = URL.createObjectURL(svgBlob);
-          const img = await loadImage(url);
-          if (img) {
-            ctx.drawImage(img, mx, my, markerRect.width, markerRect.height);
-          }
+          const img = new Image();
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject();
+            img.src = url;
+          });
+          ctx.drawImage(img, mx, my, markerRect.width, markerRect.height);
           URL.revokeObjectURL(url);
-        } catch { /* skip */ }
-      }
-
-      // Try to find an <img> inside the marker
-      const innerImg = markerEl.querySelector('img') as HTMLImageElement;
-      if (innerImg && !innerSvg) {
-        try {
-          ctx.drawImage(innerImg, mx, my, markerRect.width, markerRect.height);
         } catch { /* skip */ }
       }
     }
@@ -224,9 +158,6 @@ export async function capture2D(simTime: string | null, airport: string | null):
   try {
     return watermarked.toDataURL('image/png');
   } catch {
-    // Canvas still tainted despite CORS reload — fall back to watermark-only
-    // capture (blank background + overlays that did draw successfully)
-    console.warn('Canvas tainted by CORS tiles, capture may be incomplete');
     return null;
   }
 }

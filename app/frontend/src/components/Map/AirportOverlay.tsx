@@ -1,22 +1,14 @@
-import { useState } from 'react';
-import { CircleMarker, Tooltip, Polygon, Polyline, useMapEvents } from 'react-leaflet';
-import L, { LatLngExpression } from 'leaflet';
+import { useState, useEffect, useMemo } from 'react';
+import { Source, Layer, useMap } from 'react-map-gl/maplibre';
 import { useAirportConfigContext } from '../../context/AirportConfigContext';
 import { GeoPosition } from '../../types/airportFormats';
 import { useCongestion } from '../../hooks/usePredictions';
 import { useCongestionFilter } from '../../context/CongestionFilterContext';
 import { CongestionArea } from '../../types/flight';
 
-// Zoom thresholds for gate rendering (exported for testing)
-export const GATE_LABEL_ZOOM = 17; // Show permanent text labels at this zoom and above (17 avoids overlap at medium zoom)
+export const GATE_LABEL_ZOOM = 17;
 const GATE_DOT_RADIUS_BY_ZOOM: Record<number, number> = {
-  12: 2,
-  13: 2,
-  14: 3,
-  15: 4,
-  16: 5,
-  17: 6,
-  18: 7,
+  12: 2, 13: 2, 14: 3, 15: 4, 16: 5, 17: 6, 18: 7,
 };
 
 export function getGateDotRadius(zoom: number): number {
@@ -25,34 +17,23 @@ export function getGateDotRadius(zoom: number): number {
   return GATE_DOT_RADIUS_BY_ZOOM[zoom] ?? 3;
 }
 
-// Helper to convert GeoPosition array to LatLngExpression array
-function geoToLatLng(geoPoints: GeoPosition[] | undefined): LatLngExpression[] {
+function geoToGeoJSONCoords(geoPoints: GeoPosition[] | undefined): [number, number][] {
   if (!geoPoints) return [];
-  return geoPoints.map((p) => [Number(p.latitude), Number(p.longitude)] as LatLngExpression);
+  return geoPoints.map((p) => [Number(p.longitude), Number(p.latitude)]);
 }
 
-// Congestion level → polygon fill/border colors
 const CONGESTION_FILL: Record<string, { fill: string; border: string }> = {
-  low:      { fill: '#22c55e', border: '#16a34a' },   // green-500/600
-  moderate: { fill: '#eab308', border: '#ca8a04' },   // yellow-500/600
-  high:     { fill: '#f97316', border: '#ea580c' },    // orange-500/600
-  critical: { fill: '#ef4444', border: '#dc2626' },    // red-500/600
+  low:      { fill: '#22c55e', border: '#16a34a' },
+  moderate: { fill: '#eab308', border: '#ca8a04' },
+  high:     { fill: '#f97316', border: '#ea580c' },
+  critical: { fill: '#ef4444', border: '#dc2626' },
 };
 
-const CONGESTION_EMOJI: Record<string, string> = {
-  low: '\u{1f7e2}', moderate: '\u{1f7e1}', high: '\u{1f7e0}', critical: '\u{1f534}',
-};
-
-// Match a terminal/apron name to a CongestionArea by normalized name
 function findCongestion(name: string | undefined, areas: CongestionArea[], areaType?: string): CongestionArea | undefined {
   if (!name || areas.length === 0) return undefined;
   const norm = name.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
-
-  // If area type is specified, prefer matching areas of that type first
   const typed = areaType ? areas.filter((c) => c.area_type === areaType) : [];
   const candidates = typed.length > 0 ? typed : areas;
-
-  // Try exact match first, then prefix match, then substring as fallback
   return candidates.find((c) => c.area_id.toLowerCase() === norm)
     || candidates.find((c) => c.area_id.toLowerCase() === `${norm}_apron`)
     || candidates.find((c) => {
@@ -61,23 +42,25 @@ function findCongestion(name: string | undefined, areas: CongestionArea[], areaT
     });
 }
 
-// Build tooltip text for a congested area
-function congestionTooltipText(name: string, cong: CongestionArea): string {
-  const emoji = CONGESTION_EMOJI[cong.level] || '';
-  const label = cong.level.charAt(0).toUpperCase() + cong.level.slice(1);
-  const wait = cong.wait_minutes > 0 ? `, ~${cong.wait_minutes} min wait` : '';
-  return `${name}\n${emoji} ${label} \u2014 ${cong.flight_count} flights${wait}`;
-}
 
 export default function AirportOverlay() {
   const { getGates, getTerminals, getTaxiways, getAprons, getOSMRunways } = useAirportConfigContext();
   const { congestion } = useCongestion();
-  const { activeLevel, selectedArea, setSelectedArea } = useCongestionFilter();
+  const { activeLevel } = useCongestionFilter();
   const [zoom, setZoom] = useState(14);
-  useMapEvents({
-    zoomend: (e) => setZoom(e.target.getZoom()),
-    zoom: (e) => setZoom(e.target.getZoom()),
-  });
+  const { current: map } = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+    const handler = () => setZoom(map.getZoom());
+    map.on('zoomend', handler);
+    map.on('zoom', handler);
+    return () => {
+      map.off('zoomend', handler);
+      map.off('zoom', handler);
+    };
+  }, [map]);
+
   const showGateLabels = zoom >= GATE_LABEL_ZOOM;
   const gateDotRadius = getGateDotRadius(zoom);
 
@@ -87,159 +70,238 @@ export default function AirportOverlay() {
   const osmAprons = getAprons();
   const osmRunways = getOSMRunways();
 
-  // When a congestion filter is active, check if an area matches
   const isFilterActive = activeLevel !== null;
 
-  return (
-    <>
-      {/* Render OSM aprons (parking areas) - bottom layer, tinted by congestion */}
-      {osmAprons.length > 0 && osmAprons.map((apron) => {
-        const positions = geoToLatLng(apron.geoPolygon);
-        if (positions.length < 3) return null;
-        const cong = findCongestion(apron.name, congestion, 'apron');
-        const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
-        const matches = isFilterActive && cong?.level === activeLevel;
-        const dimmed = isFilterActive && !matches;
-        const isSelected = selectedArea && cong && selectedArea.area_id === cong.area_id;
-        return (
-          <Polygon
-            key={apron.id}
-            positions={positions}
-            pathOptions={{
-              fillColor: matches ? (colors?.fill || '#ef4444') : dimmed ? '#d1d5db' : colors?.fill || '#6b7280',
-              fillOpacity: dimmed ? 0.03 : matches ? 0.85 : cong ? 0.45 : 0.3,
-              color: isSelected ? '#3b82f6' : matches ? '#ffffff' : dimmed ? '#d1d5db' : colors?.border || '#4b5563',
-              weight: isSelected ? 4 : matches ? 5 : dimmed ? 0.5 : cong ? 2 : 1,
-              opacity: dimmed ? 0.2 : 1,
-            }}
-            eventHandlers={cong ? {
-              click: (e) => {
-                L.DomEvent.stopPropagation(e);
-                setSelectedArea(isSelected ? null : cong);
-              },
-            } : undefined}
-          >
-            <Tooltip direction="center">
-              {cong && apron.name
-                ? congestionTooltipText(apron.name, cong)
-                : apron.name || 'Apron'}
-            </Tooltip>
-          </Polygon>
-        );
-      })}
+  // Build GeoJSON for runways
+  const runwayGeoJSON = useMemo(() => {
+    const features = osmRunways
+      .filter((r) => {
+        const coords = geoToGeoJSONCoords(r.geoPoints);
+        return coords.length >= 2;
+      })
+      .map((runway) => ({
+        type: 'Feature' as const,
+        properties: { name: runway.name || '' },
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: geoToGeoJSONCoords(runway.geoPoints),
+        },
+      }));
+    return { type: 'FeatureCollection' as const, features };
+  }, [osmRunways]);
 
-      {/* Render OSM terminals - below runways, taxiways, and gates, tinted by congestion */}
-      {osmTerminals.length > 0 && osmTerminals.map((terminal) => {
-        const positions = geoToLatLng(terminal.geoPolygon);
-        if (positions.length < 3) return null;
+  // Build GeoJSON for taxiways
+  const taxiwayGeoJSON = useMemo(() => {
+    const features = osmTaxiways
+      .filter((t) => {
+        const coords = geoToGeoJSONCoords(t.geoPoints);
+        return coords.length >= 2;
+      })
+      .map((taxiway) => ({
+        type: 'Feature' as const,
+        properties: { name: taxiway.name || '' },
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: geoToGeoJSONCoords(taxiway.geoPoints),
+        },
+      }));
+    return { type: 'FeatureCollection' as const, features };
+  }, [osmTaxiways]);
+
+  // Build GeoJSON for gates (point features)
+  const gateGeoJSON = useMemo(() => {
+    const features = osmGates
+      .filter((gate) => gate.geo)
+      .map((gate) => ({
+        type: 'Feature' as const,
+        properties: {
+          label: gate.ref || gate.name || gate.id,
+        },
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [Number(gate.geo.longitude), Number(gate.geo.latitude)],
+        },
+      }));
+    return { type: 'FeatureCollection' as const, features };
+  }, [osmGates]);
+
+  // Build GeoJSON for terminals (polygons)
+  const terminalGeoJSON = useMemo(() => {
+    const features = osmTerminals
+      .filter((t) => {
+        const coords = geoToGeoJSONCoords(t.geoPolygon);
+        return coords.length >= 3;
+      })
+      .map((terminal) => {
+        const coords = geoToGeoJSONCoords(terminal.geoPolygon);
+        if (coords.length > 0 && (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1])) {
+          coords.push(coords[0]);
+        }
         const cong = findCongestion(terminal.name, congestion, 'terminal');
         const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
         const matches = isFilterActive && cong?.level === activeLevel;
         const dimmed = isFilterActive && !matches;
-        const isSelected = selectedArea && cong && selectedArea.area_id === cong.area_id;
-        return (
-          <Polygon
-            key={terminal.id}
-            positions={positions}
-            pathOptions={{
-              fillColor: matches ? (colors?.fill || '#ef4444') : dimmed ? '#d1d5db' : colors?.fill || '#3b82f6',
-              fillOpacity: dimmed ? 0.05 : matches ? 0.85 : 0.6,
-              color: isSelected ? '#3b82f6' : matches ? '#ffffff' : dimmed ? '#d1d5db' : colors?.border || '#1d4ed8',
-              weight: isSelected ? 4 : matches ? 5 : dimmed ? 0.5 : 2,
-              opacity: dimmed ? 0.2 : 1,
-            }}
-            eventHandlers={cong ? {
-              click: (e) => {
-                L.DomEvent.stopPropagation(e);
-                setSelectedArea(isSelected ? null : cong);
-              },
-            } : undefined}
-          >
-            <Tooltip direction="center" permanent={matches}>
-              {cong
-                ? congestionTooltipText(terminal.name, cong)
-                : terminal.name}
-            </Tooltip>
-          </Polygon>
-        );
-      })}
+        return {
+          type: 'Feature' as const,
+          properties: {
+            name: terminal.name || 'Terminal',
+            fillColor: matches ? (colors?.fill || '#ef4444') : dimmed ? '#d1d5db' : colors?.fill || '#3b82f6',
+            fillOpacity: dimmed ? 0.05 : matches ? 0.85 : 0.6,
+            strokeColor: matches ? '#ffffff' : dimmed ? '#d1d5db' : colors?.border || '#1d4ed8',
+            strokeWidth: matches ? 5 : dimmed ? 0.5 : 2,
+          },
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [coords],
+          },
+        };
+      });
+    return { type: 'FeatureCollection' as const, features };
+  }, [osmTerminals, congestion, activeLevel, isFilterActive]);
 
-      {/* Render OSM runways as polylines */}
-      {osmRunways.length > 0 && osmRunways.map((runway) => {
-        const positions = geoToLatLng(runway.geoPoints);
-        if (positions.length < 2) return null;
-        return (
-          <Polyline
-            key={runway.id}
-            positions={positions}
-            pathOptions={{
-              color: '#4b5563', // gray-600
-              weight: 8,
-              opacity: 0.9,
-            }}
-          >
-            {runway.name && (
-              <Tooltip direction="center">
-                RWY {runway.name}
-              </Tooltip>
-            )}
-          </Polyline>
-        );
-      })}
+  // Build GeoJSON for aprons (polygons)
+  const apronGeoJSON = useMemo(() => {
+    const features = osmAprons
+      .filter((a) => {
+        const coords = geoToGeoJSONCoords(a.geoPolygon);
+        return coords.length >= 3;
+      })
+      .map((apron) => {
+        const coords = geoToGeoJSONCoords(apron.geoPolygon);
+        if (coords.length > 0 && (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1])) {
+          coords.push(coords[0]);
+        }
+        const cong = findCongestion(apron.name, congestion, 'apron');
+        const colors = cong ? CONGESTION_FILL[cong.level] : undefined;
+        const matches = isFilterActive && cong?.level === activeLevel;
+        const dimmed = isFilterActive && !matches;
+        return {
+          type: 'Feature' as const,
+          properties: {
+            name: apron.name || 'Apron',
+            fillColor: matches ? (colors?.fill || '#ef4444') : dimmed ? '#d1d5db' : colors?.fill || '#6b7280',
+            fillOpacity: dimmed ? 0.03 : matches ? 0.85 : cong ? 0.45 : 0.3,
+            strokeColor: matches ? '#ffffff' : dimmed ? '#d1d5db' : colors?.border || '#4b5563',
+            strokeWidth: matches ? 5 : dimmed ? 0.5 : cong ? 2 : 1,
+          },
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [coords],
+          },
+        };
+      });
+    return { type: 'FeatureCollection' as const, features };
+  }, [osmAprons, congestion, activeLevel, isFilterActive]);
 
-      {/* Render OSM taxiways */}
-      {osmTaxiways.length > 0 && osmTaxiways.map((taxiway) => {
-        const positions = geoToLatLng(taxiway.geoPoints);
-        if (positions.length < 2) return null;
-        return (
-          <Polyline
-            key={taxiway.id}
-            positions={positions}
-            pathOptions={{
-              color: '#fbbf24', // amber-400
-              weight: 3,
-              opacity: 0.7,
+  return (
+    <>
+      {/* Aprons */}
+      {apronGeoJSON.features.length > 0 && (
+        <Source id="aprons" type="geojson" data={apronGeoJSON}>
+          <Layer
+            id="aprons-fill"
+            type="fill"
+            paint={{
+              'fill-color': ['get', 'fillColor'],
+              'fill-opacity': ['get', 'fillOpacity'],
             }}
-          >
-            {taxiway.name && (
-              <Tooltip direction="center">
-                TWY {taxiway.name}
-              </Tooltip>
-            )}
-          </Polyline>
-        );
-      })}
-
-      {/* Render OSM gates as circle markers - top layer so labels are visible */}
-      {osmGates.filter((gate) => gate.geo).map((gate, index) => {
-        const label = gate.ref || gate.name || gate.id;
-        return (
-          <CircleMarker
-            key={`osm-${index}-${gate.id}-${showGateLabels}`}
-            center={[Number(gate.geo.latitude), Number(gate.geo.longitude)]}
-            radius={gateDotRadius}
-            pathOptions={{
-              fillColor: '#10b981', // emerald-500
-              fillOpacity: 0.9,
-              color: '#059669', // emerald-600
-              weight: 1,
+          />
+          <Layer
+            id="aprons-stroke"
+            type="line"
+            paint={{
+              'line-color': ['get', 'strokeColor'],
+              'line-width': ['get', 'strokeWidth'],
             }}
-          >
-            {showGateLabels ? (
-              <Tooltip permanent direction="top" offset={[0, -4]}
-                className="gate-label"
-              >
-                {label}
-              </Tooltip>
-            ) : (
-              <Tooltip direction="top" offset={[0, -4]}>
-                Gate {label}
-              </Tooltip>
-            )}
-          </CircleMarker>
-        );
-      })}
+          />
+        </Source>
+      )}
 
+      {/* Terminals */}
+      {terminalGeoJSON.features.length > 0 && (
+        <Source id="terminals" type="geojson" data={terminalGeoJSON}>
+          <Layer
+            id="terminals-fill"
+            type="fill"
+            paint={{
+              'fill-color': ['get', 'fillColor'],
+              'fill-opacity': ['get', 'fillOpacity'],
+            }}
+          />
+          <Layer
+            id="terminals-stroke"
+            type="line"
+            paint={{
+              'line-color': ['get', 'strokeColor'],
+              'line-width': ['get', 'strokeWidth'],
+            }}
+          />
+        </Source>
+      )}
+
+      {/* Runways */}
+      {runwayGeoJSON.features.length > 0 && (
+        <Source id="runways" type="geojson" data={runwayGeoJSON}>
+          <Layer
+            id="runways-line"
+            type="line"
+            paint={{
+              'line-color': '#4b5563',
+              'line-width': 8,
+              'line-opacity': 0.9,
+            }}
+          />
+        </Source>
+      )}
+
+      {/* Taxiways */}
+      {taxiwayGeoJSON.features.length > 0 && (
+        <Source id="taxiways" type="geojson" data={taxiwayGeoJSON}>
+          <Layer
+            id="taxiways-line"
+            type="line"
+            paint={{
+              'line-color': '#fbbf24',
+              'line-width': 3,
+              'line-opacity': 0.7,
+            }}
+          />
+        </Source>
+      )}
+
+      {/* Gates as circles */}
+      {gateGeoJSON.features.length > 0 && (
+        <Source id="gates" type="geojson" data={gateGeoJSON}>
+          <Layer
+            id="gates-circle"
+            type="circle"
+            paint={{
+              'circle-radius': gateDotRadius,
+              'circle-color': '#10b981',
+              'circle-opacity': 0.9,
+              'circle-stroke-color': '#059669',
+              'circle-stroke-width': 1,
+            }}
+          />
+          {showGateLabels && (
+            <Layer
+              id="gates-labels"
+              type="symbol"
+              layout={{
+                'text-field': ['get', 'label'],
+                'text-size': 10,
+                'text-offset': [0, -1.2],
+                'text-anchor': 'bottom',
+              }}
+              paint={{
+                'text-color': '#065f46',
+                'text-halo-color': '#ffffff',
+                'text-halo-width': 1,
+              }}
+            />
+          )}
+        </Source>
+      )}
     </>
   );
 }

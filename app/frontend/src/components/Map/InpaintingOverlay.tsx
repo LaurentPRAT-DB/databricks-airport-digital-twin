@@ -1,6 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { useMap } from 'react-leaflet';
-import L from 'leaflet';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
+import { Source, Layer, Marker } from 'react-map-gl/maplibre';
 
 export interface Detection {
   x1: number;
@@ -28,181 +27,207 @@ export interface TileEvent {
 
 const TILE_SIZE = 256;
 
-function tileToLatLngBounds(x: number, y: number, z: number): L.LatLngBounds {
+function tileToLngLatBounds(x: number, y: number, z: number): [[number, number], [number, number]] {
   const n = Math.pow(2, z);
   const lonLeft = (x / n) * 360 - 180;
   const lonRight = ((x + 1) / n) * 360 - 180;
   const latTop = (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n))) * 180) / Math.PI;
   const latBottom = (Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 1)) / n))) * 180) / Math.PI;
-  return L.latLngBounds([latBottom, lonLeft], [latTop, lonRight]);
+  return [[lonLeft, latBottom], [lonRight, latTop]];
 }
 
-function detectionToLatLngBounds(det: Detection, tileBounds: L.LatLngBounds): L.LatLngBounds {
-  const sw = tileBounds.getSouthWest();
-  const ne = tileBounds.getNorthEast();
-  const latSpan = ne.lat - sw.lat;
-  const lngSpan = ne.lng - sw.lng;
+function detectionToLngLatBounds(det: Detection, tileBounds: [[number, number], [number, number]]): [[number, number], [number, number]] {
+  const [sw, ne] = tileBounds;
+  const latSpan = ne[1] - sw[1];
+  const lngSpan = ne[0] - sw[0];
 
-  // Pixel coords: (0,0) is top-left of tile
-  const detSWLat = ne.lat - (det.y2 / TILE_SIZE) * latSpan;
-  const detSWLng = sw.lng + (det.x1 / TILE_SIZE) * lngSpan;
-  const detNELat = ne.lat - (det.y1 / TILE_SIZE) * latSpan;
-  const detNELng = sw.lng + (det.x2 / TILE_SIZE) * lngSpan;
+  const detSWLng = sw[0] + (det.x1 / TILE_SIZE) * lngSpan;
+  const detSWLat = ne[1] - (det.y2 / TILE_SIZE) * latSpan;
+  const detNELng = sw[0] + (det.x2 / TILE_SIZE) * lngSpan;
+  const detNELat = ne[1] - (det.y1 / TILE_SIZE) * latSpan;
 
-  return L.latLngBounds([detSWLat, detSWLng], [detNELat, detNELng]);
+  return [[detSWLng, detSWLat], [detNELng, detNELat]];
 }
 
-interface OverlayEntry {
-  event: TileEvent;
-  layers: L.Layer[];
-  timeout?: ReturnType<typeof setTimeout>;
-}
-
-const PHASE_COLORS = {
-  loading: '#3b82f6',   // blue-500
-  detected: '#f97316',  // orange-500
-  done: '#10b981',      // emerald-500
-  cached: '#10b981',    // emerald-500
+const PHASE_COLORS: Record<TilePhase, string> = {
+  loading: '#3b82f6',
+  detected: '#f97316',
+  done: '#10b981',
+  cached: '#10b981',
 };
 
-const PHASE_TTL = {
-  loading: 60000,  // removed when phase advances, fallback 60s
+const PHASE_TTL: Record<TilePhase, number> = {
+  loading: 60000,
   detected: 3000,
   done: 5000,
   cached: 4000,
 };
 
+interface OverlayState {
+  visibleEvents: TileEvent[];
+}
+
 export default function InpaintingOverlay({ events }: { events: TileEvent[] }) {
-  const map = useMap();
-  const entriesRef = useRef<Map<string, OverlayEntry>>(new Map());
+  const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [state] = useVisibleEvents(events, timeoutsRef);
 
-  useEffect(() => {
-    const entries = entriesRef.current;
+  // Build GeoJSON for tile borders
+  const borderGeoJSON = useMemo(() => {
+    const features = state.visibleEvents.map((event) => {
+      const bounds = tileToLngLatBounds(event.tileX, event.tileY, event.zoom);
+      const [[swLng, swLat], [neLng, neLat]] = bounds;
+      return {
+        type: 'Feature' as const,
+        properties: {
+          phase: event.phase,
+          color: PHASE_COLORS[event.phase],
+          id: event.id,
+        },
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [[
+            [swLng, swLat],
+            [neLng, swLat],
+            [neLng, neLat],
+            [swLng, neLat],
+            [swLng, swLat],
+          ]],
+        },
+      };
+    });
+    return { type: 'FeatureCollection' as const, features };
+  }, [state.visibleEvents]);
 
-    for (const event of events) {
-      const existing = entries.get(event.id);
-
-      // Remove old layers for this tile
-      if (existing) {
-        existing.layers.forEach((l) => map.removeLayer(l));
-        if (existing.timeout) clearTimeout(existing.timeout);
-        entries.delete(event.id);
+  // Build GeoJSON for detection boxes
+  const detectionGeoJSON = useMemo(() => {
+    const features: GeoJSON.Feature[] = [];
+    for (const event of state.visibleEvents) {
+      if (event.detections.length === 0) continue;
+      const tileBounds = tileToLngLatBounds(event.tileX, event.tileY, event.zoom);
+      for (const det of event.detections) {
+        const [[swLng, swLat], [neLng, neLat]] = detectionToLngLatBounds(det, tileBounds);
+        features.push({
+          type: 'Feature',
+          properties: {
+            confidence: Math.round(det.confidence * 100),
+            color: event.phase === 'detected' ? '#ef4444' : '#f97316',
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [swLng, swLat],
+              [neLng, swLat],
+              [neLng, neLat],
+              [swLng, neLat],
+              [swLng, swLat],
+            ]],
+          },
+        });
       }
+    }
+    return { type: 'FeatureCollection' as const, features };
+  }, [state.visibleEvents]);
 
-      const layers: L.Layer[] = [];
-      const bounds = tileToLatLngBounds(event.tileX, event.tileY, event.zoom);
-      const color = PHASE_COLORS[event.phase];
-
-      if (event.phase === 'loading') {
-        // Pulsing border
-        const rect = L.rectangle(bounds, {
-          color,
-          weight: 2,
-          fill: false,
-          dashArray: '6 4',
-          className: 'inpainting-tile-loading',
-        });
-        rect.addTo(map);
-        layers.push(rect);
-      } else if (event.phase === 'detected' && event.detections.length > 0) {
-        // Tile border
-        const rect = L.rectangle(bounds, {
-          color,
-          weight: 2,
-          fill: false,
-        });
-        rect.addTo(map);
-        layers.push(rect);
-
-        // Detection bounding boxes
-        for (const det of event.detections) {
-          const detBounds = detectionToLatLngBounds(det, bounds);
-          const box = L.rectangle(detBounds, {
-            color: '#ef4444', // red-500
-            weight: 2,
-            fillColor: '#ef4444',
-            fillOpacity: 0.15,
-          });
-          box.bindTooltip(
-            `Aircraft ${Math.round(det.confidence * 100)}%`,
-            { permanent: true, direction: 'top', className: 'inpainting-det-tooltip' }
-          );
-          box.addTo(map);
-          layers.push(box);
-        }
-      } else if (event.phase === 'done' || event.phase === 'cached') {
-        // Brief green border
-        const rect = L.rectangle(bounds, {
-          color,
-          weight: 2,
-          fill: true,
-          fillColor: color,
-          fillOpacity: 0.08,
-        });
-        rect.addTo(map);
-        layers.push(rect);
-
-        // Show detection boxes on cached/done tiles too
-        if (event.detections.length > 0) {
-          for (const det of event.detections) {
-            const detBounds = detectionToLatLngBounds(det, bounds);
-            const box = L.rectangle(detBounds, {
-              color: '#f97316', // orange-500
-              weight: 2,
-              fillColor: '#f97316',
-              fillOpacity: 0.12,
-              dashArray: '4 3',
-            });
-            box.bindTooltip(
-              `${Math.round(det.confidence * 100)}%`,
-              { permanent: true, direction: 'top', className: 'inpainting-det-tooltip' }
-            );
-            box.addTo(map);
-            layers.push(box);
-          }
-        }
-
-        // Info badge at tile center
-        const center = bounds.getCenter();
+  // Badge markers for done/cached tiles
+  const badges = useMemo(() => {
+    return state.visibleEvents
+      .filter((e) => e.phase === 'done' || e.phase === 'cached')
+      .map((event) => {
+        const bounds = tileToLngLatBounds(event.tileX, event.tileY, event.zoom);
+        const centerLng = (bounds[0][0] + bounds[1][0]) / 2;
+        const centerLat = (bounds[0][1] + bounds[1][1]) / 2;
         const label = event.cacheStatus === 'HIT'
           ? `CACHE HIT ${event.zoom}/${event.tileX}/${event.tileY}`
           : `${event.aircraftCount} aircraft · ${event.processingMs ?? '?'}ms · ${event.zoom}/${event.tileX}/${event.tileY}`;
+        return { key: event.id, lng: centerLng, lat: centerLat, label, isHit: event.cacheStatus === 'HIT' };
+      });
+  }, [state.visibleEvents]);
 
-        const marker = L.marker(center, {
-          icon: L.divIcon({
-            className: 'inpainting-badge',
-            html: `<span class="inpainting-badge-inner ${event.cacheStatus === 'HIT' ? 'cache-hit' : 'cache-miss'}">${label}</span>`,
-            iconSize: [0, 0],
-            iconAnchor: [0, 0],
-          }),
-          interactive: false,
-        });
-        marker.addTo(map);
-        layers.push(marker);
+  return (
+    <>
+      {/* Tile borders */}
+      {borderGeoJSON.features.length > 0 && (
+        <Source id="inpainting-borders" type="geojson" data={borderGeoJSON}>
+          <Layer
+            id="inpainting-borders-line"
+            type="line"
+            paint={{
+              'line-color': ['get', 'color'],
+              'line-width': 2,
+            }}
+          />
+        </Source>
+      )}
+
+      {/* Detection boxes */}
+      {detectionGeoJSON.features.length > 0 && (
+        <Source id="inpainting-detections" type="geojson" data={detectionGeoJSON}>
+          <Layer
+            id="inpainting-detections-fill"
+            type="fill"
+            paint={{
+              'fill-color': ['get', 'color'],
+              'fill-opacity': 0.15,
+            }}
+          />
+          <Layer
+            id="inpainting-detections-line"
+            type="line"
+            paint={{
+              'line-color': ['get', 'color'],
+              'line-width': 2,
+            }}
+          />
+        </Source>
+      )}
+
+      {/* Info badges */}
+      {badges.map((b) => (
+        <Marker key={b.key} longitude={b.lng} latitude={b.lat} anchor="center">
+          <span className={`inpainting-badge-inner ${b.isHit ? 'cache-hit' : 'cache-miss'}`}>
+            {b.label}
+          </span>
+        </Marker>
+      ))}
+    </>
+  );
+}
+
+function useVisibleEvents(events: TileEvent[], timeoutsRef: React.MutableRefObject<Map<string, ReturnType<typeof setTimeout>>>): [OverlayState, React.Dispatch<React.SetStateAction<OverlayState>>] {
+  const [state, setState] = useState<OverlayState>({ visibleEvents: [] });
+
+  useEffect(() => {
+    const timeouts = timeoutsRef.current;
+
+    setState((prev) => {
+      const eventMap = new Map(prev.visibleEvents.map((e) => [e.id, e]));
+
+      for (const event of events) {
+        // Clear old timeout for this tile
+        const oldTimeout = timeouts.get(event.id);
+        if (oldTimeout) clearTimeout(oldTimeout);
+
+        eventMap.set(event.id, event);
+
+        // Set removal timeout
+        const ttl = PHASE_TTL[event.phase];
+        const timeout = setTimeout(() => {
+          setState((s) => ({
+            visibleEvents: s.visibleEvents.filter((e) => e.id !== event.id),
+          }));
+          timeouts.delete(event.id);
+        }, ttl);
+        timeouts.set(event.id, timeout);
       }
 
-      // Auto-remove after TTL
-      const ttl = PHASE_TTL[event.phase];
-      const timeout = setTimeout(() => {
-        const entry = entries.get(event.id);
-        if (entry && entry.event.timestamp === event.timestamp) {
-          entry.layers.forEach((l) => map.removeLayer(l));
-          entries.delete(event.id);
-        }
-      }, ttl);
+      return { visibleEvents: Array.from(eventMap.values()) };
+    });
 
-      entries.set(event.id, { event, layers, timeout });
-    }
-
-    // Cleanup on unmount
     return () => {
-      entries.forEach((entry) => {
-        entry.layers.forEach((l) => map.removeLayer(l));
-        if (entry.timeout) clearTimeout(entry.timeout);
-      });
-      entries.clear();
+      timeouts.forEach((t) => clearTimeout(t));
+      timeouts.clear();
     };
-  }, [events, map]);
+  }, [events, timeoutsRef]);
 
-  return null;
+  return [state, setState];
 }

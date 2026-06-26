@@ -1,6 +1,5 @@
-import { useMemo, useRef, useEffect } from 'react';
-import { Marker, Tooltip } from 'react-leaflet';
-import L from 'leaflet';
+import { useMemo, useRef } from 'react';
+import { Marker } from 'react-map-gl/maplibre';
 import { Flight } from '../../types/flight';
 import { useFlightContext } from '../../context/FlightContext';
 import { isGroundPhase } from '../../utils/phaseUtils';
@@ -10,10 +9,8 @@ interface FlightMarkerProps {
   zoom?: number;
 }
 
-// Selection color (green)
 const SELECTION_COLOR = '#22c55e';
 
-// Aircraft silhouette categories based on ICAO type codes
 type AircraftCategory = 'narrow' | 'wideTwin' | 'wideQuad' | 'default';
 
 function getAircraftCategory(aircraftType?: string): AircraftCategory {
@@ -32,46 +29,30 @@ function getAircraftCategory(aircraftType?: string): AircraftCategory {
   }
 }
 
-// Top-down SVG silhouettes per category (viewBox 0 0 100 100, nose at top).
-// Visual differences: fuselage width, wing span, engine pod count.
 const SILHOUETTE_PATHS: Record<AircraftCategory, string> = {
-  // Default: generic mid-size jet (same as original)
   default: `M50 2 C52 2 54 8 54 18 L55 38 L92 56 L92 62 L55 52 L55.5 76 L70 86 L70 90 L55.5 84 L55 92 C55 96 54 98 50 98 C46 98 45 96 45 92 L44.5 84 L30 90 L30 86 L44.5 76 L45 52 L8 62 L8 56 L45 38 L46 18 C46 8 48 2 50 2 Z`,
-
-  // Narrow-body (A320/B737): slender fuselage, moderate swept wings
   narrow: `M50 2 C52 2 53.5 8 53.5 18 L54.5 38 L90 54 L90 59 L54.5 50 L55 76 L68 85 L68 89 L55 83 L54.5 93 C54 96 53 98 50 98 C47 98 46 96 45.5 93 L45 83 L32 89 L32 85 L45 76 L45.5 50 L10 59 L10 54 L45.5 38 L46.5 18 C46.5 8 48 2 50 2 Z`,
-
-  // Wide-body twin (A330/B777): wider fuselage, longer wingspan, 2 engine pods
   wideTwin: `M50 2 C53 2 55 8 55 18 L56 36 L95 52 L95 58 L56 49 L56.5 75 L72 84 L72 88 L56.5 82 L56 93 C55.5 96 54 98 50 98 C46 98 44.5 96 44 93 L43.5 82 L28 88 L28 84 L43.5 75 L44 49 L5 58 L5 52 L44 36 L45 18 C45 8 47 2 50 2 Z M60 44 C62 44 63 42 63 40 C63 38 62 36 60 36 C58 36 57 38 57 40 C57 42 58 44 60 44 Z M40 44 C42 44 43 42 43 40 C43 38 42 36 40 36 C38 36 37 38 37 40 C37 42 38 44 40 44 Z`,
-
-  // Wide-body quad (A380/A340): 4 engine pods, very wide wingspan
   wideQuad: `M50 2 C53.5 2 56 8 56 18 L57 34 L97 50 L97 56 L57 47 L57.5 74 L74 83 L74 87 L57.5 81 L57 93 C56.5 96 55 98 50 98 C45 98 43.5 96 43 93 L42.5 81 L26 87 L26 83 L42.5 74 L43 47 L3 56 L3 50 L43 34 L44 18 C44 8 46.5 2 50 2 Z M63 42 C65 42 66 40 66 38 C66 36 65 34 63 34 C61 34 60 36 60 38 C60 40 61 42 63 42 Z M76 48 C78 48 79 46 79 44 C79 42 78 40 76 40 C74 40 73 42 73 44 C73 46 74 48 76 48 Z M37 42 C39 42 40 40 40 38 C40 36 39 34 37 34 C35 34 34 36 34 38 C34 40 35 42 37 42 Z M24 48 C26 48 27 46 27 44 C27 42 26 40 24 40 C22 40 21 42 21 44 C21 46 22 48 24 48 Z`,
 };
 
-// Real wingspans in meters per ICAO type code
 const AIRCRAFT_WINGSPAN_M: Record<string, number> = {
   A318: 34.1, A319: 35.8, A320: 35.8, A321: 35.8,
   B737: 35.8, B738: 35.8, B739: 35.8,
   A330: 60.9, A350: 64.8, B777: 65.0, B787: 60.1,
   A380: 79.7, A340: 63.5, A345: 63.5, A310: 44.0,
 };
-const DEFAULT_WINGSPAN_M = 36; // midsize jet fallback
+const DEFAULT_WINGSPAN_M = 36;
 
-// Geo-realistic sizing: pixel size derived from real wingspan and Leaflet meters-per-pixel.
-// At zoom 18 (~0.46 m/px at lat 40): B737→78px, B777→141→capped 96px.
-// At zoom 16 (~1.83 m/px): B737→20px, B777→36px.
-// At zoom 14 (~7.33 m/px): B737→5→clamped 6px.
 function getIconSize(zoom: number, aircraftType?: string, latitude?: number): number {
   const lat = latitude ?? 40;
   const metersPerPixel = (156543 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
   const wingspan = AIRCRAFT_WINGSPAN_M[(aircraftType ?? '').toUpperCase()] ?? DEFAULT_WINGSPAN_M;
   const rawPixels = wingspan / metersPerPixel;
-  // Cap at 96px to prevent aircraft from visually dominating terminals at high zoom
   return Math.round(Math.max(6, Math.min(rawPixels, 96)));
 }
 
-// Create airplane SVG icon with rotation, ARIA label, aircraft-type silhouette, and optional gate label
-function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'], isSelected: boolean, size: number, callsign?: string | null, icao24?: string, gateName?: string | null, aircraftType?: string): L.DivIcon {
+export function createAirplaneIconHtml(heading: number | null, phase: Flight['flight_phase'], isSelected: boolean, size: number, callsign?: string | null, icao24?: string, gateName?: string | null, aircraftType?: string): string {
   const rotation = heading ?? 0;
   const label = callsign || icao24 || 'Unknown';
   const category = getAircraftCategory(aircraftType);
@@ -81,11 +62,8 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
     ? `<div class="gate-label">${gateName}</div>`
     : '';
 
-  // Selected aircraft are rendered 1.6x larger for easy tracking at wide zoom
   const displaySize = isSelected ? Math.round(size * 1.6) : size;
 
-  // Use realistic white fuselage color for satellite view, with a thin dark outline for visibility.
-  // Selected aircraft use green. Phase color is shown via the drop-shadow glow instead of fill.
   const fill = isSelected ? SELECTION_COLOR : '#f0f0f0';
   const stroke = isSelected ? '#166534' : '#4a4a4a';
   const strokeWidth = isSelected ? 3 : 1.5;
@@ -93,42 +71,19 @@ function createAirplaneIcon(heading: number | null, phase: Flight['flight_phase'
     ? 'drop-shadow(0 0 6px rgba(34,197,94,0.9))'
     : 'drop-shadow(1px 1px 2px rgba(0,0,0,0.6))';
 
-  // Pulsing radar ring around selected aircraft for visual tracking
   const pulseRing = isSelected
     ? `<div class="selected-pulse-ring" style="width:${displaySize + 20}px;height:${displaySize + 20}px;top:${-10}px;left:${-10}px;"></div>`
     : '';
 
-  const svgIcon = `
+  return `
     ${pulseRing}
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${displaySize}" height="${displaySize}" style="transform: rotate(${rotation}deg); transform-origin: center; filter: ${shadow};" role="img" aria-label="Flight ${label}">
       <path d="${path}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
     </svg>
     ${gateLabel}
   `;
-
-  // Minimum 44px hit area for touch targets — icon renders centered within larger area
-  const MIN_TOUCH = 44;
-  const hitSize = Math.max(displaySize, MIN_TOUCH);
-  const hitHalf = hitSize / 2;
-  const needsPad = hitSize > displaySize;
-  const wrappedHtml = needsPad
-    ? `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%">${svgIcon}</div>`
-    : svgIcon;
-
-  return L.divIcon({
-    html: wrappedHtml,
-    className: `flight-marker${isSelected ? ' flight-marker-selected' : ''}`,
-    iconSize: [hitSize, hitSize],
-    iconAnchor: [hitHalf, hitHalf],
-    popupAnchor: [0, -hitHalf],
-  });
 }
 
-// Format altitude for display
-function formatAltitude(altitude: number | null): string {
-  if (altitude === null) return 'N/A';
-  return `${Math.round(altitude)} ft`;
-}
 
 /** Compute bearing (degrees, 0=N clockwise) between two lat/lon points. */
 export function computeBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -139,15 +94,13 @@ export function computeBearing(lat1: number, lon1: number, lat2: number, lon2: n
   return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
 }
 
-const MIN_MOVE_DEG_SQ = 0.00001 * 0.00001; // ~1m movement threshold
+const MIN_MOVE_DEG_SQ = 0.00001 * 0.00001;
 
 export default function FlightMarker({ flight, zoom = 14 }: FlightMarkerProps) {
   const { selectedFlight, setSelectedFlight } = useFlightContext();
   const isSelected = selectedFlight?.icao24 === flight.icao24;
-  const markerRef = useRef<L.Marker>(null);
   const size = getIconSize(zoom, flight.aircraft_type, flight.latitude);
 
-  // Track previous position to compute movement-based heading
   const prevPosRef = useRef<{ lat: number; lon: number; bearing: number | null }>({ lat: flight.latitude, lon: flight.longitude, bearing: null });
 
   const movementBearing = useMemo(() => {
@@ -166,45 +119,34 @@ export default function FlightMarker({ flight, zoom = 14 }: FlightMarkerProps) {
     return prev.bearing;
   }, [flight.latitude, flight.longitude]);
 
-  // Use movement-derived bearing when available, fall back to reported heading
   const effectiveHeading = movementBearing ?? flight.heading;
 
-  const icon = useMemo(
-    () => createAirplaneIcon(effectiveHeading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type),
+  const iconHtml = useMemo(
+    () => createAirplaneIconHtml(effectiveHeading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type),
     [effectiveHeading, flight.flight_phase, isSelected, size, flight.callsign, flight.icao24, flight.assigned_gate, flight.aircraft_type, flight.latitude]
   );
 
-  // Update marker icon when selection changes without full re-render
-  useEffect(() => {
-    if (markerRef.current) {
-      markerRef.current.setIcon(icon);
-    }
-  }, [icon]);
-
-  // Guard against invalid coordinates (defense in depth)
   if (flight.latitude == null || flight.longitude == null || isNaN(flight.latitude) || isNaN(flight.longitude)) {
     return null;
   }
 
+  const displaySize = isSelected ? Math.round(size * 1.6) : size;
+  const MIN_TOUCH = 44;
+  const hitSize = Math.max(displaySize, MIN_TOUCH);
+
   return (
     <Marker
-      ref={markerRef}
-      position={[flight.latitude, flight.longitude]}
-      icon={icon}
-      zIndexOffset={isSelected ? 1000 : 0}
-      eventHandlers={{
-        click: () => setSelectedFlight(flight),
-      }}
+      longitude={flight.longitude}
+      latitude={flight.latitude}
+      anchor="center"
+      onClick={() => setSelectedFlight(flight)}
+      style={{ zIndex: isSelected ? 1000 : 0 }}
     >
-      <Tooltip direction="top" offset={[0, -12]}>
-        <div className="text-sm">
-          <div className="font-bold">{flight.callsign || flight.icao24}</div>
-          <div className="text-gray-500">
-            {flight.flight_phase} • {formatAltitude(flight.altitude)}
-            {flight.assigned_gate && ` • Gate ${flight.assigned_gate}`}
-          </div>
-        </div>
-      </Tooltip>
+      <div
+        className={`flight-marker${isSelected ? ' flight-marker-selected' : ''}`}
+        style={{ width: hitSize, height: hitSize, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+        dangerouslySetInnerHTML={{ __html: iconHtml }}
+      />
     </Marker>
   );
 }
