@@ -149,11 +149,11 @@ jobs:
           else
             rm -rf node_modules
             for attempt in 1 2 3; do
-              timeout 120 npm install --no-audit --no-fund --legacy-peer-deps && break
-              echo "::warning::npm install attempt $attempt failed (exit $?), retrying in 10s..."
+              timeout 120 npm ci --legacy-peer-deps && break
+              echo "::warning::npm ci attempt $attempt failed (exit $?), retrying in 10s..."
               sleep 10
             done
-            test -d node_modules/typescript || { echo "::error::npm install failed — typescript not installed"; exit 1; }
+            test -d node_modules/typescript || { echo "::error::npm ci failed — typescript not installed"; exit 1; }
           fi
           # Persist for next run (self-hosted only, survives checkout@v4 clean)
           if [[ "${{ runner.environment }}" != "github-hosted" && -d node_modules/typescript ]]; then
