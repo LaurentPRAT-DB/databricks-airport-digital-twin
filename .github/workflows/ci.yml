@@ -57,7 +57,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: app/frontend
-        run: npm install --no-audit --no-fund --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
       - name: Run tests
         working-directory: app/frontend
