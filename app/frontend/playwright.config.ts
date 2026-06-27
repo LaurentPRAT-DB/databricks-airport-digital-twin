@@ -10,7 +10,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
@@ -37,17 +37,31 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         // Enable WebGL for 3D testing
         launchOptions: {
-          args: ['--enable-webgl', '--use-gl=angle'],
+          args: [
+            '--enable-webgl',
+            '--use-gl=swiftshader',
+            '--enable-features=Vulkan',
+            '--disable-gpu-sandbox',
+            '--ignore-gpu-blocklist',
+          ],
         },
       },
     },
   ],
 
-  // Run local dev server before tests
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  // Run backend + frontend dev servers before tests
+  webServer: [
+    {
+      command: 'cd ../.. && DEMO_MODE=true DEMO_DEFAULT_AIRPORT=KSFO DEMO_FLIGHT_COUNT=20 uv run uvicorn app.backend.main:app --port 8000',
+      url: 'http://localhost:8000/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      command: 'npm run dev',
+      url: 'http://localhost:3000',
+      reuseExistingServer: !process.env.CI,
+      timeout: 15_000,
+    },
+  ],
 });

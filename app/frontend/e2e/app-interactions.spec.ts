@@ -160,39 +160,23 @@ test.describe('2D Map Interactions', () => {
     await page.getByRole('button', { name: /2d/i }).click();
   });
 
-  test('2D map renders Leaflet container', async ({ page }) => {
-    const mapContainer = page.locator('.leaflet-container');
-    await expect(mapContainer).toBeVisible({ timeout: 5000 });
+  test('2D map renders MapLibre container', async ({ page }) => {
+    const mapContainer = page.locator('.maplibregl-map');
+    await expect(mapContainer).toBeVisible({ timeout: 10000 });
   });
 
-  test('2D map has zoom controls', async ({ page }) => {
-    const zoomIn = page.locator('.leaflet-control-zoom-in');
-    const zoomOut = page.locator('.leaflet-control-zoom-out');
-
-    await expect(zoomIn).toBeVisible();
-    await expect(zoomOut).toBeVisible();
-  });
-
-  test('2D map can be zoomed', async ({ page }) => {
-    const zoomIn = page.locator('.leaflet-control-zoom-in');
-
-    // Click zoom in
-    await zoomIn.click();
-    await page.waitForTimeout(500);
-
-    // Map should still be visible
-    await expect(page.locator('.leaflet-container')).toBeVisible();
+  test('2D map canvas is present', async ({ page }) => {
+    const canvas = page.locator('.maplibregl-map canvas.maplibregl-canvas');
+    await expect(canvas).toBeVisible({ timeout: 10000 });
   });
 
   test('2D map shows flight markers', async ({ page }) => {
     // Wait for flights to load and render
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(5000);
 
-    // Flight markers should be visible (Leaflet markers or custom markers)
-    const markers = page.locator('.leaflet-marker-icon, .flight-marker, [data-flight-marker]');
+    const markers = page.locator('.flight-marker');
     const count = await markers.count();
 
-    // Should have at least one marker (flights are loaded)
     expect(count).toBeGreaterThan(0);
   });
 });
