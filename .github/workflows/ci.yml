@@ -65,13 +65,10 @@ jobs:
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
         working-directory: app/frontend
+        timeout-minutes: 15
         run: |
           rm -rf node_modules
-          for attempt in 1 2 3; do
-            timeout 300 npm ci --legacy-peer-deps && break
-            echo "::warning::npm ci attempt $attempt failed (exit $?), retrying in 10s..."
-            sleep 10
-          done
+          npm ci --legacy-peer-deps
           test -d node_modules/vitest || { echo "::error::npm ci failed — vitest not installed"; exit 1; }
 
       - name: Run tests
