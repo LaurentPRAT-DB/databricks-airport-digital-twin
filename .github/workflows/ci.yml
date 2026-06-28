@@ -46,7 +46,7 @@ jobs:
 
   frontend-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +68,7 @@ jobs:
         run: |
           rm -rf node_modules
           for attempt in 1 2 3; do
-            timeout 120 npm ci --legacy-peer-deps && break
+            timeout 300 npm ci --legacy-peer-deps && break
             echo "::warning::npm ci attempt $attempt failed (exit $?), retrying in 10s..."
             sleep 10
           done
