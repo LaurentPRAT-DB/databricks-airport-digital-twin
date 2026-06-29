@@ -61,19 +61,9 @@ jobs:
         working-directory: app/frontend
         timeout-minutes: 15
         run: |
-          for attempt in 1 2 3; do
-            echo "::group::npm ci attempt $attempt"
-            npm ci --legacy-peer-deps || true
-            echo "::endgroup::"
-            if [ -x node_modules/.bin/vitest ]; then
-              echo "Install succeeded on attempt $attempt"
-              break
-            fi
-            echo "::warning::npm ci attempt $attempt did not produce vitest binary, retrying..."
-            rm -rf node_modules
-            sleep 5
-          done
-          test -x node_modules/.bin/vitest || { echo "::error::npm ci failed after 3 attempts — vitest binary missing"; exit 1; }
+          npm install -g npm@10.8.2
+          npm ci --legacy-peer-deps
+          test -x node_modules/.bin/vitest || { echo "::error::vitest binary missing after npm ci"; exit 1; }
 
       - name: Run tests
         working-directory: app/frontend
