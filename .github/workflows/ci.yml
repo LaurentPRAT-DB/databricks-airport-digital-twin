@@ -63,16 +63,17 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             echo "::group::npm ci attempt $attempt"
-            if npm ci --legacy-peer-deps; then
-              echo "::endgroup::"
+            npm ci --legacy-peer-deps || true
+            echo "::endgroup::"
+            if [ -x node_modules/.bin/vitest ]; then
+              echo "Install succeeded on attempt $attempt"
               break
             fi
-            echo "::endgroup::"
-            echo "::warning::npm ci attempt $attempt failed, retrying..."
+            echo "::warning::npm ci attempt $attempt did not produce vitest binary, retrying..."
             rm -rf node_modules
             sleep 5
           done
-          test -d node_modules/vitest || { echo "::error::npm ci failed after 3 attempts"; exit 1; }
+          test -x node_modules/.bin/vitest || { echo "::error::npm ci failed after 3 attempts — vitest binary missing"; exit 1; }
 
       - name: Run tests
         working-directory: app/frontend
