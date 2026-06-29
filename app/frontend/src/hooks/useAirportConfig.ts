@@ -303,6 +303,8 @@ export function useAirportConfig(): UseAirportConfigReturn {
   const inflightRef = useRef<Promise<void> | null>(null);
   const defaultInitializedRef = useRef(false);
 
+  const mountedRef = useRef(true);
+
   const refresh = useCallback(async () => {
     // Deduplicate: if a refresh is already in-flight, reuse it
     if (inflightRef.current) return inflightRef.current;
@@ -313,6 +315,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
         const cached = configCache.get(currentAirport)!;
         const configData = cached.config as AirportConfig & { icaoCode?: string };
         if (configData && Object.keys(configData).length > 0) {
+          if (!mountedRef.current) { inflightRef.current = null; return; }
           setConfig((prev) => ({
             ...prev,
             ...configData,
@@ -327,6 +330,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
         return;
       }
 
+      if (!mountedRef.current) { inflightRef.current = null; return; }
       setIsLoading(true);
       setError(null);
 
@@ -338,6 +342,7 @@ export function useAirportConfig(): UseAirportConfigReturn {
 
         const data: ConfigResponse = await response.json();
 
+        if (!mountedRef.current) { inflightRef.current = null; return; }
         if (data.config && Object.keys(data.config).length > 0) {
           const configData = data.config as AirportConfig & { icaoCode?: string };
           setConfig((prev) => ({
@@ -355,10 +360,11 @@ export function useAirportConfig(): UseAirportConfigReturn {
           }
         }
       } catch (err) {
+        if (!mountedRef.current) { inflightRef.current = null; return; }
         // API might not have config yet, fall back to default
         console.warn('Failed to load config from API, using defaults:', err);
       } finally {
-        setIsLoading(false);
+        if (mountedRef.current) setIsLoading(false);
         inflightRef.current = null;
       }
     };
@@ -904,7 +910,9 @@ export function useAirportConfig(): UseAirportConfigReturn {
 
   // Load config on mount (selected airport only — no pre-warm of others)
   useEffect(() => {
+    mountedRef.current = true;
     refresh();
+    return () => { mountedRef.current = false; };
   }, [refresh]);
 
   return {

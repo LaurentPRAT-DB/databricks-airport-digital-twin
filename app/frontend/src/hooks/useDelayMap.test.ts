@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { FlightProvider } from '../context/FlightContext';
@@ -27,27 +27,31 @@ function createWrapper() {
 
 describe('useDelayMap', () => {
   it('returns a Map of delay predictions', async () => {
-    const { result } = renderHook(() => useDelayMap(), {
+    const { result, unmount } = renderHook(() => useDelayMap(), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => {
       expect(result.current.delayMap).toBeInstanceOf(Map);
     });
+
+    await act(() => { unmount(); });
   });
 
   it('returns delayedCount as a number', async () => {
-    const { result } = renderHook(() => useDelayMap(), {
+    const { result, unmount } = renderHook(() => useDelayMap(), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => {
       expect(typeof result.current.delayedCount).toBe('number');
     });
+
+    await act(() => { unmount(); });
   });
 
   it('populates delay predictions from API', async () => {
-    const { result } = renderHook(() => useDelayMap(), {
+    const { result, unmount } = renderHook(() => useDelayMap(), {
       wrapper: createWrapper(),
     });
 
@@ -55,5 +59,7 @@ describe('useDelayMap', () => {
     await waitFor(() => {
       expect(result.current.delayMap.size).toBeGreaterThanOrEqual(0);
     });
+
+    await act(() => { unmount(); });
   });
 });
