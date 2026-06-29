@@ -55,21 +55,26 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Cache node_modules
-        id: cache
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
         uses: actions/cache@v4
         with:
-          path: app/frontend/node_modules
-          key: modules-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
 
       - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
         working-directory: app/frontend
         timeout-minutes: 15
-        env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
-          npm install --legacy-peer-deps --prefer-offline
+          pnpm import
+          pnpm install --no-frozen-lockfile
           test -x node_modules/.bin/vitest || { echo "::error::vitest binary missing"; exit 1; }
 
       - name: Run tests
