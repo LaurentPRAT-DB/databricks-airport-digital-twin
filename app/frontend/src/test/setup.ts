@@ -4,8 +4,27 @@ import { afterEach, vi, beforeAll, afterAll, expect } from 'vitest'
 import { server } from './mocks/server'
 import { setWsFlightOverride } from './mocks/handlers'
 
-// Start MSW server before all tests
-beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }))
+// Start MSW server before all tests, then fix the AbortSignal cross-realm mismatch.
+// jsdom 28's fetch (undici) rejects AbortSignal from the outer global scope.
+// We must patch AFTER MSW installs its interceptor, so our wrapper sits on top.
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: 'warn' })
+
+  const mswFetch = globalThis.fetch
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const signal = init?.signal
+    if (signal) {
+      const { signal: _stripped, ...rest } = init!
+      if (signal.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
+      const promise = mswFetch(input, rest)
+      signal.addEventListener('abort', () => { /* no-op, let promise resolve */ })
+      const response = await promise
+      if (signal.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
+      return response
+    }
+    return mswFetch(input, init)
+  }
+})
 
 // Reset handlers after each test
 afterEach(() => {

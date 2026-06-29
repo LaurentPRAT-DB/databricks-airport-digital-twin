@@ -244,9 +244,8 @@ export const handlers = [
     return HttpResponse.json({ icao24: params.icao24, callsign: null, points: [], count: 0, start_time: null, end_time: null })
   }),
 
-  // Weather endpoint
-  http.get('/api/weather/current', async () => {
-    await delay(30)
+  // Weather endpoint — respond immediately to avoid abort race with parent re-renders
+  http.get('/api/weather/current', () => {
     return HttpResponse.json(mockWeather)
   }),
 
@@ -499,6 +498,11 @@ export const handlers = [
   // Readiness endpoint (backend startup status)
   http.get('/api/ready', async () => {
     return HttpResponse.json({ ready: true, status: 'Ready' })
+  }),
+
+  // FLIFO status
+  http.get('/api/schedule/flifo/status', () => {
+    return HttpResponse.json({ enabled: false, provider: null })
   }),
 
   // Health check
