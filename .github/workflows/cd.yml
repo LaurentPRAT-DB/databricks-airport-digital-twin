@@ -88,6 +88,11 @@ jobs:
         env:
           RUNNER_TOOL_CACHE: /tmp/runner-tool-cache
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Install Python dependencies
         run: uv sync --extra deploy
         env:
@@ -125,41 +130,25 @@ jobs:
             echo "skip_build=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Cache node_modules
+      - name: Get pnpm store path
+        if: steps.frontend-changes.outputs.skip_build != 'true'
+        id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
         if: steps.frontend-changes.outputs.skip_build != 'true' && runner.environment == 'github-hosted'
-        id: npm-cache
         uses: actions/cache@v4
         with:
-          path: app/frontend/node_modules
-          key: npm-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-cd-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
 
       - name: Install frontend dependencies
         if: steps.frontend-changes.outputs.skip_build != 'true'
         working-directory: app/frontend
-        env:
-          npm_config_registry: ${{ runner.environment == 'github-hosted' && 'https://registry.npmjs.org/' || 'https://npm-proxy.dev.databricks.com/' }}
-          NPM_PERSISTENT_CACHE: /tmp/npm-node-modules-airport
         run: |
-          # On self-hosted: restore from persistent cache (survives checkout clean)
-          if [[ "${{ runner.environment }}" != "github-hosted" && -d "$NPM_PERSISTENT_CACHE/typescript" ]]; then
-            cp -a "$NPM_PERSISTENT_CACHE" node_modules
-            echo "::notice::Self-hosted runner — restored node_modules from persistent cache"
-          elif [[ "${{ steps.npm-cache.outputs.cache-hit }}" == "true" ]]; then
-            echo "::notice::Cache hit — skipping npm install"
-          else
-            rm -rf node_modules
-            for attempt in 1 2 3; do
-              timeout 120 npm ci --legacy-peer-deps && break
-              echo "::warning::npm ci attempt $attempt failed (exit $?), retrying in 10s..."
-              sleep 10
-            done
-            test -d node_modules/typescript || { echo "::error::npm ci failed — typescript not installed"; exit 1; }
-          fi
-          # Persist for next run (self-hosted only, survives checkout@v4 clean)
-          if [[ "${{ runner.environment }}" != "github-hosted" && -d node_modules/typescript ]]; then
-            rm -rf "$NPM_PERSISTENT_CACHE"
-            cp -a node_modules "$NPM_PERSISTENT_CACHE"
-          fi
+          pnpm import
+          pnpm install --no-frozen-lockfile --shamefully-hoist --strict-peer-dependencies=false
+          test -x node_modules/.bin/tsc || { echo "::error::tsc binary missing after install"; exit 1; }
 
       - name: Build frontend
         if: steps.frontend-changes.outputs.skip_build != 'true'
