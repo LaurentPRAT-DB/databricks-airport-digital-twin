@@ -54,30 +54,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-
-      - name: Cache node_modules
-        id: npm-cache
-        uses: actions/cache@v4
-        with:
-          path: app/frontend/node_modules
-          key: npm-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
-          save-always: true
+          cache: "npm"
+          cache-dependency-path: app/frontend/package-lock.json
 
       - name: Install dependencies
-        if: steps.npm-cache.outputs.cache-hit != 'true'
         working-directory: app/frontend
         timeout-minutes: 15
         run: |
-          rm -rf node_modules
           for attempt in 1 2 3; do
             echo "::group::npm ci attempt $attempt"
-            npm ci --legacy-peer-deps && break
+            if npm ci --legacy-peer-deps; then
+              echo "::endgroup::"
+              break
+            fi
             echo "::endgroup::"
             echo "::warning::npm ci attempt $attempt failed, retrying..."
             rm -rf node_modules
             sleep 5
           done
-          echo "::endgroup::"
           test -d node_modules/vitest || { echo "::error::npm ci failed after 3 attempts"; exit 1; }
 
       - name: Run tests
