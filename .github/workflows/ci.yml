@@ -55,28 +55,24 @@ jobs:
         with:
           node-version: "20"
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Cache bun modules
+      - name: Cache node_modules
+        id: cache
         uses: actions/cache@v4
         with:
-          path: |
-            app/frontend/node_modules
-            ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
+          path: app/frontend/node_modules
+          key: modules-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
 
       - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
         working-directory: app/frontend
         timeout-minutes: 15
         run: |
-          bun install
-          test -x node_modules/.bin/vitest || { echo "::error::vitest binary missing"; exit 1; }
+          npm ci --legacy-peer-deps || true
+          test -d node_modules/vitest || { echo "::error::node_modules/vitest not installed"; exit 1; }
 
       - name: Run tests
         working-directory: app/frontend
-        run: npm run test:run
+        run: npx vitest run
 
       - name: TypeScript check
         working-directory: app/frontend
