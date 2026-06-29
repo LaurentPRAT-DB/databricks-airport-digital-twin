@@ -74,7 +74,7 @@ jobs:
         timeout-minutes: 15
         run: |
           pnpm import
-          pnpm install --no-frozen-lockfile
+          pnpm install --no-frozen-lockfile --shamefully-hoist --strict-peer-dependencies=false
           test -x node_modules/.bin/vitest || { echo "::error::vitest binary missing"; exit 1; }
 
       - name: Run tests
