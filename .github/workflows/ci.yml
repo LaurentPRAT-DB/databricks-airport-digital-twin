@@ -66,9 +66,11 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         working-directory: app/frontend
         timeout-minutes: 15
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
-          npm ci --legacy-peer-deps || true
-          test -d node_modules/vitest || { echo "::error::node_modules/vitest not installed"; exit 1; }
+          npm install --legacy-peer-deps --prefer-offline
+          test -x node_modules/.bin/vitest || { echo "::error::vitest binary missing"; exit 1; }
 
       - name: Run tests
         working-directory: app/frontend
