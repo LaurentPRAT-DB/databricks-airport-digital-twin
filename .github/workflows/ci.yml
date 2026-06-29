@@ -61,6 +61,7 @@ jobs:
         with:
           path: app/frontend/node_modules
           key: npm-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
+          save-always: true
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
@@ -68,8 +69,16 @@ jobs:
         timeout-minutes: 15
         run: |
           rm -rf node_modules
-          npm ci --legacy-peer-deps
-          test -d node_modules/vitest || { echo "::error::npm ci failed — vitest not installed"; exit 1; }
+          for attempt in 1 2 3; do
+            echo "::group::npm ci attempt $attempt"
+            npm ci --legacy-peer-deps && break
+            echo "::endgroup::"
+            echo "::warning::npm ci attempt $attempt failed, retrying..."
+            rm -rf node_modules
+            sleep 5
+          done
+          echo "::endgroup::"
+          test -d node_modules/vitest || { echo "::error::npm ci failed after 3 attempts"; exit 1; }
 
       - name: Run tests
         working-directory: app/frontend
