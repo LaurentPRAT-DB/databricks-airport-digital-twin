@@ -14,6 +14,9 @@ import {
   calculateLerpFactor,
   normalizeRotationDiff,
   extractAirlineCode,
+  calculatePitch,
+  calculateBank,
+  normalizeAngleDiffDeg,
 } from '../../utils/map3d-calculations';
 import { isGroundPhase as isGroundPhaseFn } from '../../utils/phaseUtils';
 
@@ -62,6 +65,10 @@ export function Aircraft3D({ flight, selected = false, onClick, airportCenter }:
   // Store current interpolated values to animate toward targets
   const currentPosition = useRef(new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z));
   const currentRotation = useRef(targetRotation);
+  const currentPitch = useRef(0);
+  const currentBank = useRef(0);
+  const prevHeadingRef = useRef(flight.heading || 0);
+  const turnRateRef = useRef(0);
 
   /**
    * Smooth Animation Loop (Optimized)
@@ -84,18 +91,36 @@ export function Aircraft3D({ flight, selected = false, onClick, airportCenter }:
     // Lerp position toward target
     currentPosition.current.lerp(_targetVec3, lerpFactor);
 
-    // Lerp rotation toward target with angle wrapping
+    // Lerp yaw toward target with angle wrapping
     const adjustedDiff = normalizeRotationDiff(currentRotation.current, targetRotation);
     currentRotation.current += adjustedDiff * lerpFactor;
 
-    // Batch DOM writes - only update if changed significantly
-    const posChanged = groupRef.current.position.distanceToSquared(currentPosition.current) > 0.0001;
-    const rotChanged = Math.abs(groupRef.current.rotation.y - currentRotation.current) > 0.0001;
-
-    if (posChanged || rotChanged) {
-      groupRef.current.position.copy(currentPosition.current);
-      groupRef.current.rotation.y = currentRotation.current;
+    // Compute turn rate from heading changes (smoothed)
+    const headingDeg = flight.heading || 0;
+    if (delta > 0) {
+      const headingDelta = normalizeAngleDiffDeg(headingDeg - prevHeadingRef.current);
+      const instantTurnRate = headingDelta / delta;
+      // Smooth turn rate to avoid spikes from noisy data
+      turnRateRef.current += (instantTurnRate - turnRateRef.current) * Math.min(lerpFactor, 0.3);
     }
+    prevHeadingRef.current = headingDeg;
+
+    // Derive pitch and bank (zero for ground phases)
+    let targetPitch = 0;
+    let targetBank = 0;
+    if (!isGroundPhase) {
+      targetPitch = calculatePitch(flight.vertical_rate, flight.velocity);
+      targetBank = calculateBank(turnRateRef.current, flight.velocity);
+    }
+
+    // Lerp pitch and bank
+    currentPitch.current += (targetPitch - currentPitch.current) * lerpFactor;
+    currentBank.current += (targetBank - currentBank.current) * lerpFactor;
+
+    // Apply position and full rotation (YXZ: yaw first, then pitch, then roll)
+    groupRef.current.position.copy(currentPosition.current);
+    groupRef.current.rotation.order = 'YXZ';
+    groupRef.current.rotation.set(currentPitch.current, currentRotation.current, currentBank.current);
   });
 
   // Get airline configuration from callsign

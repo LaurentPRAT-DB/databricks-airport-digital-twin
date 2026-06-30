@@ -107,6 +107,49 @@ export function position3DToLatLon(
 }
 
 // ============================================================================
+// Aircraft Attitude Calculations (Pitch & Bank)
+// ============================================================================
+
+const MAX_PITCH_RAD = 15 * Math.PI / 180; // ±15°
+const MAX_BANK_RAD = 30 * Math.PI / 180;  // ±30°
+
+/**
+ * Derive pitch angle (radians) from vertical rate and groundspeed.
+ * Uses flight path angle: atan2(vertical_speed, ground_speed).
+ * Returns 0 for ground or slow aircraft. Clamped to ±15°.
+ */
+export function calculatePitch(verticalRate: number | null, velocity: number | null): number {
+  if (!verticalRate || !velocity || velocity < 30) return 0;
+  const vrFps = verticalRate / 60; // ft/min → ft/sec
+  const gsFps = velocity * 1.68781; // knots → ft/sec
+  const angle = Math.atan2(vrFps, gsFps);
+  return Math.max(-MAX_PITCH_RAD, Math.min(MAX_PITCH_RAD, angle));
+}
+
+/**
+ * Derive bank angle (radians) from turn rate and groundspeed.
+ * Uses coordinated turn formula: bank = atan2(V·ω, g).
+ * Returns 0 for slow aircraft or negligible turn rate. Clamped to ±30°.
+ */
+export function calculateBank(turnRate: number, velocity: number | null): number {
+  if (!velocity || velocity < 30 || Math.abs(turnRate) < 0.5) return 0;
+  const vMps = velocity * 0.514444; // knots → m/s
+  const omegaRad = turnRate * Math.PI / 180; // deg/s → rad/s
+  const bank = Math.atan2(vMps * omegaRad, 9.81);
+  return Math.max(-MAX_BANK_RAD, Math.min(MAX_BANK_RAD, bank));
+}
+
+/**
+ * Normalize angle difference in degrees to [-180, 180].
+ * Used to compute turn rate from consecutive heading samples.
+ */
+export function normalizeAngleDiffDeg(delta: number): number {
+  while (delta > 180) delta -= 360;
+  while (delta < -180) delta += 360;
+  return delta;
+}
+
+// ============================================================================
 // Aircraft Animation Calculations
 // ============================================================================
 

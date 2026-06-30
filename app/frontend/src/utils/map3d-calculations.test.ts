@@ -6,6 +6,11 @@ import {
   DEFAULT_CENTER_LAT,
   DEFAULT_CENTER_LON,
 
+  // Attitude calculations
+  calculatePitch,
+  calculateBank,
+  normalizeAngleDiffDeg,
+
   // Animation calculations
   headingToRotation,
   calculateLerpFactor,
@@ -520,6 +525,84 @@ describe('map3d-calculations', () => {
 
     it('returns true for change above threshold', () => {
       expect(hasRotationChanged(0, 0.1, 0.0001)).toBe(true);
+    });
+  });
+
+  // ========================================================================
+  // Aircraft Attitude (Pitch & Bank)
+  // ========================================================================
+  describe('calculatePitch', () => {
+    it('returns 0 for level flight (no vertical rate)', () => {
+      expect(calculatePitch(0, 250)).toBe(0);
+      expect(calculatePitch(null, 250)).toBe(0);
+    });
+
+    it('returns 0 for slow aircraft', () => {
+      expect(calculatePitch(1000, 20)).toBe(0);
+      expect(calculatePitch(1000, null)).toBe(0);
+    });
+
+    it('returns positive for climbing', () => {
+      const pitch = calculatePitch(2000, 250);
+      expect(pitch).toBeGreaterThan(0);
+      expect(pitch).toBeLessThan(0.27); // under 15°
+    });
+
+    it('returns negative for descending', () => {
+      const pitch = calculatePitch(-1500, 200);
+      expect(pitch).toBeLessThan(0);
+      expect(pitch).toBeGreaterThan(-0.27);
+    });
+
+    it('clamps to ±15°', () => {
+      const extreme = calculatePitch(10000, 60);
+      expect(Math.abs(extreme)).toBeCloseTo(15 * Math.PI / 180, 2);
+    });
+  });
+
+  describe('calculateBank', () => {
+    it('returns 0 for straight flight', () => {
+      expect(calculateBank(0, 250)).toBe(0);
+      expect(calculateBank(0.2, 250)).toBe(0); // below threshold
+    });
+
+    it('returns 0 for slow aircraft', () => {
+      expect(calculateBank(3, 20)).toBe(0);
+      expect(calculateBank(3, null)).toBe(0);
+    });
+
+    it('returns positive for right turn (positive turn rate)', () => {
+      const bank = calculateBank(3, 250);
+      expect(bank).toBeGreaterThan(0);
+      expect(bank).toBeLessThan(0.53); // under 30°
+    });
+
+    it('returns negative for left turn (negative turn rate)', () => {
+      const bank = calculateBank(-3, 250);
+      expect(bank).toBeLessThan(0);
+      expect(bank).toBeGreaterThan(-0.53);
+    });
+
+    it('clamps to ±30°', () => {
+      const extreme = calculateBank(20, 300);
+      expect(Math.abs(extreme)).toBeCloseTo(30 * Math.PI / 180, 2);
+    });
+  });
+
+  describe('normalizeAngleDiffDeg', () => {
+    it('passes through small angles unchanged', () => {
+      expect(normalizeAngleDiffDeg(45)).toBe(45);
+      expect(normalizeAngleDiffDeg(-90)).toBe(-90);
+    });
+
+    it('wraps angles > 180 to negative', () => {
+      expect(normalizeAngleDiffDeg(270)).toBe(-90);
+      expect(normalizeAngleDiffDeg(350)).toBe(-10);
+    });
+
+    it('wraps angles < -180 to positive', () => {
+      expect(normalizeAngleDiffDeg(-270)).toBe(90);
+      expect(normalizeAngleDiffDeg(-350)).toBe(10);
     });
   });
 });
