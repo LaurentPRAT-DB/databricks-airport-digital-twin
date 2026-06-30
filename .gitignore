@@ -143,6 +143,7 @@ docs/email_*.md
 # Test coverage and results
 app/frontend/coverage/
 app/frontend/test-results/
+app/frontend/playwright-report/
 app/frontend/data/
 test-results/
 tests/output/
