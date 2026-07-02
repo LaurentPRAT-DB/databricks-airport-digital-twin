@@ -334,3 +334,50 @@ test.describe('2D Map - Overlay Layer Verification', () => {
     expect(await canvas.count()).toBeGreaterThan(0);
   });
 });
+
+test.describe('2D Map - Visual Snapshots', () => {
+  test.setTimeout(90_000);
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.locator('text=Initializing').waitFor({ state: 'hidden', timeout: 45_000 });
+    const btn2D = page.getByRole('button', { name: /2d/i });
+    if (await btn2D.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await btn2D.click();
+    }
+    await page.locator('.maplibregl-map').waitFor({ state: 'visible', timeout: 30_000 });
+    await page.waitForTimeout(8000);
+  });
+
+  test('map loaded state matches baseline', async ({ page }) => {
+    const map = page.locator('.maplibregl-map');
+    await expect(map).toHaveScreenshot('map-loaded.png', {
+      maxDiffPixels: 500,
+      timeout: 10_000,
+    });
+  });
+
+  test('flight selected state matches baseline', async ({ page }) => {
+    const flightRow = page.locator('button').filter({ hasText: /^[A-Z]{2,3}\d+/ }).first();
+    await flightRow.click();
+    await page.waitForTimeout(2000);
+
+    const map = page.locator('.maplibregl-map');
+    await expect(map).toHaveScreenshot('map-flight-selected.png', {
+      maxDiffPixels: 500,
+      timeout: 10_000,
+    });
+  });
+
+  test('satellite mode matches baseline', async ({ page }) => {
+    const satBtn = page.getByRole('button', { name: /satellite/i });
+    await satBtn.click();
+    await page.waitForTimeout(3000);
+
+    const map = page.locator('.maplibregl-map');
+    await expect(map).toHaveScreenshot('map-satellite.png', {
+      maxDiffPixels: 500,
+      timeout: 10_000,
+    });
+  });
+});

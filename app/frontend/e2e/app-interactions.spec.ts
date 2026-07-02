@@ -248,3 +248,53 @@ test.describe('Data Loading', () => {
     await expect(dataSource).toBeVisible({ timeout: 5000 });
   });
 });
+
+test.describe('Layout Visual Regression', () => {
+  test.setTimeout(60_000);
+
+  test('full page layout matches baseline', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/');
+    await page.waitForSelector('[data-testid="flight-list"] button', { timeout: 15_000 }).catch(() =>
+      page.waitForSelector('button:has-text("UAL")', { timeout: 10_000 })
+    );
+    await page.waitForTimeout(2000);
+
+    await expect(page).toHaveScreenshot('layout-full-page.png', {
+      maxDiffPixelRatio: 0.03,
+      timeout: 10_000,
+    });
+  });
+
+  test('flight detail panel matches baseline', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/');
+    await page.waitForSelector('[data-testid="flight-list"] button', { timeout: 15_000 }).catch(() =>
+      page.waitForSelector('button:has-text("UAL")', { timeout: 10_000 })
+    );
+
+    const flightRow = page.locator('button').filter({ hasText: /^[A-Z]{2,3}\d+/ }).first();
+    await flightRow.click();
+    await page.waitForTimeout(1000);
+
+    await expect(page).toHaveScreenshot('layout-flight-detail.png', {
+      maxDiffPixelRatio: 0.03,
+      timeout: 10_000,
+    });
+  });
+
+  test('mobile layout matches baseline', async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/');
+
+    // Wait for initializing screen to disappear (mobile loads slower)
+    await page.locator('text=Initializing').waitFor({ state: 'hidden', timeout: 60_000 });
+    await page.waitForTimeout(3000);
+
+    await expect(page).toHaveScreenshot('layout-mobile.png', {
+      maxDiffPixels: 600,
+      timeout: 15_000,
+    });
+  });
+});

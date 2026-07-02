@@ -50,8 +50,8 @@ test.describe('3D Visualization', () => {
     // Verify 2D is active
     await expect(button2D).toHaveClass(/bg-blue-600/);
 
-    // 2D map should be visible (Leaflet container)
-    const mapContainer = page.locator('.leaflet-container');
+    // 2D map should be visible (MapLibre container)
+    const mapContainer = page.locator('.maplibregl-map');
     await expect(mapContainer).toBeVisible({ timeout: 5000 });
   });
 
@@ -186,18 +186,25 @@ test.describe('3D Visual Regression', () => {
     expect(webglErrors).toHaveLength(0);
   });
 
-  // Visual regression test - run with --update-snapshots to create baseline
+  // R3F canvas captures blank in headless (preserveDrawingBuffer=false + SwiftShader).
+  // Run with --headed to generate baseline: npx playwright test --headed --update-snapshots --grep "3D view screenshot"
   test.skip('3D view screenshot matches baseline', async ({ page }) => {
+    test.setTimeout(60_000);
     await page.goto('/');
+
+    await page.waitForSelector('[data-testid="flight-list"]', { timeout: 20_000 }).catch(() =>
+      page.waitForSelector('button:has-text("UAL")', { timeout: 15_000 })
+    );
+
     await page.getByRole('button', { name: /3d/i }).click();
 
-    await page.locator('canvas').waitFor({ state: 'visible', timeout: 10000 });
-    await page.waitForTimeout(2000);
+    const threeCanvas = page.locator('canvas:not(.maplibregl-canvas)');
+    await threeCanvas.waitFor({ state: 'visible', timeout: 15_000 });
+    await page.waitForTimeout(5000);
 
-    const canvas = page.locator('canvas');
-    await expect(canvas).toHaveScreenshot('3d-view.png', {
+    await expect(threeCanvas).toHaveScreenshot('3d-view.png', {
       maxDiffPixels: 1000,
-      timeout: 10000,
+      timeout: 15_000,
     });
   });
 });

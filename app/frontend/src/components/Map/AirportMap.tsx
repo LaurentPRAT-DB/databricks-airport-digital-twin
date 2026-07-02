@@ -399,6 +399,7 @@ export default function AirportMap({ sharedViewport, onViewportChange, satellite
         }}
         style={{ width: '100%', height: '100%' }}
         mapStyle={mapStyle}
+        canvasContextAttributes={{ antialias: true, preserveDrawingBuffer: true }}
         attributionControl={true as unknown as false}
       >
         {tileSource === 'inpainting' && (
