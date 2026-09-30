@@ -6,6 +6,9 @@
 
 **Live Demo**: [airport-digital-twin-dev](https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.com)
 
+**Execution evidence**: [`docs/EXECUTION_EVIDENCE.md`](docs/EXECUTION_EVIDENCE.md) — live governed-table row counts, real ADS-B samples, a Genie NL→SQL→result run, and the E2E smoke-test result.
+**How AI built this**: [`docs/AI_USAGE.md`](docs/AI_USAGE.md) — tooling, workflow, and engineering trade-offs.
+
 ---
 
 ## At a Glance
