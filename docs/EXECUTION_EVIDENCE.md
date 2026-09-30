@@ -155,6 +155,58 @@ curl -s -o /dev/null -w "%{http_code}\n" https://airport-digital-twin-dev-747464
 
 ---
 
+## Artifact 6 — Unity Catalog governance (verified in code + workspace)
+
+Governance code lives in `databricks/unity_catalog_governance.sql`,
+`databricks/unity_catalog_rls.sql`, and `databricks/notebooks/uc_lineage_audit.sql`.
+Every statement was executed against the workspace; outputs below are verbatim.
+
+**Medallion schemas + governed views** (raw → governed path in UC):
+```
+SHOW SCHEMAS ... LIKE 'bronze|silver|gold'  ->  bronze, silver, gold
+```
+`bronze.opensky_states_raw`, `silver.flight_positions`, `gold.flight_status` are governed views
+over the ingested tables, each tagged `medallion_layer`.
+
+**Access control (GRANTs enforced, not commented):**
+```
+information_schema.table_privileges  ->  bronze: 8 grants, silver: 7, gold: 14
+```
+e.g. `GRANT SELECT ON VIEW gold.flight_status TO `account users`` — verified present.
+
+**Data quality — Delta CHECK constraint on gold:**
+```
+SHOW TBLPROPERTIES airport_digital_twin.flight_status_gold
+  ->  delta.constraints.valid_altitude   (altitude IS NULL OR altitude >= 0)
+      delta.feature.checkConstraints
+```
+Complements the DLT `@dlt.expect_or_drop` gates in `src/pipelines/silver.py`.
+
+**Row-level security + column masking (multi-tenant airline separation):**
+```
+base gold.flight_status_gold                          ->  5 rows
+gold.flight_status_secured (tenant filter, non-tenant) ->  0 rows   [RLS ENFORCED]
+after admitting the group, SELECT icao24               ->  'REDACTED' [MASK ENFORCED]
+```
+Row filter `gold.rf_airline_tenant` + column mask `gold.mask_tail` — each airline/handler sees
+only its own flights; the tail id is redacted for non-privileged callers.
+
+**Lineage + audit trail (system tables readable):**
+```
+system.access.table_lineage  (target catalog)  ->  35,337 rows / 30d
+system.access.audit          (last 1d)         ->  getTable 8,681 · getSchema 2,227 · updateTables 1,473
+```
+Queries in `databricks/notebooks/uc_lineage_audit.sql`.
+
+**Reproduce:**
+```bash
+databricks experimental aitools tools query \
+  "SHOW SCHEMAS IN serverless_stable_3n0ihb_catalog LIKE 'bronze|silver|gold'" \
+  --profile FEVM_SERVERLESS_STABLE
+```
+
+---
+
 ## Supporting infrastructure (deployed jobs & pipelines)
 
 Real deployed resources in the workspace (not backlog planning):

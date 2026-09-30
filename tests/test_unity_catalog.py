@@ -34,9 +34,10 @@ class TestUnityCatalogSQL:
         # Check for schema comments
         assert "COMMENT" in sql_content
 
-        # Check for GRANT statements (commented)
-        assert "GRANT" in sql_content
-        assert "<service_principal>" in sql_content
+        # Grants must be ENFORCED, not commented-out placeholders
+        assert "GRANT USE CATALOG ON CATALOG airport_digital_twin" in sql_content
+        assert "GRANT SELECT ON SCHEMA airport_digital_twin.gold" in sql_content
+        assert "<service_principal>" not in sql_content
 
     def test_sql_has_valid_structure(self, sql_content: str) -> None:
         """Validate SQL statements are properly terminated."""
@@ -53,6 +54,40 @@ class TestUnityCatalogSQL:
         # Should have at least 4 statements (1 CREATE CATALOG + 1 USE + 3 CREATE SCHEMA)
         sql_statements = [s.strip() for s in full_sql.split(";") if s.strip()]
         assert len(sql_statements) >= 4
+
+
+class TestUnityCatalogGovernance:
+    """The governance layer must exist in code: schemas, grants, DQ, RLS, lineage."""
+
+    @pytest.fixture
+    def db_dir(self) -> Path:
+        return Path(__file__).parent.parent / "databricks"
+
+    def test_governance_sql_has_schemas_grants_and_constraints(self, db_dir: Path) -> None:
+        sql = (db_dir / "unity_catalog_governance.sql").read_text()
+        # Medallion schemas
+        for layer in ("bronze", "silver", "gold"):
+            assert f"CREATE SCHEMA IF NOT EXISTS serverless_stable_3n0ihb_catalog.{layer}" in sql
+        # Enforced access control
+        assert "GRANT USE CATALOG ON CATALOG" in sql
+        assert "GRANT SELECT ON VIEW" in sql
+        # Data-quality constraint
+        assert "ADD CONSTRAINT valid_altitude CHECK" in sql
+        # Classification tags
+        assert "SET TAGS ('medallion_layer'" in sql
+
+    def test_rls_sql_has_row_filter_and_column_mask(self, db_dir: Path) -> None:
+        sql = (db_dir / "unity_catalog_rls.sql").read_text()
+        assert "CREATE OR REPLACE FUNCTION" in sql
+        assert "SET ROW FILTER" in sql
+        assert "SET MASK" in sql
+        assert "is_account_group_member" in sql
+
+    def test_lineage_audit_sql_queries_system_tables(self, db_dir: Path) -> None:
+        sql = (db_dir / "notebooks" / "uc_lineage_audit.sql").read_text()
+        assert "system.access.table_lineage" in sql
+        assert "system.access.audit" in sql
+        assert "information_schema.table_privileges" in sql
 
 
 class TestFlightPositionSchema:

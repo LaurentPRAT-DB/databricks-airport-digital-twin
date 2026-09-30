@@ -20,22 +20,25 @@ COMMENT 'Cleaned and validated data with quality checks applied';
 CREATE SCHEMA IF NOT EXISTS gold
 COMMENT 'Business-ready aggregated data for dashboards and analytics';
 
--- Grant statements for service principal access
--- Uncomment and replace <service_principal> with your actual service principal name
+-- Access control (ENFORCED). Reader role gets USE + SELECT across the medallion;
+-- the ingestion/app service principal gets CREATE/MODIFY to write the layers.
+-- `data_readers` and `airport_twin_sp` are the workspace group / SP; the deployed
+-- workspace applies the concrete-principal equivalents via
+-- databricks/unity_catalog_governance.sql and scripts/grant_sp_permissions.sh.
 
--- GRANT USE CATALOG ON CATALOG airport_digital_twin TO `<service_principal>`;
--- GRANT USE SCHEMA ON SCHEMA airport_digital_twin.bronze TO `<service_principal>`;
--- GRANT USE SCHEMA ON SCHEMA airport_digital_twin.silver TO `<service_principal>`;
--- GRANT USE SCHEMA ON SCHEMA airport_digital_twin.gold TO `<service_principal>`;
--- GRANT SELECT ON SCHEMA airport_digital_twin.bronze TO `<service_principal>`;
--- GRANT SELECT ON SCHEMA airport_digital_twin.silver TO `<service_principal>`;
--- GRANT SELECT ON SCHEMA airport_digital_twin.gold TO `<service_principal>`;
--- GRANT CREATE TABLE ON SCHEMA airport_digital_twin.bronze TO `<service_principal>`;
--- GRANT CREATE TABLE ON SCHEMA airport_digital_twin.silver TO `<service_principal>`;
--- GRANT CREATE TABLE ON SCHEMA airport_digital_twin.gold TO `<service_principal>`;
--- GRANT MODIFY ON SCHEMA airport_digital_twin.bronze TO `<service_principal>`;
--- GRANT MODIFY ON SCHEMA airport_digital_twin.silver TO `<service_principal>`;
--- GRANT MODIFY ON SCHEMA airport_digital_twin.gold TO `<service_principal>`;
+GRANT USE CATALOG ON CATALOG airport_digital_twin TO `data_readers`;
+GRANT USE SCHEMA ON SCHEMA airport_digital_twin.bronze TO `data_readers`;
+GRANT USE SCHEMA ON SCHEMA airport_digital_twin.silver TO `data_readers`;
+GRANT USE SCHEMA ON SCHEMA airport_digital_twin.gold TO `data_readers`;
+GRANT SELECT ON SCHEMA airport_digital_twin.bronze TO `data_readers`;
+GRANT SELECT ON SCHEMA airport_digital_twin.silver TO `data_readers`;
+GRANT SELECT ON SCHEMA airport_digital_twin.gold TO `data_readers`;
+GRANT CREATE TABLE ON SCHEMA airport_digital_twin.bronze TO `airport_twin_sp`;
+GRANT CREATE TABLE ON SCHEMA airport_digital_twin.silver TO `airport_twin_sp`;
+GRANT CREATE TABLE ON SCHEMA airport_digital_twin.gold TO `airport_twin_sp`;
+GRANT MODIFY ON SCHEMA airport_digital_twin.bronze TO `airport_twin_sp`;
+GRANT MODIFY ON SCHEMA airport_digital_twin.silver TO `airport_twin_sp`;
+GRANT MODIFY ON SCHEMA airport_digital_twin.gold TO `airport_twin_sp`;
 
 -- ============================================================================
 -- Gold Layer Tables (synced from Lakebase for analytics/ML)

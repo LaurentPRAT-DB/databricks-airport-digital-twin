@@ -6,7 +6,8 @@
 
 **Live Demo**: [airport-digital-twin-dev](https://airport-digital-twin-dev-7474645572615955.aws.databricksapps.com)
 
-**Execution evidence**: [`docs/EXECUTION_EVIDENCE.md`](docs/EXECUTION_EVIDENCE.md) — live governed-table row counts, real ADS-B samples, a Genie NL→SQL→result run, and the E2E smoke-test result.
+**Execution evidence**: [`docs/EXECUTION_EVIDENCE.md`](docs/EXECUTION_EVIDENCE.md) — live governed-table row counts, real ADS-B samples, a Genie NL→SQL→result run, the E2E smoke-test result, and the Unity Catalog governance layer (schemas, grants, CHECK constraints, row-level security, column masking, lineage/audit).
+**Unity Catalog governance**: [`databricks/unity_catalog_governance.sql`](databricks/unity_catalog_governance.sql) · [`databricks/unity_catalog_rls.sql`](databricks/unity_catalog_rls.sql) · [`databricks/notebooks/uc_lineage_audit.sql`](databricks/notebooks/uc_lineage_audit.sql) — medallion schemas, enforced grants, data-quality constraints, multi-tenant RLS + column masking, lineage/audit.
 **How AI built this**: [`docs/AI_USAGE.md`](docs/AI_USAGE.md) — tooling, workflow, and engineering trade-offs.
 
 ---
