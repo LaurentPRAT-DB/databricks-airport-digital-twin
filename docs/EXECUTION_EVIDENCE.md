@@ -157,9 +157,13 @@ curl -s -o /dev/null -w "%{http_code}\n" https://airport-digital-twin-dev-747464
 
 ## Artifact 6 — Unity Catalog governance (verified in code + workspace)
 
-Governance code lives in `databricks/unity_catalog_governance.sql`,
-`databricks/unity_catalog_rls.sql`, and `databricks/notebooks/uc_lineage_audit.sql`.
-Every statement was executed against the workspace; outputs below are verbatim.
+Governance is implemented as **executable Python** in `src/governance/unity_catalog.py`
+(pure SQL-builders + `apply_governance()` / `governance_report()`), run by the notebook
+`databricks/notebooks/setup_unity_catalog_governance.py`, and unit-tested in
+`tests/test_unity_catalog.py` (18 passed). `.sql` mirrors also exist
+(`databricks/unity_catalog_governance.sql`, `unity_catalog_rls.sql`,
+`notebooks/uc_lineage_audit.sql`). Executed on serverless compute — run
+`11593057370429` (SUCCESS). Outputs below are verbatim from the workspace.
 
 **Medallion schemas + governed views** (raw → governed path in UC):
 ```
