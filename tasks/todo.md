@@ -90,3 +90,37 @@ b48bea5 feat: split simulation batch into 3 parallel jobs + training job
 8dd91e8 fix: lightweight JSON loader to skip position_snapshots in training
 ada8485 docs: add Turnaround and OBT model feature specifications
 ```
+
+---
+
+## AI-Assisted Workflow
+
+This session was driven with **Claude Code (Anthropic Opus)** as the primary
+engineering copilot, orchestrating the **Databricks skills** (CLI, DABs, jobs,
+Unity Catalog, Genie, pipelines) and delegating fan-out work to **subagents**.
+Where it multiplied speed:
+
+- **Root-cause triage.** Claude Code read the failed batch-job run logs, traced
+  the training failures to a missing `mlflow` in `sim_env` (not a code bug),
+  and pinpointed the fix in one pass instead of manual log-diving across three
+  jobs. Same for the OOM: it profiled `turnaround_features.py` /
+  `obt_features.py` and proposed the lightweight JSON loader that skips
+  `position_snapshots` before `json.loads()` (~1GB → ~100MB).
+- **Parallel refactor.** Splitting the monolithic 12h batch into 3 parallel
+  jobs + per-batch training + a final champion-promotion job was scaffolded by
+  Claude Code editing `resources/*.yml` and the widget-parameterized
+  `list_simulation_configs.py` together, keeping the job graph consistent.
+- **Governance layer.** The Unity Catalog governance module
+  (`src/governance/unity_catalog.py`) — medallion schemas, grants, CHECK
+  constraints, row-level security, column masking, lineage/audit — was authored
+  and executed against the workspace via Claude Code + the Databricks UC skill,
+  then unit-tested (18 passing).
+- **Read-only fan-out.** Codebase audits ("does X already exist", "where is the
+  Genie space wired") ran as parallel subagents so the main thread stayed on
+  the fix.
+
+**Trade-off in the loop itself:** I let Claude Code relax specific test
+thresholds (taxi-in P95, go-around rate) only with a written reason each time,
+and marked `test_O02_gate_occupy_event_emitted` as `xfail` with the exact root
+cause rather than letting it auto-skip — AI speed, human judgment on what a
+threshold should mean. Full account: `docs/AI_USAGE.md`.
