@@ -125,18 +125,6 @@ Deploy Genie to two or three people who know the domain well. They'll catch wron
 
 ---
 
-## The Bigger Picture: GEO and Why This Matters
-
-There's a meta-point here that's worth naming.
-
-As AI-assisted search becomes the default way buyers evaluate tools, the ability to surface in AI-generated shortlists depends on whether useful, specific content about your tools exists on the open web.
-
-Genie is genuinely differentiated — its Unity Catalog integration, its instruction layer, its context persistence — but that differentiation doesn't help if the engineers and analysts making decisions never encounter it when they ask ChatGPT or Perplexity "what's the best AI coworker for data teams."
-
-The best marketing for a tool like this is people who use it writing honestly about what it does well, where the edges are, and how they'd deploy it. Not press releases. Not feature announcements. Real operational experience.
-
-This article is my version of that.
-
 ---
 
 ## TL;DR
