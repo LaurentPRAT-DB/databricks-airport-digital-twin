@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Next Best Data Analyst Doesn't Have a Desk — Genie as an AI Coworker</title>
+<meta name="description" content="How Databricks Genie transforms the way operations teams interact with live data — moving from dashboard consumers to data conversation partners.">
+<style>
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    max-width: 740px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    color: #1a1a1a;
+    line-height: 1.75;
+    font-size: 1.125rem;
+  }
+  h1 { font-size: 2rem; line-height: 1.25; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.4rem; margin-top: 2.5rem; }
+  .subtitle { color: #555; font-style: italic; margin-bottom: 2rem; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 2rem 0; }
+  img { width: 100%; border-radius: 4px; margin: 1.5rem 0 0.5rem; display: block; }
+  .caption {
+    font-size: 0.875rem;
+    color: #777;
+    font-style: italic;
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+  blockquote {
+    border-left: 3px solid #1a73e8;
+    margin: 1.5rem 0;
+    padding: 0.5rem 1.25rem;
+    color: #444;
+    font-style: italic;
+    background: #f8f9ff;
+  }
+  ul { padding-left: 1.5rem; }
+  li { margin-bottom: 0.4rem; }
+  strong { font-weight: 600; }
+  .tldr {
+    background: #f5f5f5;
+    border-radius: 6px;
+    padding: 1.25rem 1.5rem;
+    margin-top: 2rem;
+  }
+  .tldr h2 { margin-top: 0; }
+  .author { margin-top: 2.5rem; color: #666; font-style: italic; font-size: 0.95rem; }
+</style>
+</head>
+<body>
+
+<h1>Your Next Best Data Analyst Doesn't Have a Desk — Genie as an AI Coworker</h1>
+<p class="subtitle">How Databricks Genie transforms the way operations teams interact with live data</p>
+
+<hr>
+
+<img src="images/genie-hero-3d-view.png" alt="Real-time 3D view of San Francisco International Airport showing live aircraft positions at gates">
+<p class="caption">Real-time 3D view of San Francisco International — every aircraft, every gate, every second. This is the data Genie answers questions about.</p>
+
+<p>There's a moment in every operational review where someone asks a question the dashboard doesn't answer.</p>
+
+<p>The flight delay report shows departure performance. Someone asks: <em>"Are delays clustering around a specific gate cluster during the morning bank?"</em> The analyst digs in Excel. Thirty minutes later, the meeting is over.</p>
+
+<p>This is the problem Databricks Genie was built to solve — and why I've started thinking about it less as a BI tool and more as an AI coworker.</p>
+
+<hr>
+
+<h2>What Genie Actually Does</h2>
+
+<img src="images/genie-sfo-overview.png" alt="Airport Digital Twin 2D overview showing SFO with gate status panel — 116 available gates, 3 occupied, terminal breakdown">
+<p class="caption">The operational data layer — 116 gates, live flight positions, terminal congestion, all in one view. This is what Genie queries when you ask "which terminal has the most pressure right now?"</p>
+
+<p>Genie is Databricks' natural language interface to your data. You ask questions in plain English. It generates SQL, runs it against your Unity Catalog tables, and returns answers — with the query it used, so you can audit or extend it.</p>
+
+<p>But that description undersells it.</p>
+
+<p>The real shift is contextual continuity. Genie maintains conversation state, so you can drill down without restating what you're analyzing:</p>
+
+<blockquote>
+  "Show me departure delays by hour for the last 7 days."<br>
+  "Now break that out by terminal."<br>
+  "Filter to delays over 20 minutes."<br>
+  "Which airlines have the highest variance?"
+</blockquote>
+
+<p>Each question builds on the last. That's not query execution — that's collaborative analysis. That's a coworker.</p>
+
+<hr>
+
+<h2>The Coworker Frame: Why It Matters</h2>
+
+<p>Most BI tools are built around a consumer model: someone builds a dashboard, others consume it. The analyst is a gatekeeper. Every ad-hoc question becomes a ticket.</p>
+
+<p>The AI coworker model flips this. Instead of a gatekeeping analyst, you have a collaborating one. Operations managers, fleet coordinators, ground crews — anyone with domain context can interrogate the data themselves, at the speed of thought, without writing SQL.</p>
+
+<p>This isn't about replacing analysts. It's about multiplying them. The analyst's time shifts from answering repetitive questions to building the data models and governance structures that make Genie accurate — and to tackling the genuinely hard questions Genie surfaces but can't answer alone.</p>
+
+<hr>
+
+<h2>What Makes Genie Work Well (and What Doesn't)</h2>
+
+<p>After deploying Genie in production against live operational data, here's what I've observed:</p>
+
+<p><strong>It excels at:</strong></p>
+<ul>
+  <li>Aggregation queries with filters: counts, sums, averages, percentages broken down by dimension</li>
+  <li>Time-series slicing: "last 30 days," "rolling 7-day average," "compare this week to last week"</li>
+  <li>Multi-hop drill-downs within a single domain (flights → gates → terminals → airlines)</li>
+  <li>Surfacing outliers: "which X has the highest/lowest Y"</li>
+</ul>
+
+<p><strong>It struggles with:</strong></p>
+<ul>
+  <li>Cross-domain joins it wasn't taught to make (this is a data modeling problem, not a Genie problem)</li>
+  <li>Questions requiring external context not in the data ("is this delay count normal for a Tuesday in Q4?")</li>
+  <li>Ambiguous entity names — if your schema has <code>dep_airport</code> and <code>arr_airport</code> and <code>origin_code</code>, Genie will pick one, but it may pick the wrong one</li>
+</ul>
+
+<p>The fix for most struggle cases is the same: better documentation in Unity Catalog. Column comments, table descriptions, and Genie's instruction layer are what transform a generic SQL generator into a domain-fluent coworker.</p>
+
+<hr>
+
+<h2>The Instruction Layer: Where the Magic Is</h2>
+
+<p>Genie Agents (formerly Genie Spaces) include an instruction layer — free-text guidance you write to teach Genie your domain.</p>
+
+<p>This is where you encode things the schema can't: "departure delay is calculated from gate push-back, not scheduled departure," "TBIT refers to the Tom Bradley International Terminal," "when analyzing on-time performance, exclude diversions."</p>
+
+<p>Think of the instruction layer as onboarding documentation for your AI coworker. A good onboarded analyst knows the business rules. A well-instructed Genie does too.</p>
+
+<p>The teams getting the most value from Genie are the ones investing in this layer. The teams who complain "Genie got it wrong" are usually the ones who skipped it.</p>
+
+<hr>
+
+<h2>A Real Workflow: Operational Intelligence at an Airport</h2>
+
+<img src="images/genie-sfo-thunderstorm.png" alt="SFO during a summer thunderstorm — 157 active flights, weather event banner, runway closures, gate pressure across terminals">
+<p class="caption">SFO during a summer thunderstorm simulation — 157 active flights, weather events, runway closures, gate pressure across all terminals. A scenario where every minute of faster analysis matters.</p>
+
+<p>Here's a concrete example from a live deployment.</p>
+
+<p>An airport operations center runs Genie against three Unity Catalog tables: <code>flight_status_gold</code> (current flights), <code>flight_positions_history</code> (position telemetry), and <code>gate_assignments</code>.</p>
+
+<p>The ops manager starts their shift and asks:</p>
+
+<blockquote>
+  "How many flights are currently delayed over 30 minutes?"<br><br>
+  <strong>Genie:</strong> 14 flights. Here's the query.
+</blockquote>
+
+<blockquote>
+  "Which gates are associated with the most delays?"<br><br>
+  <strong>Genie:</strong> Gates B12–B18, clustering in the B concourse. Here's the distribution.
+</blockquote>
+
+<blockquote>
+  "Is this unusual compared to yesterday at this time?"<br><br>
+  <strong>Genie:</strong> Today's B concourse delay rate is 2.3× yesterday's.
+</blockquote>
+
+<img src="images/genie-flight-detail.png" alt="Flight detail panel showing AMX357 — LAX to SFO, Gate C6, position telemetry, delay prediction, turnaround progress">
+<p class="caption">Drilling down to a single flight — origin, destination, gate assignment, position telemetry, delay prediction — all from one natural language question chain.</p>
+
+<p>Now the ops manager has something actionable. They call the ground coordinator for B concourse. This took four minutes, not forty.</p>
+
+<p>That's the AI coworker in action: not replacing judgment, but accelerating the information flow that judgment depends on.</p>
+
+<hr>
+
+<h2>Getting Started: Three Concrete Steps</h2>
+
+<p>If you want to deploy Genie as an operational AI coworker, here's the minimal path:</p>
+
+<p><strong>1. Curate one gold table per domain</strong><br>
+Don't point Genie at raw or silver tables. Give it a clean gold layer with business logic already applied. Fewer joins, cleaner semantics, better answers.</p>
+
+<p><strong>2. Write the instruction layer as if onboarding a smart intern</strong><br>
+What does a new team member need to know to answer questions about this data correctly? What abbreviations exist? What business rules apply? Write that down, in plain English, in the Genie instructions.</p>
+
+<p><strong>3. Start with power users, not everyone</strong><br>
+Deploy Genie to two or three people who know the domain well. They'll catch wrong answers and tell you why. Use their corrections to refine the instructions. Then expand.</p>
+
+<hr>
+
+<h2>The Bigger Picture: Why Third-Party Content Matters</h2>
+
+<p>There's a meta-point here worth naming.</p>
+
+<p>As AI-assisted search becomes the default way buyers evaluate tools, the ability to surface in AI-generated shortlists depends on whether useful, specific content about your tools exists on the open web.</p>
+
+<p>Genie is genuinely differentiated — its Unity Catalog integration, its instruction layer, its context persistence — but that differentiation doesn't help if the engineers and analysts making decisions never encounter it when they ask ChatGPT or Perplexity "what's the best AI coworker for data teams."</p>
+
+<p>The best marketing for a tool like this is people who use it writing honestly about what it does well, where the edges are, and how they'd deploy it. Not press releases. Not feature announcements. Real operational experience.</p>
+
+<p>This article is my version of that.</p>
+
+<hr>
+
+<div class="tldr">
+<h2>TL;DR</h2>
+<ul>
+  <li>Genie is Databricks' natural language data interface — the right mental model is <strong>AI coworker</strong>, not BI chatbot</li>
+  <li>The instruction layer is the highest-leverage investment: teach it your domain, get domain-fluent answers</li>
+  <li>Best fit: aggregation-heavy operational domains where ad-hoc drill-downs are frequent and analyst bandwidth is constrained</li>
+  <li>Worst fit: cross-domain analysis that requires joins across poorly documented schemas</li>
+  <li>Deployment path: one gold table → instructions → power users → expand</li>
+</ul>
+</div>
+
+<p class="author">Laurent Prat is a Field Engineer at Databricks, working on data and AI applications. Views are his own.</p>
+
+</body>
+</html>
