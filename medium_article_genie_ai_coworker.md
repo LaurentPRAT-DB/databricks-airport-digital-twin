@@ -149,8 +149,6 @@ This article is my version of that.
 
 ---
 
-*Laurent Prat is a Field Engineer at Databricks, working on data and AI applications in regulated industries. Views are his own.*
-
 ---
 
 **Tags:** databricks, genie, ai-coworker, natural-language-query, business-intelligence, data-analytics, unity-catalog, enterprise-ai, generative-ai, data-engineering
